@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign in | Workout Tracker</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="auth-shell">
+    <section class="card auth-card">
+      <h1>Workout Tracker</h1>
+      <p class="subtitle">Private, self-hosted training data.</p>
+      <div class="auth-tabs"><button class="secondary active" id="loginTab" type="button">Sign in</button><button class="secondary" id="registerTab" type="button">Create account</button></div>
+      <form id="authForm"><label for="username">Username</label><input id="username" autocomplete="username" required minlength="3" /><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required minlength="8" /><button class="primary" id="authSubmit" type="submit">Sign in</button></form>
+      <p class="auth-feedback" id="authFeedback" role="alert" hidden></p>
+    </section>
+  </main>
+  <script src="login.js"></script>
+</body>
+</html>
