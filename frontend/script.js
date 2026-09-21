@@ -14,6 +14,8 @@ let wakeLock = null;
 let wakeLockRequesting = false;
 let workoutsReachable = true;
 let initialLoadDone = false;
+let feedbackTimer = null;
+let lastPerformance = {};
 let restRemaining = getWorkoutSettings().restDuration;
 const customTemplateStorageKey = 'workout-tracker-custom-templates';
 let customTemplates = loadCustomTemplates();
@@ -45,14 +47,18 @@ function showWorkoutBuilder() {
   $('workoutBuilder').hidden = false;
 }
 
+// The banner sticks to the top of the screen so a message is seen wherever the page is scrolled; successes dismiss themselves.
 function showFeedback(message, type = 'error') {
   const feedback = $('formFeedback');
   feedback.textContent = message;
   feedback.className = `form-feedback ${type}`;
   feedback.hidden = false;
+  clearTimeout(feedbackTimer);
+  if (type === 'success') feedbackTimer = setTimeout(clearFeedback, 6000);
 }
 
 function clearFeedback() {
+  clearTimeout(feedbackTimer);
   $('formFeedback').hidden = true;
   $('formFeedback').textContent = '';
 }
@@ -123,7 +129,7 @@ function render() {
 
 function renderSavedWorkouts(workouts) {
   const list = $('savedWorkoutList');
-  list.innerHTML = workouts.length ? workouts.map(workout => `<li class="saved-workout" data-id="${workout.id}"><div class="saved-workout-summary"><div><strong>${escapeHTML(workout.name)}</strong><span>${new Date(workout.createdAt).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' })}</span></div><div class="workout-actions"><button class="primary" type="button" data-action="start">Start</button><button class="secondary" type="button" data-action="view" aria-expanded="false">View</button><button class="secondary" type="button" data-action="repeat">Repeat</button><button class="secondary" type="button" data-action="edit">Edit</button><button class="danger" type="button" data-action="delete">Delete</button></div></div><div class="workout-details" hidden>${workout.notes ? `<p class="workout-note">${escapeHTML(workout.notes)}</p>` : ''}<ul>${workout.exercises.map(item => `<li><strong>${escapeHTML(item.name)}</strong><span>${item.weight || 0} lbs &middot; ${item.reps} reps</span></li>`).join('')}</ul></div></li>`).join('') : '<li class="empty">No saved workouts yet.</li>';
+  list.innerHTML = workouts.length ? workouts.map(workout => `<li class="saved-workout" data-id="${workout.id}"><div class="saved-workout-summary"><div><strong>${escapeHTML(workout.name)}</strong><span>${new Date(workout.createdAt).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' })}</span></div><div class="workout-actions"><button class="primary" type="button" data-action="start">Start</button><button class="secondary" type="button" data-action="view" aria-expanded="false">View</button><button class="secondary" type="button" data-action="repeat">Repeat</button><button class="secondary" type="button" data-action="edit">Edit</button><button class="danger" type="button" data-action="delete">Delete</button></div></div><div class="workout-details" hidden>${workout.notes ? `<p class="workout-note">${escapeHTML(workout.notes)}</p>` : ''}<ul>${workout.exercises.map(item => `<li><strong>${escapeHTML(item.name)}</strong><span>${item.sets && !item.sets.length ? 'Skipped' : `${item.weight || 0} lbs &middot; ${item.reps} reps`}</span></li>`).join('')}</ul></div></li>`).join('') : '<li class="empty">No saved workouts yet.</li>';
 }
 
 function renderTemplates() {
@@ -226,18 +232,83 @@ async function syncWakeLock() {
   }
 }
 
+function exerciseKey(name) {
+  return String(name).trim().toLowerCase();
+}
+
+function formatSet(set) {
+  return set.weight ? `${set.weight} lbs × ${set.reps}` : `${set.reps} reps`;
+}
+
+function normalizeSets(sets) {
+  return sets.map(set => ({ weight:Number(set.weight) || 0, reps:Number(set.reps) || 0 }));
+}
+
+// The most recent real performance of each exercise (skipped exercises are ignored); shown and used to prefill the next session.
+function buildLastPerformance(workouts) {
+  const latest = {};
+  [...workouts].sort((a, b) => b.createdAt - a.createdAt).forEach(workout => workout.exercises.forEach(item => {
+    const key = exerciseKey(item.name);
+    if (latest[key]) return;
+    if (item.sets && item.sets.length) latest[key] = { date:workout.createdAt, sets:normalizeSets(item.sets) };
+    else if (!item.sets) latest[key] = { date:workout.createdAt, sets:normalizeSets([{ weight:item.weight, reps:item.reps }]) };
+  }));
+  return latest;
+}
+
+function saveLastPerformance() {
+  writeLocal(localKey('lastperf'), lastPerformance);
+}
+
+// Updated as soon as a workout is finished, so the next session shows it even if the upload is still waiting.
+function rememberLastPerformance(workout) {
+  workout.exercises.forEach(item => { lastPerformance[exerciseKey(item.name)] = { date:workout.createdAt, sets:normalizeSets(item.sets) }; });
+  saveLastPerformance();
+}
+
+function renderActiveProgress() {
+  $('activeWorkoutProgress').textContent = `Exercise ${activeSession.currentIndex + 1} of ${activeSession.exercises.length}`;
+  $('prevExerciseBtn').hidden = activeSession.currentIndex === 0;
+  $('nextExerciseBtn').textContent = activeSession.currentIndex === activeSession.exercises.length - 1 ? 'Finish workout' : 'Next exercise';
+}
+
 function renderActiveWorkout() {
   const exercise = activeSession.exercises[activeSession.currentIndex];
+  exercise.sets = exercise.sets || [];
+  const previous = lastPerformance[exerciseKey(exercise.name)];
+  const previousFirst = previous ? previous.sets[0] : null;
+  const lastSet = exercise.sets[exercise.sets.length - 1];
   $('activeWorkoutTitle').textContent = activeSession.name;
-  $('activeWorkoutProgress').textContent = `Exercise ${activeSession.currentIndex + 1} of ${activeSession.exercises.length}`;
+  renderActiveProgress();
   $('activeExerciseName').textContent = exercise.name;
   $('activeExerciseTarget').textContent = `Target: ${exercise.reps} reps${exercise.weight ? ` at ${exercise.weight} lbs` : ''}`;
+  $('activeExerciseLast').hidden = !previous;
+  if (previous) $('activeExerciseLast').textContent = `Last time (${new Date(previous.date).toLocaleDateString(undefined, { month:'short', day:'numeric' })}): ${previous.sets.map(formatSet).join(' · ')}`;
   $('activeNotes').value = activeSession.notes || '';
-  $('activeWeight').value = exercise.weight || '';
-  $('completedReps').value = '';
-  $('completedSets').innerHTML = (exercise.sets || []).map((set, index) => `<li>Set ${index + 1}: ${set.reps} reps${set.weight ? ` at ${set.weight} lbs` : ''}</li>`).join('');
-  $('nextExerciseBtn').textContent = activeSession.currentIndex === activeSession.exercises.length - 1 ? 'Finish workout' : 'Next exercise';
+  // Next set defaults to the set just logged, or to last time's first set, so repeating a set is one tap.
+  $('activeWeight').value = lastSet ? lastSet.weight || '' : exercise.weight || (previousFirst && previousFirst.weight) || '';
+  $('completedReps').value = (lastSet || previousFirst || {}).reps || '';
+  $('completedSets').innerHTML = exercise.sets.map((set, index) => `<li><span class="set-number">Set ${index + 1}</span><div class="set-field"><input class="set-edit" type="number" min="0" step="0.5" value="${escapeHTML(set.weight || '')}" data-set="${index}" data-field="weight" aria-label="Set ${index + 1} weight in lbs"><span>lbs</span></div><div class="set-field"><input class="set-edit" type="number" min="1" step="1" value="${escapeHTML(set.reps)}" data-set="${index}" data-field="reps" aria-label="Set ${index + 1} reps"><span>reps</span></div><button class="remove" type="button" data-remove-set="${index}" aria-label="Remove set ${index + 1}">Remove</button></li>`).join('');
   $('activeSyncNotice').hidden = !activeSyncFailed;
+}
+
+function goToExercise(index) {
+  activeSession.currentIndex = index;
+  stopRestTimer();
+  restRemaining = getWorkoutSettings().restDuration;
+  updateRestTimer();
+  $('restPanel').hidden = true;
+  renderActiveWorkout();
+  persistActiveSession();
+}
+
+function closeActiveWorkout() {
+  activeSession = null;
+  persistActiveSession();
+  stopRestTimer();
+  $('restPanel').hidden = true;
+  $('activeWorkout').hidden = true;
+  syncWakeLock();
 }
 
 function startWorkout(template) {
@@ -256,17 +327,23 @@ function startWorkout(template) {
 // The finished workout goes into the local upload queue first, so nothing can lose it after this point;
 // the clientId lets the server ignore a retried upload it already stored.
 async function finishWorkout() {
+  // An exercise with no logged sets was skipped; saving it would make history and progress count its target as done.
+  const performed = activeSession.exercises.filter(item => item.sets && item.sets.length);
+  if (!performed.length) {
+    if (getWorkoutSettings().confirmEnd && !confirm('No sets were logged. Finish without saving this workout?')) return;
+    closeActiveWorkout();
+    showFeedback('No sets were logged, so nothing was saved.');
+    return;
+  }
+  const skipped = activeSession.exercises.length - performed.length;
   activeSession.clientId = activeSession.clientId || newClientId();
-  const workout = { name:activeSession.name, notes:activeSession.notes || '', exercises:activeSession.exercises.map(item => ({ name:item.name, weight:item.weight, reps:item.sets.length ? item.sets[item.sets.length - 1].reps : item.reps, sets:item.sets })), createdAt:Date.now(), clientId:activeSession.clientId };
+  const workout = { name:activeSession.name, notes:activeSession.notes || '', exercises:performed.map(item => ({ name:item.name, weight:Math.max(...item.sets.map(set => Number(set.weight) || 0)), reps:item.sets[item.sets.length - 1].reps, sets:item.sets })), createdAt:Date.now(), clientId:activeSession.clientId };
+  rememberLastPerformance(workout);
   queuePendingWorkout(workout);
-  activeSession = null;
-  persistActiveSession();
-  stopRestTimer();
-  $('restPanel').hidden = true;
-  $('activeWorkout').hidden = true;
-  syncWakeLock();
+  closeActiveWorkout();
   const synced = await flushPendingWorkouts();
-  showFeedback(synced ? `“${workout.name}” saved successfully.` : `“${workout.name}” is saved on this device and will sync when the server is reachable again.`, 'success');
+  const note = skipped ? ` ${skipped} exercise${skipped === 1 ? '' : 's'} with no sets ${skipped === 1 ? 'was' : 'were'} left out.` : '';
+  showFeedback(synced ? `“${workout.name}” saved successfully.${note}` : `“${workout.name}” is saved on this device and will sync when the server is reachable again.${note}`, 'success');
 }
 
 function renderStorageStatus() {
@@ -280,6 +357,8 @@ async function loadSavedWorkouts() {
   try {
     const workouts = await getSavedWorkouts();
     renderSavedWorkouts(workouts);
+    lastPerformance = buildLastPerformance([...workouts, ...readPendingWorkouts()]);
+    saveLastPerformance();
     workoutsReachable = true;
     renderStorageStatus();
     return workouts;
@@ -344,6 +423,9 @@ $('addBtn').onclick = () => {
   clearFeedback();
   exercises.push({ name, weight, reps }); $('exercise').value = ''; $('weight').value = ''; $('reps').value = ''; render(); $('exercise').focus();
 };
+// Tap the banner to dismiss it; opening settings also clears it so a stale message never sits over the dialog.
+$('formFeedback').onclick = clearFeedback;
+$('settingsButton').addEventListener('click', clearFeedback);
 $('createWorkoutBtn').onclick = () => { showWorkoutBuilder(); $('workoutName').focus(); };
 $('exercise').oninput = () => markInvalid($('exercise'), false);
 $('weight').oninput = () => markInvalid($('weight'), false);
@@ -420,7 +502,6 @@ $('completeSetBtn').onclick = () => {
   const weight = Number(weightValue) || 0;
   const exercise = activeSession.exercises[activeSession.currentIndex];
   exercise.sets.push({ reps, weight });
-  exercise.weight = Math.max(Number(exercise.weight) || 0, weight);
   persistActiveSession();
   renderActiveWorkout();
   unlockAudio();
@@ -439,9 +520,48 @@ $('restToggleBtn').onclick = () => {
 $('restResetBtn').onclick = () => { stopRestTimer(); restRemaining = getWorkoutSettings().restDuration; updateRestTimer(); };
 $('nextExerciseBtn').onclick = () => {
   if (activeSession.currentIndex === activeSession.exercises.length - 1) finishWorkout();
-  else { activeSession.currentIndex += 1; stopRestTimer(); restRemaining = getWorkoutSettings().restDuration; updateRestTimer(); $('restPanel').hidden = true; renderActiveWorkout(); persistActiveSession(); }
+  else goToExercise(activeSession.currentIndex + 1);
 };
-$('endWorkoutBtn').onclick = () => { if (!getWorkoutSettings().confirmEnd || confirm('End this workout without saving it?')) { activeSession = null; persistActiveSession(); stopRestTimer(); $('activeWorkout').hidden = true; syncWakeLock(); } };
+$('prevExerciseBtn').onclick = () => { if (activeSession.currentIndex > 0) goToExercise(activeSession.currentIndex - 1); };
+$('endWorkoutBtn').onclick = () => { if (!getWorkoutSettings().confirmEnd || confirm('End this workout without saving it?')) closeActiveWorkout(); };
+// Logged sets can be corrected in place; a value that is not valid snaps back to what was logged.
+$('completedSets').onchange = e => {
+  const index = Number(e.target.dataset.set);
+  const field = e.target.dataset.field;
+  if (!activeSession || !field || Number.isNaN(index)) return;
+  const set = activeSession.exercises[activeSession.currentIndex].sets[index];
+  if (!set) return;
+  const value = e.target.value;
+  if (field === 'reps' && (!value || Number(value) < 1)) { showFeedback('Reps must be at least 1.'); e.target.value = set.reps; return; }
+  if (field === 'weight' && value !== '' && Number(value) < 0) { showFeedback('Weight cannot be negative.'); e.target.value = set.weight || ''; return; }
+  set[field] = Number(value) || 0;
+  clearFeedback();
+  persistActiveSession();
+};
+$('completedSets').onclick = e => {
+  const button = e.target.closest('[data-remove-set]');
+  if (!button || !activeSession) return;
+  activeSession.exercises[activeSession.currentIndex].sets.splice(Number(button.dataset.removeSet), 1);
+  persistActiveSession();
+  renderActiveWorkout();
+};
+$('activeAddName').oninput = () => markInvalid($('activeAddName'), false);
+$('activeAddReps').oninput = () => markInvalid($('activeAddReps'), false);
+// The new exercise goes right after the current one so Next reaches it; the current exercise is not re-rendered, keeping anything typed.
+$('activeAddBtn').onclick = () => {
+  const name = $('activeAddName').value.trim(), reps = $('activeAddReps').value;
+  markInvalid($('activeAddName'), !name);
+  markInvalid($('activeAddReps'), !reps || Number(reps) < 1);
+  if (!name) { showFeedback('Enter an exercise name before adding it.'); $('activeAddName').focus(); return; }
+  if (!reps || Number(reps) < 1) { showFeedback('Enter at least 1 target rep for this exercise.'); $('activeAddReps').focus(); return; }
+  activeSession.exercises.splice(activeSession.currentIndex + 1, 0, { name, weight:'', reps:String(Math.floor(Number(reps))), sets:[] });
+  persistActiveSession();
+  renderActiveProgress();
+  $('activeAddName').value = '';
+  $('activeAddReps').value = '';
+  $('addActiveExercise').open = false;
+  showFeedback(`Added “${name}” as your next exercise.`, 'success');
+};
 $('savedWorkoutList').onclick = async e => {
   const action = e.target.dataset.action;
   if (!action) return;
@@ -490,7 +610,7 @@ $('saveBtn').onclick = async () => {
     showFeedback(`“${workout.name}” saved successfully.${replacedSets ? ' Set-by-set details were replaced for exercises whose weight or reps you changed.' : ''}`, 'success');
     $('clearBtn').click();
   } catch (error) {
-    showFeedback('This workout could not be saved on this device.');
+    showFeedback('This workout could not be saved. Check your connection and try again.');
     console.error('Unable to save workout.', error);
   }
 };
@@ -508,4 +628,4 @@ window.addEventListener('syncchange', event => {
   if (event.detail.uploaded && initialLoadDone) loadSavedWorkouts();
 });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && restInterval) tickRest(); syncWakeLock(); });
-window.localReady.then(flushPendingWorkouts).then(loadSavedWorkouts).then(resumeOrStartWorkout).finally(() => { initialLoadDone = true; });
+window.localReady.then(() => { lastPerformance = readLocal(localKey('lastperf')) || {}; }).then(flushPendingWorkouts).then(loadSavedWorkouts).then(resumeOrStartWorkout).finally(() => { initialLoadDone = true; });

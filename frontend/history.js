@@ -28,6 +28,7 @@ function escapeHTML(value) {
 }
 
 function exerciseDetails(exercise) {
+  if (exercise.sets && !exercise.sets.length) return 'Skipped';
   if (!exercise.sets || !exercise.sets.length) return `${exercise.weight || 0} lbs &middot; ${exercise.reps} reps`;
   return exercise.sets.map(set => `${set.weight || 0} lbs x ${set.reps}`).join(' &middot; ');
 }
@@ -38,6 +39,6 @@ function renderHistory(workouts) {
 }
 
 window.localReady.then(flushPendingWorkouts).then(getSavedWorkouts).then(renderHistory).catch(error => {
-  $('historySummary').textContent = 'Local storage unavailable';
+  $('historySummary').textContent = 'Unable to load workouts.';
   console.error('Unable to load workout history.', error);
 });

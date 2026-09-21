@@ -36,7 +36,8 @@ function buildChartData(workouts) {
   const points = [];
   [...workouts].sort((a, b) => a.createdAt - b.createdAt).forEach((workout, index) => {
     const name = workout.name || 'Untitled workout';
-    const matchingExercises = selectedExercise === 'all' ? workout.exercises : workout.exercises.filter(item => item.name === selectedExercise);
+    // An exercise saved with an empty set list was skipped, so it has no result to chart.
+    const matchingExercises = (selectedExercise === 'all' ? workout.exercises : workout.exercises.filter(item => item.name === selectedExercise)).filter(item => !item.sets || item.sets.length);
     const values = matchingExercises.map(item => {
       if (selectedMetric === 'reps') return Math.max(...(item.sets || []).map(set => Number(set.reps) || 0), Number(item.reps) || 0);
       if (selectedMetric === 'volume') return item.sets?.length ? item.sets.reduce((total, set) => total + (Number(set.weight) || 0) * (Number(set.reps) || 0), 0) : (Number(item.weight) || 0) * (Number(item.reps) || 0);
@@ -178,7 +179,7 @@ async function loadProgress() {
     renderProgress(allWorkouts);
   } catch (error) {
     $('chartEmpty').hidden = false;
-    $('chartEmpty').textContent = 'Progress data is unavailable on this device.';
+    $('chartEmpty').textContent = 'Progress data could not be loaded.';
     console.error('Unable to load progress.', error);
   }
 }

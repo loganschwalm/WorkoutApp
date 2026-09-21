@@ -19,7 +19,10 @@ A browser-based workout tracker for creating, completing, reviewing, and analyzi
 - Start workouts from built-in templates or saved workouts.
 - Move through exercises one at a time.
 - Enter the weight and reps completed for each set.
-- View completed sets during the workout.
+- See how you did last time on each exercise; its weight and reps are prefilled, and after each set the next one defaults to the set you just logged.
+- View completed sets during the workout, correct a set's weight or reps in place, or remove a set that was logged by mistake.
+- Go back to a previous exercise, or add an exercise in the middle of a workout.
+- Exercises with no logged sets count as skipped and are left out of the saved workout, so they never appear as done in History or Progress.
 - Automatically start a configurable rest timer after each set.
 - Pause and reset the rest timer.
 - Keep accurate rest time even when the screen locks or the tab is in the background; the timer alerts you with a sound and vibration when rest is over (configurable in Settings).
