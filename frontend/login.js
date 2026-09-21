@@ -5,6 +5,12 @@ const loginTab = document.getElementById('loginTab');
 const registerTab = document.getElementById('registerTab');
 let mode = 'login';
 
+// Only same-site paths are followed, so a crafted ?next= link cannot send someone to another site after signing in.
+function nextDestination() {
+  const next = new URLSearchParams(location.search).get('next');
+  return next && next.startsWith('/') && !next.startsWith('//') && !next.startsWith('/\\') ? next : '/frontend/index.html';
+}
+
 function showError(message) {
   feedback.textContent = message;
   feedback.hidden = false;
@@ -31,7 +37,7 @@ form.onsubmit = async event => {
     try { result = JSON.parse(responseText); }
     catch (parseError) { throw new Error(`The server returned an unexpected response (${response.status}). Check that the self-hosted server is running the current version.`); }
     if (!response.ok) throw new Error(result.error || 'Unable to authenticate.');
-    window.location.href = new URLSearchParams(location.search).get('next') || '/frontend/index.html';
+    window.location.href = nextDestination();
   } catch (error) {
     showError(error.message);
     submit.disabled = false;

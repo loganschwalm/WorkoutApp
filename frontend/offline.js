@@ -50,6 +50,7 @@ function reportSyncStatus(uploaded = 0) {
 // The signed-in account decides which local copy is ours; fall back to the last known account when the server is unreachable.
 window.localReady = syncFetch('/api/auth/me', {}, 4000).then(response => response.ok ? response.json() : Promise.reject(new Error('Unable to identify the user.'))).then(result => {
   localUserId = result.user ? result.user.id : null;
+  window.localUsername = result.user ? result.user.username : null;
   if (localUserId !== null) writeLocal(lastUserStorageKey, localUserId);
 }).catch(() => {});
 
@@ -140,6 +141,12 @@ function flushPendingWorkouts() {
     return true;
   })().finally(() => { pendingFlush = null; });
   return pendingFlush;
+}
+
+// Finished workouts still queued plus an in-progress workout the server has not seen the latest version of.
+function unsyncedWorkCount() {
+  const active = readLocalActive();
+  return readPendingWorkouts().length + (active && active.dirty && active.session ? 1 : 0);
 }
 
 function syncNow() {

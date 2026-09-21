@@ -10,6 +10,30 @@ const alertTones = {
 };
 let audioContext = null;
 let serverSettings = null;
+
+// A 401 from the API means the sign-in expired while the page was open. Offer a way back in without discarding anything on screen.
+const nativeFetch = window.fetch.bind(window);
+window.fetch = (...args) => nativeFetch(...args).then(response => {
+  if (response.status === 401) showSessionExpired();
+  return response;
+});
+
+function showSessionExpired() {
+  if (document.getElementById('sessionExpired')) return;
+  const banner = document.createElement('div');
+  banner.id = 'sessionExpired';
+  banner.className = 'session-banner';
+  banner.setAttribute('role', 'alert');
+  const message = document.createElement('span');
+  message.textContent = 'Your session has expired. Sign in again to keep saving your workouts; a workout in progress stays on this device.';
+  const link = document.createElement('a');
+  link.className = 'button-link primary';
+  link.href = `/login.html?next=${encodeURIComponent(location.pathname + location.search)}`;
+  link.textContent = 'Sign in again';
+  banner.append(message, link);
+  document.body.prepend(banner);
+}
+
 window.serverStateReady = fetch('/api/state').then(response => response.ok ? response.json() : null).then(state => {
   if (!state) return null;
   serverSettings = { ...defaultSettings, ...(state.settings || {}) };
@@ -95,6 +119,7 @@ function closeSettings() {
 
 function openSettings() {
   applySettings(getWorkoutSettings());
+  getSettingElement('accountName').textContent = window.localUsername ? `Signed in as ${window.localUsername}` : '';
   getSettingElement('settingsModal').hidden = false;
   getSettingElement('themeSetting').focus();
 }
@@ -109,6 +134,18 @@ document.addEventListener('keydown', event => { if (event.key === 'Escape' && !g
 ['input', 'change'].forEach(type => getSettingElement('settingsForm').addEventListener(type, syncSoundControls));
 // Plays the alert with the values currently in the form, so changes can be heard before they are saved.
 getSettingElement('testAlertButton').onclick = () => { unlockAudio(); playRestAlert(readSettingsForm()); };
+getSettingElement('signOutButton').onclick = async () => {
+  const unsynced = typeof unsyncedWorkCount === 'function' ? unsyncedWorkCount() : 0;
+  if (unsynced && !confirm('Some of your workout data has not reached the server yet. It stays on this device and uploads the next time you sign in to this account. Sign out anyway?')) return;
+  try {
+    const response = await fetch('/api/auth/logout', { method:'POST' });
+    if (!response.ok) throw new Error('Sign out failed.');
+  } catch (error) {
+    alert('Could not sign out. Check your connection and try again.');
+    return;
+  }
+  location.href = '/login.html';
+};
 getSettingElement('settingsForm').onsubmit = event => {
   event.preventDefault();
   const settings = readSettingsForm();

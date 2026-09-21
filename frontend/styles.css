@@ -76,6 +76,11 @@ html[data-theme="dark"] .danger, html[data-theme="dark"] .remove { color:#ff9eaa
 .set-list { display:flex; flex-wrap:wrap; gap:8px; margin:18px 0 0; padding:0; list-style:none; }
 .set-list li { padding:8px 11px; color:var(--muted); background:#f8f9fd; border:1px solid var(--line); border-radius:8px; font-size:.85rem; }
 html[data-theme="dark"] .set-list li { background:#171c27; }
+.session-banner { position:sticky; top:0; z-index:30; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px 16px; padding:12px 20px; color:#7e3942; background:#fff1f3; border-bottom:1px solid #f0c5cc; font-size:.9rem; }
+html[data-theme="dark"] .session-banner { color:#ffb1ba; background:#482934; border-color:#6d3b49; }
+.account-row { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:16px; padding-top:16px; border-top:1px solid var(--line); }
+.account-row .subtitle { margin:0; overflow-wrap:anywhere; }
+.account-row + .settings-actions { margin-top:8px; padding-top:8px; border-top:0; }
 .rest-panel { display:flex; justify-content:space-between; align-items:center; gap:16px; margin-top:20px; padding:14px 16px; background:#eef0ff; border-radius:10px; }
 html[data-theme="dark"] .rest-panel { background:#303653; }
 .rest-panel strong, .rest-panel span { display:block; }

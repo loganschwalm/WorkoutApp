@@ -38,6 +38,7 @@ Logged sets, notes, and finished workouts are saved on the device first and uplo
 - Finishing a workout while offline queues it locally and shows how many workouts are waiting to sync. The History and Progress pages upload anything queued before they load your workouts.
 - Uploads are safe to retry: each finished workout carries a unique `clientId`, and the server ignores a repeat of one it already stored.
 - Local copies are kept per account, so another account signed in on the same browser never sees them.
+- If your sign-in expires while a page is open, a banner offers to sign in again and returns you to the same page; nothing on screen is discarded, and a workout in progress stays on the device.
 
 Limitation: the page itself must already be loaded. Reloading while your device has no connection to the server at all still fails because the app's files are not cached for offline use yet.
 
@@ -89,6 +90,7 @@ The gear button opens a settings modal available on every page. Settings include
 - End-workout confirmation toggle.
 - Rest-timer alert: play a sound on or off, choose the alert sound (double beep, chime, or long tone), set the volume, and turn vibration on or off. The vibration option only appears on devices that support it.
 - A Test alert button plays the alert with the current choices, before you save them.
+- The signed-in account name and a Sign out button. Signing out warns first if a workout has not finished syncing; it stays on the device and uploads the next time you sign in to the same account.
 
 Settings persist locally between visits.
 

@@ -7,7 +7,7 @@ import sqlite3
 import time
 from http import HTTPStatus
 from http.cookies import SimpleCookie
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 SERVER_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SERVER_DIR)
@@ -115,7 +115,7 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
         public_path = parsed.path[9:] if parsed.path.startswith('/frontend/') else parsed.path
         if public_path in ('/', '/index.html', '/progress.html', '/history.html') and not self.session_user():
             self.send_response(HTTPStatus.SEE_OTHER)
-            self.send_header('Location', '/login.html')
+            self.send_header('Location', '/login.html?next=' + quote(self.path, safe=''))
             self.end_headers()
             return
         if parsed.path.startswith('/frontend/'):
