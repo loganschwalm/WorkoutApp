@@ -5,7 +5,7 @@ set -Eeuo pipefail
 # Run this script as root on the Proxmox host itself.
 
 CTID="${CTID:-}" 
-HOSTNAME="${HOSTNAME:-workout-tracker}"
+CT_HOSTNAME="${CT_HOSTNAME:-workout-tracker}"
 STORAGE="${STORAGE:-local-lvm}"
 BRIDGE="${BRIDGE:-vmbr0}"
 IP_CONFIG="${IP_CONFIG:-dhcp}"
@@ -28,7 +28,7 @@ Required:
 
 Optional environment variables:
   CTID            LXC ID; automatically selects the next available ID when omitted
-  HOSTNAME        Container hostname (default: workout-tracker)
+  CT_HOSTNAME     Container hostname (default: workout-tracker)
   STORAGE         Proxmox storage for the root disk (default: local-lvm)
   BRIDGE          Network bridge (default: vmbr0)
   IP_CONFIG       dhcp or a static CIDR such as 192.168.1.50/24
@@ -90,7 +90,7 @@ fi
 
 echo "Creating unprivileged LXC $CTID..."
 pct create "$CTID" "$TEMPLATE_PATH" \
-  --hostname "$HOSTNAME" \
+  --hostname "$CT_HOSTNAME" \
   --unprivileged 1 \
   --cores "$CORES" \
   --memory "$MEMORY" \
@@ -119,7 +119,7 @@ cat <<EOF
 Workout Tracker installed successfully.
 
 LXC ID:       $CTID
-Hostname:     $HOSTNAME
+Hostname:     $CT_HOSTNAME
 Container IP: ${CONTAINER_IP:-unknown}
 App URL:      http://${CONTAINER_IP:-<container-ip>}:8000
 Project path: $APP_DIR
