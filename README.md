@@ -113,6 +113,7 @@ data/            Runtime SQLite database directory
 Dockerfile       Container image definition
 docker-compose.yml Docker deployment with persistent storage
 scripts/install-proxmox-lxc.sh Proxmox LXC installation helper
+tests/           Browser-level end-to-end tests (see tests/README.md)
 ```
 
 ## Self-hosted deployment
@@ -196,6 +197,22 @@ Then open:
 - http://localhost:8000/index.html
 - http://localhost:8000/progress.html
 - http://localhost:8000/history.html
+
+## Tests
+
+The `tests/` directory holds end-to-end tests that drive a real headless browser
+against a real server: no mocking, so a passing check means the feature works in a
+browser. They cover the workout flow, the rest timer, offline syncing, the alert
+settings, and in-workout usability.
+
+```bash
+pip install -r tests/requirements.txt
+python tests/run.py
+```
+
+They need `websocket-client` and a Chrome, Chromium or Edge install; the app itself
+still needs nothing beyond the Python standard library. See `tests/README.md` for the
+suite breakdown and for how to add a test.
 
 ## Data storage
 
