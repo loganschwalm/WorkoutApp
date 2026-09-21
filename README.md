@@ -22,7 +22,7 @@ A browser-based workout tracker for creating, completing, reviewing, and analyzi
 - View completed sets during the workout.
 - Automatically start a configurable rest timer after each set.
 - Pause and reset the rest timer.
-- Keep accurate rest time even when the screen locks or the tab is in the background; the timer vibrates and beeps when rest is over.
+- Keep accurate rest time even when the screen locks or the tab is in the background; the timer alerts you with a sound and vibration when rest is over (configurable in Settings).
 - Keep the screen awake during a workout (on browsers that support it).
 - Move to the next exercise with the rest timer reset to the configured duration.
 - Add notes while training.
@@ -87,6 +87,8 @@ The gear button opens a settings modal available on every page. Settings include
 - Default rest duration from 15 to 600 seconds.
 - Automatic rest-timer start toggle.
 - End-workout confirmation toggle.
+- Rest-timer alert: play a sound on or off, choose the alert sound (double beep, chime, or long tone), set the volume, and turn vibration on or off. The vibration option only appears on devices that support it.
+- A Test alert button plays the alert with the current choices, before you save them.
 
 Settings persist locally between visits.
 

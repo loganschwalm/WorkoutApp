@@ -10,7 +10,6 @@ const setBaselines = new WeakMap();
 let activeSession = null;
 let restInterval = null;
 let restEndsAt = null;
-let audioContext = null;
 let wakeLock = null;
 let wakeLockRequesting = false;
 let workoutsReachable = true;
@@ -184,7 +183,7 @@ function tickRest() {
   updateRestTimer();
   if (restRemaining <= 0) {
     stopRestTimer();
-    notifyRestDone();
+    playRestAlert(getWorkoutSettings());
   }
 }
 
@@ -207,37 +206,6 @@ function startRestTimer() {
   $('restPanel').hidden = false;
   updateRestTimer();
   runRestTimer();
-}
-
-// Browsers only allow sound after a tap, so the audio context is created from the buttons that start the rest timer.
-function unlockAudio() {
-  try {
-    audioContext = audioContext || new (window.AudioContext || window.webkitAudioContext)();
-    if (audioContext.state === 'suspended') audioContext.resume();
-  } catch (error) {
-    audioContext = null;
-  }
-}
-
-function notifyRestDone() {
-  if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-  if (!audioContext) return;
-  try {
-    [0, 0.25].forEach(offset => {
-      const oscillator = audioContext.createOscillator();
-      const gain = audioContext.createGain();
-      const start = audioContext.currentTime + offset;
-      oscillator.frequency.value = 880;
-      gain.gain.setValueAtTime(0.12, start);
-      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.18);
-      oscillator.connect(gain);
-      gain.connect(audioContext.destination);
-      oscillator.start(start);
-      oscillator.stop(start + 0.2);
-    });
-  } catch (error) {
-    console.error('Unable to play the rest timer sound.', error);
-  }
 }
 
 // Keeps the screen awake during a workout so the timer can alert you; the browser drops the lock whenever the page is hidden.

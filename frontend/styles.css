@@ -105,7 +105,7 @@ html[data-theme="dark"] .progress-filters { background:#171c27; }
 .legend-swatch { width:10px; height:10px; border-radius:50%; }
 .modal-backdrop { position:fixed; inset:0; z-index:10; display:grid; place-items:center; padding:20px; background:rgba(16,21,35,.48); }
 .modal-backdrop[hidden] { display:none; }
-.settings-modal { width:min(440px,100%); padding:24px; color:var(--ink); background:var(--card); border:1px solid var(--line); border-radius:16px; box-shadow:0 24px 70px rgba(16,21,35,.25); }
+.settings-modal { width:min(440px,100%); max-height:100%; overflow-y:auto; padding:24px; color:var(--ink); background:var(--card); border:1px solid var(--line); border-radius:16px; box-shadow:0 24px 70px rgba(16,21,35,.25); }
 .settings-heading { display:flex; justify-content:space-between; align-items:center; margin-bottom:22px; }
 .settings-heading h2 { margin:0; }
 .modal-close { width:34px; height:34px; padding:0; color:var(--muted); background:transparent; font-size:1.5rem; line-height:1; }
@@ -113,5 +113,9 @@ html[data-theme="dark"] .progress-filters { background:#171c27; }
 .settings-modal form > label:not(.setting-check) { margin-top:8px; }
 .setting-check { display:flex; align-items:flex-start; gap:9px; margin-top:12px; color:var(--muted); font-size:.9rem; line-height:1.4; }
 .setting-check input { width:auto; margin:2px 0 0; }
+.setting-check[hidden] { display:none; }
+input[type="range"] { padding:0; border:0; background:transparent; accent-color:var(--accent); }
+.settings-modal form > .test-alert { justify-self:start; margin-top:10px; }
+.settings-modal :disabled { opacity:.5; cursor:not-allowed; }
 .settings-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:20px; padding-top:18px; border-top:1px solid var(--line); }
 @media (max-width:620px) { .shell{padding-top:25px}.date{display:none}.grid{grid-template-columns:1fr 1fr}.grid .exercise-input{grid-column:1/-1}.grid button{width:100%}.exercise{grid-template-columns:1fr auto auto}.exercise .remove{grid-column:1/-1; width:100%}.workout-name{align-items:stretch; flex-direction:column}.saved-workout-summary{align-items:flex-start; flex-direction:column}.workout-actions{width:100%}.workout-actions button{flex:1}.workout-details li{align-items:flex-start; flex-direction:column; gap:3px}.header-actions{align-items:flex-end; flex-direction:column; gap:8px}.site-nav{order:3; width:100%; justify-content:center} header{align-items:flex-start; flex-wrap:wrap}.template-grid{grid-template-columns:1fr}.set-entry{grid-template-columns:1fr 1fr}.set-entry button{grid-column:1/-1; width:100%}.rest-panel{align-items:flex-start; flex-direction:column}.rest-actions{width:100%}.rest-actions button{flex:1}.section-heading-actions{align-items:flex-end; flex-direction:column; gap:8px}.progress-filters{grid-template-columns:1fr 1fr}.progress-filters > div:nth-child(1), .progress-filters > div:nth-child(2), .progress-filters button{grid-column:1/-1}.progress-filters button{width:100%}.template-exercise-row{grid-template-columns:1fr 1fr}.template-exercise-row .template-row-actions{grid-column:1/-1} }

@@ -65,6 +65,11 @@
         <label for="restDurationSetting">Default rest duration (seconds)</label><input id="restDurationSetting" type="number" min="15" max="600" step="15" />
         <label class="setting-check"><input id="autoRestSetting" type="checkbox" /> Start the rest timer automatically after each set</label>
         <label class="setting-check"><input id="confirmEndSetting" type="checkbox" /> Confirm before ending an active workout</label>
+        <label class="setting-check"><input id="soundEnabledSetting" type="checkbox" /> Play a sound when rest ends</label>
+        <label for="alertSoundSetting">Alert sound</label><select id="alertSoundSetting"><option value="beep">Double beep</option><option value="chime">Chime</option><option value="long">Long tone</option></select>
+        <label for="soundVolumeSetting">Volume</label><input id="soundVolumeSetting" type="range" min="0" max="100" step="5" />
+        <label class="setting-check" id="vibrateSettingRow"><input id="vibrateSetting" type="checkbox" /> Vibrate when rest ends</label>
+        <button class="secondary test-alert" id="testAlertButton" type="button">Test alert</button>
         <div class="settings-actions"><button class="secondary" id="cancelSettings" type="button">Cancel</button><button class="primary" type="submit">Save settings</button></div>
       </form>
     </section>
