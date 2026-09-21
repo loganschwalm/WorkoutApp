@@ -37,7 +37,7 @@ function renderHistory(workouts) {
   $('historyList').innerHTML = workouts.length ? workouts.map(workout => `<li class="saved-workout history-workout"><div class="saved-workout-summary"><div><strong>${escapeHTML(workout.name)}</strong><span>${new Date(workout.createdAt).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' })}</span></div><a class="button-link primary" href="index.html?start=${workout.id}">Start workout</a></div><div class="workout-details">${workout.notes ? `<p class="workout-note">${escapeHTML(workout.notes)}</p>` : ''}<ul>${workout.exercises.map(item => `<li><strong>${escapeHTML(item.name)}</strong><span>${exerciseDetails(item)}</span></li>`).join('')}</ul></div></li>`).join('') : '<li class="empty">No saved workouts yet.</li>';
 }
 
-getSavedWorkouts().then(renderHistory).catch(error => {
+window.localReady.then(flushPendingWorkouts).then(getSavedWorkouts).then(renderHistory).catch(error => {
   $('historySummary').textContent = 'Local storage unavailable';
   console.error('Unable to load workout history.', error);
 });

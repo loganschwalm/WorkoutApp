@@ -223,6 +223,14 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             now = int(time.time() * 1000)
             payload = dict(data)
             database = connection()
+            client_id = data.get('clientId')
+            if client_id:
+                # Clients retry uploads after network failures, so a repeated clientId must not create a second workout.
+                existing = database.execute("SELECT id FROM workouts WHERE user_id = ? AND json_extract(payload, '$.clientId') = ?", (user['id'], str(client_id))).fetchone()
+                if existing:
+                    database.close()
+                    self.send_json(HTTPStatus.OK, {'id': existing['id']})
+                    return
             cursor = database.execute('INSERT INTO workouts (user_id, name, notes, created_at, payload) VALUES (?, ?, ?, ?, ?)', (user['id'], data.get('name', 'Untitled workout'), data.get('notes', ''), data.get('createdAt', now), json.dumps(payload)))
             database.commit()
             database.close()

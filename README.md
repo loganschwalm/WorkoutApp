@@ -22,10 +22,24 @@ A browser-based workout tracker for creating, completing, reviewing, and analyzi
 - View completed sets during the workout.
 - Automatically start a configurable rest timer after each set.
 - Pause and reset the rest timer.
+- Keep accurate rest time even when the screen locks or the tab is in the background; the timer vibrates and beeps when rest is over.
+- Keep the screen awake during a workout (on browsers that support it).
 - Move to the next exercise with the rest timer reset to the configured duration.
 - Add notes while training.
 - Restore an active workout after refreshing the page.
 - Finish or cancel an active workout.
+
+### Network drops
+
+Logged sets, notes, and finished workouts are saved on the device first and uploaded to the server in the background.
+
+- If the server cannot be reached, keep training. A notice explains that your sets are stored on this device, and they upload automatically when the connection returns (retries back off up to one minute).
+- Reloading the page while the server is unreachable restores the in-progress workout from the device.
+- Finishing a workout while offline queues it locally and shows how many workouts are waiting to sync. The History and Progress pages upload anything queued before they load your workouts.
+- Uploads are safe to retry: each finished workout carries a unique `clientId`, and the server ignores a repeat of one it already stored.
+- Local copies are kept per account, so another account signed in on the same browser never sees them.
+
+Limitation: the page itself must already be loaded. Reloading while your device has no connection to the server at all still fails because the app's files are not cached for offline use yet.
 
 ### Workout templates
 

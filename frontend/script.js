@@ -9,6 +9,12 @@ let editingWorkout = null;
 const setBaselines = new WeakMap();
 let activeSession = null;
 let restInterval = null;
+let restEndsAt = null;
+let audioContext = null;
+let wakeLock = null;
+let wakeLockRequesting = false;
+let workoutsReachable = true;
+let initialLoadDone = false;
 let restRemaining = getWorkoutSettings().restDuration;
 const customTemplateStorageKey = 'workout-tracker-custom-templates';
 let customTemplates = loadCustomTemplates();
@@ -83,16 +89,13 @@ function deleteWorkout(id) {
   return fetch(`/api/workouts/${id}`, { method:'DELETE' }).then(response => response.ok ? response.json() : Promise.reject(new Error('Unable to delete workout.')));
 }
 
+// Saved on this device immediately; offline.js uploads it in the background (activeSession === null records that the workout ended).
 function persistActiveSession() {
-  return fetch('/api/active-session', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ session:activeSession }) }).then(response => response.ok ? response.json() : Promise.reject(new Error('Unable to persist active workout.')));
+  saveLocalActive(activeSession);
 }
 
 function getActiveSession() {
   return fetch('/api/active-session').then(response => response.ok ? response.json() : Promise.reject(new Error('Unable to load active workout.'))).then(result => result.session);
-}
-
-function clearActiveSession() {
-  return fetch('/api/active-session', { method:'DELETE' }).then(response => response.ok ? response.json() : Promise.reject(new Error('Unable to clear active workout.')));
 }
 
 function escapeHTML(value) {
@@ -170,27 +173,89 @@ function updateRestTimer() {
   $('timerDisplay').textContent = `${minutes}:${seconds}`;
 }
 
+// The countdown is derived from an end timestamp, not from counting ticks, so it stays correct when the browser
+// throttles timers (locked screen, background tab) and catches up as soon as the page runs again.
+function syncRestRemaining() {
+  if (restEndsAt !== null) restRemaining = Math.max(0, Math.ceil((restEndsAt - Date.now()) / 1000));
+}
+
+function tickRest() {
+  syncRestRemaining();
+  updateRestTimer();
+  if (restRemaining <= 0) {
+    stopRestTimer();
+    notifyRestDone();
+  }
+}
+
+function runRestTimer() {
+  clearInterval(restInterval);
+  restEndsAt = Date.now() + restRemaining * 1000;
+  $('restToggleBtn').textContent = 'Pause rest';
+  restInterval = setInterval(tickRest, 250);
+}
+
 function stopRestTimer() {
   clearInterval(restInterval);
   restInterval = null;
+  restEndsAt = null;
   $('restToggleBtn').textContent = 'Start rest';
 }
 
 function startRestTimer() {
-  clearInterval(restInterval);
   restRemaining = getWorkoutSettings().restDuration;
   $('restPanel').hidden = false;
-  $('restToggleBtn').textContent = 'Pause rest';
   updateRestTimer();
-  restInterval = setInterval(() => {
-    restRemaining -= 1;
-    updateRestTimer();
-    if (restRemaining <= 0) {
-      stopRestTimer();
-      restRemaining = 0;
-      updateRestTimer();
+  runRestTimer();
+}
+
+// Browsers only allow sound after a tap, so the audio context is created from the buttons that start the rest timer.
+function unlockAudio() {
+  try {
+    audioContext = audioContext || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioContext.state === 'suspended') audioContext.resume();
+  } catch (error) {
+    audioContext = null;
+  }
+}
+
+function notifyRestDone() {
+  if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+  if (!audioContext) return;
+  try {
+    [0, 0.25].forEach(offset => {
+      const oscillator = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+      const start = audioContext.currentTime + offset;
+      oscillator.frequency.value = 880;
+      gain.gain.setValueAtTime(0.12, start);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.18);
+      oscillator.connect(gain);
+      gain.connect(audioContext.destination);
+      oscillator.start(start);
+      oscillator.stop(start + 0.2);
+    });
+  } catch (error) {
+    console.error('Unable to play the rest timer sound.', error);
+  }
+}
+
+// Keeps the screen awake during a workout so the timer can alert you; the browser drops the lock whenever the page is hidden.
+async function syncWakeLock() {
+  const wanted = Boolean(activeSession) && !document.hidden && 'wakeLock' in navigator;
+  if (wanted && !wakeLock && !wakeLockRequesting) {
+    wakeLockRequesting = true;
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    } catch (error) {
+      console.error('Unable to keep the screen awake.', error);
+    } finally {
+      wakeLockRequesting = false;
     }
-  }, 1000);
+  } else if (!wanted && wakeLock) {
+    await wakeLock.release();
+  }
 }
 
 function renderActiveWorkout() {
@@ -204,6 +269,7 @@ function renderActiveWorkout() {
   $('completedReps').value = '';
   $('completedSets').innerHTML = (exercise.sets || []).map((set, index) => `<li>Set ${index + 1}: ${set.reps} reps${set.weight ? ` at ${set.weight} lbs` : ''}</li>`).join('');
   $('nextExerciseBtn').textContent = activeSession.currentIndex === activeSession.exercises.length - 1 ? 'Finish workout' : 'Next exercise';
+  $('activeSyncNotice').hidden = !activeSyncFailed;
 }
 
 function startWorkout(template) {
@@ -211,38 +277,47 @@ function startWorkout(template) {
   stopRestTimer();
   restRemaining = getWorkoutSettings().restDuration;
   $('restPanel').hidden = true;
-  activeSession = { name:template.name, notes:template.notes || '', exercises:template.exercises.map(item => ({ ...item, sets:[] })), currentIndex:0 };
-  persistActiveSession().catch(error => console.error('Unable to persist active workout.', error));
+  activeSession = { name:template.name, notes:template.notes || '', exercises:template.exercises.map(item => ({ ...item, sets:[] })), currentIndex:0, clientId:newClientId() };
+  persistActiveSession();
   renderActiveWorkout();
   $('activeWorkout').hidden = false;
+  syncWakeLock();
   $('activeWorkout').scrollIntoView({ behavior:'smooth', block:'start' });
 }
 
+// The finished workout goes into the local upload queue first, so nothing can lose it after this point;
+// the clientId lets the server ignore a retried upload it already stored.
 async function finishWorkout() {
-  const workout = { name:activeSession.name, notes:activeSession.notes || '', exercises:activeSession.exercises.map(item => ({ name:item.name, weight:item.weight, reps:item.sets.length ? item.sets[item.sets.length - 1].reps : item.reps, sets:item.sets })), createdAt:Date.now() };
-  try {
-    await persistWorkout(workout);
-    await clearActiveSession();
-    activeSession = null;
-    stopRestTimer();
-    $('restPanel').hidden = true;
-    $('activeWorkout').hidden = true;
-    await loadSavedWorkouts();
-    showFeedback(`“${workout.name}” saved successfully.`, 'success');
-  } catch (error) {
-    showFeedback('This workout could not be saved on this device.');
-    console.error('Unable to save completed workout.', error);
-  }
+  activeSession.clientId = activeSession.clientId || newClientId();
+  const workout = { name:activeSession.name, notes:activeSession.notes || '', exercises:activeSession.exercises.map(item => ({ name:item.name, weight:item.weight, reps:item.sets.length ? item.sets[item.sets.length - 1].reps : item.reps, sets:item.sets })), createdAt:Date.now(), clientId:activeSession.clientId };
+  queuePendingWorkout(workout);
+  activeSession = null;
+  persistActiveSession();
+  stopRestTimer();
+  $('restPanel').hidden = true;
+  $('activeWorkout').hidden = true;
+  syncWakeLock();
+  const synced = await flushPendingWorkouts();
+  showFeedback(synced ? `“${workout.name}” saved successfully.` : `“${workout.name}” is saved on this device and will sync when the server is reachable again.`, 'success');
+}
+
+function renderStorageStatus() {
+  const waiting = readPendingWorkouts().length;
+  const parts = [workoutsReachable ? 'Saved to your account' : 'Server unreachable'];
+  if (waiting) parts.push(`${waiting} workout${waiting === 1 ? '' : 's'} waiting to sync`);
+  $('storageStatus').textContent = parts.join(' · ');
 }
 
 async function loadSavedWorkouts() {
   try {
     const workouts = await getSavedWorkouts();
     renderSavedWorkouts(workouts);
-    $('storageStatus').textContent = 'Stored on this device';
+    workoutsReachable = true;
+    renderStorageStatus();
     return workouts;
   } catch (error) {
-    $('storageStatus').textContent = 'Local storage unavailable';
+    workoutsReachable = false;
+    renderStorageStatus();
     console.error('Unable to load saved workouts.', error);
     return null;
   }
@@ -258,21 +333,33 @@ function takeRequestedWorkoutId() {
   return requestedId;
 }
 
+// `workouts` is null when the server could not be reached; the in-progress workout is still restored from this device.
 async function resumeOrStartWorkout(workouts) {
-  const requestedId = takeRequestedWorkoutId();
-  try {
-    const savedSession = await getActiveSession();
-    if (savedSession) {
-      activeSession = savedSession;
-      stopRestTimer();
-      restRemaining = getWorkoutSettings().restDuration;
-      updateRestTimer();
-      $('restPanel').hidden = true;
-      renderActiveWorkout();
-      $('activeWorkout').hidden = false;
+  const requestedId = workouts ? takeRequestedWorkoutId() : null;
+  const local = readLocalActive();
+  let savedSession = null;
+  if (local && local.dirty) {
+    // Changes made here that the server has not seen yet win over the server's copy.
+    savedSession = local.session;
+    syncActiveSession();
+  } else {
+    try {
+      savedSession = await getActiveSession();
+      mirrorActiveSession(savedSession);
+    } catch (error) {
+      console.error('Unable to load active workout.', error);
+      savedSession = local ? local.session : null;
     }
-  } catch (error) {
-    console.error('Unable to load active workout.', error);
+  }
+  if (savedSession) {
+    activeSession = savedSession;
+    stopRestTimer();
+    restRemaining = getWorkoutSettings().restDuration;
+    updateRestTimer();
+    $('restPanel').hidden = true;
+    renderActiveWorkout();
+    $('activeWorkout').hidden = false;
+    syncWakeLock();
   }
   const requestedWorkout = requestedId === null ? null : workouts.find(workout => workout.id === requestedId);
   if (requestedWorkout) startWorkout(requestedWorkout);
@@ -299,7 +386,7 @@ $('exerciseList').oninput = e => {
   if (index !== undefined && field) exercises[+index][field] = e.target.value;
 };
 $('exerciseList').onclick = e => { if (e.target.classList.contains('remove') && e.target.dataset.index !== undefined) { exercises.splice(+e.target.dataset.index, 1); render(); } };
-$('activeNotes').oninput = () => { if (activeSession) { activeSession.notes = $('activeNotes').value; persistActiveSession().catch(error => console.error('Unable to persist active workout notes.', error)); } };
+$('activeNotes').oninput = () => { if (activeSession) { activeSession.notes = $('activeNotes').value; persistActiveSession(); } };
 $('clearBtn').onclick = () => { editingWorkout = null; exercises.length = 0; $('workoutName').value = ''; $('workoutDate').value = dateInputValue(Date.now()); $('workoutNotes').value = ''; $('saveBtn').textContent = 'Save workout'; render(); };
 $('templateList').onclick = e => {
   const action = e.target.dataset.templateAction;
@@ -366,24 +453,27 @@ $('completeSetBtn').onclick = () => {
   const exercise = activeSession.exercises[activeSession.currentIndex];
   exercise.sets.push({ reps, weight });
   exercise.weight = Math.max(Number(exercise.weight) || 0, weight);
-  persistActiveSession().catch(error => console.error('Unable to persist active workout.', error));
+  persistActiveSession();
   renderActiveWorkout();
+  unlockAudio();
   if (getWorkoutSettings().autoRest) startRestTimer();
-  else { restRemaining = getWorkoutSettings().restDuration; updateRestTimer(); $('restPanel').hidden = false; }
+  else { stopRestTimer(); restRemaining = getWorkoutSettings().restDuration; updateRestTimer(); $('restPanel').hidden = false; }
 };
 $('restToggleBtn').onclick = () => {
-  if (restInterval) stopRestTimer();
+  unlockAudio();
+  if (restInterval) { syncRestRemaining(); updateRestTimer(); stopRestTimer(); }
   else {
-    $('restToggleBtn').textContent = 'Pause rest';
-    restInterval = setInterval(() => { restRemaining -= 1; updateRestTimer(); if (restRemaining <= 0) { stopRestTimer(); restRemaining = 0; updateRestTimer(); } }, 1000);
+    if (restRemaining <= 0) restRemaining = getWorkoutSettings().restDuration;
+    updateRestTimer();
+    runRestTimer();
   }
 };
 $('restResetBtn').onclick = () => { stopRestTimer(); restRemaining = getWorkoutSettings().restDuration; updateRestTimer(); };
 $('nextExerciseBtn').onclick = () => {
   if (activeSession.currentIndex === activeSession.exercises.length - 1) finishWorkout();
-  else { activeSession.currentIndex += 1; stopRestTimer(); restRemaining = getWorkoutSettings().restDuration; updateRestTimer(); $('restPanel').hidden = true; renderActiveWorkout(); persistActiveSession().catch(error => console.error('Unable to persist active workout.', error)); }
+  else { activeSession.currentIndex += 1; stopRestTimer(); restRemaining = getWorkoutSettings().restDuration; updateRestTimer(); $('restPanel').hidden = true; renderActiveWorkout(); persistActiveSession(); }
 };
-$('endWorkoutBtn').onclick = () => { if (!getWorkoutSettings().confirmEnd || confirm('End this workout without saving it?')) { activeSession = null; clearActiveSession(); stopRestTimer(); $('activeWorkout').hidden = true; } };
+$('endWorkoutBtn').onclick = () => { if (!getWorkoutSettings().confirmEnd || confirm('End this workout without saving it?')) { activeSession = null; persistActiveSession(); stopRestTimer(); $('activeWorkout').hidden = true; syncWakeLock(); } };
 $('savedWorkoutList').onclick = async e => {
   const action = e.target.dataset.action;
   if (!action) return;
@@ -444,4 +534,10 @@ window.serverStateReady?.then(state => {
   localStorage.setItem(customTemplateStorageKey, JSON.stringify(customTemplates));
   renderTemplates();
 });
-loadSavedWorkouts().then(workouts => { if (workouts) return resumeOrStartWorkout(workouts); });
+window.addEventListener('syncchange', event => {
+  renderStorageStatus();
+  $('activeSyncNotice').hidden = !(event.detail.activeOffline && activeSession);
+  if (event.detail.uploaded && initialLoadDone) loadSavedWorkouts();
+});
+document.addEventListener('visibilitychange', () => { if (!document.hidden && restInterval) tickRest(); syncWakeLock(); });
+window.localReady.then(flushPendingWorkouts).then(loadSavedWorkouts).then(resumeOrStartWorkout).finally(() => { initialLoadDone = true; });

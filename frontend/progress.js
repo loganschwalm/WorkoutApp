@@ -168,6 +168,8 @@ function renderProgress(workouts) {
 
 async function loadProgress() {
   try {
+    await window.localReady;
+    await flushPendingWorkouts();
     allWorkouts = await getSavedWorkouts();
     populateWorkoutTypes(allWorkouts);
     populateExercises(allWorkouts);
