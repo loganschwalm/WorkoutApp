@@ -139,14 +139,13 @@ function drawChart() {
     context.strokeStyle = colors[typeIndex % colors.length];
     context.fillStyle = colors[typeIndex % colors.length];
     context.lineWidth = 3;
+    const own = chartData.points.map((point, index) => ({ index, value:type.values.get(point.key) })).filter(entry => entry.value !== undefined);
     context.beginPath();
-    chartData.points.forEach((point, index) => {
-      const chartPoint = { x:x(index), y:y(type.values.get(point.key) || 0) };
-      if (index === 0) context.moveTo(chartPoint.x, chartPoint.y); else context.lineTo(chartPoint.x, chartPoint.y);
+    own.forEach((entry, position) => {
+      if (position === 0) context.moveTo(x(entry.index), y(entry.value)); else context.lineTo(x(entry.index), y(entry.value));
     });
     context.stroke();
-    chartData.points.forEach((point, index) => {
-      const value = type.values.get(point.key) || 0;
+    own.forEach(({ index, value }) => {
       context.beginPath(); context.arc(x(index), y(value), 4, 0, Math.PI * 2); context.fill();
       context.textAlign = 'left';
       context.font = '11px system-ui, sans-serif';

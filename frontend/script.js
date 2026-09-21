@@ -5,6 +5,8 @@ const databaseVersion = 2;
 const workoutStore = 'workouts';
 const activeWorkoutStore = 'activeWorkout';
 let editingWorkout = null;
+// Weight/reps an exercise had when its logged sets were loaded for editing; used to tell whether the user changed them.
+const setBaselines = new WeakMap();
 let activeSession = null;
 let restInterval = null;
 let restRemaining = getWorkoutSettings().restDuration;
@@ -151,7 +153,12 @@ function loadWorkoutIntoForm(workout, editMode) {
   $('workoutName').value = workout.name;
   $('workoutDate').value = editMode ? dateInputValue(workout.createdAt) : dateInputValue(Date.now());
   $('workoutNotes').value = workout.notes || '';
-  exercises.splice(0, exercises.length, ...workout.exercises.map(item => ({ ...item })));
+  exercises.splice(0, exercises.length, ...workout.exercises.map(item => {
+    if (!editMode) { const { sets, ...plan } = item; return plan; }
+    const copy = { ...item };
+    if (item.sets?.length) setBaselines.set(copy, { weight:String(item.weight ?? ''), reps:String(item.reps ?? '') });
+    return copy;
+  }));
   $('saveBtn').textContent = editMode ? 'Update workout' : 'Save workout';
   render();
   window.scrollTo({ top:0, behavior:'smooth' });
@@ -200,6 +207,7 @@ function renderActiveWorkout() {
 }
 
 function startWorkout(template) {
+  if (activeSession && getWorkoutSettings().confirmEnd && !confirm(`Replace your in-progress “${activeSession.name}” workout? Sets you have logged so far will be lost.`)) return;
   stopRestTimer();
   restRemaining = getWorkoutSettings().restDuration;
   $('restPanel').hidden = true;
@@ -232,25 +240,42 @@ async function loadSavedWorkouts() {
     const workouts = await getSavedWorkouts();
     renderSavedWorkouts(workouts);
     $('storageStatus').textContent = 'Stored on this device';
-    const requestedId = Number(new URLSearchParams(location.search).get('start'));
-    const requestedWorkout = workouts.find(workout => workout.id === requestedId);
-    if (requestedWorkout) startWorkout(requestedWorkout);
-    else {
-      const savedSession = await getActiveSession();
-      if (savedSession) {
-        activeSession = savedSession;
-        stopRestTimer();
-        restRemaining = getWorkoutSettings().restDuration;
-        updateRestTimer();
-        $('restPanel').hidden = true;
-        renderActiveWorkout();
-        $('activeWorkout').hidden = false;
-      }
-    }
+    return workouts;
   } catch (error) {
     $('storageStatus').textContent = 'Local storage unavailable';
     console.error('Unable to load saved workouts.', error);
+    return null;
   }
+}
+
+function takeRequestedWorkoutId() {
+  const params = new URLSearchParams(location.search);
+  if (!params.has('start')) return null;
+  const requestedId = Number(params.get('start'));
+  params.delete('start');
+  const query = params.toString();
+  history.replaceState(null, '', `${location.pathname}${query ? `?${query}` : ''}${location.hash}`);
+  return requestedId;
+}
+
+async function resumeOrStartWorkout(workouts) {
+  const requestedId = takeRequestedWorkoutId();
+  try {
+    const savedSession = await getActiveSession();
+    if (savedSession) {
+      activeSession = savedSession;
+      stopRestTimer();
+      restRemaining = getWorkoutSettings().restDuration;
+      updateRestTimer();
+      $('restPanel').hidden = true;
+      renderActiveWorkout();
+      $('activeWorkout').hidden = false;
+    }
+  } catch (error) {
+    console.error('Unable to load active workout.', error);
+  }
+  const requestedWorkout = requestedId === null ? null : workouts.find(workout => workout.id === requestedId);
+  if (requestedWorkout) startWorkout(requestedWorkout);
 }
 
 $('addBtn').onclick = () => {
@@ -392,11 +417,19 @@ $('savedWorkoutList').onclick = async e => {
 $('saveBtn').onclick = async () => {
   if (!exercises.length) { showFeedback('Add at least one exercise before saving the workout.'); return; }
   if (!$('workoutDate').value) { showFeedback('Choose a workout date before saving.'); $('workoutDate').focus(); return; }
-  const workout = { ...editingWorkout, name:$('workoutName').value.trim() || 'Untitled workout', notes:$('workoutNotes').value.trim(), exercises:[...exercises], createdAt:timestampFromDateInput($('workoutDate').value) };
+  let replacedSets = 0;
+  const savedExercises = exercises.map(item => {
+    const baseline = setBaselines.get(item);
+    if (!baseline || (String(item.weight ?? '') === baseline.weight && String(item.reps ?? '') === baseline.reps)) return { ...item };
+    const { sets, ...plan } = item;
+    replacedSets += 1;
+    return plan;
+  });
+  const workout = { ...editingWorkout, name:$('workoutName').value.trim() || 'Untitled workout', notes:$('workoutNotes').value.trim(), exercises:savedExercises, createdAt:timestampFromDateInput($('workoutDate').value) };
   try {
     await persistWorkout(workout);
     await loadSavedWorkouts();
-    showFeedback(`“${workout.name}” saved successfully.`, 'success');
+    showFeedback(`“${workout.name}” saved successfully.${replacedSets ? ' Set-by-set details were replaced for exercises whose weight or reps you changed.' : ''}`, 'success');
     $('clearBtn').click();
   } catch (error) {
     showFeedback('This workout could not be saved on this device.');
@@ -411,4 +444,4 @@ window.serverStateReady?.then(state => {
   localStorage.setItem(customTemplateStorageKey, JSON.stringify(customTemplates));
   renderTemplates();
 });
-loadSavedWorkouts();
+loadSavedWorkouts().then(workouts => { if (workouts) return resumeOrStartWorkout(workouts); });
