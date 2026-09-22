@@ -1,6 +1,13 @@
 # Workout Tracker
 
-A browser-based workout tracker for creating, completing, reviewing, and analyzing workouts. The app is built with plain HTML, CSS, and JavaScript and stores data locally in the browser.
+A workout tracker for creating, completing, reviewing, and analyzing workouts.
+
+The frontend is plain HTML, CSS, and JavaScript. The backend is a single Python file that uses
+nothing outside the standard library and stores data in SQLite, so self-hosting needs no package
+manager, no build step, and no external database. Multiple accounts are supported, each with its
+own workouts, templates, and settings.
+
+**[Install it on Proxmox with one command.](#one-line-install-on-proxmox)**
 
 ## Features
 
@@ -12,7 +19,7 @@ A browser-based workout tracker for creating, completing, reviewing, and analyzi
 - Remove exercises before saving.
 - Add notes to custom workouts.
 - Validate exercise names, weights, reps, and dates with inline feedback.
-- Save workouts locally for future sessions.
+- Save workouts to your account, so they follow you to any browser or device.
 
 ### Guided workouts
 
@@ -64,7 +71,8 @@ Users can also:
 - Delete custom templates.
 - Start a workout directly from any template.
 
-Custom templates are stored locally in the browser.
+Custom templates are saved to your account on the server, and cached in the browser so they
+still work while the server is unreachable.
 
 ### Workout history
 
@@ -95,7 +103,8 @@ The gear button opens a settings modal available on every page. Settings include
 - A Test alert button plays the alert with the current choices, before you save them.
 - The signed-in account name and a Sign out button. Signing out warns first if a workout has not finished syncing; it stays on the device and uploads the next time you sign in to the same account.
 
-Settings persist locally between visits.
+Settings are saved to your account on the server and cached in the browser, so they persist
+between visits and follow you to another device.
 
 ### Responsive design
 
@@ -107,96 +116,224 @@ Settings persist locally between visits.
 ## Project structure
 
 ```text
-frontend/        Browser pages, scripts, and shared styles
-backend/server.py Self-hosted API, authentication, and static file server
-data/            Runtime SQLite database directory
-Dockerfile       Container image definition
-docker-compose.yml Docker deployment with persistent storage
-scripts/install-proxmox-lxc.sh Proxmox LXC installation helper
-tests/           Browser-level end-to-end tests (see tests/README.md)
+frontend/               Browser pages, scripts, and shared styles
+backend/server.py       API, authentication, and static file server
+data/                   SQLite database when run from a git checkout (gitignored)
+ct/workout-tracker.sh   Proxmox VE one-line installer and updater
+Dockerfile              Container image definition
+docker-compose.yml      Docker deployment with a persistent volume
+tests/                  Browser-level end-to-end tests (see tests/README.md)
 ```
 
-## Self-hosted deployment
+## Self-hosting
 
-The app supports multi-user self-hosting. Each account has isolated workout records and active workout sessions in the server-side SQLite database. No external cloud provider is required.
+Every account gets its own workouts, active session, templates, and settings, all kept in a
+server-side SQLite file. Nothing is sent to an external service.
 
-### Docker Compose
+### One-line install on Proxmox
 
-On a Debian or Ubuntu VM/LXC running on Proxmox:
+Open a **shell on the Proxmox VE host** (Datacenter → your node → Shell, or SSH as `root`) and run:
 
 ```bash
-git clone <your-repository-url> workout-tracker
-cd workout-tracker
-docker compose up -d --build
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/loganschwalm/WorkoutApp/main/ct/workout-tracker.sh)"
 ```
 
-Open `http://YOUR_SERVER_IP:8000` and create the first account. The SQLite database is stored in the persistent `workout_data` Docker volume and survives container restarts and upgrades.
+A menu offers default settings, advanced settings, or updating an existing install. The script then:
 
-Useful commands:
+1. Downloads a Debian LXC template, to whichever storage on your node accepts templates.
+2. Creates an unprivileged LXC with networking on `vmbr0` via DHCP.
+3. Installs `python3`, `git`, and `sqlite3` inside it.
+4. Clones this repository to `/opt/workout-tracker`.
+5. Creates a `workout` system user and a `workout-tracker` systemd service that starts on boot.
+6. Waits until the app actually answers on its port, then prints the URL.
 
-```bash
-docker compose logs -f
-docker compose restart
-docker compose pull
-docker compose up -d --build
-```
+If the service does not come up, the script fails loudly and prints the last 40 journal lines
+rather than reporting success.
 
-For internet access, place the app behind a reverse proxy such as Caddy, Nginx Proxy Manager, or Traefik and enable HTTPS. Do not expose the raw HTTP port directly to the public internet without a reverse proxy and firewall rules.
+There is no Docker inside the container. The app is a single standard-library Python process, so a
+systemd unit is both smaller and one less moving part than Docker nested in an unprivileged LXC.
 
-### Proxmox guidance
+When it finishes, open the printed URL and **register the first account**.
 
-1. Create a small Debian 12 VM or unprivileged LXC.
-2. Give it a static DHCP lease or fixed IP.
-3. Install Docker Engine and the Docker Compose plugin.
-4. Clone the project into the VM/LXC.
-5. Start it with `docker compose up -d --build`.
-6. Back up the Docker volume containing `/app/data/workouts.db`.
+#### Defaults
 
-The current server uses Python's standard library, SQLite, secure password hashing, HTTP-only session cookies, and per-user database queries.
+| | |
+|---|---|
+| Container | unprivileged Debian 12, next free CTID, hostname `workout-tracker` |
+| Resources | 1 core, 512 MB RAM, 512 MB swap, 4 GB disk |
+| Network | bridge `vmbr0`, DHCP, starts on boot |
+| App | `http://<container-ip>:8000` |
+| Code | `/opt/workout-tracker` |
+| Database | `/var/lib/workout-tracker/workouts.db` |
 
-### Proxmox helper script
+The database lives outside the code directory on purpose, so updates cannot touch your data.
 
-The repository includes `scripts/install-proxmox-lxc.sh`. Run it as `root` on the Proxmox host to create an unprivileged Debian 12 LXC, install Docker and Docker Compose, clone the project, and start the application.
+#### Choosing settings without the menu
 
-The script requires the Git repository URL:
-
-```bash
-chmod +x scripts/install-proxmox-lxc.sh
-REPO_URL=https://github.com/your-account/workout-tracker.git \
-	./scripts/install-proxmox-lxc.sh
-```
-
-By default it uses DHCP, `local-lvm`, `vmbr0`, 2 CPU cores, 1 GB RAM, and an 8 GB root disk. Configure a static address and other values with environment variables:
+Every setting is also an environment variable, which is how you script the install or run it
+non-interactively:
 
 ```bash
 CTID=240 \
 IP_CONFIG=192.168.1.50/24 \
 GATEWAY=192.168.1.1 \
-STORAGE=local-lvm \
-BRIDGE=vmbr0 \
-REPO_URL=https://github.com/your-account/workout-tracker.git \
-	./scripts/install-proxmox-lxc.sh
+DNS_SERVER=192.168.1.1 \
+MEMORY=1024 \
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/loganschwalm/WorkoutApp/main/ct/workout-tracker.sh)"
 ```
 
-The helper enables LXC `nesting` and `keyctl`, which Docker requires inside an unprivileged container. Review the script before running it in production and ensure your Proxmox backup plan includes the application data volume.
+| Variable | Default | Meaning |
+|---|---|---|
+| `CTID` | next free ID | LXC container ID |
+| `CT_HOSTNAME` | `workout-tracker` | Container hostname |
+| `CT_PASSWORD` | *(none)* | Root password; blank means console login is disabled and you use `pct enter` |
+| `DEBIAN_VERSION` | `12` | Debian template major version, `12` or `13` |
+| `STORAGE` | auto | Storage for the root disk, e.g. `local-lvm` |
+| `TEMPLATE_STORAGE` | auto | Storage for the LXC template, e.g. `local` |
+| `BRIDGE` | `vmbr0` | Network bridge |
+| `IP_CONFIG` | `dhcp` | `dhcp`, or a CIDR address such as `192.168.1.50/24` |
+| `GATEWAY` | *(none)* | Required with a static `IP_CONFIG` |
+| `DNS_SERVER` | host's | DNS server for the container |
+| `VLAN` | *(none)* | VLAN tag |
+| `CORES` / `MEMORY` / `SWAP` / `DISK` | `1` / `512` / `512` / `4` | Cores, MB, MB, GB |
+| `UNPRIVILEGED` | `1` | `0` creates a privileged container |
+| `ONBOOT` | `1` | Start the container with the host |
+| `APP_PORT` | `8000` | Port the app listens on |
+| `REPO_URL` / `BRANCH` | this repo / `main` | Source to install from |
+| `APP_DIR` / `DATA_DIR` | `/opt/workout-tracker` / `/var/lib/workout-tracker` | Code and database paths |
 
-Existing workouts saved in the browser-only IndexedDB version are not automatically uploaded when the self-hosted server is enabled. They must be re-entered or migrated with a future import tool.
+`STORAGE` and `TEMPLATE_STORAGE` are detected from the storages your node actually has: the script
+asks when there is more than one candidate, and only offers storages that accept the right content
+type. A template cannot live on `local-lvm`, so it is normally `local` even when the root disk is not.
+
+#### Updating
+
+Run the same command again on the Proxmox host and choose **Update an existing container**. That
+fetches the latest commit, rewrites the systemd unit, and restarts the service. Your database is
+untouched. You can also update from inside the container:
+
+```bash
+pct enter <CTID>
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/loganschwalm/WorkoutApp/main/ct/workout-tracker.sh)"
+```
+
+#### Managing the container
+
+```bash
+pct enter <CTID>                                     # shell
+pct exec <CTID> -- systemctl status workout-tracker  # service state
+pct exec <CTID> -- journalctl -u workout-tracker -f  # follow logs
+pct exec <CTID> -- systemctl restart workout-tracker # restart
+```
+
+#### Backups
+
+The install adds a `workout-tracker-backup` helper that takes a consistent snapshot while the app
+keeps running, which a plain file copy of a live SQLite database does not give you:
+
+```bash
+pct exec <CTID> -- workout-tracker-backup            # writes to /var/backups/workout-tracker
+```
+
+For the whole container, use a normal Proxmox `vzdump` backup job. Because the database sits at
+`/var/lib/workout-tracker/workouts.db` inside the container's root disk, a container backup covers it.
+
+### Before you expose it
+
+The server was written for a home network, and the defaults reflect that:
+
+- **Registration is open.** Anyone who can reach the port can create an account. There is no admin
+  role and no invite system, so create your accounts right after installing.
+- **There is no HTTPS and no rate limiting.** Passwords are hashed with PBKDF2-SHA256 and sessions
+  use `HttpOnly`, `SameSite=Lax` cookies, but the cookie is not marked `Secure`, so plain HTTP sends
+  it in the clear.
+
+Keep it on a trusted LAN, or put it behind a reverse proxy such as Caddy, Nginx Proxy Manager, or
+Traefik that terminates TLS and adds authentication. Do not forward the port straight to the internet.
+
+### Docker Compose
+
+Useful if you already run Docker, or are self-hosting somewhere other than Proxmox. It needs
+**Compose v2** (`docker compose`, the plugin). Debian's older `docker-compose` package is v1 and
+misreads this compose file, so install Docker from Docker's own repository:
+
+```bash
+curl -fsSL https://get.docker.com | sh
+git clone https://github.com/loganschwalm/WorkoutApp.git workout-tracker
+cd workout-tracker
+docker compose up -d --build
+```
+
+Open `http://YOUR_SERVER_IP:8000`. The database lives in the `workout_data` volume and survives
+restarts and rebuilds.
+
+```bash
+docker compose logs -f                      # logs
+docker compose down && git pull && docker compose up -d --build   # update
+docker run --rm -v workout_data:/data -v "$PWD":/backup alpine \
+  cp /data/workouts.db /backup/workouts.db  # back up
+```
+
+### Manual install on any Linux host
+
+No container, no Docker. You need Python 3.9 or newer, with a SQLite that has JSON support (any
+current distro), and nothing else.
+
+```bash
+sudo git clone https://github.com/loganschwalm/WorkoutApp.git /opt/workout-tracker
+sudo useradd --system --no-create-home --shell /usr/sbin/nologin workout
+sudo mkdir -p /var/lib/workout-tracker
+sudo chown workout:workout /var/lib/workout-tracker
+
+sudo tee /etc/systemd/system/workout-tracker.service >/dev/null <<'EOF'
+[Unit]
+Description=Workout Tracker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=workout
+Group=workout
+WorkingDirectory=/opt/workout-tracker
+Environment=PORT=8000
+Environment=APP_ROOT=/opt/workout-tracker/frontend
+Environment=WORKOUT_DB=/var/lib/workout-tracker/workouts.db
+ExecStart=/usr/bin/python3 /opt/workout-tracker/backend/server.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl enable --now workout-tracker
+```
+
+The server reads three environment variables: `PORT` (default `8000`), `APP_ROOT` (the directory of
+static files to serve, default `frontend/`), and `WORKOUT_DB` (the SQLite path, default `data/workouts.db`).
+
+### Migrating from the browser-only version
+
+Workouts saved in the older browser-only IndexedDB build are not uploaded automatically when you
+move to a self-hosted server. They have to be re-entered; there is no import tool yet.
 
 ## Running locally
 
-The app should be served over HTTP so IndexedDB works consistently across browsers, especially Firefox.
+Serve it over HTTP rather than opening the files directly, so that IndexedDB and session cookies
+behave the same as in a real deployment. From the project directory:
 
-From the project directory, run:
-
-```powershell
+```bash
 python backend/server.py
 ```
 
-Then open:
+Then open <http://localhost:8000/> and register an account. Visiting a page while signed out
+redirects to the login form, so start at the root rather than at `index.html`.
 
-- http://localhost:8000/index.html
-- http://localhost:8000/progress.html
-- http://localhost:8000/history.html
+The database goes to `data/workouts.db` in the checkout, which is gitignored. Override any of
+`PORT`, `APP_ROOT`, or `WORKOUT_DB` to change that:
+
+```bash
+PORT=9000 WORKOUT_DB=/tmp/scratch.db python backend/server.py
+```
 
 ## Tests
 
@@ -225,7 +362,9 @@ Data is local to the browser and localhost origin. Clearing browser storage or u
 
 In self-hosted mode, saved workouts, active sessions, custom templates, and preferences are stored server-side per account in SQLite. Authentication uses PBKDF2 password hashing and HTTP-only session cookies. Browser local storage remains as a fallback for static browser-only use.
 
-Each user's workout records are protected by the authenticated user ID in every database query. The SQLite file should be included in your regular Proxmox backup plan.
+Each user's workout records are protected by the authenticated user ID in every database query.
+Include the SQLite file in your backup plan: it is at `/var/lib/workout-tracker/workouts.db` in an
+LXC install, and in the `workout_data` volume under Docker.
 
 ## Technology
 
@@ -237,4 +376,4 @@ Each user's workout records are protected by the authenticated user ID in every 
 - HTML Canvas for progress charts
 - Python standard library HTTP server
 - SQLite
-- Docker Compose
+- systemd, Docker Compose, and a Proxmox LXC helper script for self-hosting
