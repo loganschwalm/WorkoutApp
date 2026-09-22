@@ -50,7 +50,24 @@ Logged sets, notes, and finished workouts are saved on the device first and uplo
 - Local copies are kept per account, so another account signed in on the same browser never sees them.
 - If your sign-in expires while a page is open, a banner offers to sign in again and returns you to the same page; nothing on screen is discarded, and a workout in progress stays on the device.
 
-Limitation: the page itself must already be loaded. Reloading while your device has no connection to the server at all still fails because the app's files are not cached for offline use yet.
+A service worker caches the app's own files, so reloading with no connection still opens the
+app rather than a browser error page. Workout data is untouched by that cache; `offline.js`
+keeps owning it, so there is only ever one copy of the truth.
+
+Service workers only run in a [secure context](#offline-support-needs-https), which means
+`localhost` or HTTPS. Over plain HTTP to a LAN address the app behaves exactly as it did
+before: everything works while the page stays loaded, and a reload needs the server.
+
+### Installing to a phone
+
+- Install to the home screen from the browser's menu and launch it like an app, with no
+  address bar.
+- The app icon, name, and theme colour come from a web app manifest.
+- The status bar follows the light or dark theme you picked in Settings.
+- Reloading offline opens the app from the cache instead of failing.
+
+Installing and offline reloads both need HTTPS, or `localhost`. See
+[Offline support needs HTTPS](#offline-support-needs-https).
 
 ### Workout templates
 
@@ -116,10 +133,11 @@ between visits and follow you to another device.
 ## Project structure
 
 ```text
-frontend/               Browser pages, scripts, and shared styles
+frontend/               Browser pages, scripts, styles, icons, service worker, manifest
 backend/server.py       API, authentication, and static file server
 data/                   SQLite database when run from a git checkout (gitignored)
 ct/workout-tracker.sh   Proxmox VE one-line installer and updater
+scripts/make-icons.py   Regenerates the app icons in frontend/icons/
 Dockerfile              Container image definition
 docker-compose.yml      Docker deployment with a persistent volume
 tests/                  Browser-level end-to-end tests (see tests/README.md)
@@ -251,6 +269,30 @@ The server was written for a home network, and the defaults reflect that:
 Keep it on a trusted LAN, or put it behind a reverse proxy such as Caddy, Nginx Proxy Manager, or
 Traefik that terminates TLS and adds authentication. Do not forward the port straight to the internet.
 
+### Offline support needs HTTPS
+
+Browsers only run a service worker in a *secure context*: `localhost`, or HTTPS. A stock
+install serves plain HTTP on a LAN address such as `http://192.168.1.50:8000`, and there the
+worker never registers. Nothing breaks — the app works exactly as it did before, and
+`pwa.js` gives up quietly — but reloading offline and installing to the home screen will not
+work until the app is reachable over HTTPS.
+
+If you want those on your phone, put the container behind a reverse proxy that terminates
+TLS. Caddy is the least work, because it obtains and renews the certificate itself:
+
+```caddy
+workouts.example.com {
+    reverse_proxy 192.168.1.50:8000
+}
+```
+
+A self-signed certificate is not enough on its own: the browser must actually trust it, so
+either use a real domain, or add your own CA to the phone. A tunnel such as Tailscale or
+Cloudflare Tunnel also gives you a trusted HTTPS name without opening a port.
+
+Once the app loads over HTTPS, open it on your phone and choose Install app (Chrome) or
+Share then Add to Home Screen (Safari).
+
 ### Docker Compose
 
 Useful if you already run Docker, or are self-hosting somewhere other than Proxmox. It needs
@@ -374,6 +416,7 @@ LXC install, and in the `workout_data` volume under Docker.
 - IndexedDB
 - Local Storage
 - HTML Canvas for progress charts
+- Service worker and web app manifest
 - Python standard library HTTP server
 - SQLite
 - systemd, Docker Compose, and a Proxmox LXC helper script for self-hosting

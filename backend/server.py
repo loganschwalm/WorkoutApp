@@ -75,6 +75,25 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=ROOT, **kwargs)
 
+    def send_response(self, *args, **kwargs):
+        self.cache_control_sent = False
+        super().send_response(*args, **kwargs)
+
+    def send_header(self, keyword, value):
+        if keyword.lower() == 'cache-control':
+            self.cache_control_sent = True
+        super().send_header(keyword, value)
+
+    def end_headers(self):
+        # Static files otherwise go out with only Last-Modified, and a browser is then
+        # free to guess how long they stay fresh. It guesses badly: a signed-out visit
+        # can be answered from the cache with the signed-in page instead of the login
+        # redirect, and an upgraded server keeps serving old JavaScript to a browser
+        # that never asks again. Revalidating every time costs a 304 and avoids both.
+        if not getattr(self, 'cache_control_sent', False):
+            self.send_header('Cache-Control', 'no-cache')
+        super().end_headers()
+
     def send_json(self, status, payload, cookies=None):
         body = json.dumps(payload).encode()
         self.send_response(status)

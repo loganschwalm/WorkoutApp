@@ -1,2 +1,4 @@
 # Shell scripts are piped straight into bash on Linux hosts; CRLF would break them.
 *.sh text eol=lf
+# Binary assets must never be line-ending converted.
+*.png binary

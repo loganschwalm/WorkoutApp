@@ -478,6 +478,10 @@ ${GN}  $APP is ready.${CL}
   who can reach the port, so create your accounts now and keep the app on a
   trusted network, or put it behind a reverse proxy that requires auth.
 
+  Installing to a phone's home screen and reloading offline both need HTTPS,
+  which this plain-HTTP address is not. Put the app behind a TLS reverse proxy
+  to turn them on; everything else works as it is.
+
   To update later, run this same command again on the Proxmox host.
 
 EOF

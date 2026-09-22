@@ -46,6 +46,7 @@ WORKOUT_TEST_CHROME="/opt/chrome/chrome" python tests/run.py
 | `timer_and_sync` | 51 | Rest timer accuracy under a stalled clock, the screen wake lock, and saving sets and finished workouts through a network drop |
 | `sound_settings` | 31 | Alert tone, volume, vibration, the Test alert button, persistence across pages, and settings saved before the feature existed |
 | `gym_usability` | 81 | Last time's numbers, correcting logged sets, moving between exercises, skipped exercises, message visibility, the phone layout, session expiry and signing out |
+| `pwa` | 35 | The manifest and icons, service-worker registration, what is and is not cached, the theme colour, the signed-out redirect, and a reload with the server killed |
 
 Each suite gets a fresh server, database and browser profile, so they are
 independent and safe to run concurrently.
@@ -118,3 +119,6 @@ honoured every time.
   of their own sections; they are not individually runnable.
 - Timing-sensitive checks use fixed pauses. On a heavily loaded machine, prefer
   `--jobs 1`.
+- `pwa` relies on `127.0.0.1` counting as a secure context, which is how the
+  browser is willing to run a service worker over plain HTTP. It therefore proves
+  the worker behaves, not that any particular deployment is a secure context.
