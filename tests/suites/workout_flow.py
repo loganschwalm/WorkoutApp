@@ -51,7 +51,7 @@ def run(t):
     cdp.pause(0.3)
     check('accepting replaces it', cdp.ev(TITLE) == 'Pull Day', cdp.ev(TITLE))
     cdp.dialogs.clear()
-    cdp.ev('serverSettings = { ...getWorkoutSettings(), confirmEnd: false }')
+    cdp.ev('window.__realSettings = window.__realSettings || getWorkoutSettings; getWorkoutSettings = () => ({ ...window.__realSettings(), confirmEnd: false })')
     start(2)
     cdp.pause(0.3)
     check('no prompt when confirm-end is off', not cdp.dialogs and cdp.ev(TITLE) == 'Leg Day', f'{cdp.dialogs} {cdp.ev(TITLE)}')

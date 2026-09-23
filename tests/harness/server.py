@@ -15,7 +15,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fi
 class AppServer:
     """The real application server, on its own port with an empty database."""
 
-    def __init__(self, db_path, frontend_dir=None):
+    def __init__(self, db_path, frontend_dir=None, env=None):
         self.port = free_port()
         self.base_url = f'http://127.0.0.1:{self.port}'
         env = dict(
@@ -23,6 +23,7 @@ class AppServer:
             PORT=str(self.port),
             WORKOUT_DB=db_path,
             APP_ROOT=frontend_dir or os.path.join(REPO_ROOT, 'frontend'),
+            **(env or {}),
         )
         self.process = subprocess.Popen(
             [sys.executable, os.path.join(REPO_ROOT, 'backend', 'server.py')],
@@ -61,6 +62,32 @@ class AppServer:
         cookie = response.getheader('Set-Cookie')
         conn.close()
         return (json.loads(data) if data else None), cookie
+
+    def request(self, method, path, body=None, headers=None, token=None):
+        """Send exactly these bytes and headers. Returns (status, headers, parsed JSON or raw bytes).
+
+        For requests the app itself would never make: malformed bodies, odd headers, oversized uploads.
+        """
+        conn = http.client.HTTPConnection('127.0.0.1', self.port, timeout=10)
+        headers = dict(headers or {})
+        if token:
+            headers['Cookie'] = f'session={token}'
+        conn.putrequest(method, path)
+        if body is not None and 'Content-Length' not in headers:
+            headers['Content-Length'] = str(len(body))
+        for name, value in headers.items():
+            conn.putheader(name, value)
+        conn.endheaders()
+        if body:
+            conn.send(body)
+        response = conn.getresponse()
+        data = response.read()
+        conn.close()
+        try:
+            parsed = json.loads(data) if data else None
+        except ValueError:
+            parsed = data
+        return response.status, {k.lower(): v for k, v in response.getheaders()}, parsed
 
     def raw(self, method, path):
         """A request with no session cookie, for checking redirects and status codes."""

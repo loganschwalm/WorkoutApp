@@ -1,5 +1,6 @@
-// Local-first persistence. The in-progress workout and finished workouts that have not reached the server yet are
-// written to localStorage (per account) first, then pushed to the server in the background and retried until it accepts them.
+// Local-first persistence. The in-progress workout, finished workouts that have not reached the server yet, settings and
+// custom templates are written to localStorage (per account) first, then pushed to the server in the background and
+// retried until it accepts them. Loaded before settings.js, which keeps its settings here.
 const lastUserStorageKey = 'workout-tracker-last-user';
 const memoryStore = new Map();
 let localUserId = readLocal(lastUserStorageKey);
@@ -11,6 +12,9 @@ let activeRetryCount = 0;
 let pendingFlush = null;
 let pendingRetryTimer = null;
 let pendingRetryCount = 0;
+let stateSyncTimer = null;
+let stateSyncing = false;
+let stateRetryCount = 0;
 
 // Falls back to memory when localStorage is unavailable, so syncing still works (it just cannot survive a reload).
 function readLocal(key) {
@@ -143,6 +147,95 @@ function flushPendingWorkouts() {
   return pendingFlush;
 }
 
+// ---- Settings and custom templates ----------------------------------------
+// The same rule as the in-progress workout: a change is saved on this device first and stays marked dirty until the
+// server has it, and a dirty local copy beats the server's when a page loads, so a change made offline is never undone.
+const accountStateParts = ['settings', 'templates'];
+
+// Before these were kept per account, one copy per browser was shared by whoever signed in. It was last written
+// by the last account seen here, so it becomes that account's copy, marked clean so the server's copy replaces it.
+[['settings', 'workout-tracker-settings'], ['templates', 'workout-tracker-custom-templates']].forEach(([part, legacyKey]) => {
+  try {
+    const legacy = localStorage.getItem(legacyKey);
+    if (legacy === null) return;
+    if (localUserId !== null && !readLocalState(part)) writeLocal(localKey(part), { value:JSON.parse(legacy), dirty:false, stamp:'legacy' });
+    localStorage.removeItem(legacyKey);
+  } catch (error) {
+    // Unreadable old copy or no storage: the server's copy is loaded instead.
+  }
+});
+
+function readLocalState(part) {
+  const record = readLocal(localKey(part));
+  return record && typeof record === 'object' && 'value' in record ? record : null;
+}
+
+function saveLocalState(part, value) {
+  writeLocal(localKey(part), { value, dirty:true, stamp:`${Date.now()}-${++changeCounter}` });
+  scheduleStateSync(0);
+}
+
+function scheduleStateSync(delay) {
+  clearTimeout(stateSyncTimer);
+  stateSyncTimer = setTimeout(syncAccountState, delay);
+}
+
+async function syncAccountState() {
+  clearTimeout(stateSyncTimer);
+  // Only once the signed-in account is known, so a copy kept for another account is never sent to this one.
+  await window.localReady;
+  if (stateSyncing) return;
+  const dirty = accountStateParts.map(part => [part, readLocalState(part)]).filter(([, record]) => record && record.dirty);
+  if (!dirty.length) return;
+  stateSyncing = true;
+  try {
+    const body = Object.fromEntries(dirty.map(([part, record]) => [part, record.value]));
+    const response = await syncFetch('/api/state', { method:'PUT', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(body) });
+    if (!response.ok) throw new Error(`Settings sync failed (${response.status}).`);
+    dirty.forEach(([part, record]) => {
+      const latest = readLocalState(part);
+      if (latest && latest.stamp === record.stamp) writeLocal(localKey(part), { ...latest, dirty:false });
+    });
+    stateRetryCount = 0;
+  } catch (error) {
+    console.error('Unable to sync settings or templates; they are saved on this device and will be retried.', error);
+    stateRetryCount += 1;
+  } finally {
+    stateSyncing = false;
+  }
+  if (accountStateParts.some(part => readLocalState(part)?.dirty)) scheduleStateSync(stateRetryCount ? Math.min(60000, 2000 * 2 ** (stateRetryCount - 1)) : 0);
+}
+
+// Resolves to { settings, templates } for the signed-in account: a part changed here and not uploaded yet keeps the
+// local value, anything else takes the server's, and with the server unreachable the local copy (or null) is used.
+async function loadAccountState() {
+  await window.localReady;
+  const stampsBefore = Object.fromEntries(accountStateParts.map(part => [part, readLocalState(part)?.stamp]));
+  let server = null;
+  try {
+    const response = await syncFetch('/api/state');
+    if (response.ok) server = await response.json();
+  } catch (error) {
+    console.error('Unable to load settings and templates; using the copy on this device.', error);
+  }
+  const state = {};
+  accountStateParts.forEach(part => {
+    const local = readLocalState(part);
+    // Also keep a local change made while the request was out, even one already uploaded: the reply may predate it.
+    const changedMeanwhile = (local?.stamp) !== stampsBefore[part];
+    if (server && part in server && !(local && (local.dirty || changedMeanwhile))) {
+      writeLocal(localKey(part), { value:server[part], dirty:false, stamp:`${Date.now()}-${++changeCounter}` });
+      state[part] = server[part];
+    } else {
+      state[part] = local ? local.value : null;
+    }
+  });
+  syncAccountState();
+  return state;
+}
+
+// ---- Status ---------------------------------------------------------------
+
 // Finished workouts still queued plus an in-progress workout the server has not seen the latest version of.
 function unsyncedWorkCount() {
   const active = readLocalActive();
@@ -152,6 +245,7 @@ function unsyncedWorkCount() {
 function syncNow() {
   syncActiveSession();
   flushPendingWorkouts();
+  syncAccountState();
 }
 
 window.addEventListener('online', syncNow);

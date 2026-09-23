@@ -98,8 +98,28 @@ def run(t):
     check('signing back in loads the tracker again',
           cdp.ev("document.querySelectorAll('#templateList [data-template-action=start]').length") >= 3)
 
-    # ------------------------------------------------------------------ S7 the real thing
-    print('S7  a reload with the server gone still opens the app')
+    # ------------------------------------------------------------------ S7 deploys
+    print('S7  a deploy reaches the very next load')
+    cache_name = cdp.ev("caches.keys().then(names => names.find(n => n.startsWith('workout-tracker-')))")
+    # Stand in for a previous deploy: the cache holds an old pwa.js, the server a newer one.
+    cdp.ev(f"caches.open({json.dumps(cache_name)}).then(c => c.put('/pwa.js', new Response('window.__staleShell = true;', "
+           "{ headers: { 'Content-Type': 'text/javascript' } }))).then(() => true)")
+    check('the cache holds the outdated script',
+          'staleShell' in (cdp.ev("caches.match('/pwa.js').then(r => r.text())") or ''))
+    cdp.goto('/index.html')
+    cdp.wait("typeof getWorkoutSettings === 'function'")
+    cdp.pause(0.5)
+    check('the next load runs the current script, not the cached one', cdp.ev('window.__staleShell === undefined') is True)
+    check('and the cache is refreshed with it',
+          cdp.wait("caches.match('/pwa.js').then(r => r.text()).then(text => text.includes('serviceWorker'))"))
+    cdp.goto('/')
+    cdp.wait("document.querySelectorAll('#templateList [data-template-action=start]').length >= 3")
+    cdp.pause(0.4)
+    keys = cdp.ev(f"caches.open({json.dumps(cache_name)}).then(c => c.keys()).then(r => r.map(q => new URL(q.url).pathname))") or []
+    check('/ shares the cached /index.html instead of adding a second copy', '/' not in keys and '/index.html' in keys, str(keys))
+
+    # ------------------------------------------------------------------ S8 the real thing
+    print('S8  a reload with the server gone still opens the app')
     t.server.stop()
     t.server.process.wait(timeout=10)
 

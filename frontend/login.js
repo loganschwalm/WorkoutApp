@@ -8,7 +8,14 @@ let mode = 'login';
 // Only same-site paths are followed, so a crafted ?next= link cannot send someone to another site after signing in.
 function nextDestination() {
   const next = new URLSearchParams(location.search).get('next');
-  return next && next.startsWith('/') && !next.startsWith('//') && !next.startsWith('/\\') ? next : '/frontend/index.html';
+  return next && next.startsWith('/') && !next.startsWith('//') && !next.startsWith('/\\') ? next : '/';
+}
+
+// The app keys what it keeps on this device by account and, until the server answers, assumes the last account seen.
+// Recording who just signed in means the first page load already uses this account's copy, not the previous one's.
+function rememberAccount(user) {
+  try { localStorage.setItem('workout-tracker-last-user', JSON.stringify(user.id)); }
+  catch (error) { /* no storage: the app identifies the account from the server instead */ }
 }
 
 function showError(message) {
@@ -37,6 +44,7 @@ form.onsubmit = async event => {
     try { result = JSON.parse(responseText); }
     catch (parseError) { throw new Error(`The server returned an unexpected response (${response.status}). Check that the self-hosted server is running the current version.`); }
     if (!response.ok) throw new Error(result.error || 'Unable to authenticate.');
+    if (result.user) rememberAccount(result.user);
     window.location.href = nextDestination();
   } catch (error) {
     showError(error.message);

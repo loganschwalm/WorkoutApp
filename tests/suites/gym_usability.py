@@ -47,7 +47,8 @@ def run(t):
         cdp.pause(0.6)
 
     def no_confirm():
-        cdp.ev('serverSettings = { ...getWorkoutSettings(), confirmEnd: false }')
+        # Page-scoped, like the variable it replaced: the next page load reads the real settings again.
+        cdp.ev('window.__realSettings = window.__realSettings || getWorkoutSettings; getWorkoutSettings = () => ({ ...window.__realSettings(), confirmEnd: false })')
 
     # ---- L: last time's numbers
     print('L   last time\'s numbers')

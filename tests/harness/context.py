@@ -45,27 +45,40 @@ class AppTest:
     the same three seeded workouts, so suites cannot affect one another.
     """
 
-    def __init__(self, frontend_dir=None, intercept=False):
+    def __init__(self, frontend_dir=None, intercept=False, browser=True):
         self.workdir = tempfile.mkdtemp(prefix='workout-tests-')
+        self.frontend_dir = frontend_dir
         self.checker = Checker()
         self.check = self.checker.check
         self.server = None
         self.browser = None
         self.cdp = None
+        self.extra_servers = []
         try:
             self.server = AppServer(os.path.join(self.workdir, 'test.db'), frontend_dir)
             self.base_url = self.server.base_url
             self.port = self.server.port
             self.api = self.server.api
             self.raw = self.server.raw
+            self.request = self.server.request
             self._register()
             self._seed()
-            self.browser = Chrome(os.path.join(self.workdir, 'profile'))
-            self.cdp = self.browser.connect(self.base_url)
-            self._open_page(intercept)
+            if browser:
+                self.browser = Chrome(os.path.join(self.workdir, 'profile'))
+                self.cdp = self.browser.connect(self.base_url)
+                self._open_page(intercept)
         except Exception:
             self.close()
             raise
+
+    def start_server(self, db_name, env=None):
+        """Another server with its own database (and environment), stopped with the suite."""
+        server = AppServer(os.path.join(self.workdir, db_name), self.frontend_dir, env)
+        self.extra_servers.append(server)
+        return server
+
+    def db_path(self, db_name):
+        return os.path.join(self.workdir, db_name)
 
     # ---- setup ------------------------------------------------------------
 
@@ -177,7 +190,7 @@ class AppTest:
     def close(self):
         if self.cdp:
             self.cdp.close()
-        for part in (self.browser, self.server):
+        for part in (self.browser, self.server, *self.extra_servers):
             if part:
                 part.stop()
         time.sleep(0.5)

@@ -1,5 +1,5 @@
-const settingsStorageKey = 'workout-tracker-settings';
-const legacyTheme = localStorage.getItem('workout-tracker-theme');
+let legacyTheme = null;
+try { legacyTheme = localStorage.getItem('workout-tracker-theme'); } catch (error) { /* no storage: light theme */ }
 const defaultSettings = { theme:legacyTheme === 'dark' ? 'dark' : 'light', restDuration:90, autoRest:true, confirmEnd:true, soundEnabled:true, soundVolume:40, alertSound:'beep', vibrate:true };
 const getSettingElement = id => document.getElementById(id);
 const canVibrate = typeof navigator.vibrate === 'function';
@@ -9,7 +9,6 @@ const alertTones = {
   long:[{ at:0, freq:740, length:0.7 }]
 };
 let audioContext = null;
-let serverSettings = null;
 
 // A 401 from the API means the sign-in expired while the page was open. Offer a way back in without discarding anything on screen.
 const nativeFetch = window.fetch.bind(window);
@@ -34,22 +33,17 @@ function showSessionExpired() {
   document.body.prepend(banner);
 }
 
-window.serverStateReady = fetch('/api/state').then(response => response.ok ? response.json() : null).then(state => {
-  if (!state) return null;
-  serverSettings = { ...defaultSettings, ...(state.settings || {}) };
-  localStorage.setItem(settingsStorageKey, JSON.stringify(serverSettings));
-  applySettings(serverSettings);
+// Settings and templates for this account, from offline.js: the server's copy unless one changed here is still uploading.
+window.serverStateReady = loadAccountState().then(state => {
+  applySettings(getWorkoutSettings());
   window.dispatchEvent(new Event('settingschange'));
   return state;
-}).catch(() => null);
+});
 
 function getWorkoutSettings() {
-  if (serverSettings) return { ...serverSettings };
-  try {
-    return { ...defaultSettings, ...JSON.parse(localStorage.getItem(settingsStorageKey) || '{}') };
-  } catch (error) {
-    return { ...defaultSettings };
-  }
+  const stored = readLocalState('settings');
+  const value = stored && stored.value && typeof stored.value === 'object' && !Array.isArray(stored.value) ? stored.value : {};
+  return { ...defaultSettings, ...value };
 }
 
 // Browsers only allow sound after a tap, so the audio context is created from buttons the user presses (rest timer, Test alert).
@@ -149,9 +143,7 @@ getSettingElement('signOutButton').onclick = async () => {
 getSettingElement('settingsForm').onsubmit = event => {
   event.preventDefault();
   const settings = readSettingsForm();
-  localStorage.setItem(settingsStorageKey, JSON.stringify(settings));
-  serverSettings = settings;
-  fetch('/api/state', { method:'PUT', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ settings }) }).catch(() => {});
+  saveLocalState('settings', settings);
   applySettings(settings);
   window.dispatchEvent(new Event('settingschange'));
   closeSettings();

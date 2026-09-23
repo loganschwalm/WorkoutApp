@@ -4,7 +4,9 @@ import json
 import os
 import secrets
 import sqlite3
+import threading
 import time
+import traceback
 from http import HTTPStatus
 from http.cookies import SimpleCookie
 from urllib.parse import parse_qs, quote, urlparse
@@ -14,6 +16,46 @@ PROJECT_ROOT = os.path.dirname(SERVER_DIR)
 ROOT = os.environ.get('APP_ROOT', os.path.join(PROJECT_ROOT, 'frontend'))
 DB_PATH = os.environ.get('WORKOUT_DB', os.path.join(PROJECT_ROOT, 'data', 'workouts.db'))
 SESSION_TTL = 60 * 60 * 24 * 30
+# Years of workouts are a few hundred kilobytes, so anything bigger than this is not the app talking.
+MAX_BODY = 1024 * 1024
+
+_client_id_ready = False
+_client_id_lock = threading.Lock()
+
+
+class BadRequest(Exception):
+    """A request the client got wrong; answered with its status and message instead of a dropped connection."""
+
+    def __init__(self, message, status=HTTPStatus.BAD_REQUEST):
+        super().__init__(message)
+        self.status = status
+
+
+def migrate_client_ids(database):
+    # Retried uploads are recognised by the clientId the app puts on each finished workout. Keeping it in its own
+    # column under a unique index lets the database refuse a second copy, even when two uploads race each other.
+    global _client_id_ready
+    if _client_id_ready:
+        return
+    with _client_id_lock:
+        if _client_id_ready:
+            return
+        columns = {row['name'] for row in database.execute('PRAGMA table_info(workouts)')}
+        if 'client_id' not in columns:
+            database.execute('ALTER TABLE workouts ADD COLUMN client_id TEXT')
+            # A race before this column existed may already have stored a workout twice. Only the first copy
+            # keeps its clientId, so the unique index can be built; the other copy is left untouched.
+            database.execute('''
+                UPDATE workouts SET client_id = json_extract(payload, '$.clientId')
+                WHERE json_type(payload, '$.clientId') = 'text' AND json_extract(payload, '$.clientId') != ''
+                  AND id = (SELECT MIN(other.id) FROM workouts AS other
+                            WHERE other.user_id = workouts.user_id
+                              AND json_type(other.payload, '$.clientId') = 'text'
+                              AND json_extract(other.payload, '$.clientId') = json_extract(workouts.payload, '$.clientId'))
+            ''')
+        database.execute('CREATE UNIQUE INDEX IF NOT EXISTS workouts_user_client ON workouts(user_id, client_id)')
+        database.commit()
+        _client_id_ready = True
 
 
 def connection():
@@ -39,7 +81,8 @@ def connection():
             name TEXT NOT NULL,
             notes TEXT NOT NULL DEFAULT '',
             created_at INTEGER NOT NULL,
-            payload TEXT NOT NULL
+            payload TEXT NOT NULL,
+            client_id TEXT
         );
         CREATE TABLE IF NOT EXISTS active_sessions (
             user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -53,6 +96,7 @@ def connection():
             updated_at INTEGER NOT NULL
         );
     ''')
+    migrate_client_ids(database)
     return database
 
 
@@ -107,8 +151,34 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def read_json(self):
-        length = int(self.headers.get('Content-Length', 0))
-        return json.loads(self.rfile.read(length) or b'{}')
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+        except ValueError:
+            raise BadRequest('Invalid Content-Length header.')
+        if length < 0:
+            raise BadRequest('Invalid Content-Length header.')
+        if length > MAX_BODY:
+            # The body is left unread, so this connection cannot carry another request.
+            self.close_connection = True
+            raise BadRequest('Request body is too large.', HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
+        try:
+            data = json.loads(self.rfile.read(length) or b'{}')
+        except ValueError:  # includes UnicodeDecodeError
+            raise BadRequest('Request body must be valid JSON.')
+        if not isinstance(data, dict):
+            raise BadRequest('Request body must be a JSON object.')
+        return data
+
+    def handle_api(self, handler, path):
+        try:
+            handler(path)
+        except BadRequest as error:
+            self.send_json(error.status, {'error': str(error)})
+        except Exception:
+            # Without this the client sees a dropped connection and no reason; log the cause and say so instead.
+            traceback.print_exc()
+            self.close_connection = True
+            self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {'error': 'Internal server error.'})
 
     def session_user(self):
         cookie = SimpleCookie(self.headers.get('Cookie', ''))
@@ -126,39 +196,47 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             self.send_json(HTTPStatus.UNAUTHORIZED, {'error': 'Authentication required.'})
         return user
 
+    def redirect(self, status, location):
+        self.send_response(status)
+        self.send_header('Location', location)
+        self.send_header('Content-Length', '0')
+        self.end_headers()
+
     def do_GET(self):
         parsed = urlparse(self.path)
         if parsed.path.startswith('/api/'):
-            self.api_get(parsed.path)
+            self.handle_api(self.api_get, parsed.path)
             return
-        public_path = parsed.path[9:] if parsed.path.startswith('/frontend/') else parsed.path
-        if public_path in ('/', '/index.html', '/progress.html', '/history.html') and not self.session_user():
-            self.send_response(HTTPStatus.SEE_OTHER)
-            self.send_header('Location', '/login.html?next=' + quote(self.path, safe=''))
-            self.end_headers()
+        if parsed.path == '/frontend' or parsed.path.startswith('/frontend/'):
+            # Old links and installs used /frontend/…; sending them to the one real path keeps a single copy of
+            # each page and script in the browser and service-worker caches. Leading slashes and backslashes are
+            # collapsed so /frontend//evil.example cannot become a redirect to another site.
+            target = '/' + parsed.path[len('/frontend'):].lstrip('/\\')
+            self.redirect(HTTPStatus.MOVED_PERMANENTLY, target + (f'?{parsed.query}' if parsed.query else ''))
             return
-        if parsed.path.startswith('/frontend/'):
-            self.path = parsed._replace(path=public_path).geturl()
+        if parsed.path in ('/', '/index.html', '/progress.html', '/history.html') and not self.session_user():
+            self.redirect(HTTPStatus.SEE_OTHER, '/login.html?next=' + quote(self.path, safe=''))
+            return
         super().do_GET()
 
     def do_POST(self):
         parsed = urlparse(self.path)
         if parsed.path.startswith('/api/'):
-            self.api_post(parsed.path)
+            self.handle_api(self.api_post, parsed.path)
             return
         self.send_error(HTTPStatus.NOT_FOUND)
 
     def do_PUT(self):
         parsed = urlparse(self.path)
         if parsed.path.startswith('/api/'):
-            self.api_put(parsed.path)
+            self.handle_api(self.api_put, parsed.path)
             return
         self.send_error(HTTPStatus.NOT_FOUND)
 
     def do_DELETE(self):
         parsed = urlparse(self.path)
         if parsed.path.startswith('/api/'):
-            self.api_delete(parsed.path)
+            self.handle_api(self.api_delete, parsed.path)
             return
         self.send_error(HTTPStatus.NOT_FOUND)
 
@@ -241,19 +319,19 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             data = self.read_json()
             now = int(time.time() * 1000)
             payload = dict(data)
+            client_id = data.get('clientId') if isinstance(data.get('clientId'), str) and data.get('clientId') else None
             database = connection()
-            client_id = data.get('clientId')
-            if client_id:
-                # Clients retry uploads after network failures, so a repeated clientId must not create a second workout.
-                existing = database.execute("SELECT id FROM workouts WHERE user_id = ? AND json_extract(payload, '$.clientId') = ?", (user['id'], str(client_id))).fetchone()
-                if existing:
-                    database.close()
-                    self.send_json(HTTPStatus.OK, {'id': existing['id']})
-                    return
-            cursor = database.execute('INSERT INTO workouts (user_id, name, notes, created_at, payload) VALUES (?, ?, ?, ?, ?)', (user['id'], data.get('name', 'Untitled workout'), data.get('notes', ''), data.get('createdAt', now), json.dumps(payload)))
+            # Clients retry uploads after network failures, so a repeated clientId must not create a second workout.
+            # The unique index decides, so two retries arriving at the same moment cannot both get in.
+            cursor = database.execute('INSERT INTO workouts (user_id, name, notes, created_at, payload, client_id) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(user_id, client_id) DO NOTHING', (user['id'], data.get('name', 'Untitled workout'), data.get('notes', ''), data.get('createdAt', now), json.dumps(payload), client_id))
             database.commit()
+            if cursor.rowcount:
+                database.close()
+                self.send_json(HTTPStatus.CREATED, {'id': cursor.lastrowid})
+                return
+            existing = database.execute('SELECT id FROM workouts WHERE user_id = ? AND client_id = ?', (user['id'], client_id)).fetchone()
             database.close()
-            self.send_json(HTTPStatus.CREATED, {'id': cursor.lastrowid})
+            self.send_json(HTTPStatus.OK, {'id': existing['id']})
         elif path == '/api/active-session':
             data = self.read_json()
             database = connection()

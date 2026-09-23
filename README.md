@@ -41,12 +41,13 @@ own workouts, templates, and settings.
 
 ### Network drops
 
-Logged sets, notes, and finished workouts are saved on the device first and uploaded to the server in the background.
+Logged sets, notes, finished workouts, settings, and custom templates are saved on the device first and uploaded to the server in the background.
 
 - If the server cannot be reached, keep training. A notice explains that your sets are stored on this device, and they upload automatically when the connection returns (retries back off up to one minute).
 - Reloading the page while the server is unreachable restores the in-progress workout from the device.
 - Finishing a workout while offline queues it locally and shows how many workouts are waiting to sync. The History and Progress pages upload anything queued before they load your workouts.
-- Uploads are safe to retry: each finished workout carries a unique `clientId`, and the server ignores a repeat of one it already stored.
+- Uploads are safe to retry: each finished workout carries a unique `clientId`, and the server stores it once however many copies arrive, even at the same moment.
+- A setting or template changed while offline is kept when the page reloads and uploads once the server is back; it is never replaced by the server's older copy.
 - Local copies are kept per account, so another account signed in on the same browser never sees them.
 - If your sign-in expires while a page is open, a banner offers to sign in again and returns you to the same page; nothing on screen is discarded, and a workout in progress stays on the device.
 
@@ -89,7 +90,8 @@ Users can also:
 - Start a workout directly from any template.
 
 Custom templates are saved to your account on the server, and cached in the browser so they
-still work while the server is unreachable.
+still work while the server is unreachable. A template created or edited offline uploads when the
+server is reachable again.
 
 ### Workout history
 
@@ -121,7 +123,8 @@ The gear button opens a settings modal available on every page. Settings include
 - The signed-in account name and a Sign out button. Signing out warns first if a workout has not finished syncing; it stays on the device and uploads the next time you sign in to the same account.
 
 Settings are saved to your account on the server and cached in the browser, so they persist
-between visits and follow you to another device.
+between visits and follow you to another device. A change made offline applies straight away and
+uploads when the server is reachable again.
 
 ### Responsive design
 
@@ -381,8 +384,9 @@ PORT=9000 WORKOUT_DB=/tmp/scratch.db python backend/server.py
 
 The `tests/` directory holds end-to-end tests that drive a real headless browser
 against a real server: no mocking, so a passing check means the feature works in a
-browser. They cover the workout flow, the rest timer, offline syncing, the alert
-settings, and in-workout usability.
+browser. They cover the workout flow, the rest timer, offline syncing, settings and
+templates, the alert settings, in-workout usability, the service worker, and the API
+itself (malformed requests, racing uploads, database upgrades).
 
 ```bash
 pip install -r tests/requirements.txt

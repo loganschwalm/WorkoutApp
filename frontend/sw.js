@@ -4,8 +4,9 @@
 // here, because offline.js already keeps it on the device and syncs it back. The
 // two must not both own that job, so every /api/ request is left alone.
 //
-// Bump VERSION whenever a shell file changes in a way old clients must not keep.
-const VERSION = 'v1';
+// Every request goes to the network first, so a deploy reaches the next load without
+// bumping anything. Bump VERSION only to drop old caches, e.g. when PRECACHE changes.
+const VERSION = 'v2';
 const CACHE = `workout-tracker-${VERSION}`;
 
 // Files that are the same for everyone, so they are safe to fetch at install time.
@@ -32,8 +33,9 @@ const PRECACHE = [
 // Pages worth having offline, warmed after activation while the session cookie is live.
 const PAGES = ['/index.html', '/history.html', '/progress.html'];
 
-// One cache entry per page, so /index.html?start=12 does not pile up copies of the shell.
-const pageKey = (url) => url.origin + url.pathname;
+// One cache entry per page, so /index.html?start=12 does not pile up copies of the shell,
+// and / shares the entry of /index.html, which is the page it serves.
+const pageKey = (url) => url.origin + (url.pathname === '/' ? '/index.html' : url.pathname);
 
 // A 303 to the login page reaches a navigation as an opaque redirect, which the browser
 // has to follow itself and which must never be stored.
@@ -84,49 +86,29 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.startsWith('/api/')) return; // offline.js owns the data layer
 
   if (request.mode === 'navigate') {
-    event.respondWith(networkFirst(request, url));
+    event.respondWith(networkFirst(event, request, pageKey(url), true));
     return;
   }
-  event.respondWith(staleWhileRevalidate(event, request));
+  event.respondWith(networkFirst(event, request, request, false));
 });
 
-// Pages go to the network first, so a sign-in redirect and freshly deployed HTML both
-// behave normally, and the cache is only there for when the network is gone.
-async function networkFirst(request, url) {
-  const key = pageKey(url);
+// Pages and assets alike go to the network first, and the cache is only there for when
+// the network is gone. Serving assets from the cache first would pair freshly deployed
+// HTML with the previous deploy's JavaScript for one load. The server answers an
+// unchanged file with a 304, so asking every time costs little on a home network.
+async function networkFirst(event, request, key, isPage) {
+  const cache = await caches.open(CACHE);
   try {
     const response = await fetch(request);
-    if (storable(response)) {
-      const cache = await caches.open(CACHE);
-      await cache.put(key, response.clone());
-    }
+    if (storable(response)) event.waitUntil(cache.put(key, response.clone()));
     return response;
   } catch (error) {
-    const cached = await caches.match(key);
+    const cached = await cache.match(key);
     if (cached) return cached;
-    const shell = await caches.match(pageKey(new URL('/index.html', self.location.origin)));
-    if (shell) return shell;
+    if (isPage) {
+      const shell = await cache.match(pageKey(new URL('/index.html', self.location.origin)));
+      if (shell) return shell;
+    }
     throw error;
   }
-}
-
-// Assets come from the cache straight away and are refreshed in the background, so a
-// reload is instant and the next one picks up any change.
-async function staleWhileRevalidate(event, request) {
-  const cache = await caches.open(CACHE);
-  const cached = await cache.match(request);
-  const update = fetch(request)
-    .then((response) => {
-      if (storable(response)) cache.put(request, response.clone());
-      return response;
-    })
-    .catch(() => undefined);
-
-  if (cached) {
-    event.waitUntil(update); // keep the worker alive long enough to finish refreshing
-    return cached;
-  }
-  const response = await update;
-  if (response) return response;
-  throw new Error(`offline and not cached: ${request.url}`);
 }

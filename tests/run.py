@@ -31,7 +31,8 @@ def run_suite(name, frontend=None):
     """Run one suite in this process. Returns (passed, total)."""
     module = importlib.import_module(f'tests.suites.{name}')
     print(f'=== {name}')
-    test = AppTest(frontend_dir=frontend, intercept=getattr(module, 'INTERCEPT', True))
+    test = AppTest(frontend_dir=frontend, intercept=getattr(module, 'INTERCEPT', True),
+                   browser=getattr(module, 'BROWSER', True))
     try:
         module.run(test)
     finally:

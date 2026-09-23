@@ -17,7 +17,6 @@ let initialLoadDone = false;
 let feedbackTimer = null;
 let lastPerformance = {};
 let restRemaining = getWorkoutSettings().restDuration;
-const customTemplateStorageKey = 'workout-tracker-custom-templates';
 let customTemplates = loadCustomTemplates();
 let editingTemplateId = null;
 let templateDraftExercises = [];
@@ -107,14 +106,14 @@ function escapeHTML(value) {
   return String(value).replace(/[&<>'"]/g, character => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[character]));
 }
 
+// Kept per account by offline.js, which uploads a change as soon as the server can be reached.
 function loadCustomTemplates() {
-  try { return JSON.parse(localStorage.getItem(customTemplateStorageKey) || '[]'); }
-  catch (error) { return []; }
+  const stored = readLocalState('templates');
+  return stored && Array.isArray(stored.value) ? stored.value : [];
 }
 
 function saveCustomTemplates() {
-  localStorage.setItem(customTemplateStorageKey, JSON.stringify(customTemplates));
-  fetch('/api/state', { method:'PUT', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ templates:customTemplates }) }).catch(() => {});
+  saveLocalState('templates', customTemplates);
 }
 
 function getAllTemplates() {
@@ -616,10 +615,8 @@ $('saveBtn').onclick = async () => {
 };
 
 renderTemplates();
-window.serverStateReady?.then(state => {
-  if (!state || !Array.isArray(state.templates)) return;
-  customTemplates = state.templates;
-  localStorage.setItem(customTemplateStorageKey, JSON.stringify(customTemplates));
+window.serverStateReady.then(() => {
+  customTemplates = loadCustomTemplates();
   renderTemplates();
 });
 window.addEventListener('syncchange', event => {

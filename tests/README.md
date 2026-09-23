@@ -42,11 +42,13 @@ WORKOUT_TEST_CHROME="/opt/chrome/chrome" python tests/run.py
 
 | Suite | Checks | Covers |
 | --- | --- | --- |
+| `api` | 31 | The HTTP API without a browser: malformed and oversized request bodies, many copies of one upload arriving at once, upgrading a database from before `client_id`, and `/frontend/` redirects |
+| `account_state` | 21 | Settings and templates changed offline surviving a reload and reaching the server, a change from another device still arriving, a second account on the same browser, and adopting the copy kept by the previous version |
 | `workout_flow` | 22 | `?start=` links, replacing an in-progress workout, editing and repeating workouts that have logged sets, progress-chart series |
 | `timer_and_sync` | 51 | Rest timer accuracy under a stalled clock, the screen wake lock, and saving sets and finished workouts through a network drop |
 | `sound_settings` | 31 | Alert tone, volume, vibration, the Test alert button, persistence across pages, and settings saved before the feature existed |
 | `gym_usability` | 81 | Last time's numbers, correcting logged sets, moving between exercises, skipped exercises, message visibility, the phone layout, session expiry and signing out |
-| `pwa` | 35 | The manifest and icons, service-worker registration, what is and is not cached, the theme colour, the signed-out redirect, and a reload with the server killed |
+| `pwa` | 39 | The manifest and icons, service-worker registration, what is and is not cached, the theme colour, the signed-out redirect, a deploy reaching the next load, and a reload with the server killed |
 
 Each suite gets a fresh server, database and browser profile, so they are
 independent and safe to run concurrently.
@@ -62,6 +64,9 @@ workouts and the page helpers the suites share.
 changing them does nothing, so a suite that simulates a network failure must keep it
 on. Suites that never touch the network conditions can turn it off (as
 `workout_flow` does); leaving the flag out defaults to on.
+
+A suite that only talks to the API can set `BROWSER = False`; it then starts
+without Chrome, and `t.cdp` is `None`.
 
 To add a suite, create `tests/suites/<name>.py` and append `<name>` to `NAMES` in
 `tests/suites/__init__.py`; the runner only knows the suites listed there.
@@ -88,6 +93,8 @@ Useful pieces of `t`:
 - `t.cdp.drop_responses = 1` — let a request through but discard its reply
 - `t.cdp.answer = False` — what `window.confirm` returns; `t.cdp.dialogs` lists what was asked
 - `t.api(method, path, body, token)` — call the API directly, around the browser
+- `t.request(method, path, body_bytes, headers, token)` — send exact bytes and headers, for requests the app would never make; returns `(status, headers, body)`
+- `t.start_server(db_name, env)` — a second server with its own database and environment variables, stopped with the suite
 - `t.wait_for(predicate)` — poll a Python condition while the page keeps running
 
 ### Two things worth knowing
