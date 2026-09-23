@@ -1,35 +1,7 @@
-const $ = id => document.getElementById(id);
-const databaseName = 'workout-tracker';
-const databaseVersion = 2;
-const workoutStore = 'workouts';
-const activeWorkoutStore = 'activeWorkout';
 const colors = ['#5b5ce2', '#e26d5c', '#2a9d8f', '#d9912f', '#c25bd8', '#3c8dcc'];
 let chartData = null;
 let allWorkouts = [];
 let selectedMetric = 'weight';
-
-$('today').textContent = new Date().toLocaleDateString(undefined, { weekday:'long', month:'short', day:'numeric' });
-
-function openDatabase() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(databaseName, databaseVersion);
-    request.onupgradeneeded = () => {
-      const database = request.result;
-      if (!database.objectStoreNames.contains(workoutStore)) database.createObjectStore(workoutStore, { keyPath:'id', autoIncrement:true });
-      if (!database.objectStoreNames.contains(activeWorkoutStore)) database.createObjectStore(activeWorkoutStore, { keyPath:'id' });
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-function getSavedWorkouts() {
-  return fetch('/api/workouts').then(response => response.ok ? response.json() : Promise.reject(new Error('Unable to load workouts.'))).then(result => result.workouts);
-}
-
-function escapeHTML(value) {
-  return String(value).replace(/[&<>'"]/g, character => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[character]));
-}
 
 function buildChartData(workouts) {
   const types = new Map();
@@ -37,7 +9,7 @@ function buildChartData(workouts) {
   [...workouts].sort((a, b) => a.createdAt - b.createdAt).forEach((workout, index) => {
     const name = workout.name || 'Untitled workout';
     // An exercise saved with an empty set list was skipped, so it has no result to chart.
-    const matchingExercises = (selectedExercise === 'all' ? workout.exercises : workout.exercises.filter(item => item.name === selectedExercise)).filter(item => !item.sets || item.sets.length);
+    const matchingExercises = (selectedExercise === 'all' ? workout.exercises : workout.exercises.filter(item => exerciseKey(item.name) === selectedExercise)).filter(item => !item.sets || item.sets.length);
     const values = matchingExercises.map(item => {
       if (selectedMetric === 'reps') return Math.max(...(item.sets || []).map(set => Number(set.reps) || 0), Number(item.reps) || 0);
       if (selectedMetric === 'volume') return item.sets?.length ? item.sets.reduce((total, set) => total + (Number(set.weight) || 0) * (Number(set.reps) || 0), 0) : (Number(item.weight) || 0) * (Number(item.reps) || 0);
@@ -70,11 +42,18 @@ function populateWorkoutTypes(workouts) {
   $('workoutTypeFilter').value = names.includes(selected) ? selected : 'all';
 }
 
+// One option per exercise however its name was typed ("Bench press", "Bench Press "), labelled with the most recent
+// spelling. The option's value is the exerciseKey the chart matches on.
 function populateExercises(workouts) {
   const selected = $('exerciseFilter').value;
-  const names = [...new Set(workouts.flatMap(workout => workout.exercises.map(item => item.name)))].sort();
-  $('exerciseFilter').innerHTML = '<option value="all">All exercises</option>' + names.map(name => `<option value="${escapeHTML(name)}">${escapeHTML(name)}</option>`).join('');
-  $('exerciseFilter').value = names.includes(selected) ? selected : 'all';
+  const labels = new Map();
+  [...workouts].sort((a, b) => b.createdAt - a.createdAt).forEach(workout => workout.exercises.forEach(item => {
+    const key = exerciseKey(item.name);
+    if (key && !labels.has(key)) labels.set(key, String(item.name).trim());
+  }));
+  const options = [...labels].sort(([, a], [, b]) => a.localeCompare(b, undefined, { sensitivity:'base' }));
+  $('exerciseFilter').innerHTML = '<option value="all">All exercises</option>' + options.map(([key, label]) => `<option value="${escapeHTML(key)}">${escapeHTML(label)}</option>`).join('');
+  $('exerciseFilter').value = labels.has(selected) ? selected : 'all';
 }
 
 function applyFilters() {

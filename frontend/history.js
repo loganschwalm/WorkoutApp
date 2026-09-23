@@ -1,32 +1,3 @@
-const $ = id => document.getElementById(id);
-const databaseName = 'workout-tracker';
-const databaseVersion = 2;
-const workoutStore = 'workouts';
-const activeWorkoutStore = 'activeWorkout';
-
-$('today').textContent = new Date().toLocaleDateString(undefined, { weekday:'long', month:'short', day:'numeric' });
-
-function openDatabase() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(databaseName, databaseVersion);
-    request.onupgradeneeded = () => {
-      const database = request.result;
-      if (!database.objectStoreNames.contains(workoutStore)) database.createObjectStore(workoutStore, { keyPath:'id', autoIncrement:true });
-      if (!database.objectStoreNames.contains(activeWorkoutStore)) database.createObjectStore(activeWorkoutStore, { keyPath:'id' });
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-function getSavedWorkouts() {
-  return fetch('/api/workouts').then(response => response.ok ? response.json() : Promise.reject(new Error('Unable to load workouts.'))).then(result => result.workouts);
-}
-
-function escapeHTML(value) {
-  return String(value).replace(/[&<>'"]/g, character => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[character]));
-}
-
 function exerciseDetails(exercise) {
   if (exercise.sets && !exercise.sets.length) return 'Skipped';
   if (!exercise.sets || !exercise.sets.length) return `${escapeHTML(exercise.weight || 0)} lbs &middot; ${escapeHTML(exercise.reps)} reps`;

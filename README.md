@@ -104,7 +104,7 @@ server is reachable again.
 
 - View progress as a responsive chart.
 - Track heaviest weight, best reps, or total volume.
-- Filter by exercise.
+- Filter by exercise. Names typed differently ("Bench press", "Bench Press ") count as one exercise.
 - Filter by workout type.
 - Filter by start and end date.
 - See filtered workout counts and chart legends.
@@ -142,8 +142,9 @@ data/                   SQLite database when run from a git checkout (gitignored
 ct/workout-tracker.sh   Proxmox VE one-line installer and updater
 scripts/make-icons.py   Regenerates the app icons in frontend/icons/
 Dockerfile              Container image definition
+docker-entrypoint.py    Container start: hands the data volume to the unprivileged user, then runs the server
 docker-compose.yml      Docker deployment with a persistent volume
-tests/                  Browser-level end-to-end tests (see tests/README.md)
+tests/                  End-to-end browser tests and API tests (see tests/README.md)
 ```
 
 ## Self-hosting
@@ -409,8 +410,8 @@ move to a self-hosted server. They have to be re-entered; there is no import too
 
 ## Running locally
 
-Serve it over HTTP rather than opening the files directly, so that IndexedDB and session cookies
-behave the same as in a real deployment. From the project directory:
+Run the server rather than opening the HTML files directly: the pages need its API and session
+cookie, and the service worker only runs on `localhost` or HTTPS. From the project directory:
 
 ```bash
 python backend/server.py
@@ -445,16 +446,15 @@ suite breakdown and for how to add a test.
 
 ## Data storage
 
-In the static browser-only mode, workout records, active sessions, and settings are stored in the browser using:
+The server is the record. Saved workouts, the in-progress workout, custom templates, and settings are
+stored per account in SQLite, and every query is scoped to the signed-in account's user ID. The server
+checks the shape of everything it stores, so a malformed upload is refused rather than saved.
 
-- IndexedDB for saved workouts and active workout recovery.
-- `localStorage` for settings and custom templates.
-
-Data is local to the browser and localhost origin. Clearing browser storage or using a different browser/device will not share the same data.
-
-In self-hosted mode, saved workouts, active sessions, custom templates, and preferences are stored server-side per account in SQLite. Authentication uses PBKDF2 password hashing and HTTP-only session cookies. Browser local storage remains as a fallback for static browser-only use.
-
-Each user's workout records are protected by the authenticated user ID in every database query.
+The browser keeps a working copy in `localStorage`, separately for each account that signs in on it:
+the in-progress workout, finished workouts still waiting to upload (and any the server refused), last
+time's numbers for each exercise, settings, and custom templates. That copy is what lets you keep
+training through a network drop; it uploads when the server is reachable again, and clearing the
+browser's site data only loses whatever had not uploaded yet.
 Include the SQLite file in your backup plan: it is at `/var/lib/workout-tracker/workouts.db` in an
 LXC install, and in the `workout_data` volume under Docker. The database runs in write-ahead-log mode,
 so recent changes can sit in `workouts.db-wal` next to it. Back up with SQLite's backup (the LXC's
@@ -465,9 +465,8 @@ file while the server runs.
 
 - HTML5
 - CSS3
-- Vanilla JavaScript
-- IndexedDB
-- Local Storage
+- Vanilla JavaScript, with no build step
+- `localStorage` for the per-account offline copy
 - HTML Canvas for progress charts
 - Service worker and web app manifest
 - Python standard library HTTP server

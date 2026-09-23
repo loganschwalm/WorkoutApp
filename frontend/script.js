@@ -1,10 +1,7 @@
-const $ = id => document.getElementById(id);
 const exercises = [];
-const databaseName = 'workout-tracker';
-const databaseVersion = 2;
-const workoutStore = 'workouts';
-const activeWorkoutStore = 'activeWorkout';
 let editingWorkout = null;
+// The saved workouts as last loaded, so the list's buttons act without asking the server again.
+let savedWorkouts = [];
 // Weight/reps an exercise had when its logged sets were loaded for editing; used to tell whether the user changed them.
 const setBaselines = new WeakMap();
 let activeSession = null;
@@ -27,7 +24,6 @@ const templates = [
   { name:'Upper Body', exercises:[{ name:'Bench Press', weight:'', reps:'8' }, { name:'Pull-up', weight:'', reps:'8' }, { name:'Dumbbell Row', weight:'', reps:'10' }, { name:'Lateral Raise', weight:'', reps:'12' }] },
   { name:'Full Body', exercises:[{ name:'Goblet Squat', weight:'', reps:'10' }, { name:'Push-up', weight:'', reps:'10' }, { name:'Dumbbell Row', weight:'', reps:'10' }, { name:'Plank', weight:'', reps:'30' }] }
 ];
-$('today').textContent = new Date().toLocaleDateString(undefined, { weekday:'long', month:'short', day:'numeric' });
 
 function dateInputValue(timestamp) {
   const date = new Date(timestamp);
@@ -66,23 +62,6 @@ function markInvalid(element, invalid) {
   element.setAttribute('aria-invalid', String(invalid));
 }
 
-function openDatabase() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(databaseName, databaseVersion);
-    request.onupgradeneeded = () => {
-      const database = request.result;
-      if (!database.objectStoreNames.contains(workoutStore)) database.createObjectStore(workoutStore, { keyPath:'id', autoIncrement:true });
-      if (!database.objectStoreNames.contains(activeWorkoutStore)) database.createObjectStore(activeWorkoutStore, { keyPath:'id' });
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-function getSavedWorkouts() {
-  return fetch('/api/workouts').then(response => response.ok ? response.json() : Promise.reject(new Error('Unable to load workouts.'))).then(result => result.workouts);
-}
-
 function persistWorkout(workout) {
   const method = workout.id ? 'PUT' : 'POST';
   const path = workout.id ? `/api/workouts/${workout.id}` : '/api/workouts';
@@ -100,10 +79,6 @@ function persistActiveSession() {
 
 function getActiveSession() {
   return fetch('/api/active-session').then(response => response.ok ? response.json() : Promise.reject(new Error('Unable to load active workout.'))).then(result => result.session);
-}
-
-function escapeHTML(value) {
-  return String(value).replace(/[&<>'"]/g, character => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[character]));
 }
 
 // Kept per account by offline.js, which uploads a change as soon as the server can be reached.
@@ -231,10 +206,6 @@ async function syncWakeLock() {
   }
 }
 
-function exerciseKey(name) {
-  return String(name).trim().toLowerCase();
-}
-
 function formatSet(set) {
   return set.weight ? `${set.weight} lbs × ${set.reps}` : `${set.reps} reps`;
 }
@@ -357,6 +328,7 @@ function renderStorageStatus() {
 async function loadSavedWorkouts() {
   try {
     const workouts = await getSavedWorkouts();
+    savedWorkouts = workouts;
     renderSavedWorkouts(workouts);
     lastPerformance = buildLastPerformance([...workouts, ...readPendingWorkouts()]);
     saveLastPerformance();
@@ -568,8 +540,9 @@ $('savedWorkoutList').onclick = async e => {
   if (!action) return;
   const workoutElement = e.target.closest('.saved-workout');
   const workoutId = Number(workoutElement.dataset.id);
-  const workouts = await getSavedWorkouts();
-  const workout = workouts.find(item => item.id === workoutId);
+  // The list on screen was drawn from savedWorkouts, so the workout a button belongs to is already here: no request,
+  // and the buttons keep working if the connection drops after the list has loaded.
+  const workout = savedWorkouts.find(item => item.id === workoutId);
   if (!workout) return;
 
   if (action === 'start') startWorkout(workout);
