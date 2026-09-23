@@ -1,5 +1,6 @@
 """The HTTP API on its own, without a browser: bad input, racing uploads, redirects and database upgrades."""
 
+import hashlib
 import json
 import sqlite3
 import threading
@@ -155,3 +156,147 @@ def run(t):
         check(f'{path} -> {expected}', status == 301 and location == expected, f'{status} {location}')
     status, _ = t.raw('GET', '/script.js')
     check('the real path is served directly', status == 200, status)
+
+    run_security(t, check, request)
+
+
+def login(server, username, password, headers=None):
+    body = json.dumps({'username': username, 'password': password}).encode()
+    return server.request('POST', '/api/auth/login', body, {'Content-Type': 'application/json', **(headers or {})})
+
+
+def run_security(t, check, request):
+    main = t.server
+    db_path = t.db_path('test.db')
+
+    def stored_hash(username, path=db_path):
+        db = sqlite3.connect(path)
+        row = db.execute('SELECT password_hash FROM users WHERE username = ?', (username,)).fetchone()
+        db.close()
+        return row[0] if row else None
+
+    # ------------------------------------------------------------------ A5 registration switch
+    print('A5  ALLOW_REGISTRATION=0 closes sign-up but not sign-in')
+    check('registration is open by default', main.api('GET', '/api/auth/me')[0].get('registrationOpen') is True)
+    opener = t.start_server('closed.db')
+    opener.api('POST', '/api/auth/register', {'username': 'owner', 'password': 'password123'})
+    opener.stop()
+    opener.process.wait(timeout=10)
+    closed = t.start_server('closed.db', {'ALLOW_REGISTRATION': '0'})
+    check('the server says registration is closed', closed.api('GET', '/api/auth/me')[0].get('registrationOpen') is False)
+    status, _, reply = closed.request('POST', '/api/auth/register', json.dumps({'username': 'intruder', 'password': 'password123'}).encode(),
+                                      {'Content-Type': 'application/json'})
+    check('registering is refused with 403', status == 403 and 'turned off' in reply.get('error', ''), f'{status} {reply}')
+    check('and no account was created', stored_hash('intruder', t.db_path('closed.db')) is None)
+    status, headers, _ = login(closed, 'owner', 'password123')
+    check('an existing account still signs in', status == 200 and 'session=' in headers.get('set-cookie', ''), status)
+
+    # ------------------------------------------------------------------ A6 sign-in throttling
+    print('A6  repeated failed sign-ins are slowed down')
+    main.api('POST', '/api/auth/register', {'username': 'target', 'password': 'right-password'})
+    statuses = [login(main, 'target', f'wrong-guess-{n}')[0] for n in range(5)]
+    check('the first five wrong passwords are just refused', statuses == [401] * 5, statuses)
+    status, headers, reply = login(main, 'target', 'wrong-guess-6')
+    check('the sixth is told to wait, with Retry-After', status == 429 and int(headers.get('retry-after', 0)) > 800,
+          f"{status} {headers.get('retry-after')} {reply}")
+    status, _, _ = login(main, 'target', 'right-password')
+    check('even the right password waits, so guessing cannot continue', status == 429, status)
+    check('another username from the same address is unaffected', login(main, 'tester', 'password123')[0] == 200)
+    check('a different case of the same username shares the limit', login(main, 'TARGET', 'wrong-guess-7')[0] == 429)
+
+    # Each failed sign-in costs a full-strength hash (0.15 s here, more under load), so the window must
+    # comfortably outlast five of them; the wait is then measured from the first failure.
+    window = 8
+    quick = t.start_server('quick.db', {'LOGIN_WINDOW': str(window)})
+    quick.api('POST', '/api/auth/register', {'username': 'target', 'password': 'right-password'})
+    first_failure = time.monotonic()
+    for n in range(5):
+        login(quick, 'target', f'wrong-password-{n}')
+    check(f'with a {window} second window the limit applies too', login(quick, 'target', 'right-password')[0] == 429)
+    time.sleep(max(0, first_failure + window + 0.5 - time.monotonic()))
+    check('and lifts once the failures are older than the window', login(quick, 'target', 'right-password')[0] == 200)
+    for n in range(4):
+        login(quick, 'target', f'before-password-{n}')
+    check('four failures and then the right password signs in', login(quick, 'target', 'right-password')[0] == 200)
+    after = [login(quick, 'target', f'after-password-{n}')[0] for n in range(5)]
+    check('that success forgot the four, so five more tries are each just refused', after == [401] * 5, after)
+
+    # ------------------------------------------------------------------ A7 password hashes
+    print('A7  password hashes use 600k iterations, and older hashes are upgraded on sign-in')
+    stored = stored_hash('tester')
+    check('a new account is hashed with PBKDF2-SHA256 at 600,000 iterations', stored.startswith('pbkdf2_sha256$600000$'), stored[:30])
+    salt = 'legacysalt0123456789'
+    legacy = f"{salt}${hashlib.pbkdf2_hmac('sha256', b'old-password', salt.encode(), 120000).hex()}"
+    db = sqlite3.connect(db_path)
+    db.execute("INSERT INTO users (username, password_hash, created_at) VALUES ('veteran', ?, 0)", (legacy,))
+    db.commit()
+    db.close()
+    check('an account with an old-format hash can sign in', login(main, 'veteran', 'old-password')[0] == 200)
+    upgraded = stored_hash('veteran')
+    check('and its hash is upgraded in place', upgraded.startswith('pbkdf2_sha256$600000$') and upgraded != legacy, upgraded[:30])
+    check('the upgraded hash still accepts the password', login(main, 'veteran', 'old-password')[0] == 200)
+    check('and still refuses a wrong one', login(main, 'veteran', 'not-the-password')[0] == 401)
+
+    def timed(username):
+        started = time.perf_counter()
+        login(main, username, 'some-wrong-password')
+        return time.perf_counter() - started
+
+    known = sorted(timed('veteran') for _ in range(3))[1]
+    unknown = sorted(timed(f'nobody-{n}') for n in range(3))[1]
+    check('an unknown username takes about as long as a wrong password', unknown > known * 0.5,
+          f'unknown {unknown:.3f}s, known {known:.3f}s')
+
+    # ------------------------------------------------------------------ A8 cookies
+    print('A8  the session cookie is marked Secure behind HTTPS')
+    _, headers, _ = login(main, 'tester', 'password123')
+    cookie = headers['set-cookie']
+    check('plain HTTP: HttpOnly and SameSite, no Secure',
+          'HttpOnly' in cookie and 'SameSite=Lax' in cookie and 'Secure' not in cookie, cookie)
+    _, headers, _ = login(main, 'tester', 'password123', {'X-Forwarded-Proto': 'https'})
+    check('a proxy reporting HTTPS gets a Secure cookie', headers['set-cookie'].endswith('; Secure'), headers['set-cookie'])
+    secure = t.start_server('secure.db', {'SECURE_COOKIES': '1'})
+    secure.api('POST', '/api/auth/register', {'username': 'someone', 'password': 'password123'})
+    _, headers, _ = login(secure, 'someone', 'password123')
+    check('SECURE_COOKIES=1 marks it Secure without a proxy', headers['set-cookie'].endswith('; Secure'), headers['set-cookie'])
+
+    # ------------------------------------------------------------------ A9 expired sessions
+    print('A9  expired sessions are deleted')
+    tester_id = main.api('GET', '/api/auth/me', token=t.token)[0]['user']['id']
+    db = sqlite3.connect(db_path)
+    db.executemany('INSERT INTO sessions VALUES (?, ?, ?)', [(f'stale-{n}', tester_id, 1000 + n) for n in range(5)])
+    db.commit()
+    db.close()
+    login(main, 'tester', 'password123')
+    db = sqlite3.connect(db_path)
+    stale = db.execute("SELECT COUNT(*) FROM sessions WHERE token LIKE 'stale-%'").fetchone()[0]
+    live = db.execute('SELECT COUNT(*) FROM sessions WHERE token = ?', (t.token,)).fetchone()[0]
+    db.close()
+    check('signing in clears sessions that have expired', stale == 0, stale)
+    check('and keeps the ones that have not', live == 1 and main.api('GET', '/api/auth/me', token=t.token)[0]['user'] is not None)
+
+    # ------------------------------------------------------------------ A10 headers
+    print('A10 every response carries the security headers and an exact content type')
+    for path, token in [('/index.html', t.token), ('/login.html', None), ('/script.js', None), ('/api/auth/me', None),
+                        ('/api/workouts', t.token), ('/no-such-file', None)]:
+        status, headers, _ = request('GET', path, token=token)
+        csp = headers.get('content-security-policy', '')
+        check(f'{path} ({status}) has CSP, nosniff and frame protection',
+              "script-src 'self'" in csp and "frame-ancestors 'none'" in csp and headers.get('x-content-type-options') == 'nosniff'
+              and headers.get('x-frame-options') == 'DENY',
+              str({k: v for k, v in headers.items() if k.startswith(('content-security', 'x-'))}))
+    for path, expected in [('/script.js', 'text/javascript'), ('/styles.css', 'text/css'), ('/login.html', 'text/html'),
+                           ('/manifest.webmanifest', 'application/manifest+json'), ('/icons/icon-192.png', 'image/png')]:
+        _, headers, _ = request('GET', path)
+        check(f'{path} is served as {expected}', headers.get('content-type', '').startswith(expected), headers.get('content-type'))
+
+    # ------------------------------------------------------------------ A11 directories and odd paths
+    print('A11 no directory listings, and no redirects off-site')
+    status, _, body = request('GET', '/icons/')
+    check('/icons/ is not listed', status == 404 and b'Directory listing' not in (body if isinstance(body, bytes) else b''), status)
+    for method in ('GET', 'HEAD'):
+        for path in ('//evil.example', '//evil.example/', '///evil.example/', '/\\evil.example', '/%5Cevil.example', '/icons\\..\\'):
+            status, headers, _ = request(method, path)
+            location = headers.get('location', '')
+            check(f'{method} {path} does not redirect to another site',
+                  not location.startswith(('//', '/\\', 'http')) and '\\' not in location, f'{status} {location!r}')

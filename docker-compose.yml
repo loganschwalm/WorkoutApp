@@ -10,6 +10,8 @@ services:
     environment:
       PORT: 8000
       WORKOUT_DB: /app/data/workouts.db
+      # Set to "0" once your accounts exist, so nobody else can create one.
+      ALLOW_REGISTRATION: "1"
 
 volumes:
   workout_data:

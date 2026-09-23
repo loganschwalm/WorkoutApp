@@ -9,7 +9,7 @@ import time
 import traceback
 from http import HTTPStatus
 from http.cookies import SimpleCookie
-from urllib.parse import parse_qs, quote, urlparse
+from urllib.parse import quote, unquote, urlparse
 
 SERVER_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SERVER_DIR)
@@ -18,6 +18,39 @@ DB_PATH = os.environ.get('WORKOUT_DB', os.path.join(PROJECT_ROOT, 'data', 'worko
 SESSION_TTL = 60 * 60 * 24 * 30
 # Years of workouts are a few hundred kilobytes, so anything bigger than this is not the app talking.
 MAX_BODY = 1024 * 1024
+
+
+def env_flag(name, default):
+    value = os.environ.get(name, '').strip().lower()
+    return default if not value else value not in ('0', 'false', 'no', 'off')
+
+
+# Set ALLOW_REGISTRATION=0 once your accounts exist, so nobody else who can reach the port can make one.
+ALLOW_REGISTRATION = env_flag('ALLOW_REGISTRATION', True)
+# The cookie is also marked Secure whenever a reverse proxy says the request arrived over HTTPS.
+SECURE_COOKIES = env_flag('SECURE_COOKIES', False)
+# After this many failed sign-ins for one username from one address, that pair waits until the oldest failure
+# is LOGIN_WINDOW seconds old. Behind a reverse proxy every request shares the proxy's address.
+LOGIN_ATTEMPTS = int(os.environ.get('LOGIN_ATTEMPTS', '5'))
+LOGIN_WINDOW = int(os.environ.get('LOGIN_WINDOW', str(15 * 60)))
+
+# OWASP's recommendation for PBKDF2-HMAC-SHA256. Hashes record their own count, so raising it later only
+# needs this number changed: each account is rehashed the next time it signs in.
+PBKDF2_ITERATIONS = 600_000
+# Hashes written before the count was recorded ("salt$digest") used this many.
+LEGACY_ITERATIONS = 120_000
+
+SECURITY_HEADERS = {
+    # Every script and stylesheet is a file served from here; nothing inline, nothing from elsewhere.
+    'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; "
+                               "connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; "
+                               "base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'same-origin',
+    'Cross-Origin-Opener-Policy': 'same-origin',
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()',
+}
 
 _client_id_ready = False
 _client_id_lock = threading.Lock()
@@ -100,24 +133,112 @@ def connection():
     return database
 
 
-def password_hash(password, salt=None):
+def derive(password, salt, iterations):
+    # surrogatepass: JSON can carry a lone surrogate, which strict UTF-8 refuses; valid text encodes as before.
+    return hashlib.pbkdf2_hmac('sha256', password.encode('utf-8', 'surrogatepass'), salt.encode(), iterations).hex()
+
+
+def password_hash(password, salt=None, iterations=PBKDF2_ITERATIONS):
     salt = salt or secrets.token_hex(16)
-    digest = hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 120000).hex()
-    return f'{salt}${digest}'
+    return f'pbkdf2_sha256${iterations}${salt}${derive(password, salt, iterations)}'
+
+
+def parse_hash(stored):
+    """(iterations, salt, digest) from either hash format; ValueError if it is neither."""
+    parts = stored.split('$')
+    if len(parts) == 4 and parts[0] == 'pbkdf2_sha256':
+        return int(parts[1]), parts[2], parts[3]
+    if len(parts) == 2:
+        return LEGACY_ITERATIONS, parts[0], parts[1]
+    raise ValueError('unrecognised password hash')
 
 
 def password_matches(password, stored):
     try:
-        salt, expected = stored.split('$', 1)
-        actual = hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 120000).hex()
-        return secrets.compare_digest(actual, expected)
+        iterations, salt, expected = parse_hash(stored)
     except ValueError:
         return False
+    return secrets.compare_digest(derive(password, salt, iterations), expected)
+
+
+def needs_rehash(stored):
+    try:
+        return parse_hash(stored)[0] < PBKDF2_ITERATIONS
+    except ValueError:
+        return True
+
+
+# Checked against when the username does not exist, so a wrong username takes as long as a wrong password.
+DUMMY_HASH = password_hash(secrets.token_hex(16))
+
+
+class LoginThrottle:
+    """Failed sign-ins per (client address, username), forgotten LOGIN_WINDOW seconds after they happen."""
+
+    def __init__(self, attempts, window):
+        self.attempts = attempts
+        self.window = window
+        self.failures = {}
+        self.lock = threading.Lock()
+
+    def retry_after(self, key):
+        """Seconds until this key may try again; 0 if it may try now."""
+        now = time.monotonic()
+        with self.lock:
+            recent = [moment for moment in self.failures.get(key, []) if now - moment < self.window]
+            if recent:
+                self.failures[key] = recent
+            else:
+                self.failures.pop(key, None)
+            if len(recent) < self.attempts:
+                return 0
+            return max(1, int(self.window - (now - recent[0])) + 1)
+
+    def failed(self, key):
+        now = time.monotonic()
+        with self.lock:
+            if len(self.failures) > 10000:  # someone cycling through usernames; drop what has expired
+                self.failures = {k: v for k, v in self.failures.items() if now - v[-1] < self.window}
+            self.failures.setdefault(key, []).append(now)
+
+    def succeeded(self, key):
+        with self.lock:
+            self.failures.pop(key, None)
+
+
+login_throttle = LoginThrottle(LOGIN_ATTEMPTS, LOGIN_WINDOW)
 
 
 class AppHandler(http.server.SimpleHTTPRequestHandler):
+    # With nosniff the browser trusts these types exactly, so they must not depend on the host's mime database
+    # (Windows can map .js to text/plain from the registry, and a minimal container may have no database at all).
+    extensions_map = {
+        **http.server.SimpleHTTPRequestHandler.extensions_map,
+        '.html': 'text/html; charset=utf-8',
+        '.js': 'text/javascript; charset=utf-8',
+        '.css': 'text/css; charset=utf-8',
+        '.json': 'application/json',
+        '.webmanifest': 'application/manifest+json',
+        '.png': 'image/png',
+        '.svg': 'image/svg+xml',
+        '.ico': 'image/x-icon',
+    }
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=ROOT, **kwargs)
+
+    def list_directory(self, path):
+        # Directories are not browsable; only the files the pages reference are served.
+        self.send_error(HTTPStatus.NOT_FOUND)
+        return None
+
+    def send_head(self):
+        # A path beginning // or containing a backslash can come back in the Location of the standard library's
+        # directory redirect, which browsers read as a link to another site. The app never uses either.
+        if self.path.startswith('//') or '\\' in unquote(urlparse(self.path).path):
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return None
+        return super().send_head()
 
     def send_response(self, *args, **kwargs):
         self.cache_control_sent = False
@@ -136,14 +257,25 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
         # that never asks again. Revalidating every time costs a 304 and avoids both.
         if not getattr(self, 'cache_control_sent', False):
             self.send_header('Cache-Control', 'no-cache')
+        for name, value in SECURITY_HEADERS.items():
+            self.send_header(name, value)
         super().end_headers()
 
-    def send_json(self, status, payload, cookies=None):
+    def secure_cookies(self):
+        forwarded = self.headers.get('X-Forwarded-Proto', '').split(',')[0].strip().lower()
+        return SECURE_COOKIES or forwarded == 'https'
+
+    def session_cookie(self, token, max_age):
+        return f"session={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={max_age}" + ('; Secure' if self.secure_cookies() else '')
+
+    def send_json(self, status, payload, cookies=None, headers=None):
         body = json.dumps(payload).encode()
         self.send_response(status)
         self.send_header('Content-Type', 'application/json; charset=utf-8')
         self.send_header('Content-Length', str(len(body)))
         self.send_header('Cache-Control', 'no-store')
+        for name, value in (headers or {}).items():
+            self.send_header(name, value)
         if cookies:
             for cookie in cookies:
                 self.send_header('Set-Cookie', cookie)
@@ -243,7 +375,7 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
     def api_get(self, path):
         if path == '/api/auth/me':
             user = self.session_user()
-            self.send_json(HTTPStatus.OK, {'user': user})
+            self.send_json(HTTPStatus.OK, {'user': user, 'registrationOpen': ALLOW_REGISTRATION})
             return
         user = self.require_user()
         if not user:
@@ -268,12 +400,23 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
         database.close()
 
     def authenticate(self, create=False):
+        if create and not ALLOW_REGISTRATION:
+            self.send_json(HTTPStatus.FORBIDDEN, {'error': 'New accounts are turned off on this server.'})
+            return
         data = self.read_json()
         username = str(data.get('username', '')).strip()
         password = str(data.get('password', ''))
         if len(username) < 3 or len(password) < 8:
             self.send_json(HTTPStatus.BAD_REQUEST, {'error': 'Username must be 3+ characters and password must be 8+ characters.'})
             return
+        throttle_key = (self.client_address[0], username.lower())
+        if not create:
+            wait = login_throttle.retry_after(throttle_key)
+            if wait:
+                # Refused before the password is even checked, so guessing cannot continue during the wait.
+                self.send_json(HTTPStatus.TOO_MANY_REQUESTS, {'error': f'Too many failed sign-ins. Try again in {(wait + 59) // 60} minute(s).'},
+                               headers={'Retry-After': str(wait)})
+                return
         database = connection()
         row = database.execute('SELECT id, username, password_hash FROM users WHERE username = ?', (username,)).fetchone()
         if create:
@@ -284,16 +427,24 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             database.execute('INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)', (username, password_hash(password), int(time.time() * 1000)))
             database.commit()
             row = database.execute('SELECT id, username FROM users WHERE username = ?', (username,)).fetchone()
-        elif not row or not password_matches(password, row['password_hash']):
-            database.close()
-            self.send_json(HTTPStatus.UNAUTHORIZED, {'error': 'Invalid username or password.'})
-            return
+        else:
+            matches = password_matches(password, row['password_hash'] if row else DUMMY_HASH)
+            if not row or not matches:
+                database.close()
+                login_throttle.failed(throttle_key)
+                self.send_json(HTTPStatus.UNAUTHORIZED, {'error': 'Invalid username or password.'})
+                return
+            login_throttle.succeeded(throttle_key)
+            if needs_rehash(row['password_hash']):
+                # The password is only known now, so this is the moment to move an older hash to the current strength.
+                database.execute('UPDATE users SET password_hash = ? WHERE id = ?', (password_hash(password), row['id']))
+        now = int(time.time())
         token = secrets.token_urlsafe(32)
-        database.execute('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)', (token, row['id'], int(time.time()) + SESSION_TTL))
+        database.execute('DELETE FROM sessions WHERE expires_at <= ?', (now,))
+        database.execute('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)', (token, row['id'], now + SESSION_TTL))
         database.commit()
         database.close()
-        cookie = f'session={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={SESSION_TTL}'
-        self.send_json(HTTPStatus.OK, {'user': {'id': row['id'], 'username': row['username']}}, [cookie])
+        self.send_json(HTTPStatus.OK, {'user': {'id': row['id'], 'username': row['username']}}, [self.session_cookie(token, SESSION_TTL)])
 
     def api_post(self, path):
         if path == '/api/auth/register':
@@ -310,7 +461,7 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
                 database.execute('DELETE FROM sessions WHERE token = ?', (token.value,))
                 database.commit()
                 database.close()
-            self.send_json(HTTPStatus.OK, {'ok': True}, ['session=; Path=/; HttpOnly; Max-Age=0'])
+            self.send_json(HTTPStatus.OK, {'ok': True}, [self.session_cookie('', 0)])
             return
         user = self.require_user()
         if not user:

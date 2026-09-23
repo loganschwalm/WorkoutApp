@@ -129,6 +129,27 @@ mkdir -p "$DATA_DIR"
 chown -R "$SERVICE_USER":"$SERVICE_USER" "$DATA_DIR"
 chmod 750 "$DATA_DIR"
 
+# Settings for the server itself. Created once and never overwritten, so an update keeps what you set here.
+if [[ ! -f /etc/workout-tracker/workout-tracker.env ]]; then
+  step "writing /etc/workout-tracker/workout-tracker.env"
+  cat >/etc/workout-tracker/workout-tracker.env <<'ENVFILE'
+# Workout Tracker server settings. Updates never overwrite this file.
+# Apply a change with: systemctl restart workout-tracker
+#
+# Stop anyone else creating an account once yours exist (existing accounts still sign in):
+#ALLOW_REGISTRATION=0
+#
+# Always mark the session cookie Secure. Only set this if the app is reached exclusively over HTTPS;
+# it is already marked Secure on requests a reverse proxy forwards with X-Forwarded-Proto: https.
+#SECURE_COOKIES=1
+#
+# Failed sign-ins allowed per username and address before a wait, and how long failures are remembered (seconds):
+#LOGIN_ATTEMPTS=5
+#LOGIN_WINDOW=900
+ENVFILE
+  chmod 0644 /etc/workout-tracker/workout-tracker.env
+fi
+
 step "writing systemd unit"
 cat >/etc/systemd/system/workout-tracker.service <<UNIT
 [Unit]
@@ -146,6 +167,7 @@ Environment=PORT=$APP_PORT
 Environment=APP_ROOT=$APP_DIR/frontend
 Environment=WORKOUT_DB=$DATA_DIR/workouts.db
 Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-/etc/workout-tracker/workout-tracker.env
 ExecStart=/usr/bin/python3 $APP_DIR/backend/server.py
 Restart=always
 RestartSec=3

@@ -31,6 +31,13 @@ function setMode(nextMode) {
   feedback.hidden = true;
 }
 
+// A server with registration turned off only offers signing in.
+fetch('/api/auth/me').then(response => response.json()).then(info => {
+  if (info.registrationOpen !== false) return;
+  registerTab.hidden = true;
+  setMode('login');
+}).catch(() => {});
+
 loginTab.onclick = () => setMode('login');
 registerTab.onclick = () => setMode('register');
 form.onsubmit = async event => {

@@ -263,14 +263,49 @@ For the whole container, use a normal Proxmox `vzdump` backup job. Because the d
 
 The server was written for a home network, and the defaults reflect that:
 
-- **Registration is open.** Anyone who can reach the port can create an account. There is no admin
-  role and no invite system, so create your accounts right after installing.
-- **There is no HTTPS and no rate limiting.** Passwords are hashed with PBKDF2-SHA256 and sessions
-  use `HttpOnly`, `SameSite=Lax` cookies, but the cookie is not marked `Secure`, so plain HTTP sends
-  it in the clear.
+- **Registration is open until you close it.** Anyone who can reach the port can create an account.
+  Create your accounts, then set `ALLOW_REGISTRATION=0` (see [Server settings](#server-settings)): the
+  sign-in page then only offers signing in, and the API refuses new accounts. To add someone later,
+  turn it back on briefly.
+- **The server does not speak HTTPS itself.** Put it behind a reverse proxy that terminates TLS. The
+  session cookie is `HttpOnly` and `SameSite=Lax`, and it is marked `Secure` whenever the proxy sends
+  `X-Forwarded-Proto: https` (or always, with `SECURE_COOKIES=1`). Over plain HTTP it travels in the clear.
+
+What is already in place:
+
+- Passwords are hashed with PBKDF2-SHA256 at 600,000 iterations. Accounts created by an older version
+  are upgraded to that strength the next time they sign in.
+- After 5 failed sign-ins for one username from one address, that pair has to wait until the oldest
+  failure is 15 minutes old, even with the right password. Behind a reverse proxy every request comes
+  from the proxy's address, so the limit then works per username.
+- Every response carries a strict Content-Security-Policy (only this site's own scripts and styles,
+  nothing inline), plus `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` and
+  `Referrer-Policy: same-origin`. Directory listings are off.
 
 Keep it on a trusted LAN, or put it behind a reverse proxy such as Caddy, Nginx Proxy Manager, or
 Traefik that terminates TLS and adds authentication. Do not forward the port straight to the internet.
+
+### Server settings
+
+The server reads these environment variables:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `PORT` | `8000` | Port to listen on |
+| `APP_ROOT` | `frontend/` | Directory of static files to serve |
+| `WORKOUT_DB` | `data/workouts.db` | SQLite database path |
+| `ALLOW_REGISTRATION` | `1` | `0` refuses new accounts; existing accounts still sign in |
+| `SECURE_COOKIES` | `0` | `1` always marks the session cookie `Secure`; only for a site reached exclusively over HTTPS |
+| `LOGIN_ATTEMPTS` | `5` | Failed sign-ins per username and address before a wait |
+| `LOGIN_WINDOW` | `900` | Seconds a failed sign-in is remembered |
+
+Where to set them:
+
+- **Proxmox install:** in `/etc/workout-tracker/workout-tracker.env` inside the container. The installer
+  creates it with every option commented out, and updates never overwrite it. Apply a change with
+  `pct exec <CTID> -- systemctl restart workout-tracker`.
+- **Docker Compose:** under `environment:` in `docker-compose.yml`, then `docker compose up -d`.
+- **Manual install:** `Environment=` lines in the systemd unit, then `systemctl daemon-reload` and a restart.
 
 ### Offline support needs HTTPS
 
@@ -310,7 +345,8 @@ docker compose up -d --build
 ```
 
 Open `http://YOUR_SERVER_IP:8000`. The database lives in the `workout_data` volume and survives
-restarts and rebuilds.
+restarts and rebuilds. The server runs as an unprivileged `workout` user; the container starts as root
+only long enough to hand the data volume to that user (volumes made by older images are owned by root).
 
 ```bash
 docker compose logs -f                      # logs
@@ -353,8 +389,8 @@ EOF
 sudo systemctl enable --now workout-tracker
 ```
 
-The server reads three environment variables: `PORT` (default `8000`), `APP_ROOT` (the directory of
-static files to serve, default `frontend/`), and `WORKOUT_DB` (the SQLite path, default `data/workouts.db`).
+See [Server settings](#server-settings) for the environment variables the server reads, such as
+`ALLOW_REGISTRATION=0` to close sign-up once your accounts exist.
 
 ### Migrating from the browser-only version
 

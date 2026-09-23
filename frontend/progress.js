@@ -163,7 +163,9 @@ function renderProgress(workouts) {
   const labels = { weight:['Heaviest weight', 'Track your heaviest weight by workout type and date.', 'Weight (lbs)'], reps:['Best reps', 'Track your highest completed reps by workout type and date.', 'Reps'], volume:['Total volume', 'Track total weight moved by workout type and date.', 'Volume'] };
   $('progressTitle').textContent = labels[selectedMetric][0];
   $('progressDescription').textContent = labels[selectedMetric][1];
-  $('legend').innerHTML = chartData.types.map((type, index) => `<div class="legend-item"><span class="legend-swatch" style="background:${colors[index % colors.length]}"></span><span>${escapeHTML(type.name)}</span></div>`).join('');
+  $('legend').innerHTML = chartData.types.map(type => `<div class="legend-item"><span class="legend-swatch"></span><span>${escapeHTML(type.name)}</span></div>`).join('');
+  // Set through the DOM: the Content-Security-Policy refuses style="" attributes written into markup.
+  $('legend').querySelectorAll('.legend-swatch').forEach((swatch, index) => { swatch.style.background = colors[index % colors.length]; });
   drawChart();
 }
 
