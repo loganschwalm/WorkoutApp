@@ -50,7 +50,7 @@ WORKOUT_TEST_CHROME="/opt/chrome/chrome" python tests/run.py
 | `gym_usability` | 81 | Last time's numbers, correcting logged sets, moving between exercises, skipped exercises, message visibility, the phone layout, session expiry and signing out |
 | `pwa` | 39 | The manifest and icons, service-worker registration, what is and is not cached, the theme colour, the signed-out redirect, a deploy reaching the next load, and a reload with the server killed |
 | `security` | 16 | The Content-Security-Policy leaving every page working while blocking injected scripts, stored text that looks like markup staying text on every page, and the sign-in page on a server with registration closed |
-| `pages` | 20 | Every page loading its scripts without an error and with the shared helpers, Progress treating differently typed exercise names as one, and the saved-workout buttons working from the list on screen, offline included |
+| `pages` | 23 | Every page loading its scripts without an error and with the shared helpers, an older cached script (as served for one load after an update) still being able to declare its own `$`, Progress treating differently typed exercise names as one, and the saved-workout buttons working from the list on screen, offline included |
 
 Each suite gets a fresh server, database and browser profile, so they are
 independent and safe to run concurrently.

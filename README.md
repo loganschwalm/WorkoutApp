@@ -47,17 +47,20 @@ Logged sets, notes, finished workouts, settings, and custom templates are saved 
 - Reloading the page while the server is unreachable restores the in-progress workout from the device.
 - Finishing a workout while offline queues it locally and shows how many workouts are waiting to sync. The History and Progress pages upload anything queued before they load your workouts.
 - Uploads are safe to retry: each finished workout carries a unique `clientId`, and the server stores it once however many copies arrive, even at the same moment.
+- If the server ever refuses a queued workout as invalid, it is set aside on the device and the status line says so, so it never holds up the workouts queued after it.
 - A setting or template changed while offline is kept when the page reloads and uploads once the server is back; it is never replaced by the server's older copy.
 - Local copies are kept per account, so another account signed in on the same browser never sees them.
 - If your sign-in expires while a page is open, a banner offers to sign in again and returns you to the same page; nothing on screen is discarded, and a workout in progress stays on the device.
 
 A service worker caches the app's own files, so reloading with no connection still opens the
-app rather than a browser error page. Workout data is untouched by that cache; `offline.js`
-keeps owning it, so there is only ever one copy of the truth.
+app rather than a browser error page. It always asks the server first and only falls back to
+the cache when the server cannot be reached, so an update reaches the very next page load.
+Workout data is untouched by that cache; `offline.js` keeps owning it, so there is only ever
+one copy of the truth.
 
 Service workers only run in a [secure context](#offline-support-needs-https), which means
-`localhost` or HTTPS. Over plain HTTP to a LAN address the app behaves exactly as it did
-before: everything works while the page stays loaded, and a reload needs the server.
+`localhost` or HTTPS. Over plain HTTP to a LAN address there is no service worker: everything
+works while the page stays loaded, and a reload needs the server.
 
 ### Installing to a phone
 
@@ -126,6 +129,14 @@ Settings are saved to your account on the server and cached in the browser, so t
 between visits and follow you to another device. A change made offline applies straight away and
 uploads when the server is reachable again.
 
+### Accounts and security
+
+- Any number of accounts, each with its own workouts, templates, and settings.
+- Sessions last 30 days; signing out ends the session on the server.
+- Registration can be closed once your accounts exist, and the sign-in page then only offers signing in.
+- Repeated wrong passwords for one username are slowed down, and passwords are stored as strong
+  one-way hashes. See [Before you expose it](#before-you-expose-it).
+
 ### Responsive design
 
 - Desktop and mobile layouts.
@@ -167,7 +178,9 @@ A menu offers default settings, advanced settings, or updating an existing insta
 3. Installs `python3`, `git`, and `sqlite3` inside it.
 4. Clones this repository to `/opt/workout-tracker`.
 5. Creates a `workout` system user and a `workout-tracker` systemd service that starts on boot.
-6. Waits until the app actually answers on its port, then prints the URL.
+6. Creates `/etc/workout-tracker/workout-tracker.env` for [server settings](#server-settings), with
+   every option commented out. Updates never overwrite it.
+7. Waits until the app actually answers on its port, then prints the URL.
 
 If the service does not come up, the script fails loudly and prints the last 40 journal lines
 rather than reporting success.
@@ -175,7 +188,13 @@ rather than reporting success.
 There is no Docker inside the container. The app is a single standard-library Python process, so a
 systemd unit is both smaller and one less moving part than Docker nested in an unprivileged LXC.
 
-When it finishes, open the printed URL and **register the first account**.
+When it finishes, open the printed URL and **register your accounts**. Then close registration so
+nobody else on the network can create one:
+
+```bash
+pct exec <CTID> -- sed -i 's/^#ALLOW_REGISTRATION=0/ALLOW_REGISTRATION=0/' /etc/workout-tracker/workout-tracker.env
+pct exec <CTID> -- systemctl restart workout-tracker
+```
 
 #### Defaults
 
@@ -187,8 +206,10 @@ When it finishes, open the printed URL and **register the first account**.
 | App | `http://<container-ip>:8000` |
 | Code | `/opt/workout-tracker` |
 | Database | `/var/lib/workout-tracker/workouts.db` |
+| Server settings | `/etc/workout-tracker/workout-tracker.env` |
 
-The database lives outside the code directory on purpose, so updates cannot touch your data.
+The database lives outside the code directory on purpose, so replacing the code on an update never
+replaces your data.
 
 #### Choosing settings without the menu
 
@@ -348,9 +369,12 @@ cd workout-tracker
 docker compose up -d --build
 ```
 
-Open `http://YOUR_SERVER_IP:8000`. The database lives in the `workout_data` volume and survives
-restarts and rebuilds. The server runs as an unprivileged `workout` user; the container starts as root
-only long enough to hand the data volume to that user (volumes made by older images are owned by root).
+Open `http://YOUR_SERVER_IP:8000` and register your accounts, then set `ALLOW_REGISTRATION: "0"` in
+`docker-compose.yml` and run `docker compose up -d` to close registration.
+
+The database lives in the `workout_data` volume and survives restarts and rebuilds. The server runs as
+an unprivileged `workout` user; the container starts as root only long enough to hand the data volume
+to that user (volumes made by older images are owned by root).
 
 ```bash
 docker compose logs -f                      # logs
@@ -368,8 +392,8 @@ docker compose cp workout-tracker:/app/data/backup.db ./workouts-backup.db
 
 ### Manual install on any Linux host
 
-No container, no Docker. You need Python 3.9 or newer, with a SQLite that has JSON support (any
-current distro), and nothing else.
+No container, no Docker. You need Python 3.9 or newer, with SQLite 3.24 or newer and its JSON
+functions (any current distro), and nothing else.
 
 ```bash
 sudo git clone https://github.com/loganschwalm/WorkoutApp.git /opt/workout-tracker
@@ -403,6 +427,28 @@ sudo systemctl enable --now workout-tracker
 See [Server settings](#server-settings) for the environment variables the server reads, such as
 `ALLOW_REGISTRATION=0` to close sign-up once your accounts exist.
 
+### Upgrading an install from before September 2026
+
+The September 2026 release changed a few things an existing install will notice. Nothing needs to be
+done by hand except closing registration, but it is worth knowing what happens:
+
+- **Back up first.** On its first start the new server upgrades the database in place (numbered
+  schema versions and write-ahead logging), and an older release will then refuse to open it. Your
+  workouts, templates, settings, and accounts are all kept.
+- **Close registration.** It stays open by default, as before. Set `ALLOW_REGISTRATION=0` as
+  described in [Server settings](#server-settings). On Proxmox, run the update first so the settings
+  file exists.
+- **Passwords** are rehashed at the new strength the next time each account signs in; nobody has to
+  reset anything.
+- **Old links** to `/frontend/…` pages redirect to the same page without the prefix, and signing in
+  now lands on `/`.
+- **Docker:** the first start hands the existing `workout_data` volume to the unprivileged `workout`
+  user, then the server runs as that user.
+- **Phones with the app installed** (over HTTPS) may run the previous version's scripts, from the old
+  service worker's cache, for the first page load after the update; that load still works. The new
+  service worker takes over during it, and from the next load on the new version runs. After this
+  release the service worker always asks the server first, so later updates show up on the very next load.
+
 ### Migrating from the browser-only version
 
 Workouts saved in the older browser-only IndexedDB build are not uploaded automatically when you
@@ -420,8 +466,8 @@ python backend/server.py
 Then open <http://localhost:8000/> and register an account. Visiting a page while signed out
 redirects to the login form, so start at the root rather than at `index.html`.
 
-The database goes to `data/workouts.db` in the checkout, which is gitignored. Override any of
-`PORT`, `APP_ROOT`, or `WORKOUT_DB` to change that:
+The database is created (or upgraded) at `data/workouts.db` in the checkout when the server starts;
+it is gitignored. Any of the [server settings](#server-settings) can be overridden the same way:
 
 ```bash
 PORT=9000 WORKOUT_DB=/tmp/scratch.db python backend/server.py
@@ -429,11 +475,12 @@ PORT=9000 WORKOUT_DB=/tmp/scratch.db python backend/server.py
 
 ## Tests
 
-The `tests/` directory holds end-to-end tests that drive a real headless browser
-against a real server: no mocking, so a passing check means the feature works in a
-browser. They cover the workout flow, the rest timer, offline syncing, settings and
-templates, the alert settings, in-workout usability, the service worker, and the API
-itself (malformed requests, racing uploads, database upgrades).
+The `tests/` directory holds end-to-end tests that drive a real headless browser against a real
+server, plus a suite that exercises the API directly: no mocking, so a passing check means the
+feature works. Nine suites cover the workout flow, the rest timer, offline syncing, settings and
+templates, the alert settings, in-workout usability, the service worker, the security headers and
+escaping in the pages, and the API itself (validation, malformed requests, racing uploads, sign-in
+throttling, password hashes, and database upgrades).
 
 ```bash
 pip install -r tests/requirements.txt
@@ -455,6 +502,7 @@ the in-progress workout, finished workouts still waiting to upload (and any the 
 time's numbers for each exercise, settings, and custom templates. That copy is what lets you keep
 training through a network drop; it uploads when the server is reachable again, and clearing the
 browser's site data only loses whatever had not uploaded yet.
+
 Include the SQLite file in your backup plan: it is at `/var/lib/workout-tracker/workouts.db` in an
 LXC install, and in the `workout_data` volume under Docker. The database runs in write-ahead-log mode,
 so recent changes can sit in `workouts.db-wal` next to it. Back up with SQLite's backup (the LXC's

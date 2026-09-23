@@ -27,6 +27,15 @@ def run(t):
         check(f'{path}: the shared helpers are there', shared is True)
         check(f'{path}: the date header is filled in', bool(cdp.ev("document.getElementById('today').textContent")))
         check(f'{path}: no IndexedDB code is left', cdp.ev("typeof openDatabase === 'undefined' && typeof databaseName === 'undefined'") is True)
+        # On the first load after an update, the previous service worker can serve the previous page scripts,
+        # which declare `const $` at the top level. Evaluating one here is that script arriving; it must not
+        # collide with common.js. (It shadows $ for the rest of this page, so it goes last before navigating.)
+        try:
+            cdp.ev('const $ = id => document.getElementById(id); true')
+            collided = None
+        except RuntimeError as error:
+            collided = str(error)
+        check(f'{path}: an older cached script declaring its own $ still runs', collided is None, collided)
 
     # ------------------------------------------------------------------ P2 exercise names on Progress
     print('P2  Progress treats differently typed names as one exercise')

@@ -1,5 +1,10 @@
 // Helpers shared by the Tracker, History and Progress pages. Loaded first, before any page script.
-const $ = id => document.getElementById(id);
+
+// A window property, deliberately not `const $`. On the first load after an update, a phone still running the
+// previous service worker gets this file from the network but the previous page scripts from its cache, and
+// those declare their own `const $`; a second const would stop them with a SyntaxError. A property lets theirs
+// shadow it for that one load. The function declarations below can be redeclared the same way.
+window.$ = id => document.getElementById(id);
 
 function escapeHTML(value) {
   return String(value).replace(/[&<>'"]/g, character => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[character]));
