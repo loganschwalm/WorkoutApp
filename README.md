@@ -230,8 +230,11 @@ type. A template cannot live on `local-lvm`, so it is normally `local` even when
 #### Updating
 
 Run the same command again on the Proxmox host and choose **Update an existing container**. That
-fetches the latest commit, rewrites the systemd unit, and restarts the service. Your database is
-untouched. You can also update from inside the container:
+fetches the latest commit, rewrites the systemd unit, and restarts the service. Your data is kept:
+if a release changes the database layout, the server upgrades it in place when it starts, and the
+journal shows `Database upgraded to schema version N`. Take a backup first if you might want to go
+back, because an older release refuses to open a database a newer one has upgraded. You can also
+update from inside the container:
 
 ```bash
 pct enter <CTID>
@@ -351,8 +354,15 @@ only long enough to hand the data volume to that user (volumes made by older ima
 ```bash
 docker compose logs -f                      # logs
 docker compose down && git pull && docker compose up -d --build   # update
-docker run --rm -v workout_data:/data -v "$PWD":/backup alpine \
-  cp /data/workouts.db /backup/workouts.db  # back up
+```
+
+To back up, take a consistent snapshot inside the running container and copy it out. A plain copy of
+`workouts.db` is not enough: recent changes can still be in the `workouts.db-wal` file beside it.
+
+```bash
+docker compose exec workout-tracker python -c \
+  "import sqlite3; sqlite3.connect('/app/data/workouts.db').backup(sqlite3.connect('/app/data/backup.db'))"
+docker compose cp workout-tracker:/app/data/backup.db ./workouts-backup.db
 ```
 
 ### Manual install on any Linux host
@@ -446,7 +456,10 @@ In self-hosted mode, saved workouts, active sessions, custom templates, and pref
 
 Each user's workout records are protected by the authenticated user ID in every database query.
 Include the SQLite file in your backup plan: it is at `/var/lib/workout-tracker/workouts.db` in an
-LXC install, and in the `workout_data` volume under Docker.
+LXC install, and in the `workout_data` volume under Docker. The database runs in write-ahead-log mode,
+so recent changes can sit in `workouts.db-wal` next to it. Back up with SQLite's backup (the LXC's
+`workout-tracker-backup` helper, or `sqlite3 workouts.db ".backup copy.db"`) rather than copying the
+file while the server runs.
 
 ## Technology
 

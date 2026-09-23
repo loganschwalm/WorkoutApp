@@ -1,6 +1,8 @@
+import contextlib
 import hashlib
 import http.server
 import json
+import math
 import os
 import secrets
 import sqlite3
@@ -52,8 +54,8 @@ SECURITY_HEADERS = {
     'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()',
 }
 
-_client_id_ready = False
-_client_id_lock = threading.Lock()
+# How long a request waits for another request's write to finish before giving up, in seconds.
+BUSY_TIMEOUT = 10
 
 
 class BadRequest(Exception):
@@ -64,73 +66,192 @@ class BadRequest(Exception):
         self.status = status
 
 
-def migrate_client_ids(database):
-    # Retried uploads are recognised by the clientId the app puts on each finished workout. Keeping it in its own
-    # column under a unique index lets the database refuse a second copy, even when two uploads race each other.
-    global _client_id_ready
-    if _client_id_ready:
-        return
-    with _client_id_lock:
-        if _client_id_ready:
-            return
-        columns = {row['name'] for row in database.execute('PRAGMA table_info(workouts)')}
-        if 'client_id' not in columns:
-            database.execute('ALTER TABLE workouts ADD COLUMN client_id TEXT')
-            # A race before this column existed may already have stored a workout twice. Only the first copy
-            # keeps its clientId, so the unique index can be built; the other copy is left untouched.
-            database.execute('''
-                UPDATE workouts SET client_id = json_extract(payload, '$.clientId')
-                WHERE json_type(payload, '$.clientId') = 'text' AND json_extract(payload, '$.clientId') != ''
-                  AND id = (SELECT MIN(other.id) FROM workouts AS other
-                            WHERE other.user_id = workouts.user_id
-                              AND json_type(other.payload, '$.clientId') = 'text'
-                              AND json_extract(other.payload, '$.clientId') = json_extract(workouts.payload, '$.clientId'))
-            ''')
-        database.execute('CREATE UNIQUE INDEX IF NOT EXISTS workouts_user_client ON workouts(user_id, client_id)')
-        database.commit()
-        _client_id_ready = True
+# ---- Schema -------------------------------------------------------------------------------------------------
+# Each migration moves the database up one version, and PRAGMA user_version records how many have run. Add new
+# ones to the end and never change one that has shipped: databases in the wild have already run it.
 
-
-def connection():
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    database = sqlite3.connect(DB_PATH)
-    database.row_factory = sqlite3.Row
-    database.execute('PRAGMA foreign_keys = ON')
-    database.executescript('''
+def migration_1_tables(database):
+    # IF NOT EXISTS: databases from before versioning already have these tables, at user_version 0.
+    # One statement at a time: executescript would commit, ending the migration's transaction early.
+    for statement in ('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT NOT NULL UNIQUE,
             password_hash TEXT NOT NULL,
             created_at INTEGER NOT NULL
-        );
+        )''', '''
         CREATE TABLE IF NOT EXISTS sessions (
             token TEXT PRIMARY KEY,
             user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             expires_at INTEGER NOT NULL
-        );
+        )''', '''
         CREATE TABLE IF NOT EXISTS workouts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             name TEXT NOT NULL,
             notes TEXT NOT NULL DEFAULT '',
             created_at INTEGER NOT NULL,
-            payload TEXT NOT NULL,
-            client_id TEXT
-        );
+            payload TEXT NOT NULL
+        )''', '''
         CREATE TABLE IF NOT EXISTS active_sessions (
             user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
             payload TEXT NOT NULL,
             updated_at INTEGER NOT NULL
-        );
+        )''', '''
         CREATE TABLE IF NOT EXISTS user_state (
             user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
             settings_json TEXT NOT NULL DEFAULT '{}',
             templates_json TEXT NOT NULL DEFAULT '[]',
             updated_at INTEGER NOT NULL
-        );
-    ''')
-    migrate_client_ids(database)
-    return database
+        )'''):
+        database.execute(statement)
+
+
+def migration_2_client_ids(database):
+    # Retried uploads are recognised by the clientId the app puts on each finished workout. Keeping it in its own
+    # column under a unique index lets the database refuse a second copy, even when two uploads race each other.
+    # The column may already exist: the version before migrations were numbered added it the same way.
+    columns = {row[1] for row in database.execute('PRAGMA table_info(workouts)')}
+    if 'client_id' not in columns:
+        database.execute('ALTER TABLE workouts ADD COLUMN client_id TEXT')
+        # A race before this column existed may already have stored a workout twice. Only the first copy
+        # keeps its clientId, so the unique index can be built; the other copy is left untouched.
+        database.execute('''
+            UPDATE workouts SET client_id = json_extract(payload, '$.clientId')
+            WHERE json_type(payload, '$.clientId') = 'text' AND json_extract(payload, '$.clientId') != ''
+              AND id = (SELECT MIN(other.id) FROM workouts AS other
+                        WHERE other.user_id = workouts.user_id
+                          AND json_type(other.payload, '$.clientId') = 'text'
+                          AND json_extract(other.payload, '$.clientId') = json_extract(workouts.payload, '$.clientId'))
+        ''')
+    database.execute('CREATE UNIQUE INDEX IF NOT EXISTS workouts_user_client ON workouts(user_id, client_id)')
+
+
+MIGRATIONS = [migration_1_tables, migration_2_client_ids]
+
+
+def init_database():
+    """Create or upgrade the database once, before the server accepts a request."""
+    os.makedirs(os.path.dirname(os.path.abspath(DB_PATH)), exist_ok=True)
+    database = sqlite3.connect(DB_PATH, timeout=BUSY_TIMEOUT, isolation_level=None)
+    try:
+        version = database.execute('PRAGMA user_version').fetchone()[0]
+        if version > len(MIGRATIONS):
+            raise SystemExit(f'{DB_PATH} is at schema version {version}, but this server only knows {len(MIGRATIONS)}. '
+                             'It was written by a newer version of the app; update the app instead of downgrading.')
+        # Write-ahead logging lets requests keep reading while another one writes. It is a property of the
+        # file, so setting it once here covers every later connection.
+        database.execute('PRAGMA journal_mode = WAL')
+        for number in range(version + 1, len(MIGRATIONS) + 1):
+            database.execute('BEGIN IMMEDIATE')
+            try:
+                MIGRATIONS[number - 1](database)
+                database.execute(f'PRAGMA user_version = {number}')
+                database.execute('COMMIT')
+            except BaseException:
+                database.execute('ROLLBACK')
+                raise
+            print(f'Database upgraded to schema version {number}.')
+    finally:
+        database.close()
+
+
+@contextlib.contextmanager
+def connection():
+    """One request's database connection: committed if the block finishes, rolled back if it raises, always closed."""
+    database = sqlite3.connect(DB_PATH, timeout=BUSY_TIMEOUT)
+    database.row_factory = sqlite3.Row
+    database.execute('PRAGMA foreign_keys = ON')
+    try:
+        yield database
+        database.commit()
+    except BaseException:
+        database.rollback()
+        raise
+    finally:
+        database.close()
+
+
+# ---- Validation ---------------------------------------------------------------------------------------------
+# Generous limits: nothing the app sends comes near them, but a stored value is always the shape the pages expect.
+
+def text(value, field, limit, default=''):
+    if value is None:
+        return default
+    if not isinstance(value, str):
+        raise BadRequest(f'{field} must be text.')
+    if len(value) > limit:
+        raise BadRequest(f'{field} is longer than {limit} characters.')
+    return value
+
+
+def is_number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def amount(value, field):
+    """A weight or rep count: a number, or the text a number field produces ('' when left empty)."""
+    if value is None or value == '' or (is_number(value) and value >= 0):
+        return
+    if isinstance(value, str) and len(value) <= 32:
+        try:
+            number = float(value)
+        except ValueError:
+            number = None
+        if number is not None and math.isfinite(number) and number >= 0:
+            return
+    raise BadRequest(f'{field} must be a number of zero or more.')
+
+
+def listed(value, field, limit):
+    if not isinstance(value, list):
+        raise BadRequest(f'{field} must be a list.')
+    if len(value) > limit:
+        raise BadRequest(f'{field} has more than {limit} entries.')
+    for item in value:
+        if not isinstance(item, dict):
+            raise BadRequest(f'Every entry in {field} must be an object.')
+    return value
+
+
+def validate_exercises(exercises, field='exercises'):
+    for index, exercise in enumerate(listed(exercises, field, 1000)):
+        where = f'{field}[{index}]'
+        text(exercise.get('name'), f'{where}.name', 1000)
+        amount(exercise.get('weight'), f'{where}.weight')
+        amount(exercise.get('reps'), f'{where}.reps')
+        if exercise.get('sets') is not None:
+            for number, logged in enumerate(listed(exercise['sets'], f'{where}.sets', 1000)):
+                amount(logged.get('weight'), f'{where}.sets[{number}].weight')
+                amount(logged.get('reps'), f'{where}.sets[{number}].reps')
+
+
+def validate_workout(data):
+    """(name, notes, created_at) for storing, after checking the whole workout is a shape the pages can show."""
+    name = text(data.get('name', 'Untitled workout'), 'name', 1000)
+    notes = text(data.get('notes'), 'notes', 100_000)
+    created_at = data.get('createdAt', int(time.time() * 1000))
+    if not is_number(created_at) or not 0 <= created_at < 10 ** 14:
+        raise BadRequest('createdAt must be a time in milliseconds.')
+    validate_exercises(data.get('exercises'))
+    if data.get('clientId') is not None:
+        text(data['clientId'], 'clientId', 200)
+    return name, notes, int(created_at)
+
+
+def validate_state(data):
+    if 'settings' in data and not isinstance(data['settings'], dict):
+        raise BadRequest('settings must be an object.')
+    if 'templates' in data:
+        for index, template in enumerate(listed(data['templates'], 'templates', 1000)):
+            text(template.get('name'), f'templates[{index}].name', 1000)
+            validate_exercises(template.get('exercises'), f'templates[{index}].exercises')
+
+
+def workout_id(path):
+    """The id in /api/workouts/<id>, or None if it is not a plain number (answered as not found)."""
+    tail = path[len('/api/workouts/'):]
+    return int(tail) if tail.isdigit() and len(tail) < 19 else None
 
 
 def derive(password, salt, iterations):
@@ -317,9 +438,8 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
         token = cookie.get('session')
         if not token:
             return None
-        database = connection()
-        row = database.execute('SELECT users.id, users.username FROM sessions JOIN users ON users.id = sessions.user_id WHERE sessions.token = ? AND sessions.expires_at > ?', (token.value, int(time.time()))).fetchone()
-        database.close()
+        with connection() as database:
+            row = database.execute('SELECT users.id, users.username FROM sessions JOIN users ON users.id = sessions.user_id WHERE sessions.token = ? AND sessions.expires_at > ?', (token.value, int(time.time()))).fetchone()
         return dict(row) if row else None
 
     def require_user(self):
@@ -380,24 +500,23 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
         user = self.require_user()
         if not user:
             return
-        database = connection()
-        if path == '/api/workouts':
-            rows = database.execute('SELECT id, name, notes, created_at, payload FROM workouts WHERE user_id = ? ORDER BY created_at DESC', (user['id'],)).fetchall()
-            workouts = []
-            for row in rows:
-                item = json.loads(row['payload'])
-                item.update(id=row['id'], name=row['name'], notes=row['notes'], createdAt=row['created_at'])
-                workouts.append(item)
-            self.send_json(HTTPStatus.OK, {'workouts': workouts})
-        elif path == '/api/active-session':
-            row = database.execute('SELECT payload FROM active_sessions WHERE user_id = ?', (user['id'],)).fetchone()
-            self.send_json(HTTPStatus.OK, {'session': json.loads(row['payload']) if row else None})
-        elif path == '/api/state':
-            row = database.execute('SELECT settings_json, templates_json FROM user_state WHERE user_id = ?', (user['id'],)).fetchone()
-            self.send_json(HTTPStatus.OK, {'settings': json.loads(row['settings_json']) if row else {}, 'templates': json.loads(row['templates_json']) if row else []})
-        else:
-            self.send_json(HTTPStatus.NOT_FOUND, {'error': 'Endpoint not found.'})
-        database.close()
+        with connection() as database:
+            if path == '/api/workouts':
+                rows = database.execute('SELECT id, name, notes, created_at, payload FROM workouts WHERE user_id = ? ORDER BY created_at DESC', (user['id'],)).fetchall()
+                workouts = []
+                for row in rows:
+                    item = json.loads(row['payload'])
+                    item.update(id=row['id'], name=row['name'], notes=row['notes'], createdAt=row['created_at'])
+                    workouts.append(item)
+                self.send_json(HTTPStatus.OK, {'workouts': workouts})
+            elif path == '/api/active-session':
+                row = database.execute('SELECT payload FROM active_sessions WHERE user_id = ?', (user['id'],)).fetchone()
+                self.send_json(HTTPStatus.OK, {'session': json.loads(row['payload']) if row else None})
+            elif path == '/api/state':
+                row = database.execute('SELECT settings_json, templates_json FROM user_state WHERE user_id = ?', (user['id'],)).fetchone()
+                self.send_json(HTTPStatus.OK, {'settings': json.loads(row['settings_json']) if row else {}, 'templates': json.loads(row['templates_json']) if row else []})
+            else:
+                self.send_json(HTTPStatus.NOT_FOUND, {'error': 'Endpoint not found.'})
 
     def authenticate(self, create=False):
         if create and not ALLOW_REGISTRATION:
@@ -417,33 +536,28 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_json(HTTPStatus.TOO_MANY_REQUESTS, {'error': f'Too many failed sign-ins. Try again in {(wait + 59) // 60} minute(s).'},
                                headers={'Retry-After': str(wait)})
                 return
-        database = connection()
-        row = database.execute('SELECT id, username, password_hash FROM users WHERE username = ?', (username,)).fetchone()
-        if create:
-            if row:
-                database.close()
-                self.send_json(HTTPStatus.CONFLICT, {'error': 'That username is already registered.'})
-                return
-            database.execute('INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)', (username, password_hash(password), int(time.time() * 1000)))
-            database.commit()
-            row = database.execute('SELECT id, username FROM users WHERE username = ?', (username,)).fetchone()
-        else:
-            matches = password_matches(password, row['password_hash'] if row else DUMMY_HASH)
-            if not row or not matches:
-                database.close()
-                login_throttle.failed(throttle_key)
-                self.send_json(HTTPStatus.UNAUTHORIZED, {'error': 'Invalid username or password.'})
-                return
-            login_throttle.succeeded(throttle_key)
-            if needs_rehash(row['password_hash']):
-                # The password is only known now, so this is the moment to move an older hash to the current strength.
-                database.execute('UPDATE users SET password_hash = ? WHERE id = ?', (password_hash(password), row['id']))
-        now = int(time.time())
-        token = secrets.token_urlsafe(32)
-        database.execute('DELETE FROM sessions WHERE expires_at <= ?', (now,))
-        database.execute('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)', (token, row['id'], now + SESSION_TTL))
-        database.commit()
-        database.close()
+        with connection() as database:
+            row = database.execute('SELECT id, username, password_hash FROM users WHERE username = ?', (username,)).fetchone()
+            if create:
+                if row:
+                    self.send_json(HTTPStatus.CONFLICT, {'error': 'That username is already registered.'})
+                    return
+                database.execute('INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)', (username, password_hash(password), int(time.time() * 1000)))
+                row = database.execute('SELECT id, username FROM users WHERE username = ?', (username,)).fetchone()
+            else:
+                matches = password_matches(password, row['password_hash'] if row else DUMMY_HASH)
+                if not row or not matches:
+                    login_throttle.failed(throttle_key)
+                    self.send_json(HTTPStatus.UNAUTHORIZED, {'error': 'Invalid username or password.'})
+                    return
+                login_throttle.succeeded(throttle_key)
+                if needs_rehash(row['password_hash']):
+                    # The password is only known now, so this is the moment to move an older hash to the current strength.
+                    database.execute('UPDATE users SET password_hash = ? WHERE id = ?', (password_hash(password), row['id']))
+            now = int(time.time())
+            token = secrets.token_urlsafe(32)
+            database.execute('DELETE FROM sessions WHERE expires_at <= ?', (now,))
+            database.execute('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)', (token, row['id'], now + SESSION_TTL))
         self.send_json(HTTPStatus.OK, {'user': {'id': row['id'], 'username': row['username']}}, [self.session_cookie(token, SESSION_TTL)])
 
     def api_post(self, path):
@@ -457,10 +571,8 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             cookie = SimpleCookie(self.headers.get('Cookie', ''))
             token = cookie.get('session')
             if token:
-                database = connection()
-                database.execute('DELETE FROM sessions WHERE token = ?', (token.value,))
-                database.commit()
-                database.close()
+                with connection() as database:
+                    database.execute('DELETE FROM sessions WHERE token = ?', (token.value,))
             self.send_json(HTTPStatus.OK, {'ok': True}, [self.session_cookie('', 0)])
             return
         user = self.require_user()
@@ -468,27 +580,24 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             return
         if path == '/api/workouts':
             data = self.read_json()
-            now = int(time.time() * 1000)
-            payload = dict(data)
-            client_id = data.get('clientId') if isinstance(data.get('clientId'), str) and data.get('clientId') else None
-            database = connection()
-            # Clients retry uploads after network failures, so a repeated clientId must not create a second workout.
-            # The unique index decides, so two retries arriving at the same moment cannot both get in.
-            cursor = database.execute('INSERT INTO workouts (user_id, name, notes, created_at, payload, client_id) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(user_id, client_id) DO NOTHING', (user['id'], data.get('name', 'Untitled workout'), data.get('notes', ''), data.get('createdAt', now), json.dumps(payload), client_id))
-            database.commit()
-            if cursor.rowcount:
-                database.close()
-                self.send_json(HTTPStatus.CREATED, {'id': cursor.lastrowid})
-                return
-            existing = database.execute('SELECT id FROM workouts WHERE user_id = ? AND client_id = ?', (user['id'], client_id)).fetchone()
-            database.close()
-            self.send_json(HTTPStatus.OK, {'id': existing['id']})
+            name, notes, created_at = validate_workout(data)
+            client_id = data.get('clientId') or None
+            with connection() as database:
+                # Clients retry uploads after network failures, so a repeated clientId must not create a second workout.
+                # The unique index decides, so two retries arriving at the same moment cannot both get in.
+                cursor = database.execute('INSERT INTO workouts (user_id, name, notes, created_at, payload, client_id) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(user_id, client_id) DO NOTHING', (user['id'], name, notes, created_at, json.dumps(data), client_id))
+                if cursor.rowcount:
+                    status, stored_id = HTTPStatus.CREATED, cursor.lastrowid
+                else:
+                    status, stored_id = HTTPStatus.OK, database.execute('SELECT id FROM workouts WHERE user_id = ? AND client_id = ?', (user['id'], client_id)).fetchone()['id']
+            self.send_json(status, {'id': stored_id})
         elif path == '/api/active-session':
             data = self.read_json()
-            database = connection()
-            database.execute('INSERT INTO active_sessions (user_id, payload, updated_at) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET payload=excluded.payload, updated_at=excluded.updated_at', (user['id'], json.dumps(data.get('session')), int(time.time() * 1000)))
-            database.commit()
-            database.close()
+            session = data.get('session')
+            if session is not None and not isinstance(session, dict):
+                raise BadRequest('session must be an object or null.')
+            with connection() as database:
+                database.execute('INSERT INTO active_sessions (user_id, payload, updated_at) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET payload=excluded.payload, updated_at=excluded.updated_at', (user['id'], json.dumps(session), int(time.time() * 1000)))
             self.send_json(HTTPStatus.OK, {'ok': True})
         else:
             self.send_json(HTTPStatus.NOT_FOUND, {'error': 'Endpoint not found.'})
@@ -498,22 +607,25 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
         if not user:
             return
         if path.startswith('/api/workouts/'):
-            workout_id = path.rsplit('/', 1)[-1]
+            target = workout_id(path)
             data = self.read_json()
-            database = connection()
-            database.execute('UPDATE workouts SET name=?, notes=?, created_at=?, payload=? WHERE id=? AND user_id=?', (data.get('name', 'Untitled workout'), data.get('notes', ''), data.get('createdAt', int(time.time() * 1000)), json.dumps(data), workout_id, user['id']))
-            database.commit()
-            database.close()
+            name, notes, created_at = validate_workout(data)
+            updated = 0
+            if target is not None:
+                with connection() as database:
+                    updated = database.execute('UPDATE workouts SET name=?, notes=?, created_at=?, payload=? WHERE id=? AND user_id=?', (name, notes, created_at, json.dumps(data), target, user['id'])).rowcount
+            if not updated:
+                self.send_json(HTTPStatus.NOT_FOUND, {'error': 'Workout not found.'})
+                return
             self.send_json(HTTPStatus.OK, {'ok': True})
         elif path == '/api/state':
             data = self.read_json()
-            database = connection()
-            existing = database.execute('SELECT settings_json, templates_json FROM user_state WHERE user_id = ?', (user['id'],)).fetchone()
-            settings = data.get('settings', json.loads(existing['settings_json']) if existing else {})
-            templates = data.get('templates', json.loads(existing['templates_json']) if existing else [])
-            database.execute('INSERT INTO user_state (user_id, settings_json, templates_json, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET settings_json=excluded.settings_json, templates_json=excluded.templates_json, updated_at=excluded.updated_at', (user['id'], json.dumps(settings), json.dumps(templates), int(time.time() * 1000)))
-            database.commit()
-            database.close()
+            validate_state(data)
+            with connection() as database:
+                existing = database.execute('SELECT settings_json, templates_json FROM user_state WHERE user_id = ?', (user['id'],)).fetchone()
+                settings = data.get('settings', json.loads(existing['settings_json']) if existing else {})
+                templates = data.get('templates', json.loads(existing['templates_json']) if existing else [])
+                database.execute('INSERT INTO user_state (user_id, settings_json, templates_json, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET settings_json=excluded.settings_json, templates_json=excluded.templates_json, updated_at=excluded.updated_at', (user['id'], json.dumps(settings), json.dumps(templates), int(time.time() * 1000)))
             self.send_json(HTTPStatus.OK, {'settings': settings, 'templates': templates})
         else:
             self.send_json(HTTPStatus.NOT_FOUND, {'error': 'Endpoint not found.'})
@@ -522,21 +634,25 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
         user = self.require_user()
         if not user:
             return
-        database = connection()
         if path.startswith('/api/workouts/'):
-            database.execute('DELETE FROM workouts WHERE id=? AND user_id=?', (path.rsplit('/', 1)[-1], user['id']))
+            target = workout_id(path)
+            if target is None:
+                self.send_json(HTTPStatus.NOT_FOUND, {'error': 'Workout not found.'})
+                return
+            # Deleting a workout that is already gone (from another tab, say) still leaves what was asked for.
+            with connection() as database:
+                database.execute('DELETE FROM workouts WHERE id=? AND user_id=?', (target, user['id']))
         elif path == '/api/active-session':
-            database.execute('DELETE FROM active_sessions WHERE user_id=?', (user['id'],))
+            with connection() as database:
+                database.execute('DELETE FROM active_sessions WHERE user_id=?', (user['id'],))
         else:
-            database.close()
             self.send_json(HTTPStatus.NOT_FOUND, {'error': 'Endpoint not found.'})
             return
-        database.commit()
-        database.close()
         self.send_json(HTTPStatus.OK, {'ok': True})
 
 
 if __name__ == '__main__':
+    init_database()
     port = int(os.environ.get('PORT', '8000'))
     server = http.server.ThreadingHTTPServer(('0.0.0.0', port), AppHandler)
     print(f'Workout Tracker listening on http://0.0.0.0:{port}')

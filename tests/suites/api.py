@@ -158,6 +158,7 @@ def run(t):
     check('the real path is served directly', status == 200, status)
 
     run_security(t, check, request)
+    run_structure(t, check, request)
 
 
 def login(server, username, password, headers=None):
@@ -300,3 +301,182 @@ def run_security(t, check, request):
             location = headers.get('location', '')
             check(f'{method} {path} does not redirect to another site',
                   not location.startswith(('//', '/\\', 'http')) and '\\' not in location, f'{status} {location!r}')
+
+
+def schema_of(path):
+    db = sqlite3.connect(path)
+    try:
+        return {
+            'version': db.execute('PRAGMA user_version').fetchone()[0],
+            'journal': db.execute('PRAGMA journal_mode').fetchone()[0],
+            'tables': sorted(r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")),
+            'indexes': sorted(r[1] for r in db.execute("PRAGMA index_list('workouts')")),
+            'columns': [r[1] for r in db.execute('PRAGMA table_info(workouts)')],
+        }
+    finally:
+        db.close()
+
+
+def run_structure(t, check, request):
+    main = t.server
+    token = t.token
+    json_headers = {'Content-Type': 'application/json'}
+    tables = ['active_sessions', 'sessions', 'user_state', 'users', 'workouts']
+
+    # ------------------------------------------------------------------ A12 schema at startup
+    print('A12 the schema is created and versioned at startup, in WAL mode')
+    t.start_server('fresh.db')  # the harness only asks /api/auth/me, which never opens the database
+    schema = schema_of(t.db_path('fresh.db'))
+    check('a new database has every table before any request touches it', schema['tables'] == tables, schema['tables'])
+    check('it is at schema version 2', schema['version'] == 2, schema['version'])
+    check('with the client_id column and its unique index',
+          'client_id' in schema['columns'] and 'workouts_user_client' in schema['indexes'], schema)
+    check('in write-ahead-log mode', schema['journal'] == 'wal', schema['journal'])
+    legacy = schema_of(t.db_path('legacy.db'))
+    check('the database from before client_id (A3) is now at version 2 too', legacy['version'] == 2, legacy['version'])
+
+    # A database written by the release before migrations were numbered: client_id already there, version 0.
+    path = t.db_path('unversioned.db')
+    db = sqlite3.connect(path)
+    db.executescript(OLD_SCHEMA + '''
+        ALTER TABLE workouts ADD COLUMN client_id TEXT;
+        CREATE UNIQUE INDEX workouts_user_client ON workouts(user_id, client_id);
+        INSERT INTO users VALUES (1, 'kept', 'x$y', 0);
+        INSERT INTO workouts (user_id, name, notes, created_at, payload, client_id) VALUES (1, 'Kept', '', 0, '{"exercises": []}', 'k1');
+    ''')
+    db.close()
+    t.start_server('unversioned.db')
+    schema = schema_of(path)
+    db = sqlite3.connect(path)
+    kept = db.execute("SELECT name, client_id FROM workouts").fetchall()
+    db.close()
+    check('an unversioned database that already has client_id upgrades cleanly',
+          schema['version'] == 2 and schema['columns'].count('client_id') == 1 and kept == [('Kept', 'k1')], f'{schema} {kept}')
+
+    path = t.db_path('newer.db')
+    db = sqlite3.connect(path)
+    db.execute('PRAGMA user_version = 99')
+    db.close()
+    try:
+        t.start_server('newer.db')
+        refused = False
+    except RuntimeError:
+        refused = True
+    after = schema_of(path)
+    check('a database from a newer release is refused rather than touched',
+          refused and after['version'] == 99 and after['tables'] == [] and after['journal'] == 'delete', after)
+
+    # ------------------------------------------------------------------ A13 concurrency
+    print('A13 requests keep working while the database is busy')
+    holder = sqlite3.connect(t.db_path('test.db'), isolation_level=None)
+    holder.execute('BEGIN EXCLUSIVE')
+    started = time.monotonic()
+    status, _, reply = request('GET', '/api/workouts', token=token)
+    elapsed = time.monotonic() - started
+    holder.execute('ROLLBACK')
+    check('reads are answered at once while another connection holds the write lock',
+          status == 200 and elapsed < 2, f'{status} after {elapsed:.1f}s')
+
+    def hold_write_lock(seconds):
+        blocker = sqlite3.connect(t.db_path('test.db'), isolation_level=None)
+        blocker.execute('BEGIN IMMEDIATE')
+        time.sleep(seconds)
+        blocker.execute('COMMIT')
+        blocker.close()
+
+    blocker = threading.Thread(target=hold_write_lock, args=(1.5,))
+    blocker.start()
+    time.sleep(0.2)
+    started = time.monotonic()
+    body = json.dumps({'name': 'Waited', 'exercises': [], 'clientId': 'waited-1'}).encode()
+    status, _, _ = request('POST', '/api/workouts', body, json_headers, token=token)
+    elapsed = time.monotonic() - started
+    blocker.join()
+    check('a write waits for the lock instead of failing', status == 201 and elapsed >= 1, f'{status} after {elapsed:.1f}s')
+
+    # ------------------------------------------------------------------ A14 workout validation
+    print('A14 workouts are checked before they are stored')
+
+    def good(**changes):
+        workout = {'name': 'Valid', 'notes': '', 'createdAt': int(time.time() * 1000),
+                   'exercises': [{'name': 'Squat', 'weight': 100, 'reps': 5, 'sets': [{'weight': 100, 'reps': 5}]}]}
+        workout.update(changes)
+        return workout
+
+    def exercise(**changes):
+        return [{'name': 'Squat', 'weight': 100, 'reps': 5, 'sets': [{'weight': 100, 'reps': 5}], **changes}]
+
+    before = len(t.workouts())
+    refused = [
+        ('a name that is a number', good(name=5)),
+        ('notes that are a list', good(notes=['x'])),
+        ('a createdAt that is text', good(createdAt='yesterday')),
+        ('a createdAt that is true', good(createdAt=True)),
+        ('a createdAt far in the future', good(createdAt=10 ** 15)),
+        ('no exercises at all', {k: v for k, v in good().items() if k != 'exercises'}),
+        ('exercises that are text', good(exercises='squat')),
+        ('an exercise that is not an object', good(exercises=['squat'])),
+        ('an exercise name that is a number', good(exercises=exercise(name=3))),
+        ('a weight that is a word', good(exercises=exercise(weight='heavy'))),
+        ('a negative weight', good(exercises=exercise(weight=-5))),
+        ('reps that are an object', good(exercises=exercise(reps={}))),
+        ('sets that are text', good(exercises=exercise(sets='3x5'))),
+        ('a set weight that is a word', good(exercises=exercise(sets=[{'weight': 'abc', 'reps': 5}]))),
+        ('a clientId that is a number', good(clientId=7)),
+        ('a 2000-character name', good(name='x' * 2000)),
+    ]
+    for label, body in refused:
+        status, _, reply = request('POST', '/api/workouts', json.dumps(body).encode(), json_headers, token=token)
+        check(f'refused: {label}', status == 400 and isinstance(reply, dict) and reply.get('error'), f'{status} {reply}')
+    check('none of them was stored', len(t.workouts()) == before, f'{before} -> {len(t.workouts())}')
+
+    accepted = [
+        ('what a finished workout sends', good()),
+        ('what the workout form sends (text, empty weight, no sets)',
+         good(exercises=[{'name': 'Curl', 'weight': '', 'reps': '10'}, {'name': 'Row', 'weight': '72.5', 'reps': '8'}])),
+        ('a skipped exercise (empty set list)', good(exercises=exercise(sets=[]))),
+        ('no exercises (an empty list)', good(exercises=[])),
+        ('a missing name, notes and createdAt', {'exercises': []}),
+    ]
+    for label, body in accepted:
+        status, _, reply = request('POST', '/api/workouts', json.dumps(body).encode(), json_headers, token=token)
+        check(f'accepted: {label}', status == 201, f'{status} {reply}')
+
+    # ------------------------------------------------------------------ A15 editing and deleting
+    print('A15 editing a workout that is missing, or not yours, is a 404')
+    mine = t.W1
+    _, cookie = t.api('POST', '/api/auth/register', {'username': 'neighbour', 'password': 'password123'})
+    neighbour = cookie.split('session=')[1].split(';')[0]
+    theirs, _ = t.api('POST', '/api/workouts', good(name='Theirs'), neighbour)
+    for label, path in [('an id that does not exist', '/api/workouts/999999'),
+                        ('an id that is not a number', '/api/workouts/abc'),
+                        ("another account's workout", f"/api/workouts/{theirs['id']}")]:
+        status, _, reply = request('PUT', path, json.dumps(good(name='Hijack')).encode(), json_headers, token=token)
+        check(f'PUT {label} -> 404', status == 404, f'{status} {reply}')
+    their_name = next(w['name'] for w in t.api('GET', '/api/workouts', token=neighbour)[0]['workouts'])
+    check("and the other account's workout is unchanged", their_name == 'Theirs', their_name)
+    status, _, _ = request('PUT', f'/api/workouts/{mine}', json.dumps(good(name='Renamed')).encode(), json_headers, token=token)
+    check('PUT your own workout -> 200', status == 200 and t.workout(mine)['name'] == 'Renamed', status)
+    status, _, _ = request('PUT', f'/api/workouts/{mine}', json.dumps(good(exercises='bad')).encode(), json_headers, token=token)
+    check('an invalid edit is refused and changes nothing',
+          status == 400 and isinstance(t.workout(mine)['exercises'], list), status)
+    check('DELETE with an id that is not a number -> 404', request('DELETE', '/api/workouts/abc', token=token)[0] == 404)
+
+    # ------------------------------------------------------------------ A16 state and active session
+    print('A16 settings, templates and the active session are checked too')
+    template = {'id': 'custom-1', 'name': 'Ok', 'exercises': [{'name': 'Row', 'reps': '8'}]}
+    for label, body, expected in [
+        ('settings that are a list', {'settings': []}, 400),
+        ('templates that are an object', {'templates': {}}, 400),
+        ('a template without exercises', {'templates': [{'id': 'x', 'name': 'No list'}]}, 400),
+        ('a template name that is a number', {'templates': [{**template, 'name': 1}]}, 400),
+        ('valid settings and templates', {'settings': {'restDuration': 60}, 'templates': [template]}, 200),
+    ]:
+        status, _, reply = request('PUT', '/api/state', json.dumps(body).encode(), json_headers, token=token)
+        check(f'PUT /api/state with {label} -> {expected}', status == expected, f'{status} {reply}')
+    state = t.api('GET', '/api/state', token=token)[0]
+    check('only the valid state was stored', state['templates'] == [template] and state['settings'].get('restDuration') == 60, state)
+    for label, session, expected in [('text', 'running', 400), ('a list', [], 400), ('null', None, 200),
+                                     ('an object', {'name': 'Push', 'exercises': [], 'currentIndex': 0}, 200)]:
+        status, _, reply = request('POST', '/api/active-session', json.dumps({'session': session}).encode(), json_headers, token=token)
+        check(f'an active session that is {label} -> {expected}', status == expected, f'{status} {reply}')

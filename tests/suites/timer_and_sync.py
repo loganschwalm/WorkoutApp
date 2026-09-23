@@ -196,3 +196,23 @@ def run(t):
     cdp.goto('/history.html')
     check('history shows the workout without visiting the tracker', cdp.wait(f"document.querySelectorAll('.history-workout').length === {n + 1}"), cdp.ev("document.querySelectorAll('.history-workout').length"))
     check('server has it', len(workouts()) == n + 1, len(workouts()))
+
+    print('P8  a workout the server refuses does not hold up the ones behind it')
+    open_tracker()
+    n = len(workouts())
+    # A queued workout the server will never accept (as if written by a buggy older build), then a normal one.
+    broken = {'name': 'Broken', 'notes': '', 'createdAt': int(time.time() * 1000), 'clientId': 'broken-1', 'exercises': 'not a list'}
+    fine = {'name': 'Behind It', 'notes': '', 'createdAt': int(time.time() * 1000), 'clientId': 'behind-1',
+            'exercises': [{'name': 'Squat', 'weight': 100, 'reps': 5, 'sets': [{'weight': 100, 'reps': 5}]}]}
+    cdp.ev(f"queuePendingWorkout({json.dumps(broken)}); queuePendingWorkout({json.dumps(fine)})")
+    flushed = cdp.ev('flushPendingWorkouts()')
+    names = [w['name'] for w in workouts()]
+    check('the flush finishes', flushed is True, flushed)
+    check('the workout behind it is uploaded', 'Behind It' in names and len(names) == n + 1, names[:5])
+    check('the refused one is not stored', 'Broken' not in names)
+    check('nothing is left in the upload queue', safe_ev('readPendingWorkouts().length', -1) == 0)
+    kept = safe_ev('readRejectedWorkouts().map(w => w.name)', [])
+    check('the refused one is kept on this device', kept == ['Broken'], kept)
+    cdp.pause(0.5)
+    status = cdp.ev("document.getElementById('storageStatus').textContent")
+    check('and the status line says so', 'refused by the server' in status, status)

@@ -48,7 +48,7 @@ function newClientId() {
 }
 
 function reportSyncStatus(uploaded = 0) {
-  window.dispatchEvent(new CustomEvent('syncchange', { detail:{ pendingWorkouts:readPendingWorkouts().length, activeOffline:activeSyncFailed, uploaded } }));
+  window.dispatchEvent(new CustomEvent('syncchange', { detail:{ pendingWorkouts:readPendingWorkouts().length, rejectedWorkouts:readRejectedWorkouts().length, activeOffline:activeSyncFailed, uploaded } }));
 }
 
 // The signed-in account decides which local copy is ours; fall back to the last known account when the server is unreachable.
@@ -117,6 +117,12 @@ function queuePendingWorkout(workout) {
   reportSyncStatus();
 }
 
+// Finished workouts the server refused as invalid. Kept on this device rather than thrown away, but out of the
+// upload queue, where retrying one forever would hold back every workout finished after it.
+function readRejectedWorkouts() {
+  return readLocal(localKey('rejected')) || [];
+}
+
 // Resolves true once nothing is left to upload, false if the server could not be reached (a retry is scheduled).
 function flushPendingWorkouts() {
   if (pendingFlush) return pendingFlush;
@@ -126,9 +132,13 @@ function flushPendingWorkouts() {
     let uploaded = 0;
     let queue = readPendingWorkouts();
     while (queue.length) {
+      let rejected = false;
       try {
         const response = await syncFetch('/api/workouts', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(queue[0]) });
-        if (!response.ok) throw new Error(`Workout sync failed (${response.status}).`);
+        // 400 and 413 say this workout can never be accepted as it is; anything else may succeed on a retry.
+        rejected = response.status === 400 || response.status === 413;
+        if (rejected) console.error(`The server refused a finished workout (${response.status}); it is kept on this device.`, await response.text());
+        else if (!response.ok) throw new Error(`Workout sync failed (${response.status}).`);
       } catch (error) {
         console.error('Unable to sync finished workout; it is saved on this device and will be retried.', error);
         pendingRetryCount += 1;
@@ -136,9 +146,11 @@ function flushPendingWorkouts() {
         reportSyncStatus(uploaded);
         return false;
       }
+      if (rejected) writeLocal(localKey('rejected'), [...readRejectedWorkouts(), queue[0]]);
       writeLocal(localKey('pending'), readPendingWorkouts().slice(1));
       pendingRetryCount = 0;
-      uploaded += 1;
+      if (!rejected) uploaded += 1;
+      if (rejected) reportSyncStatus();
       queue = readPendingWorkouts();
     }
     if (uploaded) reportSyncStatus(uploaded);

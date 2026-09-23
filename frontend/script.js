@@ -349,6 +349,8 @@ function renderStorageStatus() {
   const waiting = readPendingWorkouts().length;
   const parts = [workoutsReachable ? 'Saved to your account' : 'Server unreachable'];
   if (waiting) parts.push(`${waiting} workout${waiting === 1 ? '' : 's'} waiting to sync`);
+  const refused = readRejectedWorkouts().length;
+  if (refused) parts.push(`${refused} workout${refused === 1 ? '' : 's'} refused by the server (kept on this device)`);
   $('storageStatus').textContent = parts.join(' · ');
 }
 

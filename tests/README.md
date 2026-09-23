@@ -42,10 +42,10 @@ WORKOUT_TEST_CHROME="/opt/chrome/chrome" python tests/run.py
 
 | Suite | Checks | Covers |
 | --- | --- | --- |
-| `api` | 80 | The HTTP API without a browser: malformed and oversized request bodies, many copies of one upload arriving at once, upgrading a database from before `client_id`, `/frontend/` redirects, closed registration, sign-in throttling, password hash strength and upgrades, `Secure` cookies, expired sessions, security headers and content types, and paths that could redirect off-site |
+| `api` | 128 | The HTTP API without a browser: the schema created, versioned and upgraded at startup (and a newer database refused), reads and writes while the database is busy, validation of workouts, templates, settings and active sessions, malformed and oversized request bodies, many copies of one upload arriving at once, upgrading a database from before `client_id`, `/frontend/` redirects, closed registration, sign-in throttling, password hash strength and upgrades, `Secure` cookies, expired sessions, security headers and content types, and paths that could redirect off-site |
 | `account_state` | 21 | Settings and templates changed offline surviving a reload and reaching the server, a change from another device still arriving, a second account on the same browser, and adopting the copy kept by the previous version |
 | `workout_flow` | 22 | `?start=` links, replacing an in-progress workout, editing and repeating workouts that have logged sets, progress-chart series |
-| `timer_and_sync` | 51 | Rest timer accuracy under a stalled clock, the screen wake lock, and saving sets and finished workouts through a network drop |
+| `timer_and_sync` | 57 | Rest timer accuracy under a stalled clock, the screen wake lock, saving sets and finished workouts through a network drop, and a workout the server refuses not holding up the ones queued behind it |
 | `sound_settings` | 31 | Alert tone, volume, vibration, the Test alert button, persistence across pages, and settings saved before the feature existed |
 | `gym_usability` | 81 | Last time's numbers, correcting logged sets, moving between exercises, skipped exercises, message visibility, the phone layout, session expiry and signing out |
 | `pwa` | 39 | The manifest and icons, service-worker registration, what is and is not cached, the theme colour, the signed-out redirect, a deploy reaching the next load, and a reload with the server killed |
