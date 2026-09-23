@@ -32,7 +32,7 @@ BRANCH="${BRANCH:-main}"
 APP_DIR="${APP_DIR:-/opt/workout-tracker}"
 DATA_DIR="${DATA_DIR:-/var/lib/workout-tracker}"
 SERVICE_USER="${SERVICE_USER:-workout}"
-APP_PORT="${APP_PORT:-8000}"
+APP_PORT="${APP_PORT:-6769}"
 
 CTID="${CTID:-}"
 CT_HOSTNAME="${CT_HOSTNAME:-workout-tracker}"
@@ -97,6 +97,24 @@ CONF_FILE=/etc/workout-tracker/install.conf
 
 export DEBIAN_FRONTEND=noninteractive
 step() { echo "    -> $*"; }
+
+# --- default port move (begin) ---
+# Installs from before September 2026 listened on 8000 by default, a port other services often want too.
+# An install still on that old default moves to 6769, once: PORT_DEFAULT_MOVED records that the question
+# has been settled, so a port chosen afterwards (8000 included) is kept by every later update. New installs,
+# and updates that name a port explicitly, are written with it already set.
+if [[ "${PORT_DEFAULT_MOVED:-}" != 1 ]]; then
+  if [[ "$APP_PORT" == 8000 ]]; then
+    APP_PORT=6769
+    step "moving from the old default port 8000 to 6769"
+    echo "    !! The app's address changes to port 6769. Update bookmarks, phones with the app"
+    echo "    !! installed, and any reverse proxy that points at port 8000."
+  fi
+  PORT_DEFAULT_MOVED=1
+  sed -i -e '/^APP_PORT=/d' -e '/^PORT_DEFAULT_MOVED=/d' "$CONF_FILE"
+  printf "APP_PORT='%s'\nPORT_DEFAULT_MOVED='1'\n" "$APP_PORT" >>"$CONF_FILE"
+fi
+# --- default port move (end) ---
 
 step "installing packages"
 apt-get update -qq
@@ -223,6 +241,7 @@ APP_DIR='$APP_DIR'
 DATA_DIR='$DATA_DIR'
 SERVICE_USER='$SERVICE_USER'
 APP_PORT='$APP_PORT'
+PORT_DEFAULT_MOVED='${PORT_DEFAULT_MOVED:-}'
 EOF
 }
 
@@ -239,7 +258,8 @@ run_in_container() {
   [[ -n "$_ENV_APP_DIR" ]] && APP_DIR="$_ENV_APP_DIR"
   [[ -n "$_ENV_DATA_DIR" ]] && DATA_DIR="$_ENV_DATA_DIR"
   [[ -n "$_ENV_SERVICE_USER" ]] && SERVICE_USER="$_ENV_SERVICE_USER"
-  [[ -n "$_ENV_APP_PORT" ]] && APP_PORT="$_ENV_APP_PORT"
+  # A port named on the command line is a decision, so the old-default move (see the payload) leaves it alone.
+  [[ -n "$_ENV_APP_PORT" ]] && { APP_PORT="$_ENV_APP_PORT"; PORT_DEFAULT_MOVED=1; }
 
   local tmp
   tmp="$(mktemp -d)"
@@ -253,7 +273,10 @@ run_in_container() {
 
   msg_info "Updating $APP in place"
   bash "$tmp/setup.sh"
+  # shellcheck source=/dev/null
+  . "$CONF_FILE"  # the update may have moved the port
   msg_ok "$APP updated and restarted"
+  msg_ok "URL: http://$(hostname -I 2>/dev/null | awk '{print $1}'):$APP_PORT"
 }
 
 # ---------------------------------------------------------------------------
@@ -433,6 +456,8 @@ EOF
 # ---------------------------------------------------------------------------
 do_install() {
   local template net tmp ip
+  # A new install starts on the current default (or the port asked for), so the old-default move never applies.
+  PORT_DEFAULT_MOVED=1
   template="$(resolve_template)"
 
   if [[ "$IP_CONFIG" == "dhcp" ]]; then
@@ -546,6 +571,11 @@ do_update() {
   msg_info "Updating $APP in LXC $target"
   pct exec "$target" -- bash /root/workout-tracker-setup.sh
   msg_ok "$APP in LXC $target updated"
+  # Read back rather than assumed: the update may have moved the container off the old default port.
+  local port ip
+  port="$(pct exec "$target" -- sh -c ". $CONF_FILE && printf %s \"\$APP_PORT\"" 2>/dev/null || true)"
+  ip="$(container_ip "$target")"
+  msg_ok "URL: http://${ip:-<container-ip>}:${port:-<port>}"
 }
 
 # ---------------------------------------------------------------------------

@@ -653,7 +653,7 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
 
 if __name__ == '__main__':
     init_database()
-    port = int(os.environ.get('PORT', '8000'))
+    port = int(os.environ.get('PORT', '6769'))
     server = http.server.ThreadingHTTPServer(('0.0.0.0', port), AppHandler)
     print(f'Workout Tracker listening on http://0.0.0.0:{port}')
     server.serve_forever()

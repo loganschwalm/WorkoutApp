@@ -203,7 +203,7 @@ pct exec <CTID> -- systemctl restart workout-tracker
 | Container | unprivileged Debian 12, next free CTID, hostname `workout-tracker` |
 | Resources | 1 core, 512 MB RAM, 512 MB swap, 4 GB disk |
 | Network | bridge `vmbr0`, DHCP, starts on boot |
-| App | `http://<container-ip>:8000` |
+| App | `http://<container-ip>:6769` |
 | Code | `/opt/workout-tracker` |
 | Database | `/var/lib/workout-tracker/workouts.db` |
 | Server settings | `/etc/workout-tracker/workout-tracker.env` |
@@ -241,7 +241,7 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/loganschwalm/WorkoutApp/
 | `CORES` / `MEMORY` / `SWAP` / `DISK` | `1` / `512` / `512` / `4` | Cores, MB, MB, GB |
 | `UNPRIVILEGED` | `1` | `0` creates a privileged container |
 | `ONBOOT` | `1` | Start the container with the host |
-| `APP_PORT` | `8000` | Port the app listens on |
+| `APP_PORT` | `6769` | Port the app listens on |
 | `REPO_URL` / `BRANCH` | this repo / `main` | Source to install from |
 | `APP_DIR` / `DATA_DIR` | `/opt/workout-tracker` / `/var/lib/workout-tracker` | Code and database paths |
 
@@ -252,7 +252,9 @@ type. A template cannot live on `local-lvm`, so it is normally `local` even when
 #### Updating
 
 Run the same command again on the Proxmox host and choose **Update an existing container**. That
-fetches the latest commit, rewrites the systemd unit, and restarts the service. Your data is kept:
+fetches the latest commit, rewrites the systemd unit, restarts the service, and prints the URL. A
+container still on the old default port 8000 moves to 6769 on this update (see
+[Upgrading](#upgrading-an-install-from-before-september-2026)). Your data is kept:
 if a release changes the database layout, the server upgrades it in place when it starts, and the
 journal shows `Database upgraded to schema version N`. Take a backup first if you might want to go
 back, because an older release refuses to open a database a newer one has upgraded. You can also
@@ -316,7 +318,7 @@ The server reads these environment variables:
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `PORT` | `8000` | Port to listen on |
+| `PORT` | `6769` | Port to listen on |
 | `APP_ROOT` | `frontend/` | Directory of static files to serve |
 | `WORKOUT_DB` | `data/workouts.db` | SQLite database path |
 | `ALLOW_REGISTRATION` | `1` | `0` refuses new accounts; existing accounts still sign in |
@@ -328,14 +330,16 @@ Where to set them:
 
 - **Proxmox install:** in `/etc/workout-tracker/workout-tracker.env` inside the container. The installer
   creates it with every option commented out, and updates never overwrite it. Apply a change with
-  `pct exec <CTID> -- systemctl restart workout-tracker`.
+  `pct exec <CTID> -- systemctl restart workout-tracker`. The port is the exception: the installer
+  manages it, so change `APP_PORT` in `/etc/workout-tracker/install.conf` and run the update instead of
+  setting `PORT` here.
 - **Docker Compose:** under `environment:` in `docker-compose.yml`, then `docker compose up -d`.
 - **Manual install:** `Environment=` lines in the systemd unit, then `systemctl daemon-reload` and a restart.
 
 ### Offline support needs HTTPS
 
 Browsers only run a service worker in a *secure context*: `localhost`, or HTTPS. A stock
-install serves plain HTTP on a LAN address such as `http://192.168.1.50:8000`, and there the
+install serves plain HTTP on a LAN address such as `http://192.168.1.50:6769`, and there the
 worker never registers. Nothing breaks — the app works exactly as it did before, and
 `pwa.js` gives up quietly — but reloading offline and installing to the home screen will not
 work until the app is reachable over HTTPS.
@@ -345,7 +349,7 @@ TLS. Caddy is the least work, because it obtains and renews the certificate itse
 
 ```caddy
 workouts.example.com {
-    reverse_proxy 192.168.1.50:8000
+    reverse_proxy 192.168.1.50:6769
 }
 ```
 
@@ -369,7 +373,7 @@ cd workout-tracker
 docker compose up -d --build
 ```
 
-Open `http://YOUR_SERVER_IP:8000` and register your accounts, then set `ALLOW_REGISTRATION: "0"` in
+Open `http://YOUR_SERVER_IP:6769` and register your accounts, then set `ALLOW_REGISTRATION: "0"` in
 `docker-compose.yml` and run `docker compose up -d` to close registration.
 
 The database lives in the `workout_data` volume and survives restarts and rebuilds. The server runs as
@@ -411,7 +415,7 @@ Wants=network-online.target
 User=workout
 Group=workout
 WorkingDirectory=/opt/workout-tracker
-Environment=PORT=8000
+Environment=PORT=6769
 Environment=APP_ROOT=/opt/workout-tracker/frontend
 Environment=WORKOUT_DB=/var/lib/workout-tracker/workouts.db
 ExecStart=/usr/bin/python3 /opt/workout-tracker/backend/server.py
@@ -438,6 +442,17 @@ done by hand except closing registration, but it is worth knowing what happens:
 - **Close registration.** It stays open by default, as before. Set `ALLOW_REGISTRATION=0` as
   described in [Server settings](#server-settings). On Proxmox, run the update first so the settings
   file exists.
+- **The default port is now 6769** instead of 8000, which other services often use. What that means
+  for an existing install:
+  - **Proxmox** containers still on the old default 8000 move to 6769 on their next update. The
+    update says so and prints the new URL. A port you chose yourself is kept. To stay on (or go
+    back to) 8000, set `APP_PORT='8000'` in `/etc/workout-tracker/install.conf` inside the container
+    after this update and run the update again. The move happens only once, so later updates keep it.
+  - **Docker** moves to 6769 when you pull, because the mapping lives in `docker-compose.yml`. To
+    keep the old address, change the mapping to `"8000:6769"`.
+  - **Manual installs** keep whatever `Environment=PORT=` their systemd unit sets.
+
+  Point any bookmark, installed phone app, or reverse-proxy target that moves at the new port.
 - **Passwords** are rehashed at the new strength the next time each account signs in; nobody has to
   reset anything.
 - **Old links** to `/frontend/…` pages redirect to the same page without the prefix, and signing in
@@ -463,7 +478,7 @@ cookie, and the service worker only runs on `localhost` or HTTPS. From the proje
 python backend/server.py
 ```
 
-Then open <http://localhost:8000/> and register an account. Visiting a page while signed out
+Then open <http://localhost:6769/> and register an account. Visiting a page while signed out
 redirects to the login form, so start at the root rather than at `index.html`.
 
 The database is created (or upgraded) at `data/workouts.db` in the checkout when the server starts;
