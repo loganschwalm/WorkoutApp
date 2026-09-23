@@ -9,6 +9,25 @@ own workouts, templates, and settings.
 
 **[Install it on Proxmox with one command.](#one-line-install-on-proxmox)**
 
+## Screenshots
+
+![The tracker: built-in and custom workout templates, and recent saved workouts](docs/screenshots/tracker.png)
+
+<table>
+  <tr>
+    <td width="50%" align="center"><img src="docs/screenshots/active-workout.png" width="320" alt="A workout in progress on a phone, showing last time's sets, two logged sets and the rest timer"></td>
+    <td width="50%" align="center"><img src="docs/screenshots/settings.png" width="320" alt="The settings on a phone: theme, rest duration, and the rest-timer alert"></td>
+  </tr>
+  <tr>
+    <td align="center">During a workout: last time's numbers, logged sets you can correct, and the rest timer.</td>
+    <td align="center">Settings, including the rest-timer sound and vibration.</td>
+  </tr>
+</table>
+
+![The Progress page charting the heaviest weight for Push, Pull and Leg days over six weeks](docs/screenshots/progress.png)
+
+![The History page in dark mode, listing each workout's sets and notes](docs/screenshots/history-dark.png)
+
 ## Features
 
 ### Workout tracking
@@ -152,6 +171,8 @@ backend/server.py       API, authentication, and static file server
 data/                   SQLite database when run from a git checkout (gitignored)
 ct/workout-tracker.sh   Proxmox VE one-line installer and updater
 scripts/make-icons.py   Regenerates the app icons in frontend/icons/
+scripts/make-screenshots.py  Regenerates docs/screenshots/ from demo data (needs the test requirements)
+docs/screenshots/       The screenshots in this README
 Dockerfile              Container image definition
 docker-entrypoint.py    Container start: hands the data volume to the unprivileged user, then runs the server
 docker-compose.yml      Docker deployment with a persistent volume

@@ -78,3 +78,27 @@ def run(t):
     loaded = cdp.ev("document.getElementById('workoutName').value")
     check('and so does Repeat, for the workout it belongs to', loaded == target, f'{loaded} vs {target}')
     cdp.block_api = False
+
+    # ------------------------------------------------------------------ P4 hidden means hidden
+    print('P4  nothing marked hidden is showing')
+    # A class that sets display (flex, grid) beats the browser's own [hidden] rule; that left the empty-chart
+    # message over a full chart and the rest timer up before the first set.
+    leaks = """[...document.querySelectorAll('[hidden]')].filter(e => getComputedStyle(e).display !== 'none')
+      .map(e => `${e.tagName.toLowerCase()}#${e.id}.${[...e.classList].join('.')}`)"""
+    states = [('the tracker', '/index.html', "document.querySelectorAll('#savedWorkoutList .saved-workout').length >= 3", None),
+              ('a workout before its first set', '/index.html', "document.querySelectorAll('#savedWorkoutList .saved-workout').length >= 3",
+               "document.querySelector('#templateList [data-template-action=start]').click()"),
+              ('History', '/history.html', "document.querySelectorAll('.history-workout').length >= 3", None),
+              ('Progress with workouts to chart', '/progress.html', "chartData && chartData.points.length > 0", None),
+              ('the sign-in page', '/login.html', "!!document.getElementById('authForm')", None)]
+    for label, path, ready, action in states:
+        settle(path, ready)
+        if action:
+            cdp.ev(action)
+            cdp.pause(0.4)
+        showing = cdp.ev(leaks)
+        check(f'{label}: every hidden element is invisible', showing == [], showing)
+    settle('/progress.html', "chartData && chartData.points.length > 0")
+    cdp.ev("renderProgress([])")
+    check('and does show when there is nothing to chart',
+          cdp.ev("getComputedStyle(document.getElementById('chartEmpty')).display") != 'none')
