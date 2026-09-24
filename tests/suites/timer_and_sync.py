@@ -134,8 +134,9 @@ def run(t):
     check('uploaded workout has every set', created and sum(len(e['sets']) for e in created[0]['exercises']) == 3, json.dumps(created[0]['exercises']) if created else 'none')
     check('local queue is empty afterwards', wait_for(lambda: safe_ev('readPendingWorkouts().length', -1) == 0), safe_ev('readPendingWorkouts().length', -1))
     check('server no longer has an active workout', wait_for(lambda: server_sets() is None), server_sets())
-    total = len(workouts())
-    check('saved-workouts list refreshes on its own', wait_for(lambda: cdp.ev("document.querySelectorAll('#savedWorkoutList .saved-workout').length") == total), cdp.ev("document.querySelectorAll('#savedWorkoutList .saved-workout').length"))
+    uploaded = created[0]['id'] if created else None
+    check('saved-workouts list refreshes on its own', wait_for(lambda: cdp.ev(f"!!document.querySelector('#savedWorkoutList .saved-workout[data-id=\"{uploaded}\"]')") is True),
+          cdp.ev("[...document.querySelectorAll('#savedWorkoutList .saved-workout')].map(li => li.dataset.id)"))
 
     print('P4  a retried upload never duplicates a workout')
     body = {'name': 'Dupe Check', 'notes': '', 'createdAt': int(time.time() * 1000), 'clientId': 'abc123', 'exercises': [ex('Squat', 100, 5, [(5, 100)])]}

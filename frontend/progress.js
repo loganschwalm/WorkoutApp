@@ -113,7 +113,14 @@ function drawChart() {
   context.fillText(metricLabel, 0, 0);
   context.restore();
   context.textAlign = 'center';
-  chartData.points.forEach((point, index) => context.fillText(formatDate(point.createdAt), x(index), height - 20));
+  // A date under every point runs together once there are a few weeks of workouts, so only as many as fit are written,
+  // evenly spaced and always including the most recent.
+  const last = chartData.points.length - 1;
+  const labelWidth = Math.max(...chartData.points.map(point => context.measureText(formatDate(point.createdAt)).width)) + 12;
+  const every = last ? Math.max(1, Math.ceil(labelWidth / (chartWidth / last))) : 1;
+  chartData.points.forEach((point, index) => {
+    if (index === last || (index % every === 0 && last - index >= every)) context.fillText(formatDate(point.createdAt), x(index), height - 20);
+  });
 
   chartData.types.forEach((type, typeIndex) => {
     context.strokeStyle = colors[typeIndex % colors.length];

@@ -170,8 +170,12 @@ The linear-progression push/pull/legs program for beginners posted to r/Fitness 
 
 ### Workout history
 
-- Review all saved workouts on the History page.
+- Review all saved workouts on the History page. The Tracker lists the 10 most recent, with a link
+  to the rest.
 - See workout dates, exercises, weights, reps, completed sets, and notes.
+- Sets are written compactly: "3 × 5 at 185 lbs", "115 lbs × 5, 5, 5, 5, 9", and bodyweight sets
+  as reps ("10, 9, 8 reps") rather than "0 lbs". The last-time line during a workout uses the same
+  style.
 - Start a saved workout again from its history entry.
 - Navigate between Tracker, Progress, and History pages.
 
@@ -183,6 +187,7 @@ The linear-progression push/pull/legs program for beginners posted to r/Fitness 
 - Filter by workout type.
 - Filter by start and end date.
 - See filtered workout counts and chart legends.
+- Dates along the chart are spaced so they never overlap, however many workouts it shows.
 - Review repeated workouts as separate progress points.
 
 ### Settings

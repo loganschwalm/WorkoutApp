@@ -56,6 +56,7 @@ html[data-theme="dark"] .secondary { background:#303653; }
 .empty { color:var(--muted); text-align:center; padding:22px 0 5px; }
 .saved-workout-list { margin:0; padding:0; list-style:none; }
 .saved-workout { padding:14px 0; border-top:1px solid var(--line); }
+.more-workouts { padding:14px 0 0; border-top:1px solid var(--line); text-align:center; }
 .history-workout .workout-details { margin-top:16px; }
 .workout-note { margin:0 0 12px; color:var(--muted); font-size:.9rem; white-space:pre-wrap; }
 .saved-workout-summary { display:flex; justify-content:space-between; align-items:center; gap:16px; }

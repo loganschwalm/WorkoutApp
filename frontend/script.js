@@ -101,9 +101,14 @@ function render() {
   $('count').textContent = `${exercises.length} exercise${exercises.length === 1 ? '' : 's'}`;
 }
 
+// The Tracker lists the most recent workouts; the History page has every one.
+const recentWorkoutLimit = 10;
+
 function renderSavedWorkouts(workouts) {
   const list = $('savedWorkoutList');
-  list.innerHTML = workouts.length ? workouts.map(workout => `<li class="saved-workout" data-id="${escapeHTML(workout.id)}"><div class="saved-workout-summary"><div><strong>${escapeHTML(workout.name)}</strong><span>${new Date(workout.createdAt).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' })}${workoutProgramLabel(workout) ? ` &middot; ${escapeHTML(workoutProgramLabel(workout))}` : ''}</span></div><div class="workout-actions"><button class="primary" type="button" data-action="start">Start</button><button class="secondary" type="button" data-action="view" aria-expanded="false">View</button><button class="secondary" type="button" data-action="repeat">Repeat</button><button class="secondary" type="button" data-action="edit">Edit</button><button class="danger" type="button" data-action="delete">Delete</button></div></div><div class="workout-details" hidden>${workout.notes ? `<p class="workout-note">${escapeHTML(workout.notes)}</p>` : ''}<ul>${workout.exercises.map(item => `<li><strong>${escapeHTML(item.name)}</strong><span>${item.sets && !item.sets.length ? 'Skipped' : `${escapeHTML(item.weight || 0)} lbs &middot; ${escapeHTML(item.reps)} reps`}</span></li>`).join('')}</ul></div></li>`).join('') : '<li class="empty">No saved workouts yet.</li>';
+  const recent = workouts.slice(0, recentWorkoutLimit);
+  const more = workouts.length > recent.length ? `<li class="more-workouts"><a class="button-link secondary" href="history.html">See all ${workouts.length} workouts in History</a></li>` : '';
+  list.innerHTML = recent.length ? recent.map(workout => `<li class="saved-workout" data-id="${escapeHTML(workout.id)}"><div class="saved-workout-summary"><div><strong>${escapeHTML(workout.name)}</strong><span>${new Date(workout.createdAt).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' })}${workoutProgramLabel(workout) ? ` &middot; ${escapeHTML(workoutProgramLabel(workout))}` : ''}</span></div><div class="workout-actions"><button class="primary" type="button" data-action="start">Start</button><button class="secondary" type="button" data-action="view" aria-expanded="false">View</button><button class="secondary" type="button" data-action="repeat">Repeat</button><button class="secondary" type="button" data-action="edit">Edit</button><button class="danger" type="button" data-action="delete">Delete</button></div></div><div class="workout-details" hidden>${workout.notes ? `<p class="workout-note">${escapeHTML(workout.notes)}</p>` : ''}<ul>${workout.exercises.map(item => `<li><strong>${escapeHTML(item.name)}</strong><span>${escapeHTML(describeSavedExercise(item))}</span></li>`).join('')}</ul></div></li>`).join('') + more : '<li class="empty">No saved workouts yet.</li>';
 }
 
 // Training programs (program.js) come first, then the single-workout templates.
@@ -207,10 +212,6 @@ async function syncWakeLock() {
   }
 }
 
-function formatSet(set) {
-  return set.weight ? `${set.weight} lbs × ${set.reps}` : `${set.reps} reps`;
-}
-
 function normalizeSets(sets) {
   return sets.map(set => ({ weight:Number(set.weight) || 0, reps:Number(set.reps) || 0 }));
 }
@@ -259,7 +260,7 @@ function renderActiveWorkout() {
   $('activePlan').hidden = !plan;
   $('activePlan').innerHTML = plan ? plan.map((set, index) => `<li class="${index < exercise.sets.length ? 'done' : index === exercise.sets.length ? 'current' : 'upcoming'}">${escapeHTML(formatPlannedSet(set))}</li>`).join('') : '';
   $('activeExerciseLast').hidden = !previous;
-  if (previous) $('activeExerciseLast').textContent = `Last time (${new Date(previous.date).toLocaleDateString(undefined, { month:'short', day:'numeric' })}): ${previous.sets.map(formatSet).join(' · ')}`;
+  if (previous) $('activeExerciseLast').textContent = `Last time (${new Date(previous.date).toLocaleDateString(undefined, { month:'short', day:'numeric' })}): ${describeLoggedSets(previous.sets)}`;
   $('activeNotes').value = activeSession.notes || '';
   if (planned) {
     // A planned set with no weight (an assistance exercise) takes the set just logged, or last time's.

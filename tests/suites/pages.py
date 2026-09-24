@@ -1,6 +1,7 @@
 """Page scripts: shared helpers, exercise names on the Progress page, and the saved-workout buttons."""
 
 import json
+import re
 
 INTERCEPT = True
 
@@ -102,3 +103,70 @@ def run(t):
     cdp.ev("renderProgress([])")
     check('and does show when there is nothing to chart',
           cdp.ev("getComputedStyle(document.getElementById('chartEmpty')).display") != 'none')
+
+    # ------------------------------------------------------------------ P5 compact sets, recent workouts, chart dates
+    print('P5  sets written compactly, the ten most recent workouts, and chart dates that fit')
+    # Four weeks of older workouts, one a day, so the lists and the chart have more than fits.
+    for days_back in range(6, 31):
+        t.seed('Older Session', -days_back, [t.ex('Barbell Row', 80, 8, [(8, 80), (8, 80)])])
+    t.seed('Format Check', 7, [
+        t.ex('Back Squat', 185, 5, [(5, 185), (5, 185), (5, 185)]),
+        t.ex('Bench Press', 115, 9, [(5, 115), (5, 115), (5, 115), (5, 115), (9, 115)]),
+        t.ex('Chin-up', 0, 8, [(10, 0), (9, 0), (8, 0)]),
+        t.ex('Overhead Press', 85, 3, [(5, 45), (5, 65), (3, 85)]),
+        t.ex('Dip', 0, 12, [(12, 0), (12, 0), (12, 0)]),
+    ])
+    total = len(t.workouts())
+    expected = ['3 × 5 at 185 lbs', '115 lbs × 5, 5, 5, 5, 9', '10, 9, 8 reps', '45 lbs × 5 · 65 lbs × 5 · 85 lbs × 3', '3 × 12']
+
+    settle('/history.html', f"document.querySelectorAll('.history-workout').length >= {total}")
+    spans = cdp.ev("[...[...document.querySelectorAll('.history-workout')].find(li => li.textContent.includes('Format Check')).querySelectorAll('.workout-details li span')].map(s => s.textContent)")
+    check('History writes repeated sets compactly', spans == expected, spans)
+    history = cdp.ev("document.getElementById('historyList').textContent")
+    check('and bodyweight sets as reps, never 0 lbs', not re.search(r'(?<![\d.])0 lbs', history), re.findall(r'.{20}(?<![\d.])0 lbs', history))
+
+    settle('/index.html', "document.querySelectorAll('#savedWorkoutList .saved-workout').length >= 10")
+    names = cdp.ev("[...document.querySelectorAll('#savedWorkoutList .saved-workout-summary strong')].map(s => s.textContent)")
+    check('the Tracker lists the ten most recent workouts', len(names) == 10 and names[0] == 'Format Check' and names.count('Older Session') == 4, names)
+    more = cdp.ev("(() => { const a = document.querySelector('#savedWorkoutList .more-workouts a'); return a && [a.textContent, a.getAttribute('href')]; })()")
+    check('with a link to all of them in History', more == [f'See all {total} workouts in History', 'history.html'], more)
+    cdp.ev("document.querySelector('#savedWorkoutList [data-action=view]').click()")
+    spans = cdp.ev("[...document.querySelectorAll('#savedWorkoutList .saved-workout')[0].querySelectorAll('.workout-details li span')].map(s => s.textContent)")
+    check('its details write sets the same way', spans == expected, spans)
+    t.start(0)
+    cdp.pause(0.4)
+    last = cdp.ev("document.getElementById('activeExerciseLast').textContent")
+    check('and so does last time’s line during a workout', last.endswith(': 115 lbs × 5, 5, 5, 5, 9'), last)
+    t.end_workout()
+
+    settle('/progress.html', f"chartData && chartData.points.length >= {total}")
+    dates = cdp.ev("""(() => {
+      const labels = [];
+      const original = CanvasRenderingContext2D.prototype.fillText;
+      CanvasRenderingContext2D.prototype.fillText = function (text, x, y, ...rest) {
+        if (y === 360 - 20) labels.push({ text, x, width: this.measureText(text).width });
+        return original.call(this, text, x, y, ...rest);
+      };
+      drawChart();
+      CanvasRenderingContext2D.prototype.fillText = original;
+      const overlaps = labels.slice(1).filter((label, i) => label.x - labels[i].x < (label.width + labels[i].width) / 2).length;
+      return { labels: labels.length, points: chartData.points.length, overlaps, first: labels[0]?.text === formatDate(chartData.points[0].createdAt),
+               last: labels[labels.length - 1]?.text === formatDate(chartData.points[chartData.points.length - 1].createdAt) };
+    })()""")
+    check('the chart writes only the dates that fit', 1 < dates['labels'] < dates['points'] and dates['overlaps'] == 0, dates)
+    check('starting with the first workout and ending with the most recent', dates['first'] is True and dates['last'] is True, dates)
+    cdp.send('Emulation.setDeviceMetricsOverride', width=375, height=800, deviceScaleFactor=1, mobile=True)
+    cdp.pause(0.3)
+    narrow = cdp.ev("""(() => {
+      const labels = [];
+      const original = CanvasRenderingContext2D.prototype.fillText;
+      CanvasRenderingContext2D.prototype.fillText = function (text, x, y, ...rest) {
+        if (y === 360 - 20) labels.push({ x, width: this.measureText(text).width });
+        return original.call(this, text, x, y, ...rest);
+      };
+      drawChart();
+      CanvasRenderingContext2D.prototype.fillText = original;
+      return { labels: labels.length, overlaps: labels.slice(1).filter((label, i) => label.x - labels[i].x < (label.width + labels[i].width) / 2).length };
+    })()""")
+    check('even on a phone', narrow['labels'] >= 2 and narrow['overlaps'] == 0, narrow)
+    cdp.send('Emulation.clearDeviceMetricsOverride')
