@@ -1,4 +1,4 @@
-"""Installability and offline reloads: the manifest, the service worker, and what it caches."""
+"""Installability and offline reloads: the manifest, the service worker, what it caches, and the install banner."""
 
 import json
 import socket
@@ -118,8 +118,93 @@ def run(t):
     keys = cdp.ev(f"caches.open({json.dumps(cache_name)}).then(c => c.keys()).then(r => r.map(q => new URL(q.url).pathname))") or []
     check('/ shares the cached /index.html instead of adding a second copy', '/' not in keys and '/index.html' in keys, str(keys))
 
-    # ------------------------------------------------------------------ S8 the real thing
-    print('S8  a reload with the server gone still opens the app')
+    # ------------------------------------------------------------------ S8 install banner
+    print('S8  a phone in the browser is shown how to install the app')
+    key = 'workout-tracker-install-banner'
+    iphone = ('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 '
+              '(KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1')
+    android = ('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 '
+               '(KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36')
+    desktop = cdp.ev('navigator.userAgent')
+    # Written so a missing banner fails a check instead of throwing.
+    shown = "document.getElementById('installBanner') !== null"
+    hint = "(document.querySelector('#installBanner .install-banner-hint') || {}).textContent || ''"
+    install_visible = "(b => !!b && b.offsetParent !== null)(document.querySelector('#installBanner button.primary'))"
+
+    def as_device(user_agent, path='/index.html'):
+        cdp.send('Emulation.setUserAgentOverride', userAgent=user_agent)
+        cdp.goto(path)
+        cdp.pause(0.3)
+
+    cdp.ev(f"localStorage.removeItem('{key}')")
+    as_device(desktop)
+    check('a desktop browser gets no banner', cdp.ev(shown) is False)
+
+    cdp.send('Emulation.setDeviceMetricsOverride', width=375, height=800, deviceScaleFactor=1, mobile=True)
+    as_device(iphone)
+    check('an iPhone gets the banner', cdp.ev(shown) is True)
+    text = cdp.ev(hint)
+    check('it says Share, then Add to Home Screen', 'Share' in text and 'Add to Home Screen' in text, text)
+    check('with no Install button, which Safari has nothing behind', cdp.ev(install_visible) is False)
+    room = cdp.ev("""(() => {
+        const banner = document.getElementById('installBanner');
+        if (!banner) return null;
+        scrollTo(0, document.documentElement.scrollHeight);
+        const cards = document.querySelectorAll('main .card');
+        return { last: cards[cards.length - 1].getBoundingClientRect().bottom, banner: banner.getBoundingClientRect().top };
+    })()""")
+    check('the end of the page scrolls clear of it', bool(room) and room['last'] <= room['banner'], str(room))
+    cdp.ev("document.getElementById('settingsButton').click()")
+    cdp.pause(0.2)
+    check('an open dialog sits over it', cdp.ev("""(() => {
+        const banner = document.getElementById('installBanner');
+        if (!banner) return false;
+        const box = banner.getBoundingClientRect();
+        return !banner.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2));
+    })()""") is True)
+    cdp.ev("document.getElementById('cancelSettings').click()")
+
+    stub = cdp.send('Page.addScriptToEvaluateOnNewDocument',
+                    source="Object.defineProperty(navigator, 'standalone', { get: () => true })")['result']['identifier']
+    as_device(iphone)
+    check('launched from the home screen, there is no banner', cdp.ev(shown) is False)
+    cdp.send('Page.removeScriptToEvaluateOnNewDocument', identifier=stub)
+
+    as_device(iphone)
+    cdp.ev("document.querySelector('#installBanner [aria-label=Dismiss]')?.click()")
+    check('Dismiss closes it', cdp.ev(shown) is False)
+    as_device(iphone, '/history.html')
+    check('and it stays closed on the next page', cdp.ev(shown) is False)
+    cdp.ev(f"localStorage.setItem('{key}', String(Date.now() - 8 * 86400000))")
+    as_device(iphone)
+    check('a week later it is back', cdp.ev(shown) is True)
+
+    cdp.ev(f"localStorage.removeItem('{key}')")
+    as_device(android)
+    text = cdp.ev(hint)
+    check('Android is pointed at the browser menu until the browser offers to install',
+          'Add to Home screen' in text and cdp.ev(install_visible) is False, text)
+    prevented = cdp.ev("""(() => {
+        const event = new Event('beforeinstallprompt', { cancelable: true });
+        event.prompt = () => { window.__prompted = true; };
+        event.userChoice = Promise.resolve({ outcome: 'accepted' });
+        window.dispatchEvent(event);
+        return event.defaultPrevented;
+    })()""")
+    check("the browser's own install bar is held back", prevented is True)
+    check('an Install button appears', cdp.ev(install_visible) is True)
+    cdp.ev("document.querySelector('#installBanner button.primary')?.click()")
+    check('it opens the browser install dialog', cdp.wait('window.__prompted === true'))
+    check('accepting closes the banner', cdp.wait(f'!({shown})'))
+    as_device(android)
+    check('and it does not come back once installed', cdp.ev(shown) is False)
+
+    cdp.ev(f"localStorage.removeItem('{key}')")
+    cdp.send('Emulation.setUserAgentOverride', userAgent=desktop)
+    cdp.send('Emulation.clearDeviceMetricsOverride')
+
+    # ------------------------------------------------------------------ S9 the real thing
+    print('S9  a reload with the server gone still opens the app')
     t.server.stop()
     t.server.process.wait(timeout=10)
 

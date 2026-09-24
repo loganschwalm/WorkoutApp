@@ -85,6 +85,9 @@ works while the page stays loaded, and a reload needs the server.
 
 - Install to the home screen from the browser's menu and launch it like an app, with no
   address bar.
+- Opened in a phone's browser, a bar along the bottom says how: Share then Add to Home Screen
+  on an iPhone or iPad, and an Install button on Android once the browser offers one. Closing it
+  hides it for a week; it never shows inside the installed app.
 - The app icon, name, and theme colour come from a web app manifest.
 - The status bar follows the light or dark theme you picked in Settings.
 - Reloading offline opens the app from the cache instead of failing.
