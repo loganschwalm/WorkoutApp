@@ -493,6 +493,7 @@ def run_structure(t, check, request):
         ('a training max that is a word', {'program': {**program, 'trainingMaxes': {'bench': 'heavy'}}}, 400),
         ('a negative training max', {'program': {**program, 'trainingMaxes': {'bench': -5}}}, 400),
         ('program options that are a list', {'program': {**program, 'options': []}}, 400),
+        ('missed sessions that are a list', {'program': {**program, 'stalls': []}}, 400),
         ('a valid program', {'program': program}, 200),
     ]:
         status, _, reply = request('PUT', '/api/state', json.dumps(body).encode(), json_headers, token=token)

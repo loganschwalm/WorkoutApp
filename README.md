@@ -115,34 +115,58 @@ Custom templates are saved to your account on the server, and cached in the brow
 still work while the server is unreachable. A template created or edited offline uploads when the
 server is reachable again.
 
-The templates also offer the Wendler 5/3/1 [training program](#training-programs).
+The templates also offer two [training programs](#training-programs): Wendler 5/3/1 and Reddit PPL.
 
 ### Training programs
 
-Wendler 5/3/1 is a whole program rather than a single workout. Setting it up asks for a one-rep max
-for the overhead press, deadlift, bench press and squat, or a training max if you already know yours.
-Lifts you have logged are filled in with an estimate from your latest sets. From then on:
+A training program is a whole plan rather than a single workout. You follow one at a time; setting
+up the other replaces it, and the workouts you finished stay in your history. Both work the same way:
 
-- The whole cycle is planned out on the Tracker: four days a week, one main lift a day, through the
-  5s, 3s and 5/3/1 weeks and a deload week. Every weight is worked out from your training max and
-  rounded to the nearest 5 or 2.5 lbs.
-- Start the next day, or any other, as a workout. Every set is planned: warm-ups, the work sets, and a
-  last "+" set of as many reps as you can. Each planned set's weight and reps are filled in as you
-  go, and your + set is turned into an estimated one-rep max.
+- The plan is on the Tracker: the next workout, ready to start or skip, the numbers the program
+  works from, and every day of the current cycle or week with its weights.
+- Every set is planned. Each planned set's weight and reps are filled in as you go. The main lift
+  ends with a "+" set of as many reps as you can, and the app turns it into an estimated one-rep max.
+- Finishing a program workout marks its day done. A day can also be skipped, or done again.
+- Program workouts are saved like any other, named after their day ("5/3/1 Bench Day",
+  "PPL Push (Bench)"), so Progress charts them. History shows where in the program each came from.
+- The program is saved to your account with your settings and templates. It follows you to another
+  device and keeps working through a network drop.
+
+#### Wendler 5/3/1
+
+- Setting it up asks for a one-rep max for the overhead press, deadlift, bench press and squat, or a
+  training max if you already know yours. Lifts you have logged are filled in with an estimate from
+  your latest sets.
+- Four days a week, one main lift a day, through the 5s, 3s and 5/3/1 weeks and a deload week.
+  Every weight is worked out from your training max and rounded to the nearest 5 or 2.5 lbs.
 - Choose the assistance work: Boring But Big (5 × 10 of the day's lift at 50%, plus one exercise),
   Triumvirate (two exercises), or the main lifts only. Warm-up sets and the deload week can each be
   turned off.
-- Finishing a program workout marks its day done. A day can also be skipped, or done again.
 - When every day of a cycle is done, the next cycle starts with each training max raised: 5 lbs
   for the press and bench press, 10 lbs for the deadlift and squat. A lift whose + set fell short of
   its reps drops to 90% instead, as the program prescribes. The card shows next cycle's numbers in
   advance.
 - Training maxes, rounding and assistance can be changed at any time, and the rest of the cycle
   follows.
-- Program workouts are saved like any other, named after their day ("5/3/1 Bench Day"), so Progress
-  charts them. History shows the cycle and week each one came from.
-- The program is saved to your account with your settings and templates. It follows you to another
-  device and keeps working through a network drop.
+
+#### Reddit PPL
+
+The linear-progression push/pull/legs program for beginners posted to r/Fitness by /u/Metallicadpa.
+
+- Six days a week: pull, push and legs twice, with the rest day wherever it suits you. Pull days
+  alternate deadlifts (1 × 5+) and barbell rows (4 × 5, 1 × 5+). Push days alternate the bench and
+  overhead press (4 × 5, 1 × 5+), then do the other press for volume. Leg days start with squats
+  (2 × 5, 1 × 5+). Accessories follow in ranges of 8–12 or 15–20 reps, with the triceps work
+  supersetted with lateral raises.
+- Setting it up asks for a starting weight for each main lift. Lifts you have logged are filled in
+  with your heaviest set of 5 or more last time.
+- Each session where the main lift gets all its reps, it goes up 5 lbs, or 10 for the deadlift.
+  Miss reps three sessions in a row and it drops 10%. The card shows each lift's working weight and
+  any misses in a row.
+- Accessories start from last time's weight. Once every set of one reached the top of its range,
+  the app says to go heavier.
+- Warm-ups are not planned, because the program leaves them to you, so log only the work sets.
+- Working weights can be changed at any time. Changing one clears its misses.
 
 ### Workout history
 
@@ -542,7 +566,7 @@ PORT=9000 WORKOUT_DB=/tmp/scratch.db python backend/server.py
 
 The `tests/` directory holds end-to-end tests that drive a real headless browser against a real
 server, plus a suite that exercises the API directly: no mocking, so a passing check means the
-feature works. Ten suites cover the workout flow, the 5/3/1 training program, the rest timer, offline syncing, settings and
+feature works. Ten suites cover the workout flow, the training programs, the rest timer, offline syncing, settings and
 templates, the alert settings, in-workout usability, the service worker, the security headers and
 escaping in the pages, and the API itself (validation, malformed requests, racing uploads, sign-in
 throttling, password hashes, and database upgrades).

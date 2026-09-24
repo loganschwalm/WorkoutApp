@@ -132,17 +132,18 @@ html[data-theme="dark"] .program-next { background:#303653; }
 .program-next-actions, .program-day-actions { display:flex; align-items:center; gap:8px; flex-shrink:0; }
 .program-next .secondary { background:var(--card); }
 .program-subheading { margin:22px 0 10px; font-size:.95rem; }
-.program-maxes { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:10px; margin:0; padding:0; list-style:none; }
+.program-maxes { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; margin:0; padding:0; list-style:none; }
 .program-maxes li { display:grid; gap:3px; padding:12px; border:1px solid var(--line); border-radius:10px; }
 .program-maxes span, .program-maxes small { color:var(--muted); font-size:.8rem; }
 .program-maxes strong { font-size:1.1rem; }
-.program-maxes small.reset { color:#c14b5a; }
-html[data-theme="dark"] .program-maxes small.reset { color:#ff9eaa; }
+.program-maxes small.warn { color:#c14b5a; }
+html[data-theme="dark"] .program-maxes small.warn { color:#ff9eaa; }
 .program-week { border-top:1px solid var(--line); }
 .program-week summary { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 12px; padding:12px 0; cursor:pointer; }
 .program-week summary span { color:var(--muted); font-size:.85rem; }
 .program-week .program-week-count { margin-left:auto; }
-.program-week ul { margin:0 0 12px; padding:0; list-style:none; }
+.program-week ul, .program-days { margin:0 0 12px; padding:0; list-style:none; }
+.program-days { padding-top:8px; border-top:1px solid var(--line); }
 .program-day { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:10px 12px; border-radius:10px; }
 .program-day + .program-day { margin-top:4px; }
 .program-day.next { background:#f8f9fd; }
@@ -159,7 +160,9 @@ html[data-theme="dark"] .program-status.missed { color:#ff9eaa; }
 .program-max-inputs { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:4px 12px; margin-top:8px; }
 .program-max-row label { margin-top:8px; }
 .program-hint { display:block; min-height:1.3em; margin-top:5px; color:var(--muted); font-size:.78rem; }
-#programTmPercentField label { margin-top:8px; }
+.program-options { display:grid; gap:8px; }
+.program-option { display:grid; gap:7px; }
+.program-option label { margin:8px 0 0; }
 .program-modal .setting-check { margin-top:6px; }
 .progress-card h2 { margin-bottom:5px; }
 .progress-filters { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px; align-items:end; margin-top:22px; padding:16px; background:#f8f9fd; border:1px solid var(--line); border-radius:12px; }

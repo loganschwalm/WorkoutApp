@@ -255,7 +255,7 @@ function renderActiveWorkout() {
   $('activeWorkoutTitle').textContent = activeSession.name;
   renderActiveProgress();
   $('activeExerciseName').textContent = exercise.name;
-  $('activeExerciseTarget').textContent = plan ? plannedTarget(exercise) : `Target: ${exercise.reps} reps${exercise.weight ? ` at ${exercise.weight} lbs` : ''}`;
+  $('activeExerciseTarget').textContent = plan ? plannedTarget(exercise, previous) : `Target: ${exercise.reps} reps${exercise.weight ? ` at ${exercise.weight} lbs` : ''}`;
   $('activePlan').hidden = !plan;
   $('activePlan').innerHTML = plan ? plan.map((set, index) => `<li class="${index < exercise.sets.length ? 'done' : index === exercise.sets.length ? 'current' : 'upcoming'}">${escapeHTML(formatPlannedSet(set))}</li>`).join('') : '';
   $('activeExerciseLast').hidden = !previous;
@@ -265,7 +265,8 @@ function renderActiveWorkout() {
     // A planned set with no weight (an assistance exercise) takes the set just logged, or last time's.
     const plannedWeight = planned.weight === '' || planned.weight === undefined || planned.weight === null ? null : planned.weight;
     $('activeWeight').value = plannedWeight ?? (lastSet ? lastSet.weight || '' : (previousFirst && previousFirst.weight) || '');
-    $('completedReps').value = planned.reps || '';
+    // A rep range (8–12) takes the reps just done, or last time's, and starts at the bottom of the range.
+    $('completedReps').value = planned.repsMax ? (lastSet || previousFirst || planned).reps || '' : planned.reps || '';
   } else {
     // Next set defaults to the set just logged, or to last time's first set, so repeating a set is one tap.
     $('activeWeight').value = lastSet ? lastSet.weight || '' : exercise.weight || (previousFirst && previousFirst.weight) || '';

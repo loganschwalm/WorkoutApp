@@ -59,9 +59,9 @@
       <div class="section-heading program-heading"><div><h2 id="programTitle">Training program</h2><p id="programSummary" class="subtitle"></p></div><div class="section-heading-actions"><button class="secondary" id="editProgramBtn" type="button">Edit program</button><button class="danger" id="endProgramBtn" type="button">End program</button></div></div>
       <p class="program-notice" id="programNotice" role="status" hidden></p>
       <div class="program-next" id="programNext"></div>
-      <h3 class="program-subheading">Training maxes</h3>
+      <h3 class="program-subheading" id="programNumbersHeading">Training maxes</h3>
       <ul class="program-maxes" id="programMaxes"></ul>
-      <h3 class="program-subheading">This cycle</h3>
+      <h3 class="program-subheading" id="programBlockHeading">This cycle</h3>
       <div id="programWeeks"></div>
     </section>
 
@@ -104,15 +104,9 @@
       <div class="settings-heading"><h2 id="programModalTitle">Start program</h2><button class="modal-close" id="closeProgram" type="button" aria-label="Close program setup">&times;</button></div>
       <form id="programForm" novalidate>
         <p class="subtitle program-help" id="programIntro"></p>
-        <label for="programMaxKind">The weights you enter are</label>
-        <select id="programMaxKind"><option value="1rm">One-rep maxes</option><option value="tm">Training maxes</option></select>
+        <div class="program-option" id="programMaxKindField"><label for="programMaxKind">The weights you enter are</label><select id="programMaxKind"><option value="1rm">One-rep maxes</option><option value="tm">Training maxes</option></select></div>
         <div class="program-max-inputs" id="programMaxInputs"></div>
-        <div id="programTmPercentField"><label for="programTmPercent">Training max</label><select id="programTmPercent"><option value="90">90% of your one-rep max (the original program)</option><option value="85">85% of your one-rep max (5/3/1 Forever)</option></select></div>
-        <label for="programAssistance">Assistance work</label><select id="programAssistance"></select>
-        <p class="subtitle program-help" id="programAssistanceHelp"></p>
-        <label for="programRounding">Round weights to</label><select id="programRounding"><option value="5">The nearest 5 lbs</option><option value="2.5">The nearest 2.5 lbs</option></select>
-        <label class="setting-check"><input id="programWarmups" type="checkbox" /> Warm up with 40%, 50% and 60% of the training max before the work sets</label>
-        <label class="setting-check"><input id="programDeload" type="checkbox" /> End each cycle with a deload week</label>
+        <div class="program-options" id="programOptions"></div>
         <p class="auth-feedback" id="programFormError" role="alert" hidden></p>
         <div class="settings-actions"><button class="secondary" id="cancelProgram" type="button">Cancel</button><button class="primary" id="programSubmit" type="submit">Start program</button></div>
       </form>
@@ -121,6 +115,7 @@
   <script src="common.js"></script>
   <script src="offline.js"></script>
   <script src="settings.js"></script>
+  <script src="program-definitions.js"></script>
   <script src="program.js"></script>
   <script src="script.js"></script>
   <script src="pwa.js"></script>

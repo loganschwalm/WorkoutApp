@@ -263,7 +263,7 @@ def validate_program(program):
         raise BadRequest('program.trainingMaxes must be an object.')
     if not all(is_number(value) and value >= 0 for value in maxes.values()):
         raise BadRequest('Every training max must be a number of zero or more.')
-    for field in ('options', 'done'):
+    for field in ('options', 'done', 'stalls'):
         if program.get(field) is not None and not isinstance(program[field], dict):
             raise BadRequest(f'program.{field} must be an object.')
 

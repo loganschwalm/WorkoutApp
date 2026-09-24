@@ -9,6 +9,10 @@ from ..harness import ACTIVE, HIDDEN, TITLE
 
 INTERCEPT = True
 
+# The two program cards in the templates list.
+WENDLER = '#templateList .program-template[data-program-id="wendler-531"]'
+PPL = '#templateList .program-template[data-program-id="reddit-ppl"]'
+
 # Collects every CSP violation on each page from the moment it starts loading.
 RECORD_VIOLATIONS = """window.__csp = [];
 document.addEventListener('securitypolicyviolation', e => window.__csp.push(`${e.violatedDirective} ${e.blockedURI}`));"""
@@ -106,7 +110,7 @@ def run(t):
     summary = text('programSummary')
     check('at the start of cycle 1', 'Cycle 1' in summary and '0 of 16 workouts done' in summary and 'week 1 of 4, 5s week' in summary, summary)
     check('the user is told what comes first', 'Press Day, week 1' in text('formFeedback'), text('formFeedback'))
-    check('its template card now leads to it', cdp.ev("!!document.querySelector('#templateList [data-program-action=view]') && !document.querySelector('#templateList [data-program-action=setup]')") is True)
+    check('its template card now leads to it', cdp.ev(f"!!document.querySelector('{WENDLER} [data-program-action=view]') && !document.querySelector('{WENDLER} [data-program-action=setup]')") is True)
     check('the program reaches the server', wait_for(lambda: (server_program() or {}).get('trainingMaxes', {}).get('bench') == 200), server_program())
 
     # ------------------------------------------------------------------ P3 the planned cycle
@@ -285,7 +289,171 @@ def run(t):
     cdp.answer = True
     click('#endProgramBtn')
     check('ending it removes the card', visible('programCard') is False and cdp.ev('currentProgram') is None)
-    check('and offers to set it up again', cdp.ev("!!document.querySelector('#templateList [data-program-action=setup]')") is True)
+    check('and offers to set it up again', cdp.ev(f"!!document.querySelector('{WENDLER} [data-program-action=setup]')") is True)
     check('the server forgets it', wait_for(lambda: server_program() is None), server_program())
     check('its workouts stay in the history', sum(w['name'].startswith('5/3/1') for w in t.workouts()) == 3, [w['name'] for w in t.workouts()])
     check('no Content-Security-Policy violations along the way', violations() == [], violations())
+
+    # ------------------------------------------------------------------ P10 Reddit PPL
+    print('P10 a program saved by the previous version, then setting up Reddit PPL')
+    # Saved before programs could keep missed sessions or per-day results; it must still load as it was.
+    api('PUT', '/api/state', {'program': {
+        'definition': 'wendler-531', 'startedAt': 1000, 'cycle': 3, 'lastRollover': None,
+        'trainingMaxes': {'press': 110, 'deadlift': 340, 'bench': 210, 'squat': 295},
+        'options': {'assistance': 'bbb', 'rounding': 5, 'warmups': True, 'deload': True, 'tmPercent': 90},
+        'done': {'0-0': {'at': 2000, 'skipped': False, 'amrap': {'weight': 80, 'reps': 8, 'target': 5}}}}}, token)
+    open_tracker()
+    check('a 5/3/1 program saved before this version still loads',
+          text('programSummary') == 'Cycle 3 · 1 of 16 workouts done · now in week 1 of 4, 5s week' and 'Done · + set 80 × 8' in week_rows(0)[0],
+          f"{text('programSummary')} {week_rows(0)[:1]}")
+    api('PUT', '/api/state', {'program': None}, token)
+    open_tracker()
+    cdp.wait("document.querySelectorAll('#savedWorkoutList .saved-workout').length >= 3")
+    names = cdp.ev("[...document.querySelectorAll('#templateList .program-template h3')].map(h => h.textContent)")
+    check('Reddit PPL is listed after 5/3/1', names == ['Wendler 5/3/1', 'Reddit PPL'], names)
+    click(f'{PPL} [data-program-action=setup]')
+    check('its own setup dialog opens', text('programModalTitle') == 'Start Reddit PPL' and 'sets of 5 until the bar slows down' in text('programIntro'), text('programIntro'))
+    check('asking for starting weights, not one-rep maxes', visible('programMaxKindField') is False)
+    controls = cdp.ev("[...document.querySelectorAll('#programOptions select, #programOptions input')].map(e => e.id)")
+    check('with only the options it uses', controls == ['programRounding'], controls)
+    prefilled = {lift: field(f'programMax-{lift}') for lift in ('deadlift', 'row', 'bench')}
+    check('logged lifts start from their heaviest set of 5 or more last time', prefilled == {'deadlift': '125', 'row': '80', 'bench': '105'}, prefilled)
+    check('each lift says how it goes up', text('programHint-deadlift') == '+10 lbs each good session'
+          and text('programHint-row') == '+5 lbs each good session', text('programHint-deadlift'))
+    for lift, value in (('deadlift', 225), ('row', 115), ('bench', 135), ('press', 85), ('squat', 185)):
+        set_field(f'programMax-{lift}', value)
+    cdp.ev("document.getElementById('programForm').requestSubmit()")
+    cdp.pause(0.5)
+    check('the program card shows it', visible('programCard') and text('programTitle') == 'Reddit PPL'
+          and text('programSummary') == 'Week 1 · 0 of 6 workouts done', text('programSummary'))
+    check('under its own headings', text('programNumbersHeading') == 'Working weights' and text('programBlockHeading') == 'This week')
+    numbers = cdp.ev("[...document.querySelectorAll('#programMaxes li')].map(li => li.textContent)")
+    check('a working weight for each main lift', numbers == [f'{name}{weight} lbs+{step} lbs after each good session' for name, weight, step in (
+        ('Deadlift', 225, 10), ('Barbell Row', 115, 5), ('Bench Press', 135, 5), ('Overhead Press', 85, 5), ('Back Squat', 185, 5))], numbers)
+    rows = cdp.ev("[...document.querySelectorAll('#programWeeks .program-day')].map(li => li.querySelector('div').textContent)")
+    check('the week is its six days: pull, push and legs twice', rows == [
+        'Pull (Deadlift)Deadlift 1 × 5+ at 225 lbs', 'Push (Bench)Bench Press 4 × 5, 1 × 5+ at 135 lbs', 'LegsBack Squat 2 × 5, 1 × 5+ at 185 lbs',
+        'Pull (Row)Barbell Row 4 × 5, 1 × 5+ at 115 lbs', 'Push (Overhead Press)Overhead Press 4 × 5, 1 × 5+ at 85 lbs', 'LegsBack Squat 2 × 5, 1 × 5+ at 185 lbs'], rows)
+    check('listed without week sections', cdp.ev("document.querySelectorAll('#programWeeks details').length") == 0)
+    lines = cdp.ev("[...document.querySelectorAll('#programNext li')].map(li => li.textContent)")
+    check('the next workout lists its accessories as rep ranges', lines == [
+        'Deadlift 1 × 5+ at 225 lbs', 'Lat Pulldown 3 × 8–12', 'Seated Cable Row 3 × 8–12', 'Face Pull 5 × 15–20', 'Hammer Curl 4 × 8–12', 'Dumbbell Curl 4 × 8–12'], lines)
+    check('the 5/3/1 card offers setting that up instead', cdp.ev(f"!!document.querySelector('{WENDLER} [data-program-action=setup]') && !!document.querySelector('{PPL} [data-program-action=view]')") is True)
+    check('the program reaches the server', wait_for(lambda: (server_program() or {}).get('definition') == 'reddit-ppl'), server_program())
+
+    # ------------------------------------------------------------------ P11 a session that adds weight
+    print('P11 a PPL workout adds weight')
+    known = t.ids()
+    click('#programNext [data-program-action=start]')
+    check('it starts as the day’s workout', cdp.ev(TITLE) == 'PPL Pull (Deadlift)' and [c[0] for c in chips()] == ['225 lbs × 5+'], f'{cdp.ev(TITLE)} {chips()}')
+    check('with one + set of deadlifts', text('activeExerciseTarget') == 'Set 1 of 1: 225 lbs × 5+. As many reps as you can.'
+          and field('activeWeight') == '225' and field('completedReps') == '5', text('activeExerciseTarget'))
+    complete_set(7)
+    estimate = math.floor(225 * (1 + 7 / 30) + 0.5)
+    check('the + set is read as a one-rep max', text('activeExerciseTarget') == f'The planned set is done. Your + set of 225 lbs × 7 puts your one-rep max near {estimate} lbs.', text('activeExerciseTarget'))
+    cdp.ev("document.getElementById('nextExerciseBtn').click()")
+    cdp.pause(0.3)
+    check('accessories are planned as rep ranges', text('activeExerciseName') == 'Lat Pulldown' and [c[0] for c in chips()] == ['8–12 reps'] * 3
+          and text('activeExerciseTarget') == 'Set 1 of 3: 8–12 reps.', f"{text('activeExerciseName')} {chips()} {text('activeExerciseTarget')}")
+    check('starting at the bottom of the range, with the weight up to you', field('activeWeight') == '' and field('completedReps') == '8', f"'{field('activeWeight')}' {field('completedReps')}")
+    cdp.ev("document.getElementById('activeWeight').value = '100'")
+    complete_set(12)
+    check('the next set follows the one just done', field('activeWeight') == '100' and field('completedReps') == '12', f"{field('activeWeight')} {field('completedReps')}")
+    complete_set()
+    complete_set()
+    finish_workout()
+    check('the workout is saved', wait_for(lambda: len(t.ids() - known) == 1), '')
+    saved = next((w for w in t.workouts() if w['id'] not in known), {})
+    check('under the day’s name, labelled with its week', saved.get('name') == 'PPL Pull (Deadlift)' and (saved.get('program') or {}).get('label') == 'Week 1',
+          json.dumps({k: saved.get(k) for k in ('name', 'program')}))
+    feedback = text('formFeedback')
+    check('getting every rep adds weight, and says so', 'Deadlift goes up to 235 lbs next time.' in feedback and 'Next in Reddit PPL: Push (Bench).' in feedback, feedback)
+    state = program() or {}
+    check('10 lbs for the deadlift', state.get('trainingMaxes', {}).get('deadlift') == 235 and state.get('done', {}).get('0-0', {}).get('hit') is True, state)
+    check('the card shows the + set', 'Done · + set 225 × 7' in cdp.ev("document.querySelectorAll('#programWeeks .program-day')[0].textContent"))
+    check('the server has the new weight', wait_for(lambda: (server_program() or {}).get('trainingMaxes', {}).get('deadlift') == 235), server_program())
+
+    # ------------------------------------------------------------------ P12 misses and the deload
+    print('P12 missed reps, and the 10% drop after three in a row')
+
+    def missed_bench_session(reps):
+        for _ in range(4):
+            complete_set()
+        complete_set(reps)
+        finish_workout()
+
+    click('#programNext [data-program-action=start]')
+    names = cdp.ev('activeSession.exercises.map(e => e.name)')
+    check('push day: the bench, the other press for volume, then accessories', names == [
+        'Bench Press', 'Overhead Press (volume)', 'Incline Dumbbell Press', 'Tricep Pushdown', 'Lateral Raise', 'Overhead Tricep Extension', 'Lateral Raise'], names)
+    check('the bench is 4 × 5 and a + set', [c[0] for c in chips()] == ['135 lbs × 5'] * 4 + ['135 lbs × 5+'], chips())
+    for _ in range(4):
+        complete_set()
+    complete_set(4)
+    for _ in range(3):
+        cdp.ev("document.getElementById('nextExerciseBtn').click()")
+        cdp.pause(0.2)
+    check('a superset says so', text('activeExerciseName') == 'Tricep Pushdown'
+          and text('activeExerciseTarget') == 'Set 1 of 3: 8–12 reps. Superset with the lateral raises that follow.', text('activeExerciseTarget'))
+    finish_workout()
+    check('a short + set keeps the weight and counts the miss', 'Bench Press stays at 135 lbs: 1 missed session in a row. A third drops it 10%.' in text('formFeedback'), text('formFeedback'))
+    state = program() or {}
+    check('the miss is kept', state.get('trainingMaxes', {}).get('bench') == 135 and state.get('stalls', {}).get('bench') == 1, state)
+    note = cdp.ev("(() => { const s = document.querySelectorAll('#programMaxes li small')[2]; return [s.textContent, s.className]; })()")
+    check('and shown as a warning', note == ['Missed 1 in a row · 3 drops it to 120', 'warn'], note)
+    click('#programWeeks [data-program-action=start][data-day="1"]')
+    missed_bench_session(3)
+    check('a second miss in a row is counted', '2 missed sessions in a row' in text('formFeedback'), text('formFeedback'))
+    click('#programWeeks [data-program-action=start][data-day="1"]')
+    missed_bench_session(3)
+    check('the third drops the weight 10%', 'Bench Press missed three sessions in a row, so it drops 10% to 120 lbs.' in text('formFeedback'), text('formFeedback'))
+    state = program() or {}
+    check('and starts counting again', state.get('trainingMaxes', {}).get('bench') == 120 and not state.get('stalls', {}).get('bench'), state)
+    check('the day shows the short + set', 'Done · + set 135 × 3 (short of 5)' in cdp.ev("document.querySelectorAll('#programWeeks .program-day')[1].textContent"))
+
+    # ------------------------------------------------------------------ P13 accessories and the next week
+    print('P13 accessory progression, and the next week')
+    skip_next()
+    check('skipping moves on without changing any weight', 'Pull (Row)' in text('programNext') and (program() or {}).get('trainingMaxes', {}).get('squat') == 185, text('programNext'))
+    click('#programNext [data-program-action=start]')
+    check('the row is 4 × 5 and a + set', [c[0] for c in chips()] == ['115 lbs × 5'] * 4 + ['115 lbs × 5+'], chips())
+    cdp.ev("document.getElementById('nextExerciseBtn').click()")
+    cdp.pause(0.3)
+    check('an accessory done at the top of its range last time says to go heavier', text('activeExerciseName') == 'Lat Pulldown'
+          and 'Last time every set reached 12, so go heavier.' in text('activeExerciseTarget') and field('activeWeight') == '100', text('activeExerciseTarget'))
+    t.end_workout()
+    for _ in range(3):
+        skip_next()
+    state = program() or {}
+    check('the sixth day starts the next week', state.get('cycle') == 2 and state.get('done') == {} and text('programSummary') == 'Week 2 · 0 of 6 workouts done', text('programSummary'))
+    check('and says so', 'Week 1 of Reddit PPL is complete. Next in Reddit PPL: Pull (Deadlift).' in text('formFeedback'), text('formFeedback'))
+    check('the working weights carry on', state.get('trainingMaxes') == {'deadlift': 235, 'row': 115, 'bench': 120, 'press': 85, 'squat': 185}
+          and visible('programNotice') is False, state.get('trainingMaxes'))
+    check('so the next deadlift is heavier', 'Deadlift 1 × 5+ at 235 lbs' in text('programNext'), text('programNext'))
+    check('the server has week 2', wait_for(lambda: (server_program() or {}).get('cycle') == 2), server_program())
+
+    # ------------------------------------------------------------------ P14 editing and switching
+    print('P14 editing it, and switching programs')
+    click('#editProgramBtn')
+    check('editing shows the working weights', text('programModalTitle') == 'Edit Reddit PPL' and field('programMax-bench') == '120' and visible('programMaxKindField') is False)
+    set_field('programMax-press', 90)
+    cdp.ev("document.getElementById('programForm').requestSubmit()")
+    cdp.pause(0.4)
+    check('a changed weight is used from the next workout', (program() or {}).get('trainingMaxes', {}).get('press') == 90
+          and 'Overhead Press 4 × 5, 1 × 5+ at 90 lbs' in cdp.ev("document.querySelectorAll('#programWeeks .program-day')[4].textContent"))
+    click(f'{WENDLER} [data-program-action=setup]')
+    check('setting up another program says it replaces this one', 'This replaces Reddit PPL' in text('programIntro')
+          and text('programSubmit') == 'Switch program' and visible('programMaxKindField') is True, text('programIntro'))
+    set_field('programMaxKind', 'tm')
+    for lift, value in (('press', 100), ('deadlift', 300), ('bench', 200), ('squat', 250)):
+        set_field(f'programMax-{lift}', value)
+    cdp.ev("document.getElementById('programForm').requestSubmit()")
+    cdp.pause(0.5)
+    check('switching replaces it', text('programTitle') == 'Wendler 5/3/1' and text('programSummary').startswith('Cycle 1 · 0 of 16')
+          and text('programNumbersHeading') == 'Training maxes', text('programSummary'))
+    check('and the PPL card offers setting it up again', cdp.ev(f"!!document.querySelector('{PPL} [data-program-action=setup]')") is True)
+    check('the server has the new program', wait_for(lambda: (server_program() or {}).get('definition') == 'wendler-531'), server_program())
+    cdp.answer = True
+    click('#endProgramBtn')
+    check('PPL workouts stay in the history', sum(w['name'].startswith('PPL') for w in t.workouts()) == 4, [w['name'] for w in t.workouts()])
+    check('no Content-Security-Policy violations with PPL either', violations() == [], violations())
