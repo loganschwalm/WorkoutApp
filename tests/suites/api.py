@@ -312,6 +312,7 @@ def schema_of(path):
             'tables': sorted(r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")),
             'indexes': sorted(r[1] for r in db.execute("PRAGMA index_list('workouts')")),
             'columns': [r[1] for r in db.execute('PRAGMA table_info(workouts)')],
+            'state_columns': [r[1] for r in db.execute('PRAGMA table_info(user_state)')],
         }
     finally:
         db.close()
@@ -328,12 +329,14 @@ def run_structure(t, check, request):
     t.start_server('fresh.db')  # the harness only asks /api/auth/me, which never opens the database
     schema = schema_of(t.db_path('fresh.db'))
     check('a new database has every table before any request touches it', schema['tables'] == tables, schema['tables'])
-    check('it is at schema version 2', schema['version'] == 2, schema['version'])
+    check('it is at schema version 3', schema['version'] == 3, schema['version'])
     check('with the client_id column and its unique index',
           'client_id' in schema['columns'] and 'workouts_user_client' in schema['indexes'], schema)
+    check('with a column for the training program', 'program_json' in schema['state_columns'], schema['state_columns'])
     check('in write-ahead-log mode', schema['journal'] == 'wal', schema['journal'])
     legacy = schema_of(t.db_path('legacy.db'))
-    check('the database from before client_id (A3) is now at version 2 too', legacy['version'] == 2, legacy['version'])
+    check('the database from before client_id (A3) is now at version 3 too', legacy['version'] == 3, legacy['version'])
+    check('and has the training program column', 'program_json' in legacy['state_columns'], legacy['state_columns'])
 
     # A database written by the release before migrations were numbered: client_id already there, version 0.
     path = t.db_path('unversioned.db')
@@ -351,7 +354,7 @@ def run_structure(t, check, request):
     kept = db.execute("SELECT name, client_id FROM workouts").fetchall()
     db.close()
     check('an unversioned database that already has client_id upgrades cleanly',
-          schema['version'] == 2 and schema['columns'].count('client_id') == 1 and kept == [('Kept', 'k1')], f'{schema} {kept}')
+          schema['version'] == 3 and schema['columns'].count('client_id') == 1 and kept == [('Kept', 'k1')], f'{schema} {kept}')
 
     path = t.db_path('newer.db')
     db = sqlite3.connect(path)
@@ -423,6 +426,8 @@ def run_structure(t, check, request):
         ('sets that are text', good(exercises=exercise(sets='3x5'))),
         ('a set weight that is a word', good(exercises=exercise(sets=[{'weight': 'abc', 'reps': 5}]))),
         ('a clientId that is a number', good(clientId=7)),
+        ('a program that is text', good(program='Wendler 5/3/1')),
+        ('a program label that is a number', good(program={'name': 'Wendler 5/3/1', 'label': 2})),
         ('a 2000-character name', good(name='x' * 2000)),
     ]
     for label, body in refused:
@@ -437,6 +442,8 @@ def run_structure(t, check, request):
         ('a skipped exercise (empty set list)', good(exercises=exercise(sets=[]))),
         ('no exercises (an empty list)', good(exercises=[])),
         ('a missing name, notes and createdAt', {'exercises': []}),
+        ('a workout from a training program',
+         good(program={'name': 'Wendler 5/3/1', 'cycle': 1, 'week': 2, 'label': 'Cycle 1, week 2 · 3s week'})),
     ]
     for label, body in accepted:
         status, _, reply = request('POST', '/api/workouts', json.dumps(body).encode(), json_headers, token=token)
@@ -476,6 +483,28 @@ def run_structure(t, check, request):
         check(f'PUT /api/state with {label} -> {expected}', status == expected, f'{status} {reply}')
     state = t.api('GET', '/api/state', token=token)[0]
     check('only the valid state was stored', state['templates'] == [template] and state['settings'].get('restDuration') == 60, state)
+    check('no training program until one is set up', state.get('program', 'missing') is None, state)
+    program = {'definition': 'wendler-531', 'startedAt': 1, 'cycle': 1, 'trainingMaxes': {'press': 100, 'deadlift': 300, 'bench': 200, 'squat': 250},
+               'options': {'assistance': 'bbb'}, 'done': {'0-0': {'at': 2, 'amrap': {'weight': 85, 'reps': 9, 'target': 5}}}}
+    for label, body, expected in [
+        ('a program that is a list', {'program': []}, 400),
+        ('a program without training maxes', {'program': {'definition': 'wendler-531'}}, 400),
+        ('a program with no definition', {'program': {k: v for k, v in program.items() if k != 'definition'}}, 400),
+        ('a training max that is a word', {'program': {**program, 'trainingMaxes': {'bench': 'heavy'}}}, 400),
+        ('a negative training max', {'program': {**program, 'trainingMaxes': {'bench': -5}}}, 400),
+        ('program options that are a list', {'program': {**program, 'options': []}}, 400),
+        ('a valid program', {'program': program}, 200),
+    ]:
+        status, _, reply = request('PUT', '/api/state', json.dumps(body).encode(), json_headers, token=token)
+        check(f'PUT /api/state with {label} -> {expected}', status == expected, f'{status} {reply}')
+    state = t.api('GET', '/api/state', token=token)[0]
+    check('the valid program is stored as sent', state.get('program') == program, state.get('program'))
+    t.api('PUT', '/api/state', {'settings': {'restDuration': 75}}, token)
+    state = t.api('GET', '/api/state', token=token)[0]
+    check('saving only settings leaves the program alone', state.get('program') == program and state['templates'] == [template], state)
+    status, _, _ = request('PUT', '/api/state', json.dumps({'program': None}).encode(), json_headers, token=token)
+    state = t.api('GET', '/api/state', token=token)[0]
+    check('a null program ends it', status == 200 and state.get('program', 'missing') is None and state['settings'].get('restDuration') == 75, f'{status} {state}')
     for label, session, expected in [('text', 'running', 400), ('a list', [], 400), ('null', None, 200),
                                      ('an object', {'name': 'Push', 'exercises': [], 'currentIndex': 0}, 200)]:
         status, _, reply = request('POST', '/api/active-session', json.dumps({'session': session}).encode(), json_headers, token=token)

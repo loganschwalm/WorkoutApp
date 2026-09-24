@@ -103,11 +103,12 @@ function render() {
 
 function renderSavedWorkouts(workouts) {
   const list = $('savedWorkoutList');
-  list.innerHTML = workouts.length ? workouts.map(workout => `<li class="saved-workout" data-id="${escapeHTML(workout.id)}"><div class="saved-workout-summary"><div><strong>${escapeHTML(workout.name)}</strong><span>${new Date(workout.createdAt).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' })}</span></div><div class="workout-actions"><button class="primary" type="button" data-action="start">Start</button><button class="secondary" type="button" data-action="view" aria-expanded="false">View</button><button class="secondary" type="button" data-action="repeat">Repeat</button><button class="secondary" type="button" data-action="edit">Edit</button><button class="danger" type="button" data-action="delete">Delete</button></div></div><div class="workout-details" hidden>${workout.notes ? `<p class="workout-note">${escapeHTML(workout.notes)}</p>` : ''}<ul>${workout.exercises.map(item => `<li><strong>${escapeHTML(item.name)}</strong><span>${item.sets && !item.sets.length ? 'Skipped' : `${escapeHTML(item.weight || 0)} lbs &middot; ${escapeHTML(item.reps)} reps`}</span></li>`).join('')}</ul></div></li>`).join('') : '<li class="empty">No saved workouts yet.</li>';
+  list.innerHTML = workouts.length ? workouts.map(workout => `<li class="saved-workout" data-id="${escapeHTML(workout.id)}"><div class="saved-workout-summary"><div><strong>${escapeHTML(workout.name)}</strong><span>${new Date(workout.createdAt).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' })}${workoutProgramLabel(workout) ? ` &middot; ${escapeHTML(workoutProgramLabel(workout))}` : ''}</span></div><div class="workout-actions"><button class="primary" type="button" data-action="start">Start</button><button class="secondary" type="button" data-action="view" aria-expanded="false">View</button><button class="secondary" type="button" data-action="repeat">Repeat</button><button class="secondary" type="button" data-action="edit">Edit</button><button class="danger" type="button" data-action="delete">Delete</button></div></div><div class="workout-details" hidden>${workout.notes ? `<p class="workout-note">${escapeHTML(workout.notes)}</p>` : ''}<ul>${workout.exercises.map(item => `<li><strong>${escapeHTML(item.name)}</strong><span>${item.sets && !item.sets.length ? 'Skipped' : `${escapeHTML(item.weight || 0)} lbs &middot; ${escapeHTML(item.reps)} reps`}</span></li>`).join('')}</ul></div></li>`).join('') : '<li class="empty">No saved workouts yet.</li>';
 }
 
+// Training programs (program.js) come first, then the single-workout templates.
 function renderTemplates() {
-  $('templateList').innerHTML = getAllTemplates().map(template => `<article class="template-card"><div><h3>${escapeHTML(template.name)}</h3><p>${template.exercises.map(item => `${escapeHTML(item.name)} (${escapeHTML(item.reps)} reps)`).join(' &middot; ')}</p></div><div class="template-actions"><button class="primary" type="button" data-template-action="start" data-template-id="${escapeHTML(template.id)}">Start workout</button><button class="secondary" type="button" data-template-action="duplicate" data-template-id="${escapeHTML(template.id)}">Duplicate</button>${template.builtIn ? '' : `<button class="secondary" type="button" data-template-action="edit" data-template-id="${escapeHTML(template.id)}">Edit</button><button class="danger" type="button" data-template-action="delete" data-template-id="${escapeHTML(template.id)}">Delete</button>`}</div></article>`).join('');
+  $('templateList').innerHTML = programTemplateCards() + getAllTemplates().map(template => `<article class="template-card"><div><h3>${escapeHTML(template.name)}</h3><p>${template.exercises.map(item => `${escapeHTML(item.name)} (${escapeHTML(item.reps)} reps)`).join(' &middot; ')}</p></div><div class="template-actions"><button class="primary" type="button" data-template-action="start" data-template-id="${escapeHTML(template.id)}">Start workout</button><button class="secondary" type="button" data-template-action="duplicate" data-template-id="${escapeHTML(template.id)}">Duplicate</button>${template.builtIn ? '' : `<button class="secondary" type="button" data-template-action="edit" data-template-id="${escapeHTML(template.id)}">Edit</button><button class="danger" type="button" data-template-action="delete" data-template-id="${escapeHTML(template.id)}">Delete</button>`}</div></article>`).join('');
 }
 
 function renderTemplateExerciseEditor() {
@@ -248,16 +249,28 @@ function renderActiveWorkout() {
   const previous = lastPerformance[exerciseKey(exercise.name)];
   const previousFirst = previous ? previous.sets[0] : null;
   const lastSet = exercise.sets[exercise.sets.length - 1];
+  // A workout from a training program plans every set, so the next set is whichever planned one has not been logged yet.
+  const plan = Array.isArray(exercise.plan) && exercise.plan.length ? exercise.plan : null;
+  const planned = plan ? plan[exercise.sets.length] : null;
   $('activeWorkoutTitle').textContent = activeSession.name;
   renderActiveProgress();
   $('activeExerciseName').textContent = exercise.name;
-  $('activeExerciseTarget').textContent = `Target: ${exercise.reps} reps${exercise.weight ? ` at ${exercise.weight} lbs` : ''}`;
+  $('activeExerciseTarget').textContent = plan ? plannedTarget(exercise) : `Target: ${exercise.reps} reps${exercise.weight ? ` at ${exercise.weight} lbs` : ''}`;
+  $('activePlan').hidden = !plan;
+  $('activePlan').innerHTML = plan ? plan.map((set, index) => `<li class="${index < exercise.sets.length ? 'done' : index === exercise.sets.length ? 'current' : 'upcoming'}">${escapeHTML(formatPlannedSet(set))}</li>`).join('') : '';
   $('activeExerciseLast').hidden = !previous;
   if (previous) $('activeExerciseLast').textContent = `Last time (${new Date(previous.date).toLocaleDateString(undefined, { month:'short', day:'numeric' })}): ${previous.sets.map(formatSet).join(' · ')}`;
   $('activeNotes').value = activeSession.notes || '';
-  // Next set defaults to the set just logged, or to last time's first set, so repeating a set is one tap.
-  $('activeWeight').value = lastSet ? lastSet.weight || '' : exercise.weight || (previousFirst && previousFirst.weight) || '';
-  $('completedReps').value = (lastSet || previousFirst || {}).reps || '';
+  if (planned) {
+    // A planned set with no weight (an assistance exercise) takes the set just logged, or last time's.
+    const plannedWeight = planned.weight === '' || planned.weight === undefined || planned.weight === null ? null : planned.weight;
+    $('activeWeight').value = plannedWeight ?? (lastSet ? lastSet.weight || '' : (previousFirst && previousFirst.weight) || '');
+    $('completedReps').value = planned.reps || '';
+  } else {
+    // Next set defaults to the set just logged, or to last time's first set, so repeating a set is one tap.
+    $('activeWeight').value = lastSet ? lastSet.weight || '' : exercise.weight || (previousFirst && previousFirst.weight) || '';
+    $('completedReps').value = (lastSet || previousFirst || {}).reps || '';
+  }
   $('completedSets').innerHTML = exercise.sets.map((set, index) => `<li><span class="set-number">Set ${index + 1}</span><div class="set-field"><input class="set-edit" type="number" min="0" step="0.5" value="${escapeHTML(set.weight || '')}" data-set="${index}" data-field="weight" aria-label="Set ${index + 1} weight in lbs"><span>lbs</span></div><div class="set-field"><input class="set-edit" type="number" min="1" step="1" value="${escapeHTML(set.reps)}" data-set="${index}" data-field="reps" aria-label="Set ${index + 1} reps"><span>reps</span></div><button class="remove" type="button" data-remove-set="${index}" aria-label="Remove set ${index + 1}">Remove</button></li>`).join('');
   $('activeSyncNotice').hidden = !activeSyncFailed;
 }
@@ -281,12 +294,15 @@ function closeActiveWorkout() {
   syncWakeLock();
 }
 
+// `template` is a template, a saved workout, or a day of a training program (program.js), whose exercises carry a
+// set-by-set plan and whose programDay says which day of the program it is.
 function startWorkout(template) {
   if (activeSession && getWorkoutSettings().confirmEnd && !confirm(`Replace your in-progress “${activeSession.name}” workout? Sets you have logged so far will be lost.`)) return;
   stopRestTimer();
   restRemaining = getWorkoutSettings().restDuration;
   $('restPanel').hidden = true;
   activeSession = { name:template.name, notes:template.notes || '', exercises:template.exercises.map(item => ({ ...item, sets:[] })), currentIndex:0, clientId:newClientId() };
+  if (template.programDay) activeSession.programDay = template.programDay;
   persistActiveSession();
   renderActiveWorkout();
   $('activeWorkout').hidden = false;
@@ -308,11 +324,14 @@ async function finishWorkout() {
   const skipped = activeSession.exercises.length - performed.length;
   activeSession.clientId = activeSession.clientId || newClientId();
   const workout = { name:activeSession.name, notes:activeSession.notes || '', exercises:performed.map(item => ({ name:item.name, weight:Math.max(...item.sets.map(set => Number(set.weight) || 0)), reps:item.sets[item.sets.length - 1].reps, sets:item.sets })), createdAt:Date.now(), clientId:activeSession.clientId };
+  if (activeSession.programDay) workout.program = programInfo(activeSession.programDay);
   rememberLastPerformance(workout);
   queuePendingWorkout(workout);
+  // Marks the program's day done (and may start its next cycle); says what comes next.
+  const programNote = activeSession.programDay ? completeProgramWorkout(activeSession) : '';
   closeActiveWorkout();
   const synced = await flushPendingWorkouts();
-  const note = skipped ? ` ${skipped} exercise${skipped === 1 ? '' : 's'} with no sets ${skipped === 1 ? 'was' : 'were'} left out.` : '';
+  const note = (skipped ? ` ${skipped} exercise${skipped === 1 ? '' : 's'} with no sets ${skipped === 1 ? 'was' : 'were'} left out.` : '') + (programNote ? ` ${programNote}` : '');
   showFeedback(synced ? `“${workout.name}” saved successfully.${note}` : `“${workout.name}” is saved on this device and will sync when the server is reachable again.${note}`, 'success');
 }
 
@@ -592,6 +611,7 @@ $('saveBtn').onclick = async () => {
 renderTemplates();
 window.serverStateReady.then(() => {
   customTemplates = loadCustomTemplates();
+  reloadProgram();
   renderTemplates();
 });
 window.addEventListener('syncchange', event => {

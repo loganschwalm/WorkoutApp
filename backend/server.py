@@ -127,7 +127,12 @@ def migration_2_client_ids(database):
     database.execute('CREATE UNIQUE INDEX IF NOT EXISTS workouts_user_client ON workouts(user_id, client_id)')
 
 
-MIGRATIONS = [migration_1_tables, migration_2_client_ids]
+def migration_3_programs(database):
+    # The training program an account is following (Wendler 5/3/1), kept beside its settings and templates.
+    database.execute("ALTER TABLE user_state ADD COLUMN program_json TEXT NOT NULL DEFAULT 'null'")
+
+
+MIGRATIONS = [migration_1_tables, migration_2_client_ids, migration_3_programs]
 
 
 def init_database():
@@ -236,7 +241,31 @@ def validate_workout(data):
     validate_exercises(data.get('exercises'))
     if data.get('clientId') is not None:
         text(data['clientId'], 'clientId', 200)
+    # A workout from a training program says where in the program it was, for History to show.
+    if data.get('program') is not None:
+        if not isinstance(data['program'], dict):
+            raise BadRequest('program must be an object.')
+        text(data['program'].get('name'), 'program.name', 1000)
+        text(data['program'].get('label'), 'program.label', 1000)
     return name, notes, int(created_at)
+
+
+def validate_program(program):
+    """The program being followed: null, or an object naming its definition with a number for every training max."""
+    if program is None:
+        return
+    if not isinstance(program, dict):
+        raise BadRequest('program must be an object or null.')
+    if not text(program.get('definition'), 'program.definition', 100):
+        raise BadRequest('program.definition must name the program.')
+    maxes = program.get('trainingMaxes')
+    if not isinstance(maxes, dict) or len(maxes) > 100:
+        raise BadRequest('program.trainingMaxes must be an object.')
+    if not all(is_number(value) and value >= 0 for value in maxes.values()):
+        raise BadRequest('Every training max must be a number of zero or more.')
+    for field in ('options', 'done'):
+        if program.get(field) is not None and not isinstance(program[field], dict):
+            raise BadRequest(f'program.{field} must be an object.')
 
 
 def validate_state(data):
@@ -246,6 +275,8 @@ def validate_state(data):
         for index, template in enumerate(listed(data['templates'], 'templates', 1000)):
             text(template.get('name'), f'templates[{index}].name', 1000)
             validate_exercises(template.get('exercises'), f'templates[{index}].exercises')
+    if 'program' in data:
+        validate_program(data['program'])
 
 
 def workout_id(path):
@@ -513,8 +544,9 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
                 row = database.execute('SELECT payload FROM active_sessions WHERE user_id = ?', (user['id'],)).fetchone()
                 self.send_json(HTTPStatus.OK, {'session': json.loads(row['payload']) if row else None})
             elif path == '/api/state':
-                row = database.execute('SELECT settings_json, templates_json FROM user_state WHERE user_id = ?', (user['id'],)).fetchone()
-                self.send_json(HTTPStatus.OK, {'settings': json.loads(row['settings_json']) if row else {}, 'templates': json.loads(row['templates_json']) if row else []})
+                row = database.execute('SELECT settings_json, templates_json, program_json FROM user_state WHERE user_id = ?', (user['id'],)).fetchone()
+                self.send_json(HTTPStatus.OK, {'settings': json.loads(row['settings_json']) if row else {}, 'templates': json.loads(row['templates_json']) if row else [],
+                                               'program': json.loads(row['program_json']) if row else None})
             else:
                 self.send_json(HTTPStatus.NOT_FOUND, {'error': 'Endpoint not found.'})
 
@@ -622,11 +654,13 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             data = self.read_json()
             validate_state(data)
             with connection() as database:
-                existing = database.execute('SELECT settings_json, templates_json FROM user_state WHERE user_id = ?', (user['id'],)).fetchone()
+                existing = database.execute('SELECT settings_json, templates_json, program_json FROM user_state WHERE user_id = ?', (user['id'],)).fetchone()
                 settings = data.get('settings', json.loads(existing['settings_json']) if existing else {})
                 templates = data.get('templates', json.loads(existing['templates_json']) if existing else [])
-                database.execute('INSERT INTO user_state (user_id, settings_json, templates_json, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET settings_json=excluded.settings_json, templates_json=excluded.templates_json, updated_at=excluded.updated_at', (user['id'], json.dumps(settings), json.dumps(templates), int(time.time() * 1000)))
-            self.send_json(HTTPStatus.OK, {'settings': settings, 'templates': templates})
+                # null is a real value here (the program was ended), so only a missing key keeps the stored one.
+                program = data['program'] if 'program' in data else (json.loads(existing['program_json']) if existing else None)
+                database.execute('INSERT INTO user_state (user_id, settings_json, templates_json, program_json, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET settings_json=excluded.settings_json, templates_json=excluded.templates_json, program_json=excluded.program_json, updated_at=excluded.updated_at', (user['id'], json.dumps(settings), json.dumps(templates), json.dumps(program), int(time.time() * 1000)))
+            self.send_json(HTTPStatus.OK, {'settings': settings, 'templates': templates, 'program': program})
         else:
             self.send_json(HTTPStatus.NOT_FOUND, {'error': 'Endpoint not found.'})
 

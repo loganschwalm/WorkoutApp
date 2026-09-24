@@ -1,6 +1,6 @@
-// Local-first persistence. The in-progress workout, finished workouts that have not reached the server yet, settings and
-// custom templates are written to localStorage (per account) first, then pushed to the server in the background and
-// retried until it accepts them. Loaded before settings.js, which keeps its settings here.
+// Local-first persistence. The in-progress workout, finished workouts that have not reached the server yet, settings,
+// custom templates and the training program are written to localStorage (per account) first, then pushed to the server in
+// the background and retried until it accepts them. Loaded before settings.js, which keeps its settings here.
 const lastUserStorageKey = 'workout-tracker-last-user';
 const memoryStore = new Map();
 let localUserId = readLocal(lastUserStorageKey);
@@ -159,10 +159,10 @@ function flushPendingWorkouts() {
   return pendingFlush;
 }
 
-// ---- Settings and custom templates ----------------------------------------
+// ---- Settings, custom templates and the training program -----------------
 // The same rule as the in-progress workout: a change is saved on this device first and stays marked dirty until the
 // server has it, and a dirty local copy beats the server's when a page loads, so a change made offline is never undone.
-const accountStateParts = ['settings', 'templates'];
+const accountStateParts = ['settings', 'templates', 'program'];
 
 // Before these were kept per account, one copy per browser was shared by whoever signed in. It was last written
 // by the last account seen here, so it becomes that account's copy, marked clean so the server's copy replaces it.
@@ -218,7 +218,7 @@ async function syncAccountState() {
   if (accountStateParts.some(part => readLocalState(part)?.dirty)) scheduleStateSync(stateRetryCount ? Math.min(60000, 2000 * 2 ** (stateRetryCount - 1)) : 0);
 }
 
-// Resolves to { settings, templates } for the signed-in account: a part changed here and not uploaded yet keeps the
+// Resolves to { settings, templates, program } for the signed-in account: a part changed here and not uploaded yet keeps the
 // local value, anything else takes the server's, and with the server unreachable the local copy (or null) is used.
 async function loadAccountState() {
   await window.localReady;

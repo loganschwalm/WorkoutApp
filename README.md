@@ -60,14 +60,14 @@ own workouts, templates, and settings.
 
 ### Network drops
 
-Logged sets, notes, finished workouts, settings, and custom templates are saved on the device first and uploaded to the server in the background.
+Logged sets, notes, finished workouts, settings, custom templates, and your training program are saved on the device first and uploaded to the server in the background.
 
 - If the server cannot be reached, keep training. A notice explains that your sets are stored on this device, and they upload automatically when the connection returns (retries back off up to one minute).
 - Reloading the page while the server is unreachable restores the in-progress workout from the device.
 - Finishing a workout while offline queues it locally and shows how many workouts are waiting to sync. The History and Progress pages upload anything queued before they load your workouts.
 - Uploads are safe to retry: each finished workout carries a unique `clientId`, and the server stores it once however many copies arrive, even at the same moment.
 - If the server ever refuses a queued workout as invalid, it is set aside on the device and the status line says so, so it never holds up the workouts queued after it.
-- A setting or template changed while offline is kept when the page reloads and uploads once the server is back; it is never replaced by the server's older copy.
+- A setting, template or program change made while offline is kept when the page reloads and uploads once the server is back; it is never replaced by the server's older copy.
 - Local copies are kept per account, so another account signed in on the same browser never sees them.
 - If your sign-in expires while a page is open, a banner offers to sign in again and returns you to the same page; nothing on screen is discarded, and a workout in progress stays on the device.
 
@@ -114,6 +114,35 @@ Users can also:
 Custom templates are saved to your account on the server, and cached in the browser so they
 still work while the server is unreachable. A template created or edited offline uploads when the
 server is reachable again.
+
+The templates also offer the Wendler 5/3/1 [training program](#training-programs).
+
+### Training programs
+
+Wendler 5/3/1 is a whole program rather than a single workout. Setting it up asks for a one-rep max
+for the overhead press, deadlift, bench press and squat, or a training max if you already know yours.
+Lifts you have logged are filled in with an estimate from your latest sets. From then on:
+
+- The whole cycle is planned out on the Tracker: four days a week, one main lift a day, through the
+  5s, 3s and 5/3/1 weeks and a deload week. Every weight is worked out from your training max and
+  rounded to the nearest 5 or 2.5 lbs.
+- Start the next day, or any other, as a workout. Every set is planned: warm-ups, the work sets, and a
+  last "+" set of as many reps as you can. Each planned set's weight and reps are filled in as you
+  go, and your + set is turned into an estimated one-rep max.
+- Choose the assistance work: Boring But Big (5 × 10 of the day's lift at 50%, plus one exercise),
+  Triumvirate (two exercises), or the main lifts only. Warm-up sets and the deload week can each be
+  turned off.
+- Finishing a program workout marks its day done. A day can also be skipped, or done again.
+- When every day of a cycle is done, the next cycle starts with each training max raised: 5 lbs
+  for the press and bench press, 10 lbs for the deadlift and squat. A lift whose + set fell short of
+  its reps drops to 90% instead, as the program prescribes. The card shows next cycle's numbers in
+  advance.
+- Training maxes, rounding and assistance can be changed at any time, and the rest of the cycle
+  follows.
+- Program workouts are saved like any other, named after their day ("5/3/1 Bench Day"), so Progress
+  charts them. History shows the cycle and week each one came from.
+- The program is saved to your account with your settings and templates. It follows you to another
+  device and keeps working through a network drop.
 
 ### Workout history
 
@@ -181,7 +210,7 @@ tests/                  End-to-end browser tests and API tests (see tests/README
 
 ## Self-hosting
 
-Every account gets its own workouts, active session, templates, and settings, all kept in a
+Every account gets its own workouts, active session, templates, training program, and settings, all kept in a
 server-side SQLite file. Nothing is sent to an external service.
 
 ### One-line install on Proxmox
@@ -513,7 +542,7 @@ PORT=9000 WORKOUT_DB=/tmp/scratch.db python backend/server.py
 
 The `tests/` directory holds end-to-end tests that drive a real headless browser against a real
 server, plus a suite that exercises the API directly: no mocking, so a passing check means the
-feature works. Nine suites cover the workout flow, the rest timer, offline syncing, settings and
+feature works. Ten suites cover the workout flow, the 5/3/1 training program, the rest timer, offline syncing, settings and
 templates, the alert settings, in-workout usability, the service worker, the security headers and
 escaping in the pages, and the API itself (validation, malformed requests, racing uploads, sign-in
 throttling, password hashes, and database upgrades).
@@ -529,13 +558,13 @@ suite breakdown and for how to add a test.
 
 ## Data storage
 
-The server is the record. Saved workouts, the in-progress workout, custom templates, and settings are
+The server is the record. Saved workouts, the in-progress workout, custom templates, the training program, and settings are
 stored per account in SQLite, and every query is scoped to the signed-in account's user ID. The server
 checks the shape of everything it stores, so a malformed upload is refused rather than saved.
 
 The browser keeps a working copy in `localStorage`, separately for each account that signs in on it:
 the in-progress workout, finished workouts still waiting to upload (and any the server refused), last
-time's numbers for each exercise, settings, and custom templates. That copy is what lets you keep
+time's numbers for each exercise, settings, custom templates, and the training program. That copy is what lets you keep
 training through a network drop; it uploads when the server is reachable again, and clearing the
 browser's site data only loses whatever had not uploaded yet.
 

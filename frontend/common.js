@@ -19,4 +19,9 @@ function exerciseKey(name) {
   return String(name).trim().toLowerCase();
 }
 
+// Where in a training program a saved workout belongs ("Cycle 1, week 2 · 3s week"), or '' for any other workout.
+function workoutProgramLabel(workout) {
+  return workout.program && typeof workout.program.label === 'string' ? workout.program.label : '';
+}
+
 $('today').textContent = new Date().toLocaleDateString(undefined, { weekday:'long', month:'short', day:'numeric' });

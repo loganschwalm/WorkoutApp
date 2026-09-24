@@ -45,7 +45,7 @@
 
     <section class="card active-workout" id="activeWorkout" hidden>
       <div class="section-heading"><div><h2 id="activeWorkoutTitle">Active workout</h2><p id="activeWorkoutProgress" class="subtitle"></p></div><button class="secondary" id="endWorkoutBtn" type="button">End workout</button></div>
-      <div class="active-exercise"><h3 id="activeExerciseName"></h3><p id="activeExerciseTarget" class="subtitle"></p><p id="activeExerciseLast" class="subtitle" hidden></p></div>
+      <div class="active-exercise"><h3 id="activeExerciseName"></h3><p id="activeExerciseTarget" class="subtitle"></p><p id="activeExerciseLast" class="subtitle" hidden></p><ol class="plan-sets" id="activePlan" aria-label="Planned sets" hidden></ol></div>
       <div class="notes-field"><label for="activeNotes">Workout notes</label><textarea id="activeNotes" rows="3" placeholder="Add notes while you train."></textarea></div>
       <div class="set-entry"><div><label for="activeWeight">Weight (lbs)</label><input id="activeWeight" type="number" min="0" step="0.5" placeholder="0" /></div><div><label for="completedReps">Reps completed</label><input id="completedReps" type="number" min="1" step="1" placeholder="0" /></div><button class="primary" id="completeSetBtn" type="button">Complete set</button></div>
       <ul class="set-list" id="completedSets"></ul>
@@ -53,6 +53,16 @@
       <div class="rest-panel" id="restPanel" hidden><div><strong>Rest timer</strong><span id="timerDisplay">1:30</span></div><div class="rest-actions"><button class="secondary" id="restToggleBtn" type="button">Start rest</button><button class="secondary" id="restResetBtn" type="button">Reset</button></div></div>
       <details class="add-exercise" id="addActiveExercise"><summary>Add an exercise</summary><div class="add-exercise-fields"><div><label for="activeAddName">Exercise</label><input id="activeAddName" type="text" placeholder="e.g. Dips" /></div><div><label for="activeAddReps">Target reps</label><input id="activeAddReps" type="number" min="1" step="1" placeholder="0" /></div><button class="secondary" id="activeAddBtn" type="button">Add next</button></div></details>
       <div class="footer-actions"><span class="subtitle">Log each set, then continue when ready.</span><div class="footer-buttons"><button class="secondary" id="prevExerciseBtn" type="button" hidden>Previous</button><button class="primary" id="nextExerciseBtn" type="button">Next exercise</button></div></div>
+    </section>
+
+    <section class="card" id="programCard" hidden>
+      <div class="section-heading program-heading"><div><h2 id="programTitle">Training program</h2><p id="programSummary" class="subtitle"></p></div><div class="section-heading-actions"><button class="secondary" id="editProgramBtn" type="button">Edit program</button><button class="danger" id="endProgramBtn" type="button">End program</button></div></div>
+      <p class="program-notice" id="programNotice" role="status" hidden></p>
+      <div class="program-next" id="programNext"></div>
+      <h3 class="program-subheading">Training maxes</h3>
+      <ul class="program-maxes" id="programMaxes"></ul>
+      <h3 class="program-subheading">This cycle</h3>
+      <div id="programWeeks"></div>
     </section>
 
     <section class="card">
@@ -89,9 +99,29 @@
       <form id="templateForm"><label for="templateName">Template name</label><input id="templateName" type="text" placeholder="e.g. Conditioning Day" required /><div class="template-exercise-heading"><label>Exercises</label><button class="secondary" id="addTemplateExercise" type="button">Add exercise</button></div><div id="templateExerciseEditor"></div><div class="settings-actions"><button class="secondary" id="cancelTemplate" type="button">Cancel</button><button class="primary" type="submit">Save template</button></div></form>
     </section>
   </div>
+  <div class="modal-backdrop" id="programModal" hidden>
+    <section class="settings-modal program-modal" role="dialog" aria-modal="true" aria-labelledby="programModalTitle">
+      <div class="settings-heading"><h2 id="programModalTitle">Start program</h2><button class="modal-close" id="closeProgram" type="button" aria-label="Close program setup">&times;</button></div>
+      <form id="programForm" novalidate>
+        <p class="subtitle program-help" id="programIntro"></p>
+        <label for="programMaxKind">The weights you enter are</label>
+        <select id="programMaxKind"><option value="1rm">One-rep maxes</option><option value="tm">Training maxes</option></select>
+        <div class="program-max-inputs" id="programMaxInputs"></div>
+        <div id="programTmPercentField"><label for="programTmPercent">Training max</label><select id="programTmPercent"><option value="90">90% of your one-rep max (the original program)</option><option value="85">85% of your one-rep max (5/3/1 Forever)</option></select></div>
+        <label for="programAssistance">Assistance work</label><select id="programAssistance"></select>
+        <p class="subtitle program-help" id="programAssistanceHelp"></p>
+        <label for="programRounding">Round weights to</label><select id="programRounding"><option value="5">The nearest 5 lbs</option><option value="2.5">The nearest 2.5 lbs</option></select>
+        <label class="setting-check"><input id="programWarmups" type="checkbox" /> Warm up with 40%, 50% and 60% of the training max before the work sets</label>
+        <label class="setting-check"><input id="programDeload" type="checkbox" /> End each cycle with a deload week</label>
+        <p class="auth-feedback" id="programFormError" role="alert" hidden></p>
+        <div class="settings-actions"><button class="secondary" id="cancelProgram" type="button">Cancel</button><button class="primary" id="programSubmit" type="submit">Start program</button></div>
+      </form>
+    </section>
+  </div>
   <script src="common.js"></script>
   <script src="offline.js"></script>
   <script src="settings.js"></script>
+  <script src="program.js"></script>
   <script src="script.js"></script>
   <script src="pwa.js"></script>
 </body>
