@@ -204,6 +204,7 @@ The gear button opens a settings modal available on every page. Settings include
 - Rest-timer alert: play a sound on or off, choose the alert sound (double beep, chime, or long tone), set the volume, and turn vibration on or off. The vibration option only appears on devices that support it.
 - A Test alert button plays the alert with the current choices, before you save them.
 - The signed-in account name and a Sign out button. Signing out warns first if a workout has not finished syncing; it stays on the device and uploads the next time you sign in to the same account.
+- The account's email, with a button to add or change it. Changing it asks for your password.
 
 Settings are saved to your account on the server and cached in the browser, so they persist
 between visits and follow you to another device. A change made offline applies straight away and
@@ -212,9 +213,16 @@ uploads when the server is reachable again.
 ### Accounts and security
 
 - Any number of accounts, each with its own workouts, templates, and settings.
+- Each account has an email as well as a username, and signs in with either. An email belongs to one
+  account only, whatever its capitals.
+- Forgot your password? The sign-in page emails you a 6-digit code. Entering it with a new password
+  signs you in and signs the account out everywhere else. This needs a mail server; see
+  [Password reset emails](#password-reset-emails).
+- Accounts made before accounts had emails keep signing in with their username. Add an email in
+  Settings to be able to reset a forgotten password.
 - Sessions last 30 days; signing out ends the session on the server.
 - Registration can be closed once your accounts exist, and the sign-in page then only offers signing in.
-- Repeated wrong passwords for one username are slowed down, and passwords are stored as strong
+- Repeated wrong passwords for one account are slowed down, and passwords are stored as strong
   one-way hashes. See [Before you expose it](#before-you-expose-it).
 
 ### Responsive design
@@ -243,7 +251,8 @@ tests/                  End-to-end browser tests and API tests (see tests/README
 ## Self-hosting
 
 Every account gets its own workouts, active session, templates, training program, and settings, all kept in a
-server-side SQLite file. Nothing is sent to an external service.
+server-side SQLite file. Nothing is sent to an external service, except password reset emails
+through the mail server you configure.
 
 ### One-line install on Proxmox
 
@@ -384,9 +393,16 @@ What is already in place:
 
 - Passwords are hashed with PBKDF2-SHA256 at 600,000 iterations. Accounts created by an older version
   are upgraded to that strength the next time they sign in.
-- After 5 failed sign-ins for one username from one address, that pair has to wait until the oldest
-  failure is 15 minutes old, even with the right password. Behind a reverse proxy every request comes
-  from the proxy's address, so the limit then works per username.
+- After 5 failed sign-ins for one account from one address, that pair has to wait until the oldest
+  failure is 15 minutes old, even with the right password. Signing in by email and by username count
+  toward the same limit, and so do wrong passwords when changing the email in Settings. Behind a reverse
+  proxy every request comes from the proxy's address, so the limit then works per account.
+- A password reset code works once, for 15 minutes, and stops working after 5 wrong tries. Each email
+  address is sent at most 5 codes an hour. The reply is the same whether or not an account uses the
+  address, so the reset form cannot be used to find out who has an account. A successful reset signs
+  the account out everywhere else.
+- Emails are not verified: the app takes the address you type. A mistyped address only means reset
+  codes go astray, and you can correct it in Settings.
 - Every response carries a strict Content-Security-Policy (only this site's own scripts and styles,
   nothing inline), plus `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` and
   `Referrer-Policy: same-origin`. Directory listings are off.
@@ -407,6 +423,11 @@ The server reads these environment variables:
 | `SECURE_COOKIES` | `0` | `1` always marks the session cookie `Secure`; only for a site reached exclusively over HTTPS |
 | `LOGIN_ATTEMPTS` | `5` | Failed sign-ins per username and address before a wait |
 | `LOGIN_WINDOW` | `900` | Seconds a failed sign-in is remembered |
+| `SMTP_HOST` | *(none)* | Mail server for password reset emails. Unset, the sign-in page does not offer a reset |
+| `SMTP_PORT` | `587` | `465` with `SMTP_SECURITY=ssl`, `25` with `none` |
+| `SMTP_SECURITY` | `starttls` | `starttls`, `ssl` (TLS from the start), or `none` (a relay on a trusted network) |
+| `SMTP_USERNAME` / `SMTP_PASSWORD` | *(none)* | Login for the mail server; leave unset if it needs none |
+| `SMTP_FROM` | `SMTP_USERNAME` | Sender of the emails, e.g. `Workout Tracker <workouts@example.com>` |
 
 Where to set them:
 
@@ -417,6 +438,34 @@ Where to set them:
   setting `PORT` here.
 - **Docker Compose:** under `environment:` in `docker-compose.yml`, then `docker compose up -d`.
 - **Manual install:** `Environment=` lines in the systemd unit, then `systemctl daemon-reload` and a restart.
+
+### Password reset emails
+
+"Forgot password?" emails a code, so the server needs a mail server to send through. Any SMTP
+server works: your email provider's, or a sending service such as Brevo, Mailgun, or Amazon SES.
+With a Gmail account, turn on 2-Step Verification, create an
+[app password](https://myaccount.google.com/apppasswords), and set:
+
+```ini
+SMTP_HOST=smtp.gmail.com
+SMTP_USERNAME=you@gmail.com
+# The app password, not your Google password. Keep comments on lines of their own: the settings file
+# has no comments at the end of a line, so one there would become part of the password.
+SMTP_PASSWORD=abcdefghijklmnop
+SMTP_FROM=Workout Tracker <you@gmail.com>
+```
+
+`SMTP_PORT` and `SMTP_SECURITY` can stay at their defaults, 587 with STARTTLS. Restart the server,
+and the sign-in page offers "Forgot password?". The server's log says which mail server it will use
+when it starts, and records each code it emails, or why sending failed.
+
+- **Proxmox:** put these in `/etc/workout-tracker/workout-tracker.env`. The installer makes that file
+  readable by root only, since it can now hold a password; systemd reads it before the service
+  starts as the `workout` user.
+- **Docker Compose:** under `environment:` in `docker-compose.yml`, or in an `.env` file beside it.
+
+Accounts need an email for this to help them. New accounts give one when they are created, and older
+accounts can add one in Settings.
 
 ### Offline support needs HTTPS
 
@@ -537,6 +586,10 @@ done by hand except closing registration, but it is worth knowing what happens:
   Point any bookmark, installed phone app, or reverse-proxy target that moves at the new port.
 - **Passwords** are rehashed at the new strength the next time each account signs in; nobody has to
   reset anything.
+- **Emails:** existing accounts keep signing in with their username, and have no email until one is
+  added in Settings. Password reset stays off until you [set up a mail server](#password-reset-emails).
+  On Proxmox, the update also makes the settings file readable by root only, since it can hold the
+  mail server's password.
 - **Old links** to `/frontend/…` pages redirect to the same page without the prefix, and signing in
   now lands on `/`.
 - **Docker:** the first start hands the existing `workout_data` volume to the unprivileged `workout`
@@ -561,7 +614,8 @@ python backend/server.py
 ```
 
 Then open <http://localhost:6769/> and register an account. Visiting a page while signed out
-redirects to the login form, so start at the root rather than at `index.html`.
+redirects to the login form, so start at the root rather than at `index.html`. Password reset is
+off until `SMTP_HOST` is set (see [Password reset emails](#password-reset-emails)).
 
 The database is created (or upgraded) at `data/workouts.db` in the checkout when the server starts;
 it is gitignored. Any of the [server settings](#server-settings) can be overridden the same way:
@@ -574,10 +628,11 @@ PORT=9000 WORKOUT_DB=/tmp/scratch.db python backend/server.py
 
 The `tests/` directory holds end-to-end tests that drive a real headless browser against a real
 server, plus a suite that exercises the API directly: no mocking, so a passing check means the
-feature works. Ten suites cover the workout flow, the training programs, the rest timer, offline syncing, settings and
+feature works. Eleven suites cover the workout flow, the training programs, the rest timer, offline syncing, settings and
 templates, the alert settings, in-workout usability, the service worker, the security headers and
-escaping in the pages, and the API itself (validation, malformed requests, racing uploads, sign-in
-throttling, password hashes, and database upgrades).
+escaping in the pages, signing in and resetting a password in the browser, and the API itself
+(validation, malformed requests, racing uploads, sign-in throttling, password hashes, emails and
+reset codes, and database upgrades). Reset emails go to a small stand-in mail server inside the tests.
 
 ```bash
 pip install -r tests/requirements.txt

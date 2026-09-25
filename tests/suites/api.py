@@ -1,4 +1,4 @@
-"""The HTTP API on its own, without a browser: bad input, racing uploads, redirects and database upgrades."""
+"""The HTTP API on its own, without a browser: bad input, racing uploads, redirects, database upgrades and accounts."""
 
 import hashlib
 import json
@@ -8,6 +8,7 @@ import time
 
 INTERCEPT = False
 BROWSER = False
+MAIL = True
 
 # The schema as it was before workouts had a client_id column, for the upgrade check.
 OLD_SCHEMA = '''
@@ -102,7 +103,7 @@ def run(t):
           all({i for _, i in results[k]} == set(copies[k]) for k in results), '')
     stored = [w for w in listed if w.get('clientId') == 'race-0']
     other_body = workout('race-0')
-    _, cookie = api('POST', '/api/auth/register', {'username': 'racer', 'password': 'password123'})
+    _, cookie = api('POST', '/api/auth/register', {'username': 'racer', 'email': 'racer@example.test', 'password': 'password123'})
     other = cookie.split('session=')[1].split(';')[0]
     created, _ = api('POST', '/api/workouts', other_body, other)
     check('another account can still use the same clientId', created['id'] != stored[0]['id'] if stored else False, str(created))
@@ -159,6 +160,7 @@ def run(t):
 
     run_security(t, check, request)
     run_structure(t, check, request)
+    run_accounts(t, check, request)
 
 
 def login(server, username, password, headers=None):
@@ -180,12 +182,12 @@ def run_security(t, check, request):
     print('A5  ALLOW_REGISTRATION=0 closes sign-up but not sign-in')
     check('registration is open by default', main.api('GET', '/api/auth/me')[0].get('registrationOpen') is True)
     opener = t.start_server('closed.db')
-    opener.api('POST', '/api/auth/register', {'username': 'owner', 'password': 'password123'})
+    opener.api('POST', '/api/auth/register', {'username': 'owner', 'email': 'owner@example.test', 'password': 'password123'})
     opener.stop()
     opener.process.wait(timeout=10)
     closed = t.start_server('closed.db', {'ALLOW_REGISTRATION': '0'})
     check('the server says registration is closed', closed.api('GET', '/api/auth/me')[0].get('registrationOpen') is False)
-    status, _, reply = closed.request('POST', '/api/auth/register', json.dumps({'username': 'intruder', 'password': 'password123'}).encode(),
+    status, _, reply = closed.request('POST', '/api/auth/register', json.dumps({'username': 'intruder', 'email': 'intruder@example.test', 'password': 'password123'}).encode(),
                                       {'Content-Type': 'application/json'})
     check('registering is refused with 403', status == 403 and 'turned off' in reply.get('error', ''), f'{status} {reply}')
     check('and no account was created', stored_hash('intruder', t.db_path('closed.db')) is None)
@@ -194,7 +196,7 @@ def run_security(t, check, request):
 
     # ------------------------------------------------------------------ A6 sign-in throttling
     print('A6  repeated failed sign-ins are slowed down')
-    main.api('POST', '/api/auth/register', {'username': 'target', 'password': 'right-password'})
+    main.api('POST', '/api/auth/register', {'username': 'target', 'email': 'target@example.test', 'password': 'right-password'})
     statuses = [login(main, 'target', f'wrong-guess-{n}')[0] for n in range(5)]
     check('the first five wrong passwords are just refused', statuses == [401] * 5, statuses)
     status, headers, reply = login(main, 'target', 'wrong-guess-6')
@@ -209,7 +211,7 @@ def run_security(t, check, request):
     # comfortably outlast five of them; the wait is then measured from the first failure.
     window = 8
     quick = t.start_server('quick.db', {'LOGIN_WINDOW': str(window)})
-    quick.api('POST', '/api/auth/register', {'username': 'target', 'password': 'right-password'})
+    quick.api('POST', '/api/auth/register', {'username': 'target', 'email': 'target@example.test', 'password': 'right-password'})
     first_failure = time.monotonic()
     for n in range(5):
         login(quick, 'target', f'wrong-password-{n}')
@@ -257,7 +259,7 @@ def run_security(t, check, request):
     _, headers, _ = login(main, 'tester', 'password123', {'X-Forwarded-Proto': 'https'})
     check('a proxy reporting HTTPS gets a Secure cookie', headers['set-cookie'].endswith('; Secure'), headers['set-cookie'])
     secure = t.start_server('secure.db', {'SECURE_COOKIES': '1'})
-    secure.api('POST', '/api/auth/register', {'username': 'someone', 'password': 'password123'})
+    secure.api('POST', '/api/auth/register', {'username': 'someone', 'email': 'someone@example.test', 'password': 'password123'})
     _, headers, _ = login(secure, 'someone', 'password123')
     check('SECURE_COOKIES=1 marks it Secure without a proxy', headers['set-cookie'].endswith('; Secure'), headers['set-cookie'])
 
@@ -313,6 +315,8 @@ def schema_of(path):
             'indexes': sorted(r[1] for r in db.execute("PRAGMA index_list('workouts')")),
             'columns': [r[1] for r in db.execute('PRAGMA table_info(workouts)')],
             'state_columns': [r[1] for r in db.execute('PRAGMA table_info(user_state)')],
+            'user_columns': [r[1] for r in db.execute('PRAGMA table_info(users)')],
+            'user_indexes': sorted(r[1] for r in db.execute("PRAGMA index_list('users')")),
         }
     finally:
         db.close()
@@ -322,21 +326,25 @@ def run_structure(t, check, request):
     main = t.server
     token = t.token
     json_headers = {'Content-Type': 'application/json'}
-    tables = ['active_sessions', 'sessions', 'user_state', 'users', 'workouts']
+    tables = ['active_sessions', 'password_resets', 'sessions', 'user_state', 'users', 'workouts']
 
     # ------------------------------------------------------------------ A12 schema at startup
     print('A12 the schema is created and versioned at startup, in WAL mode')
     t.start_server('fresh.db')  # the harness only asks /api/auth/me, which never opens the database
     schema = schema_of(t.db_path('fresh.db'))
     check('a new database has every table before any request touches it', schema['tables'] == tables, schema['tables'])
-    check('it is at schema version 3', schema['version'] == 3, schema['version'])
+    check('it is at schema version 4', schema['version'] == 4, schema['version'])
     check('with the client_id column and its unique index',
           'client_id' in schema['columns'] and 'workouts_user_client' in schema['indexes'], schema)
     check('with a column for the training program', 'program_json' in schema['state_columns'], schema['state_columns'])
+    check('with an email for each account, and its unique index',
+          'email' in schema['user_columns'] and 'users_email' in schema['user_indexes'], schema)
     check('in write-ahead-log mode', schema['journal'] == 'wal', schema['journal'])
     legacy = schema_of(t.db_path('legacy.db'))
-    check('the database from before client_id (A3) is now at version 3 too', legacy['version'] == 3, legacy['version'])
+    check('the database from before client_id (A3) is now at version 4 too', legacy['version'] == 4, legacy['version'])
     check('and has the training program column', 'program_json' in legacy['state_columns'], legacy['state_columns'])
+    check('and the email column, and the table of reset codes',
+          'email' in legacy['user_columns'] and 'password_resets' in legacy['tables'], legacy)
 
     # A database written by the release before migrations were numbered: client_id already there, version 0.
     path = t.db_path('unversioned.db')
@@ -354,7 +362,7 @@ def run_structure(t, check, request):
     kept = db.execute("SELECT name, client_id FROM workouts").fetchall()
     db.close()
     check('an unversioned database that already has client_id upgrades cleanly',
-          schema['version'] == 3 and schema['columns'].count('client_id') == 1 and kept == [('Kept', 'k1')], f'{schema} {kept}')
+          schema['version'] == 4 and schema['columns'].count('client_id') == 1 and kept == [('Kept', 'k1')], f'{schema} {kept}')
 
     path = t.db_path('newer.db')
     db = sqlite3.connect(path)
@@ -452,7 +460,7 @@ def run_structure(t, check, request):
     # ------------------------------------------------------------------ A15 editing and deleting
     print('A15 editing a workout that is missing, or not yours, is a 404')
     mine = t.W1
-    _, cookie = t.api('POST', '/api/auth/register', {'username': 'neighbour', 'password': 'password123'})
+    _, cookie = t.api('POST', '/api/auth/register', {'username': 'neighbour', 'email': 'neighbour@example.test', 'password': 'password123'})
     neighbour = cookie.split('session=')[1].split(';')[0]
     theirs, _ = t.api('POST', '/api/workouts', good(name='Theirs'), neighbour)
     for label, path in [('an id that does not exist', '/api/workouts/999999'),
@@ -510,3 +518,163 @@ def run_structure(t, check, request):
                                      ('an object', {'name': 'Push', 'exercises': [], 'currentIndex': 0}, 200)]:
         status, _, reply = request('POST', '/api/active-session', json.dumps({'session': session}).encode(), json_headers, token=token)
         check(f'an active session that is {label} -> {expected}', status == expected, f'{status} {reply}')
+
+
+def run_accounts(t, check, request):
+    main, mail = t.server, t.mail
+    db_path = t.db_path('test.db')
+
+    def post(path, body, token=None, server=main):
+        """(status, headers, reply) for a JSON body; a dropped connection is a failed check, as with `request`."""
+        if server is not main:
+            return server.request('POST', path, json.dumps(body).encode(), {'Content-Type': 'application/json'}, token=token)
+        return request('POST', path, json.dumps(body).encode(), {'Content-Type': 'application/json'}, token=token)
+
+    def session_of(headers):
+        cookie = headers.get('set-cookie', '')
+        return cookie.split('session=')[1].split(';')[0] if 'session=' in cookie else None
+
+    def me(token=None):
+        return main.api('GET', '/api/auth/me', token=token)[0]
+
+    def sign_in(login, password):
+        return post('/api/auth/login', {'login': login, 'password': password})[0]
+
+    def code_for(address, count):
+        return mail.code(mail.wait(address, count))
+
+    def other_code(code, n=1):
+        return f'{(int(code) + n) % 10 ** 6:06d}'
+
+    def reset(address, code, password):
+        return post('/api/auth/reset-password', {'email': address, 'code': code, 'password': password})
+
+    # ------------------------------------------------------------------ A17 emails
+    print('A17 accounts have an email, and sign in with it or with the username')
+    for label, body in [
+        ('no email', {'username': 'nomail', 'password': 'password123'}),
+        ('an email with no @', {'username': 'bad1', 'email': 'bad.example.test', 'password': 'password123'}),
+        ('an email with two @', {'username': 'bad2', 'email': 'a@b@example.test', 'password': 'password123'}),
+        ('an email with a space in it', {'username': 'bad3', 'email': 'a b@example.test', 'password': 'password123'}),
+        ('an email with no dot after the @', {'username': 'bad4', 'email': 'a@localhost', 'password': 'password123'}),
+        ('an email that is a number', {'username': 'bad5', 'email': 5, 'password': 'password123'}),
+        ('a username with an @ in it', {'username': 'me@home', 'email': 'me@example.test', 'password': 'password123'}),
+    ]:
+        status, _, reply = post('/api/auth/register', body)
+        check(f'registering with {label} -> 400', status == 400 and isinstance(reply, dict) and reply.get('error'), f'{status} {reply}')
+    status, headers, reply = post('/api/auth/register', {'username': 'mailer', 'email': ' Mailer@Example.TEST ', 'password': 'password123'})
+    check('an account is created with its email, trimmed and in lowercase',
+          status == 200 and reply['user']['email'] == 'mailer@example.test', f'{status} {reply}')
+    mailer = session_of(headers)
+    check('/api/auth/me includes the email', me(mailer)['user'] == reply['user'], me(mailer))
+    status, _, reply = post('/api/auth/register', {'username': 'copycat', 'email': 'MAILER@example.test', 'password': 'password123'})
+    check('the same email in another case is refused -> 409', status == 409 and 'email' in reply.get('error', ''), f'{status} {reply}')
+    for label, typed in [('the email', 'mailer@example.test'), ('the email in capitals', 'MAILER@EXAMPLE.TEST'), ('the username', 'mailer')]:
+        status, _, reply = post('/api/auth/login', {'login': typed, 'password': 'password123'})
+        check(f'signs in with {label}', status == 200 and reply['user']['username'] == 'mailer', f'{status} {reply}')
+    status, _, _ = login(main, 'mailer@example.test', 'password123')
+    check('a page from before emails, sending it as username, signs in too', status == 200, status)
+    check('the email with a wrong password -> 401', sign_in('mailer@example.test', 'wrong-password') == 401)
+    post('/api/auth/register', {'username': 'limited', 'email': 'limited@example.test', 'password': 'right-password'})
+    for n in range(5):
+        sign_in('limited@example.test', f'wrong-guess-{n}')
+    check('failures by email and by username share one limit', sign_in('limited', 'right-password') == 429)
+    status, headers, reply = post('/api/auth/login', {'login': 'veteran', 'password': 'old-password'})
+    veteran = session_of(headers)
+    check('an account from before emails (A7) signs in with its username, and has no email',
+          status == 200 and reply['user']['email'] is None, f'{status} {reply}')
+
+    # ------------------------------------------------------------------ A18 changing the email
+    print('A18 an email is added or changed with the password')
+    for label, body, expected in [
+        ('a wrong password', {'email': 'veteran@example.test', 'password': 'not-the-password'}, 403),
+        ('an invalid email', {'email': 'veteran', 'password': 'old-password'}, 400),
+        ("another account's email", {'email': 'Mailer@example.test', 'password': 'old-password'}, 409),
+    ]:
+        status, _, reply = post('/api/account/email', body, veteran)
+        check(f'{label} -> {expected}', status == expected and reply.get('error'), f'{status} {reply}')
+    check('none of them changed the email, or ended the session', me(veteran)['user']['email'] is None, me(veteran))
+    check('signed out -> 401', post('/api/account/email', {'email': 'veteran@example.test', 'password': 'old-password'})[0] == 401)
+    status, _, reply = post('/api/account/email', {'email': 'Veteran@Example.test', 'password': 'old-password'}, veteran)
+    check('the right password saves it', status == 200 and reply['user']['email'] == 'veteran@example.test'
+          and me(veteran)['user']['email'] == 'veteran@example.test', f'{status} {reply}')
+    check('and the account then signs in with it', sign_in('veteran@example.test', 'old-password') == 200)
+    guesses = [post('/api/account/email', {'email': 'v2@example.test', 'password': f'guess-{n}'}, veteran)[0] for n in range(5)]
+    status = post('/api/account/email', {'email': 'v2@example.test', 'password': 'old-password'}, veteran)[0]
+    check('guessing the password here is limited like signing in', guesses == [403] * 5 and status == 429, f'{guesses} {status}')
+
+    # ------------------------------------------------------------------ A19 password reset
+    print('A19 a forgotten password is reset with a code sent by email')
+    check('the server says reset by email is available', me().get('passwordReset') is True, me())
+    plain = t.start_server('nomail.db')
+    check('a server without SMTP_HOST says it is not', plain.api('GET', '/api/auth/me')[0].get('passwordReset') is False)
+    status, _, reply = post('/api/auth/forgot-password', {'email': 'tester@example.test'}, server=plain)
+    check('and refuses to send a code -> 404', status == 404 and 'not set up' in reply.get('error', ''), f'{status} {reply}')
+
+    status, _, nobody_reply = post('/api/auth/forgot-password', {'email': 'nobody@example.test'})
+    check('an address with no account -> 200', status == 200 and nobody_reply == {'ok': True}, f'{status} {nobody_reply}')
+    status, _, reply = post('/api/auth/forgot-password', {'email': 'MAILER@example.test'})
+    check("an account's address gets the very same reply", status == 200 and reply == nobody_reply, f'{status} {reply}')
+    check('an address that is not one -> 400', post('/api/auth/forgot-password', {'email': 'mailer'})[0] == 400)
+    message = mail.wait('mailer@example.test', 1)
+    code = mail.code(message)
+    check('an email arrives with a 6-digit code', code is not None, message.get_content() if message else 'no email')
+    check('from SMTP_FROM, naming the account', message is not None and 'tracker@example.test' in message['From']
+          and '"mailer"' in message.get_content(), str(message and message['From']))
+    check('and nothing was sent for the address with no account', not mail.to('nobody@example.test'))
+
+    status, _, wrong_reply = reset('mailer@example.test', other_code(code), 'new-password-1')
+    check('a wrong code -> 400', status == 400 and wrong_reply.get('error'), f'{status} {wrong_reply}')
+    status, _, reply = reset('nobody@example.test', code, 'new-password-1')
+    check('in the same words as an address with no account', status == 400 and reply == wrong_reply, f'{status} {reply}')
+    status, _, reply = reset('mailer@example.test', code[:5], 'new-password-1')
+    check('a code that is not 6 digits -> 400', status == 400 and '6-digit' in reply.get('error', ''), f'{status} {reply}')
+    status, _, reply = reset('mailer@example.test', code, 'short')
+    check('a new password under 8 characters -> 400', status == 400 and '8+' in reply.get('error', ''), f'{status} {reply}')
+    status, headers, reply = reset('mailer@example.test', f'{code[:3]} {code[3:]}', 'new-password-1')
+    check('the right code, even typed with a space, sets the password and signs in',
+          status == 200 and reply['user']['username'] == 'mailer' and session_of(headers), f'{status} {reply}')
+    fresh = session_of(headers)
+    check('the new session works', (me(fresh)['user'] or {}).get('username') == 'mailer', me(fresh))
+    check('every older session is signed out', me(mailer)['user'] is None)
+    check('the old password no longer signs in', sign_in('mailer', 'password123') == 401)
+    check('the new one does', sign_in('mailer@example.test', 'new-password-1') == 200)
+    check('the code works only once', reset('mailer@example.test', code, 'new-password-2')[0] == 400)
+
+    post('/api/auth/forgot-password', {'email': 'mailer@example.test'})
+    code = code_for('mailer@example.test', 2)
+    guesses = [reset('mailer@example.test', other_code(code, n + 1), 'new-password-2')[0] for n in range(5)]
+    status = reset('mailer@example.test', code, 'new-password-2')[0]
+    check('after five wrong codes the right one no longer works', guesses == [400] * 5 and status == 400, f'{guesses} {status}')
+    post('/api/auth/forgot-password', {'email': 'mailer@example.test'})
+    code = code_for('mailer@example.test', 3)
+    status, headers, _ = reset('mailer@example.test', code, 'new-password-2')
+    check('but a new code does', status == 200, status)
+    mailer = session_of(headers)
+
+    post('/api/auth/forgot-password', {'email': 'mailer@example.test'})
+    code = code_for('mailer@example.test', 4)
+    db = sqlite3.connect(db_path)
+    db.execute("UPDATE password_resets SET expires_at = ? WHERE user_id = (SELECT id FROM users WHERE username = 'mailer')", (int(time.time()) - 1,))
+    db.commit()
+    db.close()
+    check('an expired code is refused', reset('mailer@example.test', code, 'new-password-3')[0] == 400)
+
+    post('/api/auth/forgot-password', {'email': 'mailer@example.test'})
+    code = code_for('mailer@example.test', 5)
+    status, _, reply = post('/api/account/email', {'email': 'mailer2@example.test', 'password': 'new-password-2'}, mailer)
+    check('changing the email cancels a code sent to the old one',
+          status == 200 and reset('mailer@example.test', code, 'new-password-3')[0] == 400
+          and reset('mailer2@example.test', code, 'new-password-3')[0] == 400, f'{status} {reply}')
+
+    statuses = [post('/api/auth/forgot-password', {'email': 'ghost@example.test'})[0] for _ in range(5)]
+    status, headers, reply = post('/api/auth/forgot-password', {'email': 'ghost@example.test'})
+    check('a sixth code for one address within the hour is refused, with Retry-After',
+          statuses == [200] * 5 and status == 429 and int(headers.get('retry-after', 0)) > 3000, f'{statuses} {status} {reply}')
+    check('even when no account uses it, so the limit says nothing about which do', not mail.to('ghost@example.test'))
+
+    status, _, _ = post('/api/auth/forgot-password', {'email': 'limited@example.test'})
+    code = code_for('limited@example.test', 1)
+    check('another address is unaffected', status == 200 and code is not None, status)
+    check('a reset lifts the sign-in wait (A17) from this address', reset('limited@example.test', code, 'reset-password')[0] == 200
+          and sign_in('limited', 'reset-password') == 200)

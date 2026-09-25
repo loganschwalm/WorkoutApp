@@ -18,8 +18,10 @@ class AppServer:
     def __init__(self, db_path, frontend_dir=None, env=None):
         self.port = free_port()
         self.base_url = f'http://127.0.0.1:{self.port}'
+        # Mail settings from the shell are left out, so a test server can only email the sink a suite gives it.
+        inherited = {name: value for name, value in os.environ.items() if not name.startswith('SMTP_')}
         env = dict(
-            os.environ,
+            inherited,
             PORT=str(self.port),
             WORKOUT_DB=db_path,
             APP_ROOT=frontend_dir or os.path.join(REPO_ROOT, 'frontend'),

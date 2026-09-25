@@ -2,10 +2,11 @@
 
 from .browser import CDP, Chrome, find_chrome, free_port
 from .context import ACTIVE, DISPLAY, HIDDEN, TITLE, TOGGLE, AppTest, Checker, exercise
+from .mail import MailSink
 from .server import REPO_ROOT, AppServer
 
 __all__ = [
     'ACTIVE', 'DISPLAY', 'HIDDEN', 'TITLE', 'TOGGLE',
-    'AppServer', 'AppTest', 'CDP', 'Checker', 'Chrome',
+    'AppServer', 'AppTest', 'CDP', 'Checker', 'Chrome', 'MailSink',
     'REPO_ROOT', 'exercise', 'find_chrome', 'free_port',
 ]

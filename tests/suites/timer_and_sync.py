@@ -145,7 +145,7 @@ def run(t):
     second, _ = api('POST', '/api/workouts', body, token)
     check('same clientId returns the same workout', first['id'] == second['id'], f'{first} {second}')
     check('only one copy is stored', len(workouts()) == n + 1, f'{n} -> {len(workouts())}')
-    _, other_cookie = api('POST', '/api/auth/register', {'username': 'other', 'password': 'password123'})
+    _, other_cookie = api('POST', '/api/auth/register', {'username': 'other', 'email': 'other@example.test', 'password': 'password123'})
     other_token = other_cookie.split('session=')[1].split(';')[0]
     third, _ = api('POST', '/api/workouts', body, other_token)
     check('another account can reuse a clientId', third['id'] != first['id'])

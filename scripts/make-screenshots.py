@@ -124,7 +124,7 @@ def main():
     server = browser = None
     try:
         server = AppServer(os.path.join(workdir, 'demo.db'))
-        _, cookie = server.api('POST', '/api/auth/register', {'username': 'alex', 'password': 'demo-password'})
+        _, cookie = server.api('POST', '/api/auth/register', {'username': 'alex', 'email': 'alex@example.test', 'password': 'demo-password'})
         token = cookie.split('session=')[1].split(';')[0]
         for workout in demo_workouts():
             server.api('POST', '/api/workouts', workout, token)

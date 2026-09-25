@@ -111,9 +111,24 @@ function closeSettings() {
   getSettingElement('settingsModal').hidden = true;
 }
 
+// The account's name and email. While the server has not said who is signed in (offline), there is nothing to change.
+function showAccount() {
+  const known = Boolean(window.localUsername);
+  getSettingElement('accountName').textContent = known ? `Signed in as ${window.localUsername}` : '';
+  getSettingElement('accountEmail').textContent = window.localEmail || 'No email yet. Add one so you can reset a forgotten password.';
+  getSettingElement('accountEmail').hidden = getSettingElement('changeEmailButton').hidden = !known;
+  getSettingElement('changeEmailButton').textContent = window.localEmail ? 'Change email' : 'Add email';
+  getSettingElement('emailEditor').hidden = true;
+}
+
+function showEmailError(message) {
+  getSettingElement('emailFeedback').textContent = message;
+  getSettingElement('emailFeedback').hidden = false;
+}
+
 function openSettings() {
   applySettings(getWorkoutSettings());
-  getSettingElement('accountName').textContent = window.localUsername ? `Signed in as ${window.localUsername}` : '';
+  showAccount();
   getSettingElement('settingsModal').hidden = false;
   getSettingElement('themeSetting').focus();
 }
@@ -139,6 +154,38 @@ getSettingElement('signOutButton').onclick = async () => {
     return;
   }
   location.href = '/login.html';
+};
+getSettingElement('changeEmailButton').onclick = () => {
+  getSettingElement('emailSetting').value = window.localEmail || '';
+  getSettingElement('emailPassword').value = '';
+  getSettingElement('emailFeedback').hidden = true;
+  getSettingElement('emailEditor').hidden = false;
+  getSettingElement('emailSetting').focus();
+};
+getSettingElement('cancelEmail').onclick = () => { getSettingElement('emailEditor').hidden = true; };
+getSettingElement('emailForm').onsubmit = async event => {
+  event.preventDefault();
+  const save = getSettingElement('saveEmail');
+  getSettingElement('emailFeedback').hidden = true;
+  save.disabled = true;
+  try {
+    let response;
+    try {
+      response = await fetch('/api/account/email', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ email:getSettingElement('emailSetting').value, password:getSettingElement('emailPassword').value }) });
+    } catch (error) {
+      showEmailError('Could not reach the server. Try again when you are back online.');
+      return;
+    }
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      showEmailError(result.error || 'Could not save the email. Try again.');
+      return;
+    }
+    window.localEmail = result.user.email;
+    showAccount();
+  } finally {
+    save.disabled = false;
+  }
 };
 getSettingElement('settingsForm').onsubmit = event => {
   event.preventDefault();

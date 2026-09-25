@@ -42,7 +42,8 @@ WORKOUT_TEST_CHROME="/opt/chrome/chrome" python tests/run.py
 
 | Suite | Checks | Covers |
 | --- | --- | --- |
-| `api` | 145 | The HTTP API without a browser: the schema created, versioned and upgraded at startup (and a newer database refused), reads and writes while the database is busy, validation of workouts, templates, settings, training programs and active sessions, malformed and oversized request bodies, many copies of one upload arriving at once, upgrading a database from before `client_id`, `/frontend/` redirects, closed registration, sign-in throttling, password hash strength and upgrades, `Secure` cookies, expired sessions, security headers and content types, and paths that could redirect off-site |
+| `api` | 199 | The HTTP API without a browser: the schema created, versioned and upgraded at startup (and a newer database refused), reads and writes while the database is busy, validation of workouts, templates, settings, training programs and active sessions, malformed and oversized request bodies, many copies of one upload arriving at once, upgrading a database from before `client_id`, `/frontend/` redirects, closed registration, sign-in throttling, password hash strength and upgrades, `Secure` cookies, expired sessions, security headers and content types, paths that could redirect off-site, accounts' emails (registering, signing in with either name, changing it with the password), and password reset codes (the email that carries one, wrong, used, expired and replaced codes, the limits on tries and on emails, and replies that never say whether an address has an account) |
+| `accounts` | 39 | The sign-in page with emails: creating an account, signing in with an email, the whole forgot-password flow with codes read from the emails, each step on a phone, and adding an email in Settings |
 | `account_state` | 21 | Settings and templates changed offline surviving a reload and reaching the server, a change from another device still arriving, a second account on the same browser, and adopting the copy kept by the previous version |
 | `workout_flow` | 22 | `?start=` links, replacing an in-progress workout, editing and repeating workouts that have logged sets, progress-chart series |
 | `program` | 137 | The training programs. Wendler 5/3/1: setting it up (one-rep maxes estimated from history, or training maxes), the planned cycle and its weights, planned sets filled in during a workout, the + set and its one-rep-max estimate, skipping days, a missed + set resetting a training max, rolling over to the next cycle, editing and ending the program, finishing a program workout offline, and the phone layout. Reddit PPL: its six days and rep ranges, weight added after a good session, three misses in a row dropping a lift 10%, the go-heavier hint for accessories, the next week, editing, switching programs, and a program saved by the previous version still loading |
@@ -71,6 +72,10 @@ on. Suites that never touch the network conditions can turn it off (as
 A suite that only talks to the API can set `BROWSER = False`; it then starts
 without Chrome, and `t.cdp` is `None`.
 
+`MAIL = True` gives the server a mail server to send password reset codes to:
+`t.mail`, a stand-in from `tests/harness/mail.py` that keeps every message.
+Without it the server has no mail settings, even if your shell sets `SMTP_*`.
+
 To add a suite, create `tests/suites/<name>.py` and append `<name>` to `NAMES` in
 `tests/suites/__init__.py`; the runner only knows the suites listed there.
 
@@ -98,6 +103,7 @@ Useful pieces of `t`:
 - `t.api(method, path, body, token)` — call the API directly, around the browser
 - `t.request(method, path, body_bytes, headers, token)` — send exact bytes and headers, for requests the app would never make; returns `(status, headers, body)`
 - `t.start_server(db_name, env)` — a second server with its own database and environment variables, stopped with the suite
+- `t.mail.wait(address, count)` — with `MAIL = True`, the newest email to `address` once it has had `count`; `t.mail.code(message)` reads the 6-digit code out of it
 - `t.wait_for(predicate)` — poll a Python condition while the page keeps running
 
 ### Two things worth knowing

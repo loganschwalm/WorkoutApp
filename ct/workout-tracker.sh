@@ -164,9 +164,20 @@ if [[ ! -f /etc/workout-tracker/workout-tracker.env ]]; then
 # Failed sign-ins allowed per username and address before a wait, and how long failures are remembered (seconds):
 #LOGIN_ATTEMPTS=5
 #LOGIN_WINDOW=900
+#
+# Mail server for "Forgot password?" emails. Without SMTP_HOST the sign-in page does not offer a reset.
+# SMTP_SECURITY is starttls (the default, port 587), ssl (port 465) or none (port 25).
+#SMTP_HOST=smtp.gmail.com
+#SMTP_PORT=587
+#SMTP_SECURITY=starttls
+#SMTP_USERNAME=you@gmail.com
+#SMTP_PASSWORD=your-app-password
+#SMTP_FROM=Workout Tracker <you@gmail.com>
 ENVFILE
-  chmod 0644 /etc/workout-tracker/workout-tracker.env
 fi
+# It can hold the mail server's password, so only root reads it; systemd does so before starting the service as
+# $SERVICE_USER. Applied on every run, so installs from before it could hold a password are tightened too.
+chmod 0600 /etc/workout-tracker/workout-tracker.env
 
 step "writing systemd unit"
 cat >/etc/systemd/system/workout-tracker.service <<UNIT

@@ -6,10 +6,11 @@ import tempfile
 import time
 
 from .browser import Chrome
+from .mail import MailSink
 from .server import AppServer
 
 DAY_MS = 86400000
-ACCOUNT = {'username': 'tester', 'password': 'password123'}
+ACCOUNT = {'username': 'tester', 'email': 'tester@example.test', 'password': 'password123'}
 
 # Element lookups the suites share.
 ACTIVE = "!document.getElementById('activeWorkout').hidden"
@@ -42,10 +43,11 @@ class AppTest:
     """Everything a suite body needs, wired together and torn down afterwards.
 
     Each suite gets a fresh server, an empty database, a clean browser profile and
-    the same three seeded workouts, so suites cannot affect one another.
+    the same three seeded workouts, so suites cannot affect one another. With `mail`,
+    the server emails its password reset codes to `self.mail`, a MailSink.
     """
 
-    def __init__(self, frontend_dir=None, intercept=False, browser=True):
+    def __init__(self, frontend_dir=None, intercept=False, browser=True, mail=False):
         self.workdir = tempfile.mkdtemp(prefix='workout-tests-')
         self.frontend_dir = frontend_dir
         self.checker = Checker()
@@ -53,9 +55,12 @@ class AppTest:
         self.server = None
         self.browser = None
         self.cdp = None
+        self.mail = None
         self.extra_servers = []
         try:
-            self.server = AppServer(os.path.join(self.workdir, 'test.db'), frontend_dir)
+            if mail:
+                self.mail = MailSink()
+            self.server = AppServer(os.path.join(self.workdir, 'test.db'), frontend_dir, self.mail.env if mail else None)
             self.base_url = self.server.base_url
             self.port = self.server.port
             self.api = self.server.api
@@ -190,7 +195,7 @@ class AppTest:
     def close(self):
         if self.cdp:
             self.cdp.close()
-        for part in (self.browser, self.server, *self.extra_servers):
+        for part in (self.browser, self.server, self.mail, *self.extra_servers):
             if part:
                 part.stop()
         time.sleep(0.5)

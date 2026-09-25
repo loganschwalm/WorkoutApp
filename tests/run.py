@@ -32,7 +32,7 @@ def run_suite(name, frontend=None):
     module = importlib.import_module(f'tests.suites.{name}')
     print(f'=== {name}')
     test = AppTest(frontend_dir=frontend, intercept=getattr(module, 'INTERCEPT', True),
-                   browser=getattr(module, 'BROWSER', True))
+                   browser=getattr(module, 'BROWSER', True), mail=getattr(module, 'MAIL', False))
     try:
         module.run(test)
     finally:

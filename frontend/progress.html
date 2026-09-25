@@ -41,9 +41,12 @@
         <label for="soundVolumeSetting">Volume</label><input id="soundVolumeSetting" type="range" min="0" max="100" step="5" />
         <label class="setting-check" id="vibrateSettingRow"><input id="vibrateSetting" type="checkbox" /> Vibrate when rest ends</label>
         <button class="secondary test-alert" id="testAlertButton" type="button">Test alert</button>
-        <div class="account-row"><span class="subtitle" id="accountName"></span><button class="secondary" id="signOutButton" type="button">Sign out</button></div>
+        <div class="account-row"><div class="account-details"><span class="subtitle" id="accountName"></span><span class="subtitle" id="accountEmail"></span><button class="link-button" id="changeEmailButton" type="button">Change email</button></div><button class="secondary" id="signOutButton" type="button">Sign out</button></div>
+        <div class="email-editor" id="emailEditor" hidden><label for="emailSetting">Email</label><input id="emailSetting" type="email" form="emailForm" autocomplete="email" maxlength="254" required /><label for="emailPassword">Current password</label><input id="emailPassword" type="password" form="emailForm" autocomplete="current-password" required /><p class="auth-feedback" id="emailFeedback" role="alert" hidden></p><div class="email-actions"><button class="secondary" id="cancelEmail" type="button">Cancel</button><button class="primary" id="saveEmail" type="submit" form="emailForm">Save email</button></div></div>
         <div class="settings-actions"><button class="secondary" id="cancelSettings" type="button">Cancel</button><button class="primary" type="submit">Save settings</button></div>
       </form>
+      <!-- The email fields sit inside the settings form but belong to this one (form="emailForm"), since forms cannot nest. -->
+      <form id="emailForm" hidden></form>
     </section>
   </div>
   <script src="common.js"></script>

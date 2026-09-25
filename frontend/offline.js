@@ -55,6 +55,7 @@ function reportSyncStatus(uploaded = 0) {
 window.localReady = syncFetch('/api/auth/me', {}, 4000).then(response => response.ok ? response.json() : Promise.reject(new Error('Unable to identify the user.'))).then(result => {
   localUserId = result.user ? result.user.id : null;
   window.localUsername = result.user ? result.user.username : null;
+  window.localEmail = result.user ? result.user.email : null;
   if (localUserId !== null) writeLocal(lastUserStorageKey, localUserId);
 }).catch(() => {});
 

@@ -4,11 +4,15 @@ import http.server
 import json
 import math
 import os
+import re
 import secrets
+import smtplib
 import sqlite3
+import ssl
 import threading
 import time
 import traceback
+from email.message import EmailMessage
 from http import HTTPStatus
 from http.cookies import SimpleCookie
 from urllib.parse import quote, unquote, urlparse
@@ -35,6 +39,20 @@ SECURE_COOKIES = env_flag('SECURE_COOKIES', False)
 # is LOGIN_WINDOW seconds old. Behind a reverse proxy every request shares the proxy's address.
 LOGIN_ATTEMPTS = int(os.environ.get('LOGIN_ATTEMPTS', '5'))
 LOGIN_WINDOW = int(os.environ.get('LOGIN_WINDOW', str(15 * 60)))
+
+# Password reset codes are emailed through this SMTP server. With SMTP_HOST unset there is no reset by email, and the
+# sign-in page does not offer it.
+SMTP_HOST = os.environ.get('SMTP_HOST', '').strip()
+SMTP_SECURITY = os.environ.get('SMTP_SECURITY', '').strip().lower() or 'starttls'
+SMTP_PORT = int(os.environ.get('SMTP_PORT', '').strip() or {'ssl': 465, 'none': 25}.get(SMTP_SECURITY, 587))
+SMTP_USERNAME = os.environ.get('SMTP_USERNAME', '')
+SMTP_PASSWORD = os.environ.get('SMTP_PASSWORD', '')
+SMTP_FROM = os.environ.get('SMTP_FROM', '').strip() or SMTP_USERNAME
+SMTP_TIMEOUT = 20
+# A code works for this long and this many tries, and each address is sent at most RESET_EMAILS codes an hour.
+RESET_CODE_TTL = 15 * 60
+RESET_CODE_ATTEMPTS = 5
+RESET_EMAILS = 5
 
 # OWASP's recommendation for PBKDF2-HMAC-SHA256. Hashes record their own count, so raising it later only
 # needs this number changed: each account is rehashed the next time it signs in.
@@ -132,7 +150,22 @@ def migration_3_programs(database):
     database.execute("ALTER TABLE user_state ADD COLUMN program_json TEXT NOT NULL DEFAULT 'null'")
 
 
-MIGRATIONS = [migration_1_tables, migration_2_client_ids, migration_3_programs]
+def migration_4_emails(database):
+    # Accounts gain an email, to sign in with and to receive password reset codes. Existing accounts have none until
+    # they add one in Settings. Stored lowercased, so the unique index also refuses the same address in another case.
+    database.execute('ALTER TABLE users ADD COLUMN email TEXT')
+    database.execute('CREATE UNIQUE INDEX users_email ON users(email)')
+    # One code per account at a time: asking again replaces it.
+    database.execute('''
+        CREATE TABLE password_resets (
+            user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+            code_hash TEXT NOT NULL,
+            expires_at INTEGER NOT NULL,
+            attempts INTEGER NOT NULL DEFAULT 0
+        )''')
+
+
+MIGRATIONS = [migration_1_tables, migration_2_client_ids, migration_3_programs, migration_4_emails]
 
 
 def init_database():
@@ -279,6 +312,14 @@ def validate_state(data):
         validate_program(data['program'])
 
 
+def email_address(value):
+    """The address lowercased, if it looks like one. Only its shape is checked; nothing is sent to confirm it."""
+    email = text(value, 'email', 254).strip().lower()
+    if not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email) or not email.isprintable():
+        raise BadRequest('Enter a valid email address.')
+    return email
+
+
 def workout_id(path):
     """The id in /api/workouts/<id>, or None if it is not a plain number (answered as not found)."""
     tail = path[len('/api/workouts/'):]
@@ -324,41 +365,99 @@ def needs_rehash(stored):
 DUMMY_HASH = password_hash(secrets.token_hex(16))
 
 
-class LoginThrottle:
-    """Failed sign-ins per (client address, username), forgotten LOGIN_WINDOW seconds after they happen."""
+class Throttle:
+    """Recent events per key (failed sign-ins, reset emails sent), forgotten `window` seconds after they happen."""
 
     def __init__(self, attempts, window):
         self.attempts = attempts
         self.window = window
-        self.failures = {}
+        self.events = {}
         self.lock = threading.Lock()
 
     def retry_after(self, key):
         """Seconds until this key may try again; 0 if it may try now."""
         now = time.monotonic()
         with self.lock:
-            recent = [moment for moment in self.failures.get(key, []) if now - moment < self.window]
+            recent = [moment for moment in self.events.get(key, []) if now - moment < self.window]
             if recent:
-                self.failures[key] = recent
+                self.events[key] = recent
             else:
-                self.failures.pop(key, None)
+                self.events.pop(key, None)
             if len(recent) < self.attempts:
                 return 0
             return max(1, int(self.window - (now - recent[0])) + 1)
 
-    def failed(self, key):
+    def record(self, key):
         now = time.monotonic()
         with self.lock:
-            if len(self.failures) > 10000:  # someone cycling through usernames; drop what has expired
-                self.failures = {k: v for k, v in self.failures.items() if now - v[-1] < self.window}
-            self.failures.setdefault(key, []).append(now)
+            if len(self.events) > 10000:  # someone cycling through usernames; drop what has expired
+                self.events = {k: v for k, v in self.events.items() if now - v[-1] < self.window}
+            self.events.setdefault(key, []).append(now)
 
-    def succeeded(self, key):
+    def clear(self, key):
         with self.lock:
-            self.failures.pop(key, None)
+            self.events.pop(key, None)
 
 
-login_throttle = LoginThrottle(LOGIN_ATTEMPTS, LOGIN_WINDOW)
+# Failed sign-ins per (client address, username).
+login_throttle = Throttle(LOGIN_ATTEMPTS, LOGIN_WINDOW)
+# Reset codes asked for per email address, whether or not an account uses it, so the limit never says which do.
+reset_throttle = Throttle(RESET_EMAILS, 60 * 60)
+
+
+def find_account(database, login):
+    """The account signing in as `login`: an email in any case, or else a username exactly as registered."""
+    columns = 'id, username, email, password_hash'
+    if '@' in login:
+        row = database.execute(f'SELECT {columns} FROM users WHERE email = ?', (login.lower(),)).fetchone()
+        if row:
+            return row
+    # Usernames from before accounts had emails can contain @, so an address with no account behind it may be one.
+    return database.execute(f'SELECT {columns} FROM users WHERE username = ?', (login,)).fetchone()
+
+
+def public_user(row):
+    """What the pages are told about an account."""
+    return {'id': row['id'], 'username': row['username'], 'email': row['email']}
+
+
+def reset_code_hash(code):
+    return hashlib.sha256(code.encode()).hexdigest()
+
+
+def check_mail_settings():
+    if SMTP_SECURITY not in ('starttls', 'ssl', 'none'):
+        raise SystemExit(f'SMTP_SECURITY must be starttls, ssl or none, not {SMTP_SECURITY!r}.')
+    if SMTP_HOST and '@' not in SMTP_FROM:
+        raise SystemExit('SMTP_HOST is set, so reset emails need a sender: set SMTP_FROM to the address they come from.')
+
+
+def email_reset_code(email, username, code):
+    """Send a password reset code. Runs on its own thread, so a slow mail server never holds up the reply."""
+    message = EmailMessage()
+    message['Subject'] = 'Your Workout Tracker password reset code'
+    message['From'] = SMTP_FROM
+    message['To'] = email
+    message.set_content(
+        f'Someone asked to reset the password of the Workout Tracker account "{username}".\n\n'
+        f'Your code is {code}\n\n'
+        f'Enter it on the sign-in page within {RESET_CODE_TTL // 60} minutes. It works once.\n\n'
+        'If you did not ask for this, ignore this email. Your password has not changed.\n')
+    try:
+        if SMTP_SECURITY == 'ssl':
+            client = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=SMTP_TIMEOUT, context=ssl.create_default_context())
+        else:
+            client = smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=SMTP_TIMEOUT)
+        with client:
+            if SMTP_SECURITY == 'starttls':
+                client.starttls(context=ssl.create_default_context())
+            if SMTP_USERNAME:
+                client.login(SMTP_USERNAME, SMTP_PASSWORD)
+            client.send_message(message)
+    except OSError as error:  # includes every smtplib error
+        print(f'Could not email a password reset code to {email} through {SMTP_HOST}:{SMTP_PORT}: {error!r}', flush=True)
+        return
+    print(f'Emailed a password reset code to {email}.', flush=True)
 
 
 class AppHandler(http.server.SimpleHTTPRequestHandler):
@@ -470,7 +569,7 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
         if not token:
             return None
         with connection() as database:
-            row = database.execute('SELECT users.id, users.username FROM sessions JOIN users ON users.id = sessions.user_id WHERE sessions.token = ? AND sessions.expires_at > ?', (token.value, int(time.time()))).fetchone()
+            row = database.execute('SELECT users.id, users.username, users.email FROM sessions JOIN users ON users.id = sessions.user_id WHERE sessions.token = ? AND sessions.expires_at > ?', (token.value, int(time.time()))).fetchone()
         return dict(row) if row else None
 
     def require_user(self):
@@ -526,7 +625,7 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
     def api_get(self, path):
         if path == '/api/auth/me':
             user = self.session_user()
-            self.send_json(HTTPStatus.OK, {'user': user, 'registrationOpen': ALLOW_REGISTRATION})
+            self.send_json(HTTPStatus.OK, {'user': user, 'registrationOpen': ALLOW_REGISTRATION, 'passwordReset': bool(SMTP_HOST)})
             return
         user = self.require_user()
         if not user:
@@ -550,54 +649,163 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             else:
                 self.send_json(HTTPStatus.NOT_FOUND, {'error': 'Endpoint not found.'})
 
-    def authenticate(self, create=False):
-        if create and not ALLOW_REGISTRATION:
+    def start_session(self, database, user_id):
+        """Sign this account in: a new session, and the cookie that carries it."""
+        now = int(time.time())
+        token = secrets.token_urlsafe(32)
+        database.execute('DELETE FROM sessions WHERE expires_at <= ?', (now,))
+        database.execute('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)', (token, user_id, now + SESSION_TTL))
+        return self.session_cookie(token, SESSION_TTL)
+
+    def send_wait(self, wait, message):
+        self.send_json(HTTPStatus.TOO_MANY_REQUESTS, {'error': f'{message} Try again in {(wait + 59) // 60} minute(s).'},
+                       headers={'Retry-After': str(wait)})
+
+    def register(self):
+        if not ALLOW_REGISTRATION:
             self.send_json(HTTPStatus.FORBIDDEN, {'error': 'New accounts are turned off on this server.'})
             return
         data = self.read_json()
+        email = email_address(data.get('email'))
         username = str(data.get('username', '')).strip()
         password = str(data.get('password', ''))
-        if len(username) < 3 or len(password) < 8:
-            self.send_json(HTTPStatus.BAD_REQUEST, {'error': 'Username must be 3+ characters and password must be 8+ characters.'})
-            return
-        throttle_key = (self.client_address[0], username.lower())
-        if not create:
+        if len(username) < 3:
+            raise BadRequest('Username must be 3+ characters.')
+        if '@' in username:
+            # Signing in takes an email or a username in one field, and an @ is how the two are told apart.
+            raise BadRequest('Username cannot contain @. Your email goes in its own field.')
+        if len(password) < 8:
+            raise BadRequest('Password must be 8+ characters.')
+        stored_hash = password_hash(password)
+        with connection() as database:
+            if database.execute('SELECT 1 FROM users WHERE username = ?', (username,)).fetchone():
+                raise BadRequest('That username is already registered.', HTTPStatus.CONFLICT)
+            if database.execute('SELECT 1 FROM users WHERE email = ?', (email,)).fetchone():
+                raise BadRequest('That email is already registered.', HTTPStatus.CONFLICT)
+            user_id = database.execute('INSERT INTO users (username, email, password_hash, created_at) VALUES (?, ?, ?, ?)',
+                                       (username, email, stored_hash, int(time.time() * 1000))).lastrowid
+            cookie = self.start_session(database, user_id)
+        self.send_json(HTTPStatus.OK, {'user': {'id': user_id, 'username': username, 'email': email}}, [cookie])
+
+    def sign_in(self):
+        data = self.read_json()
+        # An email or a username. Pages from before accounts had emails send it as `username`.
+        login = str(data.get('login', data.get('username', ''))).strip()
+        password = str(data.get('password', ''))
+        if len(login) < 3 or len(password) < 8:
+            raise BadRequest('Enter your email or username, and a password of 8+ characters.')
+        with connection() as database:
+            row = find_account(database, login)
+            # Keyed by the account rather than what was typed, so its email and its username share one limit.
+            throttle_key = (self.client_address[0], (row['username'] if row else login).lower())
             wait = login_throttle.retry_after(throttle_key)
             if wait:
                 # Refused before the password is even checked, so guessing cannot continue during the wait.
-                self.send_json(HTTPStatus.TOO_MANY_REQUESTS, {'error': f'Too many failed sign-ins. Try again in {(wait + 59) // 60} minute(s).'},
-                               headers={'Retry-After': str(wait)})
+                self.send_wait(wait, 'Too many failed sign-ins.')
                 return
+            matches = password_matches(password, row['password_hash'] if row else DUMMY_HASH)
+            if not row or not matches:
+                login_throttle.record(throttle_key)
+                self.send_json(HTTPStatus.UNAUTHORIZED, {'error': 'Wrong email, username or password.'})
+                return
+            login_throttle.clear(throttle_key)
+            if needs_rehash(row['password_hash']):
+                # The password is only known now, so this is the moment to move an older hash to the current strength.
+                database.execute('UPDATE users SET password_hash = ? WHERE id = ?', (password_hash(password), row['id']))
+            cookie = self.start_session(database, row['id'])
+        self.send_json(HTTPStatus.OK, {'user': public_user(row)}, [cookie])
+
+    def send_reset_code(self):
+        if not SMTP_HOST:
+            raise BadRequest('Password reset by email is not set up on this server.', HTTPStatus.NOT_FOUND)
+        email = email_address(self.read_json().get('email'))
+        wait = reset_throttle.retry_after(email)
+        if wait:
+            self.send_wait(wait, 'Too many codes asked for.')
+            return
+        reset_throttle.record(email)
+        code = f'{secrets.randbelow(10 ** 6):06d}'
         with connection() as database:
-            row = database.execute('SELECT id, username, password_hash FROM users WHERE username = ?', (username,)).fetchone()
-            if create:
-                if row:
-                    self.send_json(HTTPStatus.CONFLICT, {'error': 'That username is already registered.'})
-                    return
-                database.execute('INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)', (username, password_hash(password), int(time.time() * 1000)))
-                row = database.execute('SELECT id, username FROM users WHERE username = ?', (username,)).fetchone()
-            else:
-                matches = password_matches(password, row['password_hash'] if row else DUMMY_HASH)
-                if not row or not matches:
-                    login_throttle.failed(throttle_key)
-                    self.send_json(HTTPStatus.UNAUTHORIZED, {'error': 'Invalid username or password.'})
-                    return
-                login_throttle.succeeded(throttle_key)
-                if needs_rehash(row['password_hash']):
-                    # The password is only known now, so this is the moment to move an older hash to the current strength.
-                    database.execute('UPDATE users SET password_hash = ? WHERE id = ?', (password_hash(password), row['id']))
-            now = int(time.time())
-            token = secrets.token_urlsafe(32)
-            database.execute('DELETE FROM sessions WHERE expires_at <= ?', (now,))
-            database.execute('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)', (token, row['id'], now + SESSION_TTL))
-        self.send_json(HTTPStatus.OK, {'user': {'id': row['id'], 'username': row['username']}}, [self.session_cookie(token, SESSION_TTL)])
+            user = database.execute('SELECT id, username FROM users WHERE email = ?', (email,)).fetchone()
+            if user:
+                now = int(time.time())
+                database.execute('DELETE FROM password_resets WHERE expires_at <= ?', (now,))
+                # Asking again replaces the code, and its tries start over.
+                database.execute('INSERT INTO password_resets (user_id, code_hash, expires_at, attempts) VALUES (?, ?, ?, 0) '
+                                 'ON CONFLICT(user_id) DO UPDATE SET code_hash=excluded.code_hash, expires_at=excluded.expires_at, attempts=0',
+                                 (user['id'], reset_code_hash(code), now + RESET_CODE_TTL))
+        if user:
+            # Sent off this thread, so the reply never waits on the mail server; a slow send would otherwise give away
+            # that the address has an account, which the reply itself never says.
+            threading.Thread(target=email_reset_code, args=(email, user['username'], code), daemon=True).start()
+        self.send_json(HTTPStatus.OK, {'ok': True})
+
+    def reset_password(self):
+        data = self.read_json()
+        email = email_address(data.get('email'))
+        code = ''.join(text(data.get('code'), 'code', 100).split())
+        password = str(data.get('password', ''))
+        if not re.fullmatch('[0-9]{6}', code):
+            raise BadRequest('Enter the 6-digit code from the email.')
+        if len(password) < 8:
+            raise BadRequest('Password must be 8+ characters.')
+        stored_hash = password_hash(password)
+        with connection() as database:
+            user = database.execute('SELECT id, username, email FROM users WHERE email = ?', (email,)).fetchone()
+            reset = None
+            # The try is counted before the code is compared, and in the same write, so guesses sent at once cannot
+            # share one. An address with no account, no code, or a used-up code all get the same answer.
+            if user and database.execute('UPDATE password_resets SET attempts = attempts + 1 WHERE user_id = ? AND attempts < ? AND expires_at > ?',
+                                         (user['id'], RESET_CODE_ATTEMPTS, int(time.time()))).rowcount:
+                reset = database.execute('SELECT code_hash FROM password_resets WHERE user_id = ?', (user['id'],)).fetchone()
+            accepted = reset is not None and secrets.compare_digest(reset_code_hash(code), reset['code_hash'])
+            if accepted:
+                database.execute('UPDATE users SET password_hash = ? WHERE id = ?', (stored_hash, user['id']))
+                database.execute('DELETE FROM password_resets WHERE user_id = ?', (user['id'],))
+                # Whoever knew the old password is signed out everywhere.
+                database.execute('DELETE FROM sessions WHERE user_id = ?', (user['id'],))
+                cookie = self.start_session(database, user['id'])
+        # Raised only now, so the counted try is committed rather than rolled back with the refusal.
+        if not accepted:
+            raise BadRequest('That code is wrong or has expired. Check the newest email, or send a new code.')
+        login_throttle.clear((self.client_address[0], user['username'].lower()))
+        self.send_json(HTTPStatus.OK, {'user': public_user(user)}, [cookie])
+
+    def change_email(self, user):
+        data = self.read_json()
+        email = email_address(data.get('email'))
+        password = str(data.get('password', ''))
+        # A signed-in page may not be its owner's, so the password is asked again, and wrong ones count as failed sign-ins.
+        throttle_key = (self.client_address[0], user['username'].lower())
+        wait = login_throttle.retry_after(throttle_key)
+        if wait:
+            self.send_wait(wait, 'Too many wrong passwords.')
+            return
+        with connection() as database:
+            stored = database.execute('SELECT password_hash FROM users WHERE id = ?', (user['id'],)).fetchone()['password_hash']
+            if not password_matches(password, stored):
+                login_throttle.record(throttle_key)
+                # 403, not 401: the session is fine, and a 401 would tell the page it had expired.
+                raise BadRequest('That password is not right.', HTTPStatus.FORBIDDEN)
+            if database.execute('SELECT 1 FROM users WHERE email = ? AND id != ?', (email, user['id'])).fetchone():
+                raise BadRequest('Another account already uses that email.', HTTPStatus.CONFLICT)
+            database.execute('UPDATE users SET email = ? WHERE id = ?', (email, user['id']))
+            # A code already sent went to the old address.
+            database.execute('DELETE FROM password_resets WHERE user_id = ?', (user['id'],))
+        self.send_json(HTTPStatus.OK, {'user': {**user, 'email': email}})
 
     def api_post(self, path):
         if path == '/api/auth/register':
-            self.authenticate(create=True)
+            self.register()
             return
         if path == '/api/auth/login':
-            self.authenticate()
+            self.sign_in()
+            return
+        if path == '/api/auth/forgot-password':
+            self.send_reset_code()
+            return
+        if path == '/api/auth/reset-password':
+            self.reset_password()
             return
         if path == '/api/auth/logout':
             cookie = SimpleCookie(self.headers.get('Cookie', ''))
@@ -631,6 +839,8 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             with connection() as database:
                 database.execute('INSERT INTO active_sessions (user_id, payload, updated_at) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET payload=excluded.payload, updated_at=excluded.updated_at', (user['id'], json.dumps(session), int(time.time() * 1000)))
             self.send_json(HTTPStatus.OK, {'ok': True})
+        elif path == '/api/account/email':
+            self.change_email(user)
         else:
             self.send_json(HTTPStatus.NOT_FOUND, {'error': 'Endpoint not found.'})
 
@@ -686,8 +896,11 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
 
 
 if __name__ == '__main__':
+    check_mail_settings()
     init_database()
     port = int(os.environ.get('PORT', '6769'))
     server = http.server.ThreadingHTTPServer(('0.0.0.0', port), AppHandler)
     print(f'Workout Tracker listening on http://0.0.0.0:{port}')
+    print(f'Password reset codes are emailed through {SMTP_HOST}:{SMTP_PORT} ({SMTP_SECURITY}).' if SMTP_HOST else
+          'Password reset by email is off: set SMTP_HOST to turn it on.')
     server.serve_forever()

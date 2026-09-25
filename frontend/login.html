@@ -18,9 +18,32 @@
     <section class="card auth-card">
       <h1>Workout Tracker</h1>
       <p class="subtitle">Private, self-hosted training data.</p>
-      <div class="auth-tabs"><button class="secondary active" id="loginTab" type="button">Sign in</button><button class="secondary" id="registerTab" type="button">Create account</button></div>
-      <form id="authForm"><label for="username">Username</label><input id="username" autocomplete="username" required minlength="3" /><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required minlength="8" /><button class="primary" id="authSubmit" type="submit">Sign in</button></form>
+      <div class="auth-tabs" id="authTabs"><button class="secondary active" id="loginTab" type="button">Sign in</button><button class="secondary" id="registerTab" type="button">Create account</button></div>
+      <form id="authForm">
+        <label for="email" id="emailLabel" hidden>Email</label><input id="email" type="email" autocomplete="email" maxlength="254" required hidden disabled />
+        <label for="username" id="usernameLabel">Email or username</label><input id="username" autocomplete="username" autocapitalize="none" spellcheck="false" required minlength="3" />
+        <label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required minlength="8" />
+        <button class="primary" id="authSubmit" type="submit">Sign in</button>
+        <button class="link-button" id="forgotButton" type="button" hidden>Forgot password?</button>
+      </form>
+      <form id="forgotForm" hidden>
+        <h2>Reset your password</h2>
+        <p class="subtitle">Enter the email on your account and we&rsquo;ll send it a code.</p>
+        <label for="resetEmail">Email</label><input id="resetEmail" type="email" autocomplete="email" maxlength="254" required />
+        <button class="primary" id="sendCodeButton" type="submit">Send code</button>
+        <button class="link-button" type="button" data-back>Back to sign in</button>
+      </form>
+      <form id="resetForm" hidden>
+        <h2>Enter your code</h2>
+        <p class="subtitle" id="resetIntro"></p>
+        <label for="resetCode">6-digit code</label><input id="resetCode" inputmode="numeric" autocomplete="one-time-code" required />
+        <label for="newPassword">New password</label><input id="newPassword" type="password" autocomplete="new-password" required minlength="8" />
+        <button class="primary" id="resetSubmit" type="submit">Reset password and sign in</button>
+        <button class="link-button" id="resendCode" type="button">Send a new code</button>
+        <button class="link-button" type="button" data-back>Back to sign in</button>
+      </form>
       <p class="auth-feedback" id="authFeedback" role="alert" hidden></p>
+      <p class="auth-notice" id="authNotice" role="status" hidden></p>
     </section>
   </main>
   <script src="login.js"></script>

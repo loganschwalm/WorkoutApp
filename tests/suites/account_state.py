@@ -85,7 +85,7 @@ def run(t):
 
     # ------------------------------------------------------------------ S4 another account on this browser
     print('S4  another account on the same browser never sees or inherits these')
-    _, cookie = api('POST', '/api/auth/register', {'username': 'second', 'password': 'password123'})
+    _, cookie = api('POST', '/api/auth/register', {'username': 'second', 'email': 'second@example.test', 'password': 'password123'})
     second = cookie.split('session=')[1].split(';')[0]
     cdp.block_paths = ['/api/state']  # the new account's own copy cannot load
     ui_login('second')
