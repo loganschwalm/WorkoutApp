@@ -3,6 +3,8 @@
 import json
 import socket
 
+from ..harness import PLAIN_HTTP_HOST
+
 # The service worker must see the real network. Fetch interception would sit in front of it.
 INTERCEPT = False
 
@@ -136,6 +138,22 @@ def run(t):
         cdp.goto(path)
         cdp.pause(0.3)
 
+    def offer_install():
+        """Send the page an install offer as Chrome would; True if the page held the browser's own bar back."""
+        return cdp.ev("""(() => {
+            const event = new Event('beforeinstallprompt', { cancelable: true });
+            event.prompt = () => { window.__prompted = true; };
+            event.userChoice = Promise.resolve({ outcome: 'accepted' });
+            window.dispatchEvent(event);
+            return event.defaultPrevented;
+        })()""")
+
+    # This desktop Chrome makes its own install offer as soon as a page loads, whatever device it pretends to be; a
+    # phone's browser offers later, and Safari never. Its offers are held back so the checks decide when one arrives.
+    held_back = cdp.send('Page.addScriptToEvaluateOnNewDocument', source="""
+        window.addEventListener('beforeinstallprompt', event => { if (event.isTrusted) event.stopImmediatePropagation(); }, true);
+    """)['result']['identifier']
+
     cdp.ev(f"localStorage.removeItem('{key}')")
     as_device(desktop)
     check('a desktop browser gets no banner', cdp.ev(shown) is False)
@@ -146,6 +164,9 @@ def run(t):
     text = cdp.ev(hint)
     check('it says Share, then Add to Home Screen', 'Share' in text and 'Add to Home Screen' in text, text)
     check('with no Install button, which Safari has nothing behind', cdp.ev(install_visible) is False)
+    offer_install()
+    check('an install offer does not replace those instructions',
+          'Add to Home Screen' in cdp.ev(hint) and cdp.ev(install_visible) is False, cdp.ev(hint))
     room = cdp.ev("""(() => {
         const banner = document.getElementById('installBanner');
         if (!banner) return null;
@@ -184,24 +205,33 @@ def run(t):
     text = cdp.ev(hint)
     check('Android is pointed at the browser menu until the browser offers to install',
           'Add to Home screen' in text and cdp.ev(install_visible) is False, text)
-    prevented = cdp.ev("""(() => {
-        const event = new Event('beforeinstallprompt', { cancelable: true });
-        event.prompt = () => { window.__prompted = true; };
-        event.userChoice = Promise.resolve({ outcome: 'accepted' });
-        window.dispatchEvent(event);
-        return event.defaultPrevented;
-    })()""")
-    check("the browser's own install bar is held back", prevented is True)
+    check("the browser's own install bar is held back", offer_install() is True)
     check('an Install button appears', cdp.ev(install_visible) is True)
     cdp.ev("document.querySelector('#installBanner button.primary')?.click()")
     check('it opens the browser install dialog', cdp.wait('window.__prompted === true'))
     check('accepting closes the banner', cdp.wait(f'!({shown})'))
     as_device(android)
     check('and it does not come back once installed', cdp.ev(shown) is False)
-
     cdp.ev(f"localStorage.removeItem('{key}')")
+
+    # A stock install: plain HTTP to a LAN address, where the page is not a secure context.
+    def as_device_over_http(user_agent):
+        cdp.send('Emulation.setUserAgentOverride', userAgent=user_agent)
+        cdp.send('Page.navigate', url=f'http://{PLAIN_HTTP_HOST}:{t.port}/login.html')
+        cdp.wait("document.readyState === 'complete' && !!document.getElementById('authForm')")
+        cdp.pause(0.3)
+
+    as_device_over_http(iphone)
+    check('over plain HTTP the page is not a secure context', cdp.ev('window.isSecureContext') is False)
+    check('an iPhone still gets the banner there, since Safari adds any site to the Home Screen',
+          cdp.ev(shown) is True and 'Add to Home Screen' in cdp.ev(hint), cdp.ev(hint))
+    as_device_over_http(android)
+    check('Android does not, since Chrome only installs a site served over HTTPS', cdp.ev(shown) is False)
+
+    cdp.send('Page.removeScriptToEvaluateOnNewDocument', identifier=held_back)
     cdp.send('Emulation.setUserAgentOverride', userAgent=desktop)
     cdp.send('Emulation.clearDeviceMetricsOverride')
+    cdp.goto('/index.html')
 
     # ------------------------------------------------------------------ S9 the real thing
     print('S9  a reload with the server gone still opens the app')

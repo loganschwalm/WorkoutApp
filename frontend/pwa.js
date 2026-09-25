@@ -2,8 +2,8 @@
 // phone shows how to install the app.
 //
 // Service workers only run in a secure context, so this does nothing over plain HTTP
-// to a LAN address. The app itself works exactly as before; only offline reloads and
-// installing to the home screen need HTTPS (or localhost).
+// to a LAN address. The app itself works exactly as before; only offline reloads, and
+// installing on Android, need HTTPS (or localhost).
 (() => {
   const THEME_COLORS = { light: '#f4f7fb', dark: '#151923' };
 
@@ -33,7 +33,9 @@
 // how to install it. Chrome and Edge on Android hand over their own install dialog, which the
 // Install button opens; until they do, and in browsers that never do, the bar points at the
 // browser menu. Safari has no such dialog, so iPhones and iPads are told where Add to Home
-// Screen is. Installing needs HTTPS, so over plain HTTP there is nothing to offer.
+// Screen is. Chrome only installs a site served over HTTPS, so over plain HTTP Android gets
+// nothing; Safari adds any site to the Home Screen and opens it full screen, so iPhones are
+// shown how even then (only offline reloads are missing).
 //
 // Closing it keeps it away for a week on this device, and installing keeps it away for good,
 // since the page cannot otherwise tell it is open in a browser tab on a phone that has the app.
@@ -50,7 +52,7 @@
     const stored = localStorage.getItem(KEY);
     snoozed = stored === 'installed' || Date.now() - Number(stored) < SNOOZE;
   } catch (error) { /* no storage: show it */ }
-  if (!window.isSecureContext || !isPhone || installed || snoozed) return;
+  if (!isPhone || (!isIOS && !window.isSecureContext) || installed || snoozed) return;
 
   const SHARE_ICON = '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15M12 2.25v10.5M12 2.25l3 3M12 2.25l-3 3"/></svg>';
   const banner = document.createElement('aside');
@@ -78,6 +80,8 @@
 
   // Taking the dialog over stops Chrome from showing its own install bar on top of this one.
   window.addEventListener('beforeinstallprompt', event => {
+    // An iPhone or iPad installs from the Share sheet whatever else offers; keep saying so.
+    if (isIOS) return;
     event.preventDefault();
     installPrompt = event;
     hint.textContent = 'Opens full screen like an app, and works offline.';

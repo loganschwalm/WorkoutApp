@@ -19,6 +19,8 @@ import urllib.request
 import websocket
 
 CHROME_ENV = 'WORKOUT_TEST_CHROME'
+# A name the browser resolves to 127.0.0.1 but, unlike 127.0.0.1 itself, does not trust like HTTPS.
+PLAIN_HTTP_HOST = 'plain-http.test'
 
 # Chrome installed for a single user (no admin rights) lives under %LOCALAPPDATA%, not Program Files.
 _LOCAL_APP_DATA = os.environ.get('LOCALAPPDATA')
@@ -91,6 +93,9 @@ class Chrome:
             '--no-default-browser-check',
             '--disable-gpu',
             f'--window-size={window}',
+            # 127.0.0.1 counts as a secure context, like HTTPS. This name reaches the same servers as plain
+            # HTTP to a LAN address does, for checks of what the app does without one.
+            f'--host-resolver-rules=MAP {PLAIN_HTTP_HOST} 127.0.0.1',
         ]
         # Chrome refuses to start as root without this, which is the normal case in
         # containers and CI. The sandbox stays on for ordinary users.

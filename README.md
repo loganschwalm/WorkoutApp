@@ -92,8 +92,9 @@ works while the page stays loaded, and a reload needs the server.
 - The status bar follows the light or dark theme you picked in Settings.
 - Reloading offline opens the app from the cache instead of failing.
 
-Installing and offline reloads both need HTTPS, or `localhost`. See
-[Offline support needs HTTPS](#offline-support-needs-https).
+Offline reloads need HTTPS, or `localhost`, and so does installing on Android. An iPhone or iPad
+can add the app to its Home Screen over plain HTTP too, and the bar says how, but the app then needs
+the server to open. See [Offline support needs HTTPS](#offline-support-needs-https).
 
 ### Workout templates
 
@@ -513,8 +514,10 @@ accounts can add one in Settings.
 Browsers only run a service worker in a *secure context*: `localhost`, or HTTPS. A stock
 install serves plain HTTP on a LAN address such as `http://192.168.1.50:6769`, and there the
 worker never registers. Nothing breaks — the app works exactly as it did before, and
-`pwa.js` gives up quietly — but reloading offline and installing to the home screen will not
-work until the app is reachable over HTTPS.
+`pwa.js` gives up quietly — but reloading offline will not work until the app is reachable
+over HTTPS, and neither will installing on Android. Safari on an iPhone or iPad adds any site to
+the Home Screen and opens it full screen, so that works over plain HTTP; it just needs the server
+to open.
 
 If you want those on your phone, put the container behind a reverse proxy that terminates
 TLS. Caddy is the least work, because it obtains and renews the certificate itself:
