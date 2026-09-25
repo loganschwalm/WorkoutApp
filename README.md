@@ -89,7 +89,7 @@ works while the page stays loaded, and a reload needs the server.
   on an iPhone or iPad, and an Install button on Android once the browser offers one. Closing it
   hides it for a week; it never shows inside the installed app.
 - The app icon, name, and theme colour come from a web app manifest.
-- The status bar follows the light or dark theme you picked in Settings.
+- The status bar follows the light or dark theme.
 - Reloading offline opens the app from the cache instead of failing.
 
 Offline reloads need HTTPS, or `localhost`, and so does installing on Android. An iPhone or iPad
@@ -198,7 +198,9 @@ The linear-progression push/pull/legs program for beginners posted to r/Fitness 
 
 The gear button opens a settings modal available on every page. Settings include:
 
-- Light or dark mode.
+- Appearance: match the device's own light or dark mode (the default, which also follows it when it changes
+  while the app is open), or always light, or always dark. Pages open in the right theme straight away, with no
+  flash of the other, and the sign-in page follows it too.
 - Default rest duration from 15 to 600 seconds.
 - Automatic rest-timer start toggle.
 - End-workout confirmation toggle.
@@ -231,7 +233,7 @@ uploads when the server is reachable again.
 
 - Desktop and mobile layouts.
 - Responsive navigation and template cards.
-- Mobile-friendly workout inputs and active workout controls.
+- Mobile-friendly workout inputs and active workout controls. Weight and rep fields bring up a phone's number pad.
 - Responsive progress chart and settings modal.
 
 ## Project structure

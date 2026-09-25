@@ -11,7 +11,8 @@ html[data-theme="dark"] body { background:linear-gradient(135deg,#252b42,var(--b
 .auth-card h1 { font-size:2rem; margin:0; }
 .auth-tabs { display:flex; gap:8px; margin:24px 0; }
 .auth-tabs button { flex:1; }
-.auth-tabs button.active { color:#fff; background:var(--accent); }
+/* Specific enough to beat the dark theme's .secondary background, which would otherwise hide which tab is chosen. */
+.auth-tabs button.secondary.active { color:#fff; background:var(--accent); }
 .auth-card form { display:grid; gap:8px; }
 .auth-card form label { margin-top:8px; }
 .auth-card form h2 { margin:24px 0 0; }
@@ -40,7 +41,7 @@ h1 { margin:0; font-size:clamp(2rem,5vw,3.25rem); letter-spacing:-.05em; }
 h2 { font-size:1.25rem; margin:0 0 20px; }
 .section-heading { display:flex; justify-content:space-between; align-items:baseline; gap:16px; }
 .section-heading-actions { display:flex; align-items:center; gap:12px; }
-.button-link { display:inline-block; border-radius:10px; padding:10px 13px; font:700 .85rem inherit; text-decoration:none; }
+.button-link { display:inline-block; border-radius:10px; padding:10px 13px; font-size:.85rem; font-weight:700; text-decoration:none; }
 .workout-name { display:flex; align-items:end; gap:12px; margin-bottom:22px; }
 .workout-field { flex:1; }
 input, select { width:100%; border:1px solid var(--line); border-radius:10px; padding:12px 13px; color:var(--ink); background:var(--card); font:inherit; outline:none; }
@@ -50,7 +51,9 @@ textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px #5b5ce21f; }
 input[aria-invalid="true"] { border-color:#c14b5a; box-shadow:0 0 0 3px #c14b5a1f; }
 .grid { display:grid; grid-template-columns:2fr 1fr 1fr auto; gap:12px; align-items:end; }
 label { display:block; color:var(--muted); font-size:.78rem; font-weight:700; margin:0 0 7px; }
-button { border:0; border-radius:10px; padding:12px 17px; cursor:pointer; font:700 .92rem inherit; transition:transform .15s,opacity .15s; }
+/* The font shorthand cannot mix "inherit" with a size and weight (the browser drops the whole declaration, leaving
+   buttons in its own default font), so the family is inherited first and the rest set after it. */
+button { border:0; border-radius:10px; padding:12px 17px; cursor:pointer; font:inherit; font-size:.92rem; font-weight:700; transition:transform .15s,opacity .15s; }
 button:hover { transform:translateY(-1px); } .primary { color:#fff; background:var(--accent); } .secondary { color:var(--accent); background:#eef0ff; }
 html[data-theme="dark"] .secondary { background:#303653; }
 .exercise-list { margin:22px 0 0; padding:0; list-style:none; }

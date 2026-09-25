@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Workout Tracker</title>
   <link rel="stylesheet" href="styles.css" />
+  <script src="theme.js"></script>
   <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="theme-color" content="#f4f7fb" />
   <link rel="icon" href="/icons/icon-192.png" />
@@ -34,8 +35,8 @@
         <div class="notes-field"><label for="workoutNotes">Workout notes</label><textarea id="workoutNotes" rows="3" placeholder="How did the session feel? Add cues, goals, or observations."></textarea></div>
         <div class="grid">
           <div class="exercise-input"><label for="exercise">Exercise</label><input id="exercise" type="text" placeholder="e.g. Bench Press" required /></div>
-          <div><label for="weight">Weight (lbs)</label><input id="weight" type="number" min="0" step="0.5" placeholder="0" /></div>
-          <div><label for="reps">Reps</label><input id="reps" type="number" min="1" step="1" placeholder="0" required /></div>
+          <div><label for="weight">Weight (lbs)</label><input id="weight" type="number" inputmode="decimal" min="0" step="0.5" placeholder="0" /></div>
+          <div><label for="reps">Reps</label><input id="reps" type="number" inputmode="numeric" min="1" step="1" placeholder="0" required /></div>
           <button class="primary" id="addBtn" type="button">+ Add</button>
         </div>
         <ul class="exercise-list" id="exerciseList"><li class="empty">Your exercises will appear here.</li></ul>
@@ -47,11 +48,11 @@
       <div class="section-heading"><div><h2 id="activeWorkoutTitle">Active workout</h2><p id="activeWorkoutProgress" class="subtitle"></p></div><button class="secondary" id="endWorkoutBtn" type="button">End workout</button></div>
       <div class="active-exercise"><h3 id="activeExerciseName"></h3><p id="activeExerciseTarget" class="subtitle"></p><p id="activeExerciseLast" class="subtitle" hidden></p><ol class="plan-sets" id="activePlan" aria-label="Planned sets" hidden></ol></div>
       <div class="notes-field"><label for="activeNotes">Workout notes</label><textarea id="activeNotes" rows="3" placeholder="Add notes while you train."></textarea></div>
-      <div class="set-entry"><div><label for="activeWeight">Weight (lbs)</label><input id="activeWeight" type="number" min="0" step="0.5" placeholder="0" /></div><div><label for="completedReps">Reps completed</label><input id="completedReps" type="number" min="1" step="1" placeholder="0" /></div><button class="primary" id="completeSetBtn" type="button">Complete set</button></div>
+      <div class="set-entry"><div><label for="activeWeight">Weight (lbs)</label><input id="activeWeight" type="number" inputmode="decimal" min="0" step="0.5" placeholder="0" /></div><div><label for="completedReps">Reps completed</label><input id="completedReps" type="number" inputmode="numeric" min="1" step="1" placeholder="0" /></div><button class="primary" id="completeSetBtn" type="button">Complete set</button></div>
       <ul class="set-list" id="completedSets"></ul>
       <p class="subtitle" id="activeSyncNotice" role="status" hidden>Can&rsquo;t reach the server. Your sets are saved on this device and will sync automatically.</p>
       <div class="rest-panel" id="restPanel" hidden><div><strong>Rest timer</strong><span id="timerDisplay">1:30</span></div><div class="rest-actions"><button class="secondary" id="restToggleBtn" type="button">Start rest</button><button class="secondary" id="restResetBtn" type="button">Reset</button></div></div>
-      <details class="add-exercise" id="addActiveExercise"><summary>Add an exercise</summary><div class="add-exercise-fields"><div><label for="activeAddName">Exercise</label><input id="activeAddName" type="text" placeholder="e.g. Dips" /></div><div><label for="activeAddReps">Target reps</label><input id="activeAddReps" type="number" min="1" step="1" placeholder="0" /></div><button class="secondary" id="activeAddBtn" type="button">Add next</button></div></details>
+      <details class="add-exercise" id="addActiveExercise"><summary>Add an exercise</summary><div class="add-exercise-fields"><div><label for="activeAddName">Exercise</label><input id="activeAddName" type="text" placeholder="e.g. Dips" /></div><div><label for="activeAddReps">Target reps</label><input id="activeAddReps" type="number" inputmode="numeric" min="1" step="1" placeholder="0" /></div><button class="secondary" id="activeAddBtn" type="button">Add next</button></div></details>
       <div class="footer-actions"><span class="subtitle">Log each set, then continue when ready.</span><div class="footer-buttons"><button class="secondary" id="prevExerciseBtn" type="button" hidden>Previous</button><button class="primary" id="nextExerciseBtn" type="button">Next exercise</button></div></div>
     </section>
 
@@ -79,8 +80,8 @@
     <section class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
       <div class="settings-heading"><h2 id="settingsTitle">Settings</h2><button class="modal-close" id="closeSettings" type="button" aria-label="Close settings">&times;</button></div>
       <form id="settingsForm">
-        <label for="themeSetting">Appearance</label><select id="themeSetting"><option value="light">Light mode</option><option value="dark">Dark mode</option></select>
-        <label for="restDurationSetting">Default rest duration (seconds)</label><input id="restDurationSetting" type="number" min="15" max="600" step="15" />
+        <label for="themeSetting">Appearance</label><select id="themeSetting"><option value="system">Match system</option><option value="light">Light mode</option><option value="dark">Dark mode</option></select>
+        <label for="restDurationSetting">Default rest duration (seconds)</label><input id="restDurationSetting" type="number" inputmode="numeric" min="15" max="600" step="15" />
         <label class="setting-check"><input id="autoRestSetting" type="checkbox" /> Start the rest timer automatically after each set</label>
         <label class="setting-check"><input id="confirmEndSetting" type="checkbox" /> Confirm before ending an active workout</label>
         <label class="setting-check"><input id="soundEnabledSetting" type="checkbox" /> Play a sound when rest ends</label>

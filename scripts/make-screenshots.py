@@ -22,7 +22,7 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from tests.harness import AppServer, Chrome  # noqa: E402
+from tests.harness import LIGHT_DEVICE, AppServer, Chrome  # noqa: E402
 
 OUT_DIR = os.path.join(ROOT, 'docs', 'screenshots')
 DAY_MS = 86400000
@@ -81,6 +81,9 @@ class Browser:
         for domain in ('Page', 'Runtime', 'Network'):
             self.cdp.send(f'{domain}.enable')
         self.cdp.send('Emulation.setScrollbarsHidden', hidden=True)
+        # The app follows the device's light or dark mode; the screenshots are light (the dark one sets it outright),
+        # whatever this machine uses.
+        self.cdp.send('Emulation.setEmulatedMedia', features=LIGHT_DEVICE)
 
     def viewport(self, size, phone=False):
         width, height = size

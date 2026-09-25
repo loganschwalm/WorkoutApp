@@ -1,6 +1,8 @@
 let legacyTheme = null;
-try { legacyTheme = localStorage.getItem('workout-tracker-theme'); } catch (error) { /* no storage: light theme */ }
-const defaultSettings = { theme:legacyTheme === 'dark' ? 'dark' : 'light', restDuration:90, autoRest:true, confirmEnd:true, soundEnabled:true, soundVolume:40, alertSound:'beep', vibrate:true };
+try { legacyTheme = localStorage.getItem('workout-tracker-theme'); } catch (error) { /* no storage: follow the device */ }
+// Appearance: 'system' follows the device's light or dark mode; 'light' and 'dark' fix it.
+const themeChoices = ['system', 'light', 'dark'];
+const defaultSettings = { theme:themeChoices.includes(legacyTheme) ? legacyTheme : 'system', restDuration:90, autoRest:true, confirmEnd:true, soundEnabled:true, soundVolume:40, alertSound:'beep', vibrate:true };
 const getSettingElement = id => document.getElementById(id);
 const canVibrate = typeof navigator.vibrate === 'function';
 const alertTones = {
@@ -94,8 +96,11 @@ function syncSoundControls() {
 }
 
 function applySettings(settings) {
-  document.documentElement.dataset.theme = settings.theme === 'dark' ? 'dark' : 'light';
-  getSettingElement('themeSetting').value = settings.theme;
+  // theme.js, in <head>, applies it and follows the device. A page from before theme.js existed (served from the
+  // cache for one load after an update) lacks it, and just gets light or dark.
+  if (window.setColorTheme) window.setColorTheme(settings.theme);
+  else document.documentElement.dataset.theme = settings.theme === 'dark' ? 'dark' : 'light';
+  getSettingElement('themeSetting').value = themeChoices.includes(settings.theme) ? settings.theme : 'system';
   getSettingElement('restDurationSetting').value = settings.restDuration;
   getSettingElement('autoRestSetting').checked = settings.autoRest;
   getSettingElement('confirmEndSetting').checked = settings.confirmEnd;

@@ -3,6 +3,8 @@
 import json
 import re
 
+from ..harness import LIGHT_DEVICE
+
 INTERCEPT = True
 
 
@@ -170,3 +172,93 @@ def run(t):
     })()""")
     check('even on a phone', narrow['labels'] >= 2 and narrow['overlaps'] == 0, narrow)
     cdp.send('Emulation.clearDeviceMetricsOverride')
+
+    # ------------------------------------------------------------------ P6 fonts, number pads and appearance
+    print('P6  buttons in the page font, number pads for numbers, and a theme that follows the device')
+    t.open_tracker()
+    look = "(e => (s => ({ family: s.fontFamily, weight: s.fontWeight }))(getComputedStyle(e)))"
+    fonts = cdp.ev(f"""({{ body: getComputedStyle(document.body).fontFamily,
+                        button: {look}(document.getElementById('createWorkoutBtn')),
+                        link: {look}(document.querySelector('a.button-link')) }})""")
+    check('buttons use the page font, in bold', fonts['button'] == {'family': fonts['body'], 'weight': '700'}, fonts)
+    check('and so do links drawn as buttons', fonts['link'] == {'family': fonts['body'], 'weight': '700'}, fonts)
+
+    # Every number field the Tracker can show: the page's own, a built workout's rows, the template editor's, and a
+    # logged set's. Each has to ask a phone for its number pad: decimal for weights (they take .5), numeric otherwise.
+    fields = """[...document.querySelectorAll('input[type=number]')].map(i => ({
+        name: i.id || i.className, pad: i.inputMode, weight: i.step === '0.5' }))"""
+    seen = {}
+    cdp.ev("document.getElementById('createWorkoutBtn').click(); document.getElementById('exercise').value = 'Curl';"
+           "document.getElementById('weight').value = '20'; document.getElementById('reps').value = '10'; document.getElementById('addBtn').click()")
+    seen.update({f['name']: f for f in cdp.ev(fields)})
+    cdp.ev("document.getElementById('createTemplateBtn').click()")
+    seen.update({f['name']: f for f in cdp.ev(fields)})
+    cdp.ev("document.getElementById('cancelTemplate').click(); document.getElementById('clearBtn').click()")
+    t.start(0)
+    t.log_set(8)
+    cdp.pause(0.3)
+    seen.update({f['name']: f for f in cdp.ev(fields)})
+    t.end_workout()
+    expected = {'weight', 'reps', 'activeWeight', 'completedReps', 'activeAddReps', 'restDurationSetting',
+                'templateReps0', 'exercise-edit', 'set-edit'}
+    check('every kind of number field was on screen', expected <= set(seen), sorted(set(seen)))
+    wrong = {name: field['pad'] for name, field in seen.items() if field['pad'] != ('decimal' if field['weight'] else 'numeric')}
+    check('each asks for a number pad, with a decimal point for weights', not wrong, wrong)
+
+    def device(scheme):
+        cdp.send('Emulation.setEmulatedMedia', features=[{'name': 'prefers-color-scheme', 'value': scheme}])
+
+    theme = 'document.documentElement.dataset.theme'
+    # What the theme was when <body> was created, before anything on the page could be drawn.
+    at_body = cdp.send('Page.addScriptToEvaluateOnNewDocument', source="""
+        window.__themeAtBody = 'not seen';
+        new MutationObserver((records, observer) => {
+          if (!document.body) return;
+          window.__themeAtBody = document.documentElement.dataset.theme || null;
+          observer.disconnect();
+        }).observe(document, { childList: true, subtree: true });
+    """)['result']['identifier']
+
+    def choose(value):
+        cdp.ev(f"document.getElementById('settingsButton').click(); document.getElementById('themeSetting').value = '{value}';"
+               "document.getElementById('settingsForm').requestSubmit()")
+        cdp.pause(0.3)
+
+    device('dark')
+    t.open_tracker()
+    check('with no choice saved, a device in dark mode gets the dark theme', cdp.ev(theme) == 'dark', cdp.ev(theme))
+    check('already set before the page is drawn', cdp.ev('window.__themeAtBody') == 'dark', cdp.ev('window.__themeAtBody'))
+    cdp.ev("document.getElementById('settingsButton').click()")
+    check('Settings shows Match system as the choice',
+          cdp.ev("(s => s.value + ' ' + s.selectedOptions[0].textContent)(document.getElementById('themeSetting'))") == 'system Match system')
+    cdp.ev("document.getElementById('cancelSettings').click()")
+    device('light')
+    check('the device switching to light mode takes the open page with it', cdp.wait(f"{theme} === 'light'"), cdp.ev(theme))
+    device('dark')
+    check('and back to dark', cdp.wait(f"{theme} === 'dark'"), cdp.ev(theme))
+
+    choose('light')
+    check('choosing Light overrides a dark device', cdp.ev(theme) == 'light', cdp.ev(theme))
+    t.open_tracker()
+    check('from the first moment of the next page', cdp.ev('window.__themeAtBody') == 'light' and cdp.ev(theme) == 'light',
+          f"{cdp.ev('window.__themeAtBody')} {cdp.ev(theme)}")
+    device('light')
+    device('dark')
+    cdp.pause(0.3)
+    check('and ignores the device changing', cdp.ev(theme) == 'light', cdp.ev(theme))
+    device('light')
+    choose('dark')
+    check('choosing Dark overrides a light device', cdp.ev(theme) == 'dark', cdp.ev(theme))
+    choose('system')
+    check('choosing Match system follows it again', cdp.ev(theme) == 'light', cdp.ev(theme))
+    check('and the choice reaches the server', t.wait_for(lambda: t.api('GET', '/api/state', token=t.token)[0]['settings'].get('theme') == 'system'))
+
+    device('dark')
+    cdp.goto('/login.html')
+    cdp.wait("!!document.getElementById('authForm')")
+    check('the sign-in page follows the device too', cdp.ev(theme) == 'dark' and cdp.ev('window.__themeAtBody') == 'dark',
+          f"{cdp.ev('window.__themeAtBody')} {cdp.ev(theme)}")
+    check('with the browser chrome to match', cdp.ev("document.querySelector('meta[name=theme-color]').content").lower() == '#151923')
+
+    cdp.send('Page.removeScriptToEvaluateOnNewDocument', identifier=at_body)
+    cdp.send('Emulation.setEmulatedMedia', features=LIGHT_DEVICE)

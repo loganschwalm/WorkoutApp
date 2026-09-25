@@ -10,6 +10,8 @@ from .mail import MailSink
 from .server import AppServer
 
 DAY_MS = 86400000
+# Emulation.setEmulatedMedia features for a device in light mode, whatever the machine running the tests uses.
+LIGHT_DEVICE = [{'name': 'prefers-color-scheme', 'value': 'light'}]
 ACCOUNT = {'username': 'tester', 'email': 'tester@example.test', 'password': 'password123'}
 
 # Element lookups the suites share.
@@ -103,6 +105,9 @@ class AppTest:
     def _open_page(self, intercept):
         for domain in ('Page', 'Runtime', 'Network'):
             self.cdp.send(f'{domain}.enable')
+        # The app follows the device's light or dark mode, and the browser takes it from this machine; the suites
+        # expect light unless they switch it themselves (see LIGHT_DEVICE).
+        self.cdp.send('Emulation.setEmulatedMedia', features=LIGHT_DEVICE)
         if intercept:
             # Request stage for offline simulation; response stage for dropping a reply
             # after the server has already stored the workout.
