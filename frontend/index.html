@@ -24,14 +24,10 @@
 
     <div class="form-feedback" id="formFeedback" role="status" aria-live="polite" hidden></div>
 
-    <section class="card">
-      <div id="newWorkoutIntro">
-        <h2>Create a new workout</h2>
-        <p class="subtitle">Build a custom workout by adding exercises, weight, and reps.</p>
-        <button class="primary" id="createWorkoutBtn" type="button">Create workout</button>
-      </div>
-      <div id="workoutBuilder" hidden>
-        <div class="workout-name"><div class="workout-field"><label for="workoutName">Workout name</label><input id="workoutName" type="text" placeholder="e.g. Push Day" /></div><div class="workout-field"><label for="workoutDate">Workout date</label><input id="workoutDate" type="date" /></div><button class="secondary" id="clearBtn" type="button">Clear</button></div>
+    <section class="card" id="workoutBuilderCard" hidden>
+      <div class="section-heading"><div><h2 id="workoutBuilderTitle">Create a workout</h2><p class="subtitle">Add each exercise with its weight and reps, then save it to your history.</p></div></div>
+      <div id="workoutBuilder">
+        <div class="workout-name"><div class="workout-field"><label for="workoutName">Workout name</label><input id="workoutName" type="text" placeholder="e.g. Push Day" /></div><div class="workout-field"><label for="workoutDate">Workout date</label><input id="workoutDate" type="date" /></div><button class="secondary" id="clearBtn" type="button">Cancel</button></div>
         <div class="notes-field"><label for="workoutNotes">Workout notes</label><textarea id="workoutNotes" rows="3" placeholder="How did the session feel? Add cues, goals, or observations."></textarea></div>
         <div class="grid">
           <div class="exercise-input"><label for="exercise">Exercise</label><input id="exercise" type="text" placeholder="e.g. Bench Press" required /></div>
@@ -47,11 +43,16 @@
     <section class="card active-workout" id="activeWorkout" hidden>
       <div class="section-heading"><div><h2 id="activeWorkoutTitle">Active workout</h2><p id="activeWorkoutProgress" class="subtitle"></p></div><button class="secondary" id="endWorkoutBtn" type="button">End workout</button></div>
       <div class="active-exercise"><h3 id="activeExerciseName"></h3><p id="activeExerciseTarget" class="subtitle"></p><p id="activeExerciseLast" class="subtitle" hidden></p><ol class="plan-sets" id="activePlan" aria-label="Planned sets" hidden></ol></div>
-      <div class="notes-field"><label for="activeNotes">Workout notes</label><textarea id="activeNotes" rows="3" placeholder="Add notes while you train."></textarea></div>
-      <div class="set-entry"><div><label for="activeWeight">Weight (lbs)</label><input id="activeWeight" type="number" inputmode="decimal" min="0" step="0.5" placeholder="0" /></div><div><label for="completedReps">Reps completed</label><input id="completedReps" type="number" inputmode="numeric" min="1" step="1" placeholder="0" /></div><button class="primary" id="completeSetBtn" type="button">Complete set</button></div>
+      <div class="set-entry">
+        <div class="weight-entry"><label for="activeWeight">Weight (lbs)</label><div class="weight-stepper" id="weightStepper"><button class="secondary" type="button" data-weight-step="-5" aria-label="5 lbs lighter">&minus;5</button><input id="activeWeight" type="number" inputmode="decimal" min="0" step="0.5" placeholder="0" /><button class="secondary" type="button" data-weight-step="5" aria-label="5 lbs heavier">+5</button></div></div>
+        <div class="reps-entry"><label for="completedReps">Reps completed</label><input id="completedReps" type="number" inputmode="numeric" min="1" step="1" placeholder="0" /></div>
+        <button class="primary" id="completeSetBtn" type="button">Complete set</button>
+      </div>
+      <p class="plate-hint" id="plateHint" hidden></p>
+      <div class="rest-panel" id="restPanel" hidden><div class="rest-time"><strong>Rest</strong><span id="timerDisplay">1:30</span></div><div class="rest-actions"><button class="secondary" id="restToggleBtn" type="button">Start rest</button><button class="secondary" id="restResetBtn" type="button">Reset</button></div></div>
       <ul class="set-list" id="completedSets"></ul>
       <p class="subtitle" id="activeSyncNotice" role="status" hidden>Can&rsquo;t reach the server. Your sets are saved on this device and will sync automatically.</p>
-      <div class="rest-panel" id="restPanel" hidden><div><strong>Rest timer</strong><span id="timerDisplay">1:30</span></div><div class="rest-actions"><button class="secondary" id="restToggleBtn" type="button">Start rest</button><button class="secondary" id="restResetBtn" type="button">Reset</button></div></div>
+      <details class="add-exercise" id="activeNotesToggle"><summary>Workout notes</summary><textarea class="notes-input" id="activeNotes" rows="3" aria-label="Workout notes" placeholder="Add notes while you train."></textarea></details>
       <details class="add-exercise" id="addActiveExercise"><summary>Add an exercise</summary><div class="add-exercise-fields"><div><label for="activeAddName">Exercise</label><input id="activeAddName" type="text" placeholder="e.g. Dips" /></div><div><label for="activeAddReps">Target reps</label><input id="activeAddReps" type="number" inputmode="numeric" min="1" step="1" placeholder="0" /></div><button class="secondary" id="activeAddBtn" type="button">Add next</button></div></details>
       <div class="footer-actions"><span class="subtitle">Log each set, then continue when ready.</span><div class="footer-buttons"><button class="secondary" id="prevExerciseBtn" type="button" hidden>Previous</button><button class="primary" id="nextExerciseBtn" type="button">Next exercise</button></div></div>
     </section>
@@ -66,13 +67,21 @@
       <div id="programWeeks"></div>
     </section>
 
-    <section class="card">
-      <div class="section-heading"><div><h2>Workout Templates</h2><p class="subtitle">Start with a proven routine, then adjust it to fit your session.</p></div><button class="secondary" id="createTemplateBtn" type="button">Create template</button></div>
-      <div class="template-grid" id="templateList"></div>
+    <section class="card" id="recentCard" hidden>
+      <div class="section-heading"><div><h2>Start again</h2><p class="subtitle">Your recent workouts, the one you did longest ago first.</p></div></div>
+      <ul class="recent-list" id="recentList"></ul>
     </section>
 
     <section class="card">
-      <div class="section-heading"><h2>Saved workouts</h2><div class="section-heading-actions"><span id="storageStatus" class="subtitle"></span><a class="button-link secondary" href="history.html">View workout history</a></div></div>
+      <div class="section-heading"><div><h2>Workout Templates</h2><p class="subtitle">Start with a proven routine, then adjust it to fit your session.</p></div><div class="section-heading-actions"><button class="secondary" id="templatesToggle" type="button" aria-controls="templateArea" aria-expanded="false">Show templates</button></div></div>
+      <div id="templateArea" hidden>
+        <div class="template-grid" id="templateList"></div>
+        <div class="template-area-actions"><button class="secondary" id="createTemplateBtn" type="button">Create template</button></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-heading"><h2>Saved workouts</h2><div class="section-heading-actions"><span id="storageStatus" class="subtitle"></span><button class="secondary" id="createWorkoutBtn" type="button">Create workout</button><a class="button-link secondary" href="history.html">View workout history</a></div></div>
       <ul class="saved-workout-list" id="savedWorkoutList"><li class="empty">No saved workouts yet.</li></ul>
     </section>
   </main>

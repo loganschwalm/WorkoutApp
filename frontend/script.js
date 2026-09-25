@@ -37,9 +37,11 @@ function timestampFromDateInput(value) {
 
 $('workoutDate').value = dateInputValue(Date.now());
 
-function showWorkoutBuilder() {
-  $('newWorkoutIntro').hidden = true;
-  $('workoutBuilder').hidden = false;
+// The form for writing a workout down by hand opens as its own card at the top, and closes again on Cancel or once saved.
+function showWorkoutBuilder(editing = false) {
+  $('workoutBuilderTitle').textContent = editing ? 'Edit workout' : 'Create a workout';
+  $('workoutBuilderCard').hidden = false;
+  $('workoutBuilderCard').scrollIntoView({ behavior:'smooth', block:'start' });
 }
 
 // The banner sticks to the top of the screen so a message is seen wherever the page is scrolled; successes dismiss themselves.
@@ -108,12 +110,46 @@ function renderSavedWorkouts(workouts) {
   const list = $('savedWorkoutList');
   const recent = workouts.slice(0, recentWorkoutLimit);
   const more = workouts.length > recent.length ? `<li class="more-workouts"><a class="button-link secondary" href="history.html">See all ${workouts.length} workouts in History</a></li>` : '';
-  list.innerHTML = recent.length ? recent.map(workout => `<li class="saved-workout" data-id="${escapeHTML(workout.id)}"><div class="saved-workout-summary"><div><strong>${escapeHTML(workout.name)}</strong><span>${new Date(workout.createdAt).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' })}${workoutProgramLabel(workout) ? ` &middot; ${escapeHTML(workoutProgramLabel(workout))}` : ''}</span></div><div class="workout-actions"><button class="primary" type="button" data-action="start">Start</button><button class="secondary" type="button" data-action="view" aria-expanded="false">View</button><button class="secondary" type="button" data-action="repeat">Repeat</button><button class="secondary" type="button" data-action="edit">Edit</button><button class="danger" type="button" data-action="delete">Delete</button></div></div><div class="workout-details" hidden>${workout.notes ? `<p class="workout-note">${escapeHTML(workout.notes)}</p>` : ''}<ul>${workout.exercises.map(item => `<li><strong>${escapeHTML(item.name)}</strong><span>${escapeHTML(describeSavedExercise(item))}</span></li>`).join('')}</ul></div></li>`).join('') + more : '<li class="empty">No saved workouts yet.</li>';
+  // One row a workout: tapping its name shows what was done, Start is the one button, and everything else (copying,
+  // editing, deleting) waits in its ⋯ menu, away from a thumb reaching for Start.
+  list.innerHTML = recent.length ? recent.map(workout => `<li class="saved-workout" data-id="${escapeHTML(workout.id)}"><div class="saved-workout-summary saved-workout-row"><button class="saved-workout-toggle" type="button" data-action="view" aria-expanded="false"><strong>${escapeHTML(workout.name)}</strong><span>${new Date(workout.createdAt).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' })}${workoutProgramLabel(workout) ? ` &middot; ${escapeHTML(workoutProgramLabel(workout))}` : ''}</span></button><div class="row-actions"><button class="primary" type="button" data-action="start">Start</button><details class="row-menu"><summary class="secondary" aria-label="More for ${escapeHTML(workout.name)}">&middot;&middot;&middot;</summary><div class="row-menu-items"><button type="button" data-action="repeat">Copy as new</button><button type="button" data-action="edit">Edit</button><button class="danger" type="button" data-action="delete">Delete</button></div></details></div></div><div class="workout-details" hidden>${workout.notes ? `<p class="workout-note">${escapeHTML(workout.notes)}</p>` : ''}<ul>${workout.exercises.map(item => `<li><strong>${escapeHTML(item.name)}</strong><span>${escapeHTML(describeSavedExercise(item))}</span></li>`).join('')}</ul></div></li>`).join('') + more : '<li class="empty">No saved workouts yet.</li>';
+  renderRecentWorkouts();
 }
 
-// Training programs (program.js) come first, then the single-workout templates.
+// Up to three different workouts from the recent ones, to start again in one tap. The one done longest ago comes first:
+// someone going round a rotation (push, pull, legs) is most likely due for it next. While a program is being followed,
+// its card says what is next, so its workouts are left out here.
+function renderRecentWorkouts() {
+  const picked = new Map();
+  for (const workout of savedWorkouts.slice(0, recentWorkoutLimit)) {
+    if (picked.size === 3) break;
+    if (currentProgram && workout.program) continue;
+    if (!picked.has(exerciseKey(workout.name))) picked.set(exerciseKey(workout.name), workout);
+  }
+  const recent = [...picked.values()].sort((a, b) => a.createdAt - b.createdAt);
+  $('recentCard').hidden = !recent.length;
+  $('recentList').innerHTML = recent.map((workout, index) => `<li class="recent-workout"><div><strong>${escapeHTML(workout.name)}</strong><span>Last done ${new Date(workout.createdAt).toLocaleDateString(undefined, { month:'short', day:'numeric' })} &middot; ${workout.exercises.length} exercise${workout.exercises.length === 1 ? '' : 's'}</span></div><button class="${index === 0 ? 'primary' : 'secondary'}" type="button" data-recent-id="${escapeHTML(workout.id)}">Start</button></li>`).join('');
+}
+
+// Templates fold away once there is something else to start from (saved workouts or a program), so someone new sees
+// them straight away and everyone else sees their own workouts first. The Show/Hide button's choice holds while the
+// page is open. Until the first load says whether there is anything, they stay folded, so they never jump away.
+let templatesChoice = null;
+
+function syncTemplateArea() {
+  const hasOwn = savedWorkouts.length > 0 || Object.keys(lastPerformance).length > 0 || Boolean(currentProgram);
+  const open = templatesChoice ?? (!hasOwn && initialLoadDone);
+  $('templateArea').hidden = !open;
+  $('templatesToggle').textContent = open ? 'Hide templates' : `Show templates (${programDefinitions.length + getAllTemplates().length})`;
+  $('templatesToggle').setAttribute('aria-expanded', String(open));
+}
+
+// Training programs (program.js) come first, then the single-workout templates. program.js calls this when the program
+// changes, which also changes what Start again offers and whether the templates stay folded.
 function renderTemplates() {
   $('templateList').innerHTML = programTemplateCards() + getAllTemplates().map(template => `<article class="template-card"><div><h3>${escapeHTML(template.name)}</h3><p>${template.exercises.map(item => `${escapeHTML(item.name)} (${escapeHTML(item.reps)} reps)`).join(' &middot; ')}</p></div><div class="template-actions"><button class="primary" type="button" data-template-action="start" data-template-id="${escapeHTML(template.id)}">Start workout</button><button class="secondary" type="button" data-template-action="duplicate" data-template-id="${escapeHTML(template.id)}">Duplicate</button>${template.builtIn ? '' : `<button class="secondary" type="button" data-template-action="edit" data-template-id="${escapeHTML(template.id)}">Edit</button><button class="danger" type="button" data-template-action="delete" data-template-id="${escapeHTML(template.id)}">Delete</button>`}</div></article>`).join('');
+  renderRecentWorkouts();
+  syncTemplateArea();
 }
 
 function renderTemplateExerciseEditor() {
@@ -136,7 +172,7 @@ function closeTemplateEditor() {
 }
 
 function loadWorkoutIntoForm(workout, editMode) {
-  showWorkoutBuilder();
+  showWorkoutBuilder(editMode);
   editingWorkout = editMode ? workout : null;
   $('workoutName').value = workout.name;
   $('workoutDate').value = editMode ? dateInputValue(workout.createdAt) : dateInputValue(Date.now());
@@ -149,7 +185,6 @@ function loadWorkoutIntoForm(workout, editMode) {
   }));
   $('saveBtn').textContent = editMode ? 'Update workout' : 'Save workout';
   render();
-  window.scrollTo({ top:0, behavior:'smooth' });
 }
 
 function updateRestTimer() {
@@ -238,6 +273,33 @@ function rememberLastPerformance(workout) {
   saveLastPerformance();
 }
 
+// What to load on each side of a 45 lb bar, from standard plates down to the 1.25s that a weight in 2.5 lb steps (as 5/3/1
+// can round to) needs. Only for a lift done with a barbell, which the exercise's name has to tell (it is all a custom
+// exercise has): Bench Press yes, Dumbbell Bench Press or Leg Press no.
+const BAR_WEIGHT = 45;
+const PLATES = [45, 35, 25, 10, 5, 2.5, 1.25];
+const barbellNames = /\b(barbell|bench|squat|deadlift|rdl|overhead press|military press|push press|ohp|pendlay|bent[- ]over row|power clean|hang clean|good morning|hip thrust)\b/i;
+const notBarbellNames = /\b(dumbbells?|db|kettlebells?|machine|cable|smith|leg press|hack|goblet|split|bulgarian|trap bar|hex bar|landmine|band|dips?|pistol)\b/i;
+
+function platesPerSide(weight) {
+  let left = (weight - BAR_WEIGHT) / 2;
+  const plates = [];
+  PLATES.forEach(plate => { while (left >= plate - 1e-9) { plates.push(plate); left -= plate; } });
+  // A weight the plates cannot make exactly (187 lbs) gets the nearest lighter load, and says what that comes to.
+  return { plates, makes: weight - Math.round(left * 2 * 100) / 100 };
+}
+
+function showPlates() {
+  const exercise = activeSession ? activeSession.exercises[activeSession.currentIndex] : null;
+  const weight = Number($('activeWeight').value);
+  const applies = Boolean(exercise) && barbellNames.test(exercise.name) && !notBarbellNames.test(exercise.name) && weight >= BAR_WEIGHT;
+  $('plateHint').hidden = !applies;
+  if (!applies) return;
+  const { plates, makes } = platesPerSide(weight);
+  $('plateHint').textContent = !plates.length ? `Just the ${BAR_WEIGHT} lb bar`
+    : `Each side of a ${BAR_WEIGHT} lb bar: ${plates.join(' + ')}${makes !== weight ? ` (makes ${makes} lbs)` : ''}`;
+}
+
 function renderActiveProgress() {
   $('activeWorkoutProgress').textContent = `Exercise ${activeSession.currentIndex + 1} of ${activeSession.exercises.length}`;
   $('prevExerciseBtn').hidden = activeSession.currentIndex === 0;
@@ -273,6 +335,7 @@ function renderActiveWorkout() {
     $('activeWeight').value = lastSet ? lastSet.weight || '' : exercise.weight || (previousFirst && previousFirst.weight) || '';
     $('completedReps').value = (lastSet || previousFirst || {}).reps || '';
   }
+  showPlates();
   $('completedSets').innerHTML = exercise.sets.map((set, index) => `<li><span class="set-number">Set ${index + 1}</span><div class="set-field"><input class="set-edit" type="number" inputmode="decimal" min="0" step="0.5" value="${escapeHTML(set.weight || '')}" data-set="${index}" data-field="weight" aria-label="Set ${index + 1} weight in lbs"><span>lbs</span></div><div class="set-field"><input class="set-edit" type="number" inputmode="numeric" min="1" step="1" value="${escapeHTML(set.reps)}" data-set="${index}" data-field="reps" aria-label="Set ${index + 1} reps"><span>reps</span></div><button class="remove" type="button" data-remove-set="${index}" aria-label="Remove set ${index + 1}">Remove</button></li>`).join('');
   $('activeSyncNotice').hidden = !activeSyncFailed;
 }
@@ -307,6 +370,8 @@ function startWorkout(template) {
   if (template.programDay) activeSession.programDay = template.programDay;
   persistActiveSession();
   renderActiveWorkout();
+  // Notes fold away under the set entry, unless the workout brings some with it.
+  $('activeNotesToggle').open = Boolean(activeSession.notes);
   $('activeWorkout').hidden = false;
   syncWakeLock();
   $('activeWorkout').scrollIntoView({ behavior:'smooth', block:'start' });
@@ -399,6 +464,7 @@ async function resumeOrStartWorkout(workouts) {
     updateRestTimer();
     $('restPanel').hidden = true;
     renderActiveWorkout();
+    $('activeNotesToggle').open = Boolean(activeSession.notes);
     $('activeWorkout').hidden = false;
     syncWakeLock();
   }
@@ -420,7 +486,7 @@ $('addBtn').onclick = () => {
 // Tap the banner to dismiss it; opening settings also clears it so a stale message never sits over the dialog.
 $('formFeedback').onclick = clearFeedback;
 $('settingsButton').addEventListener('click', clearFeedback);
-$('createWorkoutBtn').onclick = () => { showWorkoutBuilder(); $('workoutName').focus(); };
+$('createWorkoutBtn').onclick = () => { showWorkoutBuilder(Boolean(editingWorkout)); $('workoutName').focus({ preventScroll:true }); };
 $('exercise').oninput = () => markInvalid($('exercise'), false);
 $('weight').oninput = () => markInvalid($('weight'), false);
 $('reps').oninput = () => markInvalid($('reps'), false);
@@ -431,7 +497,7 @@ $('exerciseList').oninput = e => {
 };
 $('exerciseList').onclick = e => { if (e.target.classList.contains('remove') && e.target.dataset.index !== undefined) { exercises.splice(+e.target.dataset.index, 1); render(); } };
 $('activeNotes').oninput = () => { if (activeSession) { activeSession.notes = $('activeNotes').value; persistActiveSession(); } };
-$('clearBtn').onclick = () => { editingWorkout = null; exercises.length = 0; $('workoutName').value = ''; $('workoutDate').value = dateInputValue(Date.now()); $('workoutNotes').value = ''; $('saveBtn').textContent = 'Save workout'; render(); };
+$('clearBtn').onclick = () => { editingWorkout = null; exercises.length = 0; $('workoutName').value = ''; $('workoutDate').value = dateInputValue(Date.now()); $('workoutNotes').value = ''; $('saveBtn').textContent = 'Save workout'; render(); $('workoutBuilderCard').hidden = true; };
 $('templateList').onclick = e => {
   const action = e.target.dataset.templateAction;
   const templateId = e.target.dataset.templateId;
@@ -502,6 +568,15 @@ $('completeSetBtn').onclick = () => {
   if (getWorkoutSettings().autoRest) startRestTimer();
   else { stopRestTimer(); restRemaining = getWorkoutSettings().restDuration; updateRestTimer(); $('restPanel').hidden = false; }
 };
+// −5 and +5 beside the weight: a change of 2.5 lbs a side, the smallest most plate sets make.
+$('weightStepper').onclick = e => {
+  const step = Number(e.target.closest('[data-weight-step]')?.dataset.weightStep);
+  if (!step) return;
+  const input = $('activeWeight');
+  input.value = String(Math.max(0, (Number(input.value) || 0) + step));
+  input.dispatchEvent(new Event('input', { bubbles:true }));
+};
+$('activeWeight').oninput = () => { markInvalid($('activeWeight'), false); showPlates(); };
 $('restToggleBtn').onclick = () => {
   unlockAudio();
   if (restInterval) { syncRestRemaining(); updateRestTimer(); stopRestTimer(); }
@@ -557,22 +632,24 @@ $('activeAddBtn').onclick = () => {
   showFeedback(`Added “${name}” as your next exercise.`, 'success');
 };
 $('savedWorkoutList').onclick = async e => {
-  const action = e.target.dataset.action;
-  if (!action) return;
-  const workoutElement = e.target.closest('.saved-workout');
+  const button = e.target.closest('[data-action]');
+  if (!button) return;
+  const action = button.dataset.action;
+  const workoutElement = button.closest('.saved-workout');
   const workoutId = Number(workoutElement.dataset.id);
   // The list on screen was drawn from savedWorkouts, so the workout a button belongs to is already here: no request,
   // and the buttons keep working if the connection drops after the list has loaded.
   const workout = savedWorkouts.find(item => item.id === workoutId);
   if (!workout) return;
+  const menu = button.closest('.row-menu');
+  if (menu) menu.open = false;
 
   if (action === 'start') startWorkout(workout);
   if (action === 'view') {
     const details = workoutElement.querySelector('.workout-details');
     const isHidden = details.hasAttribute('hidden');
     details.toggleAttribute('hidden', !isHidden);
-    e.target.textContent = isHidden ? 'Hide' : 'View';
-    e.target.setAttribute('aria-expanded', String(isHidden));
+    button.setAttribute('aria-expanded', String(isHidden));
   }
   if (action === 'repeat') loadWorkoutIntoForm(workout, false);
   if (action === 'edit') loadWorkoutIntoForm(workout, true);
@@ -586,6 +663,22 @@ $('savedWorkoutList').onclick = async e => {
       console.error('Unable to delete workout.', error);
     }
   }
+};
+// An open ⋯ menu closes when anything else is tapped (including another row's menu) or on Escape.
+document.addEventListener('click', e => {
+  document.querySelectorAll('.row-menu[open]').forEach(menu => { if (!menu.contains(e.target)) menu.open = false; });
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.querySelectorAll('.row-menu[open]').forEach(menu => { menu.open = false; });
+});
+$('recentList').onclick = e => {
+  const button = e.target.closest('[data-recent-id]');
+  const workout = button && savedWorkouts.find(item => item.id === Number(button.dataset.recentId));
+  if (workout) startWorkout(workout);
+};
+$('templatesToggle').onclick = () => {
+  templatesChoice = $('templateArea').hidden;
+  syncTemplateArea();
 };
 $('saveBtn').onclick = async () => {
   if (!exercises.length) { showFeedback('Add at least one exercise before saving the workout.'); return; }
@@ -622,4 +715,4 @@ window.addEventListener('syncchange', event => {
   if (event.detail.uploaded && initialLoadDone) loadSavedWorkouts();
 });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && restInterval) tickRest(); syncWakeLock(); });
-window.localReady.then(() => { lastPerformance = readLocal(localKey('lastperf')) || {}; }).then(flushPendingWorkouts).then(loadSavedWorkouts).then(resumeOrStartWorkout).finally(() => { initialLoadDone = true; });
+window.localReady.then(() => { lastPerformance = readLocal(localKey('lastperf')) || {}; syncTemplateArea(); }).then(flushPendingWorkouts).then(loadSavedWorkouts).then(resumeOrStartWorkout).finally(() => { initialLoadDone = true; syncTemplateArea(); });

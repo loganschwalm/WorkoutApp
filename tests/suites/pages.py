@@ -2,6 +2,7 @@
 
 import json
 import re
+import time
 
 from ..harness import LIGHT_DEVICE
 
@@ -262,3 +263,81 @@ def run(t):
 
     cdp.send('Page.removeScriptToEvaluateOnNewDocument', identifier=at_body)
     cdp.send('Emulation.setEmulatedMedia', features=LIGHT_DEVICE)
+
+    # ------------------------------------------------------------------ P7 the Tracker's order and its rows
+    print('P7  the Tracker puts your own workouts first, each a tap from starting')
+    DAY = 86400000
+
+    def account(name):
+        cookie = t.api('POST', '/api/auth/register', {'username': name, 'email': f'{name}@example.test', 'password': 'password123'})[1]
+        return cookie.split('session=')[1].split(';')[0]
+
+    def top(selector):
+        return cdp.ev(f"document.querySelector({json.dumps(selector)}).getBoundingClientRect().top")
+
+    # A rotation of three workouts, most recently B: A, B and C are each done, then A and B again. C is due next.
+    rotation = account('rotation')
+    base = int(time.time() * 1000) - 10 * DAY
+    for day, name in enumerate(['A Day', 'B Day', 'C Day', 'A Day', 'B Day']):
+        t.api('POST', '/api/workouts', {'name': name, 'createdAt': base + day * DAY,
+                                        'exercises': [t.ex('Bench Press', 135, 5, [(5, 135)])]}, rotation)
+    t.set_cookie(rotation)
+    t.open_tracker()
+    cdp.wait('initialLoadDone')
+    shown = cdp.ev("[...document.querySelectorAll('#recentList strong')].map(s => s.textContent)")
+    check('Start again offers the recent workouts, the one done longest ago first', shown == ['C Day', 'A Day', 'B Day'], shown)
+    check('above the templates and the saved workouts',
+          top('#recentCard') < top('#templatesToggle') < top('#savedWorkoutList'), f"{top('#recentCard')} {top('#templatesToggle')}")
+    check('with the templates folded away, since there is history', cdp.ev("document.getElementById('templateArea').hidden") is True)
+    check('a button says how many there are', cdp.ev("document.getElementById('templatesToggle').textContent") == 'Show templates (7)',
+          cdp.ev("document.getElementById('templatesToggle').textContent"))
+    cdp.ev("document.getElementById('templatesToggle').click()")
+    check('and shows them', cdp.ev("!document.getElementById('templateArea').hidden && document.getElementById('templatesToggle').textContent === 'Hide templates'") is True)
+    cdp.ev("document.getElementById('templatesToggle').click()")
+    cdp.ev("document.querySelector('#recentList button').click()")
+    cdp.pause(0.4)
+    check("Start begins the workout that is due", cdp.ev("document.getElementById('activeWorkoutTitle').textContent") == 'C Day')
+    t.end_workout()
+
+    menu_hidden = "[...document.querySelectorAll('#savedWorkoutList .row-menu-items button')].every(b => !b.checkVisibility())"
+    counts = cdp.ev("""[...document.querySelectorAll('#savedWorkoutList .saved-workout')].map(row =>
+        [...row.querySelectorAll('button')].filter(b => b.checkVisibility() && !b.closest('.row-menu-items')).map(b => b.dataset.action).join(' '))""")
+    check('each saved workout shows only its name and Start, with the rest in its menu',
+          counts and all(c == 'view start' for c in counts) and cdp.ev(menu_hidden) is True, counts)
+    cdp.ev("document.querySelector('#savedWorkoutList .saved-workout-toggle').click()")
+    check('tapping the name shows what was done',
+          cdp.ev("(b => b.getAttribute('aria-expanded') === 'true' && !b.closest('.saved-workout').querySelector('.workout-details').hidden)(document.querySelector('#savedWorkoutList .saved-workout-toggle'))") is True)
+    cdp.ev("document.querySelector('#savedWorkoutList .row-menu summary').click()")
+    items = cdp.ev("[...document.querySelectorAll('#savedWorkoutList .row-menu[open] .row-menu-items button')].filter(b => b.checkVisibility()).map(b => b.textContent)")
+    check('the menu holds Copy as new, Edit and Delete', items == ['Copy as new', 'Edit', 'Delete'], items)
+    cdp.ev("document.querySelector('main h1, header h1').click()")
+    check('and closes when anything else is tapped', cdp.ev("document.querySelectorAll('.row-menu[open]').length") == 0)
+    cdp.ev("document.querySelector('#savedWorkoutList .row-menu summary').click(); document.querySelector('#savedWorkoutList .row-menu [data-action=edit]').click()")
+    cdp.pause(0.3)
+    check('Edit opens the workout in its own card, and closes the menu',
+          cdp.ev("!document.getElementById('workoutBuilderCard').hidden && document.getElementById('workoutBuilderTitle').textContent === 'Edit workout' && !document.querySelector('.row-menu[open]')") is True)
+    cdp.ev("document.getElementById('clearBtn').click()")
+    check('Cancel closes it again', cdp.ev("document.getElementById('workoutBuilderCard').hidden") is True)
+    cdp.ev("document.getElementById('createWorkoutBtn').click()")
+    check('Create workout, beside the saved workouts, opens an empty one',
+          cdp.ev("!document.getElementById('workoutBuilderCard').hidden && document.getElementById('workoutBuilderTitle').textContent === 'Create a workout' && exercises.length === 0") is True)
+    cdp.ev("document.getElementById('clearBtn').click()")
+
+    cdp.send('Emulation.setDeviceMetricsOverride', width=375, height=800, deviceScaleFactor=1, mobile=True)
+    cdp.pause(0.3)
+    line = cdp.ev("""(() => {
+        const row = document.querySelector('#savedWorkoutList .saved-workout');
+        const middle = selector => (r => (r.top + r.bottom) / 2)(row.querySelector(selector).getBoundingClientRect());
+        const middles = ['.saved-workout-toggle', '[data-action=start]', '.row-menu summary'].map(middle);
+        return { spread: Math.max(...middles) - Math.min(...middles), overflow: document.documentElement.scrollWidth - innerWidth };
+    })()""")
+    check('on a phone a row keeps its name, Start and menu on one line', line['spread'] < 8 and line['overflow'] <= 0, line)
+    cdp.send('Emulation.clearDeviceMetricsOverride')
+
+    t.set_cookie(account('newcomer'))
+    t.open_tracker()
+    cdp.wait('initialLoadDone')
+    cdp.pause(0.3)
+    check('someone new sees the templates straight away, and no Start again',
+          cdp.ev("!document.getElementById('templateArea').hidden && document.getElementById('recentCard').hidden") is True)
+    t.set_cookie(t.token)

@@ -393,3 +393,87 @@ def run(t):
     check('and uploads when the same account signs back in', wait_for(lambda: len(ids() - known) == 1), f'{len(ids() - known)} new')
     check('leaving nothing queued', wait_for(lambda: safe_ev('readPendingWorkouts().length', -1) == 0), safe_ev('readPendingWorkouts().length', -1))
     set_cookie(token)
+
+    # ---- R: the controls within reach
+    print('R   the set entry, the rest timer and the plates where a thumb can reach them')
+    cdp.send('Emulation.setDeviceMetricsOverride', width=375, height=740, deviceScaleFactor=1, mobile=True)
+    open_tracker()
+    if cdp.ev(ACTIVE):
+        end_workout()
+    start(0)  # Push Day: Bench Press, Overhead Press, Tricep Pushdown
+    cdp.pause(0.6)
+
+    def top(idn):
+        return cdp.ev(f"document.getElementById('{idn}').getBoundingClientRect().top")
+
+    check('weight, reps and Complete set come straight after the exercise',
+          top('completeSetBtn') < top('completedSets') and top('completeSetBtn') < top('activeNotesToggle'),
+          f"set {top('completeSetBtn')} sets {top('completedSets')} notes {top('activeNotesToggle')}")
+    check('Complete set is on the first screen of a phone', cdp.ev("document.getElementById('completeSetBtn').getBoundingClientRect().bottom <= innerHeight") is True,
+          cdp.ev("document.getElementById('completeSetBtn').getBoundingClientRect().bottom"))
+    check('with the notes folded away', cdp.ev("document.getElementById('activeNotesToggle').open") is False)
+
+    def set_weight(value):
+        cdp.ev(f"(i => {{ i.value = '{value}'; i.dispatchEvent(new Event('input', {{ bubbles: true }})); }})(document.getElementById('activeWeight'))")
+
+    def step(amount):
+        cdp.ev(f"document.querySelector('#weightStepper [data-weight-step=\"{amount}\"]').click()")
+
+    def plates():
+        return None if cdp.ev("document.getElementById('plateHint').hidden") else text('plateHint')
+
+    set_weight(100)
+    step(5)
+    check('+5 adds 5 lbs', field('activeWeight') == '105', field('activeWeight'))
+    step(-5)
+    step(-5)
+    check('-5 takes 5 off', field('activeWeight') == '95', field('activeWeight'))
+    set_weight(3)
+    step(-5)
+    check('never below nothing', field('activeWeight') == '0', field('activeWeight'))
+    set_weight(187.5)
+    step(5)
+    check('and a half pound stays', field('activeWeight') == '192.5', field('activeWeight'))
+
+    set_weight(135)
+    check('Bench Press shows the plates for each side of the bar', plates() == 'Each side of a 45 lb bar: 45', plates())
+    step(5)
+    check('which follow the weight as it changes', plates() == 'Each side of a 45 lb bar: 45 + 2.5', plates())
+    set_weight(190)
+    check('down to the 2.5s', plates() == 'Each side of a 45 lb bar: 45 + 25 + 2.5', plates())
+    set_weight(187.5)
+    check('and the 1.25s a program rounded to 2.5 lbs needs', plates() == 'Each side of a 45 lb bar: 45 + 25 + 1.25', plates())
+    set_weight(187)
+    check('and a weight the plates cannot make says what they do make', plates() == 'Each side of a 45 lb bar: 45 + 25 (makes 185 lbs)', plates())
+    set_weight(45)
+    check('just the bar', plates() == 'Just the 45 lb bar', plates())
+    set_weight(40)
+    check('nothing under the weight of the bar', plates() is None, plates())
+    judged = cdp.ev("""['Bench Press', 'Back Squat', 'Deadlift', 'Overhead Press', 'Barbell Row', 'Romanian Deadlift',
+        'Dumbbell Bench Press', 'Leg Press', 'Goblet Squat', 'Lat Pulldown', 'Tricep Pushdown', 'Bench Dips']
+        .filter(name => barbellNames.test(name) && !notBarbellNames.test(name))""")
+    check('only barbell lifts get plates, going by their names',
+          judged == ['Bench Press', 'Back Squat', 'Deadlift', 'Overhead Press', 'Barbell Row', 'Romanian Deadlift'], judged)
+    cdp.ev("document.getElementById('nextExerciseBtn').click(); document.getElementById('nextExerciseBtn').click()")
+    cdp.pause(0.3)
+    set_weight(100)
+    check('so the Tricep Pushdown gets none', text('activeExerciseName') == 'Tricep Pushdown' and plates() is None, plates())
+
+    log(100, 8)
+    cdp.pause(0.4)
+    check('the rest timer comes up right under the set entry', visible('restPanel') and top('completeSetBtn') < top('restPanel') < top('completedSets'))
+    cdp.ev("document.getElementById('completedSets').scrollIntoView({ block: 'start' })")
+    cdp.pause(0.3)
+    pinned = cdp.ev("(r => ({ top: r.top, bottom: r.bottom, vh: innerHeight }))(document.getElementById('restPanel').getBoundingClientRect())")
+    check('and stays on screen while the page scrolls past it', pinned['top'] >= 0 and pinned['bottom'] <= pinned['vh'], pinned)
+    end_workout()
+
+    noted = api('POST', '/api/workouts', {'name': 'Noted Day', 'notes': 'Pause the reps.', 'createdAt': t.t0 + 7 * 86400000,
+                                          'exercises': [ex('Bench Press', 135, 5, [(5, 135)])]}, token)[0]['id']
+    cdp.goto(f'/index.html?start={noted}')
+    cdp.wait("!document.getElementById('activeWorkout').hidden")
+    cdp.pause(0.3)
+    check("a workout that brings notes with it opens them", cdp.ev("document.getElementById('activeNotesToggle').open") is True
+          and field('activeNotes') == 'Pause the reps.', field('activeNotes'))
+    end_workout()
+    cdp.send('Emulation.clearDeviceMetricsOverride')

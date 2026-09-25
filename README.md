@@ -11,15 +11,15 @@ own workouts, templates, and settings.
 
 ## Screenshots
 
-![The tracker: built-in and custom workout templates, and recent saved workouts](docs/screenshots/tracker.png)
+![The tracker: recent workouts to start again, the templates folded away, and recent saved workouts](docs/screenshots/tracker.png)
 
 <table>
   <tr>
-    <td width="50%" align="center"><img src="docs/screenshots/active-workout.png" width="320" alt="A workout in progress on a phone, showing last time's sets, two logged sets and the rest timer"></td>
+    <td width="50%" align="center"><img src="docs/screenshots/active-workout.png" width="320" alt="A workout in progress on a phone, showing last time's sets, the weight with its plates, the rest timer and two logged sets"></td>
     <td width="50%" align="center"><img src="docs/screenshots/settings.png" width="320" alt="The settings on a phone: theme, rest duration, and the rest-timer alert"></td>
   </tr>
   <tr>
-    <td align="center">During a workout: last time's numbers, logged sets you can correct, and the rest timer.</td>
+    <td align="center">During a workout: last time's numbers, the weight with &minus;5/+5 buttons and the plates to load, the rest timer, and logged sets you can correct.</td>
     <td align="center">Settings, including the rest-timer sound and vibration.</td>
   </tr>
 </table>
@@ -32,7 +32,7 @@ own workouts, templates, and settings.
 
 ### Workout tracking
 
-- Create custom workouts with a name and workout date.
+- Create custom workouts with a name and workout date, from Create workout beside your saved workouts.
 - Add exercises with weight and target reps.
 - Edit exercise names, weights, and reps inline.
 - Remove exercises before saving.
@@ -43,18 +43,26 @@ own workouts, templates, and settings.
 ### Guided workouts
 
 - Start workouts from built-in templates or saved workouts.
+- The Tracker opens with your own workouts first: a program's next workout when you follow one, and
+  Start again, with up to three recent workouts and the one you did longest ago first (going round
+  push, pull and legs, that is the one due). Templates fold away once you have saved workouts or a
+  program, a tap from showing again.
 - Move through exercises one at a time.
-- Enter the weight and reps completed for each set.
+- Enter the weight and reps completed for each set, right under the exercise, with −5 and +5 buttons
+  beside the weight.
+- For barbell lifts (going by the exercise's name), see the plates to load on each side of a 45 lb
+  bar, down to 1.25s: 187.5 lbs is 45 + 25 + 1.25. A weight the plates cannot make says what they do.
 - See how you did last time on each exercise; its weight and reps are prefilled, and after each set the next one defaults to the set you just logged.
 - View completed sets during the workout, correct a set's weight or reps in place, or remove a set that was logged by mistake.
 - Go back to a previous exercise, or add an exercise in the middle of a workout.
 - Exercises with no logged sets count as skipped and are left out of the saved workout, so they never appear as done in History or Progress.
-- Automatically start a configurable rest timer after each set.
+- Automatically start a configurable rest timer after each set. It sits under the set entry and stays
+  on screen while you scroll.
 - Pause and reset the rest timer.
 - Keep accurate rest time even when the screen locks or the tab is in the background; the timer alerts you with a sound and vibration when rest is over (configurable in Settings).
 - Keep the screen awake during a workout (on browsers that support it).
 - Move to the next exercise with the rest timer reset to the configured duration.
-- Add notes while training.
+- Add notes while training; they fold away until you open them, unless the workout already has some.
 - Restore an active workout after refreshing the page.
 - Finish or cancel an active workout.
 
@@ -114,6 +122,8 @@ Users can also:
 - Add, remove, and reorder template exercises.
 - Delete custom templates.
 - Start a workout directly from any template.
+- On the Tracker, templates fold away once you have saved workouts or a program; someone new sees
+  them straight away.
 
 Custom templates are saved to your account on the server, and cached in the browser so they
 still work while the server is unreachable. A template created or edited offline uploads when the
@@ -175,7 +185,8 @@ The linear-progression push/pull/legs program for beginners posted to r/Fitness 
 ### Workout history
 
 - Review all saved workouts on the History page. The Tracker lists the 10 most recent, with a link
-  to the rest.
+  to the rest. Each shows its name and date (tap it for the sets), Start, and a ⋯ menu to copy it as
+  a new workout, edit it, or delete it.
 - See workout dates, exercises, weights, reps, completed sets, and notes.
 - Sets are written compactly: "3 × 5 at 185 lbs", "115 lbs × 5, 5, 5, 5, 9", and bodyweight sets
   as reps ("10, 9, 8 reps") rather than "0 lbs". The last-time line during a workout uses the same
