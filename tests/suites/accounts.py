@@ -147,3 +147,14 @@ def run(t):
     cdp.ev("document.getElementById('cancelEmail').click()")
     check('Cancel closes the fields', not shown('emailEditor'))
     cdp.ev("document.getElementById('cancelSettings').click()")
+
+    # ------------------------------------------------------------------ C6 no mail server
+    print('C6  without a mail server, Forgot password? says who can reset it')
+    plain = t.start_server('nomail.db')
+    cdp.send('Page.navigate', url=plain.base_url + '/login.html')
+    check('the sign-in page still offers Forgot password?',
+          cdp.wait("document.readyState === 'complete' && !document.getElementById('forgotButton').hidden"))
+    cdp.ev("document.getElementById('forgotButton').click()")
+    cdp.wait("!document.getElementById('authNotice').hidden")
+    check('which says to ask whoever runs the server', 'Ask whoever runs it' in text('authNotice'), text('authNotice'))
+    check('rather than offering to email a code', not shown('forgotForm') and shown('authForm'))

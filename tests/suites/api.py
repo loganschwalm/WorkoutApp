@@ -2,6 +2,8 @@
 
 import hashlib
 import json
+import os
+import socket
 import sqlite3
 import threading
 import time
@@ -161,6 +163,7 @@ def run(t):
     run_security(t, check, request)
     run_structure(t, check, request)
     run_accounts(t, check, request)
+    run_admin(t, check, request)
 
 
 def login(server, username, password, headers=None):
@@ -678,3 +681,97 @@ def run_accounts(t, check, request):
     check('another address is unaffected', status == 200 and code is not None, status)
     check('a reset lifts the sign-in wait (A17) from this address', reset('limited@example.test', code, 'reset-password')[0] == 200
           and sign_in('limited', 'reset-password') == 200)
+
+
+def run_admin(t, check, request):
+    main, mail = t.server, t.mail
+    db_path = t.db_path('test.db')
+
+    def post(path, body, token=None):
+        return request('POST', path, json.dumps(body).encode(), {'Content-Type': 'application/json'}, token=token)
+
+    def sign_in(login, password):
+        return post('/api/auth/login', {'login': login, 'password': password})
+
+    def me(token):
+        return main.api('GET', '/api/auth/me', token=token)[0]['user']
+
+    def session_of(headers):
+        return headers.get('set-cookie', '').split('session=')[1].split(';')[0]
+
+    # ------------------------------------------------------------------ A20 the admin commands
+    print('A20 an admin manages accounts from the command line while the server runs')
+    db = sqlite3.connect(db_path)
+    db.execute("UPDATE users SET email = NULL WHERE username = 'racer'")
+    db.commit()
+    count = db.execute('SELECT COUNT(*) FROM users').fetchone()[0]
+    db.close()
+    status, out, err = main.admin('users')
+    lines = out.splitlines()
+    check('users lists every account, one a line', status == 0 and len(lines) == count, f'{status} {len(lines)} of {count} {err}')
+    check('with its email, or that it has none',
+          any(line.split(maxsplit=1) == ['tester', 'tester@example.test'] for line in lines)
+          and any(line.split(maxsplit=1) == ['racer', '(no email)'] for line in lines), out)
+
+    _, headers, _ = sign_in('tester', 'password123')
+    other_session = session_of(headers)
+    post('/api/auth/forgot-password', {'email': 'tester@example.test'})
+    code = mail.code(mail.wait('tester@example.test', 1))
+    status, out, err = main.admin('reset-password', 'tester', stdin='admin-chosen-1\n')
+    check('reset-password sets the password typed in', status == 0 and 'tester' in out, f'{status} {out!r} {err!r}')
+    check('the old password no longer signs in', sign_in('tester', 'password123')[0] == 401)
+    check('the new one does', sign_in('tester', 'admin-chosen-1')[0] == 200)
+    check('every session of the account was signed out', me(other_session) is None and me(t.token) is None)
+    status, _, _ = post('/api/auth/reset-password', {'email': 'tester@example.test', 'code': code, 'password': 'emailed-code-1'})
+    check('and a reset code emailed before it stops working', status == 400, status)
+    status, out, err = main.admin('reset-password', 'TESTER@example.test', stdin='admin-chosen-2\n')
+    check('the account can be named by its email too', status == 0 and sign_in('tester', 'admin-chosen-2')[0] == 200, f'{status} {err!r}')
+
+    for label, args, stdin, words in [
+        ('an account that does not exist', ('reset-password', 'nobody'), 'admin-chosen-3\n', 'No account'),
+        ('a password under 8 characters', ('reset-password', 'tester'), 'short\n', '8+'),
+        ('no password at all', ('reset-password', 'tester'), '', '8+'),
+    ]:
+        status, out, err = main.admin(*args, stdin=stdin)
+        check(f'refused, saying why: {label}', status == 1 and words in err, f'{status} {out!r} {err!r}')
+    check('and none of them changed the password', sign_in('tester', 'admin-chosen-2')[0] == 200)
+
+    status, out, err = main.admin('set-email', 'tester', ' Tester.New@Example.TEST ')
+    signed_in, _, reply = sign_in('tester.new@example.test', 'admin-chosen-2')
+    check('set-email changes the email, in lowercase, and the account signs in with it',
+          status == 0 and signed_in == 200 and reply['user']['email'] == 'tester.new@example.test', f'{status} {out!r} {err!r} {reply}')
+    for label, email, words in [('an address that is not one', 'tester', 'valid email'),
+                                ("another account's email", 'mailer2@example.test', 'already uses')]:
+        status, out, err = main.admin('set-email', 'tester', email)
+        check(f'set-email refuses {label}', status == 1 and words in err, f'{status} {out!r} {err!r}')
+    status, out, err = main.admin('set-email', 'racer', 'racer@example.test')
+    check('and adds one to an account that had none', status == 0 and 'racer@example.test' in main.admin('users')[1], f'{status} {err!r}')
+
+    missing = t.db_path('no-such.db')
+    status, out, err = main.admin('users', env={'WORKOUT_DB': missing})
+    check('pointed at a database that does not exist, it says so', status == 1 and 'no database' in err.lower(), f'{status} {err!r}')
+    check('and does not create one', not os.path.exists(missing))
+
+    # ------------------------------------------------------------------ A21 idle connections
+    print('A21 a connection that stops sending is closed after REQUEST_TIMEOUT seconds')
+    quick = t.start_server('timeout.db', {'REQUEST_TIMEOUT': '2'})
+
+    def closed_after(first_bytes):
+        """Seconds until the server closes a connection that sends `first_bytes` and then nothing, or None."""
+        connection = socket.create_connection(('127.0.0.1', quick.port))
+        connection.settimeout(10)
+        started = time.monotonic()
+        try:
+            if first_bytes:
+                connection.sendall(first_bytes)
+            return time.monotonic() - started if connection.recv(1) == b'' else None
+        except OSError:
+            return None
+        finally:
+            connection.close()
+
+    elapsed = closed_after(b'')
+    check('one that sends nothing', elapsed is not None and 1.5 < elapsed < 6, elapsed)
+    elapsed = closed_after(b'GET /login.html HTTP/1.1\r\nHost: 127.0.0.1\r\n')
+    check('one that stops halfway through a request', elapsed is not None and 1.5 < elapsed < 6, elapsed)
+    check('and the server goes on answering', quick.raw('GET', '/login.html')[0] == 200)

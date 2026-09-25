@@ -165,7 +165,7 @@ if [[ ! -f /etc/workout-tracker/workout-tracker.env ]]; then
 #LOGIN_ATTEMPTS=5
 #LOGIN_WINDOW=900
 #
-# Mail server for "Forgot password?" emails. Without SMTP_HOST the sign-in page does not offer a reset.
+# Mail server for "Forgot password?" emails. Without SMTP_HOST, reset a password with: workout-tracker-admin reset-password <username>
 # SMTP_SECURITY is starttls (the default, port 587), ssl (port 465) or none (port 25).
 #SMTP_HOST=smtp.gmail.com
 #SMTP_PORT=587
@@ -222,6 +222,20 @@ sqlite3 "$DATA_DIR/workouts.db" ".backup '$out'"
 echo "$out"
 BACKUP
 chmod 0755 /usr/local/bin/workout-tracker-backup
+
+cat >/usr/local/bin/workout-tracker-admin <<'ADMIN'
+#!/usr/bin/env bash
+# Manage accounts while the app keeps running:
+#   workout-tracker-admin users                          list every account and its email
+#   workout-tracker-admin reset-password <account>       set a new password (asked for twice)
+#   workout-tracker-admin set-email <account> <email>    add or change an account's email
+# Run as root; the server switches to the service's user before it touches the database.
+set -Eeuo pipefail
+. /etc/workout-tracker/install.conf
+export WORKOUT_DB="$DATA_DIR/workouts.db"
+exec python3 "$APP_DIR/backend/server.py" "$@"
+ADMIN
+chmod 0755 /usr/local/bin/workout-tracker-admin
 
 step "starting service"
 systemctl daemon-reload

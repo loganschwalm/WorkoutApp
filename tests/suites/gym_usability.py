@@ -325,10 +325,12 @@ def run(t):
     check('the server sends signed-out visitors to login with a way back', status == 303 and location == '/login.html?next=%2Fhistory.html%3Fx%3D1', f'{status} {location}')
     ui_login('?next=/history.html')
     check('signing in returns to the page you were on', cdp.ev('location.pathname') == '/history.html', cdp.ev('location.pathname'))
-    for bad in ('https://evil.example/', '//evil.example', '/\\evil.example', 'javascript:alert(1)'):
+    # The last three look like paths, but the browser strips tabs and newlines from a URL, leaving //evil.example.
+    for bad in ('https://evil.example/', '//evil.example', '/\\evil.example', 'javascript:alert(1)',
+                '/\t/evil.example', '/\n/evil.example', '/\r/evil.example'):
         ui_login('?next=' + urllib.parse.quote(bad, safe=''))
-        where = cdp.ev('location.hostname + location.pathname')
-        check(f'a crafted next ({bad}) stays on this site', where.startswith('127.0.0.1') and 'evil' not in where, where)
+        where = str(cdp.ev('location.hostname + location.pathname'))
+        check(f'a crafted next ({bad!r}) stays on this site', where.startswith('127.0.0.1') and 'evil' not in where, where)
     set_cookie(token)
     open_tracker()
     cdp.ev("confirm = () => true; document.getElementById('endWorkoutBtn')?.click()")

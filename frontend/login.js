@@ -13,13 +13,22 @@ const resetForm = document.getElementById('resetForm');
 const resetEmailInput = document.getElementById('resetEmail');
 // 'login', 'register', 'forgot' (asking for a code) or 'reset' (entering it).
 let mode = 'login';
-let resetAvailable = false;
+// Whether the server can email reset codes; null until it has said, and Forgot password? waits for the answer.
+let resetAvailable = null;
 let resetEmail = '';
 
-// Only same-site paths are followed, so a crafted ?next= link cannot send someone to another site after signing in.
+// Only pages on this site are followed, so a crafted ?next= link cannot send someone to another site after signing in.
+// It is resolved exactly as the browser would follow it: checking the text instead misses tricks the browser undoes,
+// such as a tab or newline it strips, which turns "/\t/evil.example" into "//evil.example", another site.
 function nextDestination() {
   const next = new URLSearchParams(location.search).get('next');
-  return next && next.startsWith('/') && !next.startsWith('//') && !next.startsWith('/\\') ? next : '/';
+  if (!next) return '/';
+  try {
+    const url = new URL(next, location.origin);
+    return url.origin === location.origin ? url.pathname + url.search + url.hash : '/';
+  } catch (error) {
+    return '/';
+  }
 }
 
 // The app keys what it keeps on this device by account and, until the server answers, assumes the last account seen.
@@ -57,7 +66,7 @@ function setMode(nextMode) {
   document.getElementById('usernameLabel').textContent = registering ? 'Username' : 'Email or username';
   passwordInput.autocomplete = registering ? 'new-password' : 'current-password';
   submit.textContent = registering ? 'Create account' : 'Sign in';
-  forgotButton.hidden = !signingIn || !resetAvailable;
+  forgotButton.hidden = !signingIn || resetAvailable === null;
   feedback.hidden = notice.hidden = true;
 }
 
@@ -92,7 +101,7 @@ function signedIn(result) {
 // A server with registration turned off only offers signing in, and one with no mail server cannot send reset codes.
 fetch('/api/auth/me').then(response => response.json()).then(info => {
   resetAvailable = info.passwordReset === true;
-  forgotButton.hidden = mode !== 'login' || !resetAvailable;
+  forgotButton.hidden = mode !== 'login';
   if (info.registrationOpen !== false) return;
   registerTab.hidden = true;
   if (mode === 'register') setMode('login');
@@ -111,6 +120,11 @@ form.onsubmit = event => {
 };
 
 forgotButton.onclick = () => {
+  if (!resetAvailable) {
+    // No mail server: the person who runs the server resets it instead (server.py reset-password).
+    showNotice('This server cannot email you a reset code. Ask whoever runs it to set a new password for your account.');
+    return;
+  }
   const typed = loginInput.value.trim();
   resetEmailInput.value = typed.includes('@') ? typed : '';
   setMode('forgot');

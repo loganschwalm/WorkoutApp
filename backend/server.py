@@ -1,4 +1,6 @@
+import argparse
 import contextlib
+import getpass
 import hashlib
 import http.server
 import json
@@ -9,6 +11,7 @@ import secrets
 import smtplib
 import sqlite3
 import ssl
+import sys
 import threading
 import time
 import traceback
@@ -39,9 +42,12 @@ SECURE_COOKIES = env_flag('SECURE_COOKIES', False)
 # is LOGIN_WINDOW seconds old. Behind a reverse proxy every request shares the proxy's address.
 LOGIN_ATTEMPTS = int(os.environ.get('LOGIN_ATTEMPTS', '5'))
 LOGIN_WINDOW = int(os.environ.get('LOGIN_WINDOW', str(15 * 60)))
+# Seconds a connection may sit without sending anything before it is closed. Every connection holds a thread, so
+# without this, anyone who can reach the port could open silent connections until the server ran out of room.
+REQUEST_TIMEOUT = int(os.environ.get('REQUEST_TIMEOUT', '30'))
 
-# Password reset codes are emailed through this SMTP server. With SMTP_HOST unset there is no reset by email, and the
-# sign-in page does not offer it.
+# Password reset codes are emailed through this SMTP server. With SMTP_HOST unset there is no reset by email: the
+# sign-in page says to ask whoever runs the server, who resets it with the reset-password command.
 SMTP_HOST = os.environ.get('SMTP_HOST', '').strip()
 SMTP_SECURITY = os.environ.get('SMTP_SECURITY', '').strip().lower() or 'starttls'
 SMTP_PORT = int(os.environ.get('SMTP_PORT', '').strip() or {'ssl': 465, 'none': 25}.get(SMTP_SECURITY, 587))
@@ -475,8 +481,16 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
         '.ico': 'image/x-icon',
     }
 
+    # Applied to every read and write on the connection (see REQUEST_TIMEOUT).
+    timeout = REQUEST_TIMEOUT
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=ROOT, **kwargs)
+
+    def log_error(self, format, *args):
+        # Browsers leave keep-alive connections idle, so closing one at the timeout is routine rather than an error.
+        if not format.startswith('Request timed out'):
+            super().log_error(format, *args)
 
     def list_directory(self, path):
         # Directories are not browsable; only the files the pages reference are served.
@@ -895,12 +909,127 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
         self.send_json(HTTPStatus.OK, {'ok': True})
 
 
-if __name__ == '__main__':
+def serve():
     check_mail_settings()
     init_database()
     port = int(os.environ.get('PORT', '6769'))
     server = http.server.ThreadingHTTPServer(('0.0.0.0', port), AppHandler)
     print(f'Workout Tracker listening on http://0.0.0.0:{port}')
     print(f'Password reset codes are emailed through {SMTP_HOST}:{SMTP_PORT} ({SMTP_SECURITY}).' if SMTP_HOST else
-          'Password reset by email is off: set SMTP_HOST to turn it on.')
+          'Password reset by email is off: set SMTP_HOST to turn it on, or reset passwords with the reset-password command.')
     server.serve_forever()
+
+
+# ---- Account administration ---------------------------------------------------------------------------------
+# `server.py users`, `server.py reset-password <account>` and `server.py set-email <account> <email>` manage accounts
+# from the server's own command line, so a forgotten password can be reset without a mail server.
+
+class AdminError(Exception):
+    """A command that cannot be carried out; its message is printed and the command exits with status 1."""
+
+
+def act_as_database_owner():
+    """Run as root, switch to the user who owns the database (the service's user), so that the journal files SQLite
+    creates beside it stay writable by the server. Anyone else stays who they are."""
+    if not hasattr(os, 'getuid') or os.getuid() != 0:
+        return
+    owner = os.stat(DB_PATH)
+    if owner.st_uid != 0:
+        os.setgroups([])
+        os.setgid(owner.st_gid)
+        os.setuid(owner.st_uid)
+
+
+def admin_account(database, login):
+    row = find_account(database, login)
+    if not row:
+        raise AdminError(f'No account has the username or email {login!r}. `users` lists them.')
+    return row
+
+
+def read_new_password():
+    """Asked twice, unseen, at a terminal; read from the first line of input otherwise, so it can be piped in."""
+    if sys.stdin.isatty():
+        password = getpass.getpass('New password: ')
+        if getpass.getpass('Same again: ') != password:
+            raise AdminError('The passwords did not match. Nothing was changed.')
+    else:
+        password = sys.stdin.readline().rstrip('\r\n')
+    if len(password) < 8:
+        raise AdminError('Password must be 8+ characters. Nothing was changed.')
+    return password
+
+
+def admin_users(args):
+    with connection() as database:
+        rows = database.execute('SELECT username, email FROM users ORDER BY username COLLATE NOCASE').fetchall()
+    if not rows:
+        print('No accounts yet.')
+    width = max((len(row['username']) for row in rows), default=0)
+    for row in rows:
+        print(f"{row['username']:<{width}}  {row['email'] or '(no email)'}")
+
+
+def admin_reset_password(args):
+    with connection() as database:
+        username = admin_account(database, args.account)['username']
+    stored_hash = password_hash(read_new_password())
+    with connection() as database:
+        user_id = admin_account(database, username)['id']
+        database.execute('UPDATE users SET password_hash = ? WHERE id = ?', (stored_hash, user_id))
+        database.execute('DELETE FROM password_resets WHERE user_id = ?', (user_id,))
+        database.execute('DELETE FROM sessions WHERE user_id = ?', (user_id,))
+    print(f'Set a new password for {username}, and signed the account out everywhere.')
+    # The sign-in limit lives in the running server's memory, which this command cannot reach.
+    print(f'If failed sign-ins had made it wait, that wait still runs out on its own (up to {LOGIN_WINDOW // 60} minutes), '
+          'or restart the server to end it now.')
+
+
+def admin_set_email(args):
+    try:
+        email = email_address(args.email)
+    except BadRequest as error:
+        raise AdminError(f'{error} Nothing was changed.')
+    with connection() as database:
+        row = admin_account(database, args.account)
+        if database.execute('SELECT 1 FROM users WHERE email = ? AND id != ?', (email, row['id'])).fetchone():
+            raise AdminError(f'Another account already uses {email}. Nothing was changed.')
+        database.execute('UPDATE users SET email = ? WHERE id = ?', (email, row['id']))
+        # A code already sent went to the old address.
+        database.execute('DELETE FROM password_resets WHERE user_id = ?', (row['id'],))
+    print(f"Set the email of {row['username']} to {email}.")
+
+
+def main(argv):
+    parser = argparse.ArgumentParser(
+        prog='server.py', description='Runs the Workout Tracker server. The commands manage its accounts instead, '
+                                      'in the database WORKOUT_DB names, while the server keeps running.')
+    commands = parser.add_subparsers(dest='command', metavar='command')
+    commands.add_parser('users', help='list every account and its email')
+    reset = commands.add_parser('reset-password', help='set a new password for an account, and sign it out everywhere')
+    reset.add_argument('account', help='its username or email')
+    email = commands.add_parser('set-email', help="add or change an account's email")
+    email.add_argument('account', help='its username or current email')
+    email.add_argument('email', help='the new email')
+    args = parser.parse_args(argv)
+    if args.command is None:
+        serve()
+        return 0
+    if not os.path.exists(DB_PATH):
+        print(f'There is no database at {DB_PATH}. Set WORKOUT_DB to the one the server uses.', file=sys.stderr)
+        return 1
+    act_as_database_owner()
+    init_database()
+    try:
+        {'users': admin_users, 'reset-password': admin_reset_password, 'set-email': admin_set_email}[args.command](args)
+    except AdminError as error:
+        print(error, file=sys.stderr)
+        return 1
+    except (KeyboardInterrupt, EOFError):
+        print('\nStopped. Nothing was changed.', file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))

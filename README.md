@@ -215,9 +215,10 @@ uploads when the server is reachable again.
 - Any number of accounts, each with its own workouts, templates, and settings.
 - Each account has an email as well as a username, and signs in with either. An email belongs to one
   account only, whatever its capitals.
-- Forgot your password? The sign-in page emails you a 6-digit code. Entering it with a new password
-  signs you in and signs the account out everywhere else. This needs a mail server; see
-  [Password reset emails](#password-reset-emails).
+- Forgot your password? Whoever runs the server can set a new one from its command line; see
+  [Resetting a password](#resetting-a-password). With a mail server set up, the sign-in page instead
+  emails you a 6-digit code, and entering it with a new password signs you in. Either way the account
+  is signed out everywhere else.
 - Accounts made before accounts had emails keep signing in with their username. Add an email in
   Settings to be able to reset a forgotten password.
 - Sessions last 30 days; signing out ends the session on the server.
@@ -377,6 +378,11 @@ pct exec <CTID> -- workout-tracker-backup            # writes to /var/backups/wo
 For the whole container, use a normal Proxmox `vzdump` backup job. Because the database sits at
 `/var/lib/workout-tracker/workouts.db` inside the container's root disk, a container backup covers it.
 
+#### Managing accounts
+
+The install also adds `workout-tracker-admin`, which lists accounts, sets a new password, or changes an
+email while the app keeps running. See [Resetting a password](#resetting-a-password).
+
 ### Before you expose it
 
 The server was written for a home network, and the defaults reflect that:
@@ -406,6 +412,11 @@ What is already in place:
 - Every response carries a strict Content-Security-Policy (only this site's own scripts and styles,
   nothing inline), plus `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` and
   `Referrer-Policy: same-origin`. Directory listings are off.
+- After signing in, the page only returns you to a page on this site, however the sign-in link was
+  crafted.
+- A connection that sends nothing for 30 seconds is closed, so idle connections cannot pile up until
+  the server runs out of room. A client that keeps sending a byte at a time can still hold one open;
+  a reverse proxy in front stops that too.
 
 Keep it on a trusted LAN, or put it behind a reverse proxy such as Caddy, Nginx Proxy Manager, or
 Traefik that terminates TLS and adds authentication. Do not forward the port straight to the internet.
@@ -423,7 +434,8 @@ The server reads these environment variables:
 | `SECURE_COOKIES` | `0` | `1` always marks the session cookie `Secure`; only for a site reached exclusively over HTTPS |
 | `LOGIN_ATTEMPTS` | `5` | Failed sign-ins per username and address before a wait |
 | `LOGIN_WINDOW` | `900` | Seconds a failed sign-in is remembered |
-| `SMTP_HOST` | *(none)* | Mail server for password reset emails. Unset, the sign-in page does not offer a reset |
+| `REQUEST_TIMEOUT` | `30` | Seconds a connection may send nothing before it is closed |
+| `SMTP_HOST` | *(none)* | Mail server for password reset emails. Unset, "Forgot password?" says to ask whoever runs the server |
 | `SMTP_PORT` | `587` | `465` with `SMTP_SECURITY=ssl`, `25` with `none` |
 | `SMTP_SECURITY` | `starttls` | `starttls`, `ssl` (TLS from the start), or `none` (a relay on a trusted network) |
 | `SMTP_USERNAME` / `SMTP_PASSWORD` | *(none)* | Login for the mail server; leave unset if it needs none |
@@ -439,9 +451,38 @@ Where to set them:
 - **Docker Compose:** under `environment:` in `docker-compose.yml`, then `docker compose up -d`.
 - **Manual install:** `Environment=` lines in the systemd unit, then `systemctl daemon-reload` and a restart.
 
+### Resetting a password
+
+Whoever runs the server can set a new password for any account from the command line, with no mail
+server involved. The app keeps running meanwhile. The new password is asked for twice and never
+shown, and the account is signed out everywhere, so tell its owner the new password yourself.
+
+```bash
+# Proxmox: from a shell in the container (pct enter <CTID>)
+workout-tracker-admin users                           # every account and its email
+workout-tracker-admin reset-password alex             # by username or email
+workout-tracker-admin set-email alex alex@example.com # add or correct an email
+
+# Docker Compose
+docker compose exec workout-tracker python /app/server.py reset-password alex
+
+# Manual install, or a git checkout (set WORKOUT_DB to the database the server uses)
+sudo env WORKOUT_DB=/var/lib/workout-tracker/workouts.db python3 /opt/workout-tracker/backend/server.py reset-password alex
+python backend/server.py reset-password alex
+```
+
+Run as root, the command switches to the user who owns the database before it touches it, so the
+files SQLite keeps beside the database stay usable by the server. If failed sign-ins have made the
+account wait, that wait still runs its course (up to 15 minutes), or restart the server to end it.
+Without a mail server, "Forgot password?" on the sign-in page tells people to ask you.
+
+There is no way to change your own password from Settings yet, so if you set a temporary password,
+it stays until you set another.
+
 ### Password reset emails
 
-"Forgot password?" emails a code, so the server needs a mail server to send through. Any SMTP
+Instead of asking you, people can reset their own password with a code emailed to them, once the
+server has a mail server to send through. Any SMTP
 server works: your email provider's, or a sending service such as Brevo, Mailgun, or Amazon SES.
 With a Gmail account, turn on 2-Step Verification, create an
 [app password](https://myaccount.google.com/apppasswords), and set:
@@ -587,9 +628,10 @@ done by hand except closing registration, but it is worth knowing what happens:
 - **Passwords** are rehashed at the new strength the next time each account signs in; nobody has to
   reset anything.
 - **Emails:** existing accounts keep signing in with their username, and have no email until one is
-  added in Settings. Password reset stays off until you [set up a mail server](#password-reset-emails).
-  On Proxmox, the update also makes the settings file readable by root only, since it can hold the
-  mail server's password.
+  added in Settings. You can [reset a password](#resetting-a-password) from the command line at any
+  time; people reset their own by email once you [set up a mail server](#password-reset-emails). On
+  Proxmox, the update adds `workout-tracker-admin` for this, and makes the settings file readable by
+  root only, since it can hold the mail server's password.
 - **Old links** to `/frontend/…` pages redirect to the same page without the prefix, and signing in
   now lands on `/`.
 - **Docker:** the first start hands the existing `workout_data` volume to the unprivileged `workout`
@@ -614,8 +656,9 @@ python backend/server.py
 ```
 
 Then open <http://localhost:6769/> and register an account. Visiting a page while signed out
-redirects to the login form, so start at the root rather than at `index.html`. Password reset is
-off until `SMTP_HOST` is set (see [Password reset emails](#password-reset-emails)).
+redirects to the login form, so start at the root rather than at `index.html`. To reset a password,
+run `python backend/server.py reset-password <username>`; reset by email is off until `SMTP_HOST` is
+set (see [Password reset emails](#password-reset-emails)).
 
 The database is created (or upgraded) at `data/workouts.db` in the checkout when the server starts;
 it is gitignored. Any of the [server settings](#server-settings) can be overridden the same way:

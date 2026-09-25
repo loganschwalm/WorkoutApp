@@ -20,7 +20,7 @@ class AppServer:
         self.base_url = f'http://127.0.0.1:{self.port}'
         # Mail settings from the shell are left out, so a test server can only email the sink a suite gives it.
         inherited = {name: value for name, value in os.environ.items() if not name.startswith('SMTP_')}
-        env = dict(
+        self.env = dict(
             inherited,
             PORT=str(self.port),
             WORKOUT_DB=db_path,
@@ -29,7 +29,7 @@ class AppServer:
         )
         self.process = subprocess.Popen(
             [sys.executable, os.path.join(REPO_ROOT, 'backend', 'server.py')],
-            env=env,
+            env=self.env,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
@@ -39,6 +39,16 @@ class AppServer:
             # The constructor never returned, so nobody holds a reference to stop() this later.
             self.process.kill()
             raise
+
+    def admin(self, *args, stdin='', env=None):
+        """Run one of server.py's account commands on this server's database, as an admin would while it runs.
+
+        `stdin` is what is typed; a password is read from its first line. `env` overrides this server's environment.
+        Returns (exit status, stdout, stderr).
+        """
+        result = subprocess.run([sys.executable, os.path.join(REPO_ROOT, 'backend', 'server.py'), *args],
+                                env={**self.env, **(env or {})}, input=stdin, capture_output=True, text=True, timeout=60)
+        return result.returncode, result.stdout, result.stderr
 
     def _await_ready(self):
         deadline = time.time() + 15
