@@ -204,7 +204,13 @@ def migration_4_emails(database):
         )''')
 
 
-MIGRATIONS = [migration_1_tables, migration_2_client_ids, migration_3_programs, migration_4_emails]
+def migration_5_exercise_notes(database):
+    # Notes that stay with an exercise from one workout to the next ("seat on 4"), keyed by the exercise's name as
+    # exerciseKey writes it, kept beside the settings, templates and program.
+    database.execute("ALTER TABLE user_state ADD COLUMN notes_json TEXT NOT NULL DEFAULT '{}'")
+
+
+MIGRATIONS = [migration_1_tables, migration_2_client_ids, migration_3_programs, migration_4_emails, migration_5_exercise_notes]
 
 
 def init_database():
@@ -302,10 +308,15 @@ def validate_exercises(exercises, field='exercises'):
             raise BadRequest(f'{where}.rest must be a number of seconds, up to an hour.')
         if exercise.get('timed') is not None and not isinstance(exercise['timed'], bool):
             raise BadRequest(f'{where}.timed must be true or false.')
+        # Exercises next to each other with the same group are a superset.
+        text(exercise.get('group'), f'{where}.group', 100)
         if exercise.get('sets') is not None:
             for number, logged in enumerate(listed(exercise['sets'], f'{where}.sets', 1000)):
                 amount(logged.get('weight'), f'{where}.sets[{number}].weight')
                 amount(logged.get('reps'), f'{where}.sets[{number}].reps')
+                # How many more reps the set had in it, when that was recorded: 0 (none) to 10.
+                if logged.get('rir') is not None and not (is_number(logged['rir']) and 0 <= logged['rir'] <= 10):
+                    raise BadRequest(f'{where}.sets[{number}].rir must be a number from 0 to 10.')
 
 
 def weight_unit(value, field='unit'):
@@ -365,6 +376,13 @@ def validate_state(data):
             validate_exercises(template.get('exercises'), f'templates[{index}].exercises')
     if 'program' in data:
         validate_program(data['program'])
+    if 'exerciseNotes' in data:
+        notes = data['exerciseNotes']
+        if not isinstance(notes, dict) or len(notes) > 5000:
+            raise BadRequest('exerciseNotes must be an object of up to 5000 notes.')
+        for key, note in notes.items():
+            text(key, 'exerciseNotes key', 1000)
+            text(note, f'exerciseNotes[{key!r}]', 2000)
 
 
 def email_address(value):
@@ -386,11 +404,21 @@ def workout_id(path):
 # one only ever adds. Workouts already here (by clientId, or else by name, time and exercises) and templates already
 # here are skipped, and settings and a program are only taken by an account that has none of its own.
 
-def store_state(database, user_id, settings, templates, program):
-    database.execute('INSERT INTO user_state (user_id, settings_json, templates_json, program_json, updated_at) VALUES (?, ?, ?, ?, ?) '
-                     'ON CONFLICT(user_id) DO UPDATE SET settings_json=excluded.settings_json, templates_json=excluded.templates_json, '
-                     'program_json=excluded.program_json, updated_at=excluded.updated_at',
-                     (user_id, json.dumps(settings), json.dumps(templates), json.dumps(program), int(time.time() * 1000)))
+# An account's state, as the pages have it: {settings, templates, program, exerciseNotes}.
+STATE_COLUMNS = {'settings': 'settings_json', 'templates': 'templates_json', 'program': 'program_json', 'exerciseNotes': 'notes_json'}
+STATE_EMPTY = {'settings': {}, 'templates': [], 'program': None, 'exerciseNotes': {}}
+
+
+def load_state(database, user_id):
+    row = database.execute(f"SELECT {', '.join(STATE_COLUMNS.values())} FROM user_state WHERE user_id = ?", (user_id,)).fetchone()
+    return {part: json.loads(row[column]) if row else STATE_EMPTY[part] for part, column in STATE_COLUMNS.items()}
+
+
+def store_state(database, user_id, state):
+    columns = list(STATE_COLUMNS.values())
+    database.execute(f"INSERT INTO user_state (user_id, {', '.join(columns)}, updated_at) VALUES (?, {', '.join('?' for _ in columns)}, ?) "
+                     f"ON CONFLICT(user_id) DO UPDATE SET {', '.join(f'{column}=excluded.{column}' for column in columns)}, updated_at=excluded.updated_at",
+                     (user_id, *(json.dumps(state[part]) for part in STATE_COLUMNS), int(time.time() * 1000)))
 
 
 def delete_account_rows(database, user_id):
@@ -880,9 +908,7 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
                 row = database.execute('SELECT payload FROM active_sessions WHERE user_id = ?', (user['id'],)).fetchone()
                 self.send_json(HTTPStatus.OK, {'session': json.loads(row['payload']) if row else None})
             elif path == '/api/state':
-                row = database.execute('SELECT settings_json, templates_json, program_json FROM user_state WHERE user_id = ?', (user['id'],)).fetchone()
-                self.send_json(HTTPStatus.OK, {'settings': json.loads(row['settings_json']) if row else {}, 'templates': json.loads(row['templates_json']) if row else [],
-                                               'program': json.loads(row['program_json']) if row else None})
+                self.send_json(HTTPStatus.OK, load_state(database, user['id']))
             elif path in ('/api/export', '/api/export.csv'):
                 self.export_account(database, user, as_csv=path.endswith('.csv'))
             else:
@@ -1095,12 +1121,9 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
         if as_csv:
             self.send_download(workouts_csv(workouts, zone), 'text/csv; charset=utf-8', f'workout-tracker-sets-{today}.csv')
             return
-        row = database.execute('SELECT settings_json, templates_json, program_json FROM user_state WHERE user_id = ?', (user['id'],)).fetchone()
         export = {'format': EXPORT_FORMAT, 'version': 1, 'exportedAt': int(time.time() * 1000),
                   'account': {'username': user['username'], 'email': user['email']}, 'workouts': workouts,
-                  'templates': json.loads(row['templates_json']) if row else [],
-                  'program': json.loads(row['program_json']) if row else None,
-                  'settings': json.loads(row['settings_json']) if row else {}}
+                  **load_state(database, user['id'])}
         self.send_download(json.dumps(export, indent=1), 'application/json; charset=utf-8', f'workout-tracker-{today}.json')
 
     def import_account(self, user):
@@ -1116,7 +1139,7 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
                 prepared.append((workout, *validate_workout(workout)))
             except BadRequest as error:
                 raise BadRequest(f'Workout {index + 1} in the file cannot be imported: {error}')
-        state = {part: data[part] for part in ('settings', 'templates', 'program') if part in data}
+        state = {part: data[part] for part in STATE_COLUMNS if part in data}
         validate_state(state)
         added = 0
         with connection() as database:
@@ -1127,23 +1150,26 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
                 added += database.execute('INSERT INTO workouts (user_id, name, notes, created_at, payload, client_id) VALUES (?, ?, ?, ?, ?, ?) '
                                           'ON CONFLICT(user_id, client_id) DO NOTHING',
                                           (user['id'], name, notes, created_at, json.dumps(workout), client_id)).rowcount
-            row = database.execute('SELECT settings_json, templates_json, program_json FROM user_state WHERE user_id = ?', (user['id'],)).fetchone()
-            settings = json.loads(row['settings_json']) if row else {}
-            templates = json.loads(row['templates_json']) if row else []
-            program = json.loads(row['program_json']) if row else None
-            take_settings = not settings and bool(state.get('settings'))
-            take_program = program is None and state.get('program') is not None
+            have = load_state(database, user['id'])
+            take_settings = not have['settings'] and bool(state.get('settings'))
+            take_program = have['program'] is None and state.get('program') is not None
             new_templates = []
             for template in state.get('templates') or []:
-                if not any(same_template(template, have) for have in templates + new_templates):
+                if not any(same_template(template, kept) for kept in have['templates'] + new_templates):
                     new_templates.append(template)
-            if len(templates) + len(new_templates) > 1000:
+            if len(have['templates']) + len(new_templates) > 1000:
                 raise BadRequest('Importing these templates would take the account past 1000.')
-            if take_settings or take_program or new_templates:
-                store_state(database, user['id'], state['settings'] if take_settings else settings, templates + new_templates,
-                            state['program'] if take_program else program)
+            # A note for an exercise that has none here; a note already here is the account's own and stays.
+            new_notes = {key: note for key, note in (state.get('exerciseNotes') or {}).items() if key not in have['exerciseNotes'] and note}
+            if len(have['exerciseNotes']) + len(new_notes) > 5000:
+                raise BadRequest('Importing these notes would take the account past 5000.')
+            if take_settings or take_program or new_templates or new_notes:
+                store_state(database, user['id'], {'settings': state['settings'] if take_settings else have['settings'],
+                                                   'templates': have['templates'] + new_templates,
+                                                   'program': state['program'] if take_program else have['program'],
+                                                   'exerciseNotes': {**have['exerciseNotes'], **new_notes}})
         self.send_json(HTTPStatus.OK, {'workouts': added, 'alreadyHere': len(prepared) - added, 'templates': len(new_templates),
-                                       'settings': take_settings, 'program': take_program})
+                                       'settings': take_settings, 'program': take_program, 'notes': len(new_notes)})
 
     def api_post(self, path):
         if path == '/api/auth/register':
@@ -1222,13 +1248,10 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             data = self.read_json()
             validate_state(data)
             with connection() as database:
-                existing = database.execute('SELECT settings_json, templates_json, program_json FROM user_state WHERE user_id = ?', (user['id'],)).fetchone()
-                settings = data.get('settings', json.loads(existing['settings_json']) if existing else {})
-                templates = data.get('templates', json.loads(existing['templates_json']) if existing else [])
-                # null is a real value here (the program was ended), so only a missing key keeps the stored one.
-                program = data['program'] if 'program' in data else (json.loads(existing['program_json']) if existing else None)
-                store_state(database, user['id'], settings, templates, program)
-            self.send_json(HTTPStatus.OK, {'settings': settings, 'templates': templates, 'program': program})
+                # Only the parts sent change. A missing key keeps the stored part; null is a real value for the program (ended).
+                state = {**load_state(database, user['id']), **{part: data[part] for part in STATE_COLUMNS if part in data}}
+                store_state(database, user['id'], state)
+            self.send_json(HTTPStatus.OK, state)
         else:
             self.send_json(HTTPStatus.NOT_FOUND, {'error': 'Endpoint not found.'})
 

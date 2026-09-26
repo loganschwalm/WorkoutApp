@@ -92,6 +92,25 @@ own workouts, templates, and settings.
   done for the first time has nothing to beat, so it sets no record. Records are worked out on the
   device, so they show even when the workout was finished offline.
 - Add notes while training; they fold away until you open them, unless the workout already has some.
+- Keep a note with an exercise ("seat on 4", "grip on the rings"): Add note, beside the exercise's name,
+  saves it to your account, and it shows under that exercise whenever it comes up, in any workout.
+  Save it empty to remove it.
+- Past sessions, under last time's numbers, lists the last five times you did the exercise, with a link
+  to every session of it on the Progress page.
+- Go heavier: when every set at last time's weight reached its target, the app says so and offers the
+  next step up (5 lbs, or 2.5 kg) in one tap. The target is the exercise's reps, or the first set's if
+  that was more, so a set that fell away (8, 8, 6) does not count; nor does a set logged with no reps
+  left. Training programs say this in their own way.
+- Warm-up sets for barbell lifts, before the first working set: the empty bar for 10, then about 40%,
+  60% and 80% of the weight for 5, 3 and 2, following the weight as you change it. They are a guide
+  and are not logged. 5/3/1 plans its own warm-ups instead. Settings can turn them off.
+- Effort: after a set, tap how many more reps it had in it (0 to 4 or more) before Complete set. It is
+  optional, shows beside each logged set, in Past sessions and on Progress, and a set with none left
+  keeps Go heavier quiet. Settings can turn it off.
+- Supersets: exercises done as one, a set of each in turn and a rest only when the round is done. Pair
+  an exercise with the next mid-workout (Superset with next, beside its name), or tick "Superset with
+  the next exercise" in the template editor. Next exercise moves on past the whole superset, and an
+  exercise added mid-superset goes after it. Reddit PPL does its triceps and lateral raises this way.
 - Restore an active workout after refreshing the page.
 - Finish or cancel an active workout.
 
@@ -293,6 +312,8 @@ cable stack with a single handle, and chest press, lat pulldown, leg extension a
   workouts the chart shows; the latest value is always written. Tap any point to see its value.
 - The chart is described in words for screen readers: what it shows, over how many workouts, and the
   lowest and highest values.
+- With one exercise chosen, every session of it, newest first, with its sets, the reps they had left,
+  and the note kept with it. History's exercise names, and a workout's Past sessions, link here.
 - Personal records, under the chart: for each exercise, the heaviest weight (with the most reps done at
   it), the best estimated one-rep max and the set it came from, the most reps without weight, and the
   longest hold, each with the day it was set. The most recent record comes first, and tapping one
@@ -315,6 +336,8 @@ The gear button opens a settings modal available on every page. Settings include
 - Default rest duration from 15 to 600 seconds.
 - Automatic rest-timer start toggle.
 - End-workout confirmation toggle.
+- Effort toggle: whether to ask how many reps each set had left.
+- Warm-up toggle: whether to suggest warm-up sets for barbell lifts.
 - Rest-timer alert: play a sound on or off, choose the alert sound (double beep, chime, or long tone), set the volume, and turn vibration on or off. The vibration option only appears on devices that support it.
 - On an iPhone or iPad (Safari 16.4 or later), the alert plays even with the ringer silent, at the media volume the
   volume buttons set, like a music app. The phone pauses other audio, such as music, while the alert sounds, and the
@@ -842,9 +865,9 @@ PORT=9000 WORKOUT_DB=/tmp/scratch.db python backend/server.py
 
 The `tests/` directory holds end-to-end tests that drive a real headless browser against a real
 server, plus a suite that exercises the API directly: no mocking, so a passing check means the
-feature works. Thirteen suites cover the workout flow, the training programs, the rest timer, offline syncing
+feature works. Fourteen suites cover the workout flow, the training programs, the rest timer, offline syncing
 (connections that fail and connections that stall, and two tabs uploading at once), settings and templates, exporting
-and importing, the alert settings, in-workout usability, swapping and timed exercises, rest per exercise, the workout
+and importing, the alert settings, in-workout usability, swapping and timed exercises, exercise notes, supersets, effort and warm-ups, rest per exercise, the workout
 summary and personal records, kilograms, the training calendar, the service worker, the security headers and
 escaping in the pages, signing in and resetting a password in the browser, and the API itself
 (validation, malformed requests, racing uploads, sign-in throttling, password hashes, emails and

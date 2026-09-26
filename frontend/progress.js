@@ -261,6 +261,31 @@ function renderProgress(workouts) {
   $('progressChart').setAttribute('aria-label', describeChart());
   $('chartDetail').textContent = chartData.points.length ? 'Tap a point to see its value.' : '';
   drawChart();
+  renderSessions(workouts);
+}
+
+// ---- Every session of one exercise ------------------------------------------
+// With one exercise chosen, each workout it was done in, newest first, with its sets and how many reps they had left,
+// and the note kept with the exercise. Other pages link here with ?exercise= to open on it.
+function renderSessions(workouts) {
+  const single = selectedExercise !== 'all';
+  $('sessionsCard').hidden = !single;
+  if (!single) return;
+  const label = $('exerciseFilter').selectedOptions[0]?.textContent || selectedExercise;
+  const sessions = [...workouts].sort((a, b) => b.createdAt - a.createdAt).map(workout => ({
+    workout, items:workout.exercises.filter(item => exerciseKey(item.name) === selectedExercise && (!item.sets || item.sets.length))
+  })).filter(session => session.items.length);
+  $('sessionsTitle').textContent = `Every session of ${label}`;
+  $('sessionsSummary').textContent = sessions.length ? `${plural(sessions.length, 'session')}, the most recent first.` : 'None for these filters.';
+  const notes = readLocalState('exerciseNotes')?.value;
+  const note = notes && typeof notes === 'object' ? notes[selectedExercise] : '';
+  $('sessionsNote').hidden = !note;
+  $('sessionsNote').textContent = note ? `Your note: ${note}` : '';
+  $('sessionList').innerHTML = sessions.map(({ workout, items }) => {
+    const efforts = describeEfforts(items.flatMap(item => item.sets || []));
+    return `<li><div><strong>${escapeHTML(longDate(workout.createdAt))}</strong><span>${escapeHTML(workout.name || 'Untitled workout')}</span></div>`
+      + `<span>${escapeHTML(items.map(describeSavedExercise).join(' · '))}${efforts ? ` · ${escapeHTML(efforts)}` : ''}</span></li>`;
+  }).join('');
 }
 
 // ---- Personal records -----------------------------------------------------
@@ -320,7 +345,9 @@ async function loadProgress() {
     allWorkouts = loadedWorkouts.map(workout => inUnit(workout));
     populateWorkoutTypes(allWorkouts);
     populateExercises(allWorkouts);
-    $('exerciseFilter').value = mostLoggedExercise(allWorkouts);
+    // A link from another page (History, a workout's past sessions) can name the exercise to open on.
+    const asked = new URLSearchParams(location.search).get('exercise');
+    $('exerciseFilter').value = asked && [...$('exerciseFilter').options].some(option => option.value === asked) ? asked : mostLoggedExercise(allWorkouts);
     selectedMetric = $('metricFilter').value;
     selectedExercise = $('exerciseFilter').value;
     renderProgress(allWorkouts);
@@ -357,6 +384,8 @@ $('recordsList').onclick = event => {
   document.querySelector('.progress-card').scrollIntoView({ behavior:'smooth', block:'start' });
 };
 window.addEventListener('resize', drawChart);
+// The note kept with an exercise may only arrive from the server once the page has drawn.
+window.serverStateReady.then(() => { if (allWorkouts.length) renderSessions(allWorkouts); });
 // The theme changes the chart's colours; the unit changes its numbers.
 window.addEventListener('settingschange', () => {
   const converted = loadedWorkouts.map(workout => inUnit(workout));

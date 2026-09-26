@@ -122,6 +122,12 @@ function plural(count, word) {
   return `${count} ${word}${count === 1 ? '' : 's'}`;
 }
 
+// How many reps each set had left, for sets where that was recorded: "reps left 2, 1, 0" (4 is 4 or more). '' if none.
+function describeEfforts(sets) {
+  const efforts = (sets || []).filter(set => set.rir !== undefined && set.rir !== null).map(set => Number(set.rir) >= 4 ? '4+' : String(set.rir));
+  return efforts.length ? `reps left ${efforts.join(', ')}` : '';
+}
+
 // A length of time as a clock: 90 is "1:30".
 function clockTime(seconds) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;

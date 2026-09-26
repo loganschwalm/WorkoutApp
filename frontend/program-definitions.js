@@ -177,13 +177,14 @@ const pplLifts = [
 ];
 // Sets of 5 before the last set, a + set of at least 5: deadlifts 1x5+, squats 2x5, 1x5+, the rest 4x5, 1x5+.
 const pplStraightSets = { deadlift:0, row:4, bench:4, press:4, squat:2 };
-// [name, sets, fewest reps, most reps, note]. Accessories go up in weight once every set reaches the top of the range.
+// [name, sets, fewest reps, most reps, note, superset]. Accessories go up in weight once every set reaches the top of the
+// range. Neighbours with the same superset are done as one: a set of each in turn, then rest.
 const pplPull = [['Lat Pulldown', 3, 8, 12], ['Seated Cable Row', 3, 8, 12], ['Face Pull', 5, 15, 20], ['Hammer Curl', 4, 8, 12], ['Dumbbell Curl', 4, 8, 12]];
 // Push days finish with the other press for volume, then triceps work supersetted with lateral raises.
 const pplPush = otherPress => [
   [`${otherPress} (volume)`, 3, 8, 12], ['Incline Dumbbell Press', 3, 8, 12],
-  ['Tricep Pushdown', 3, 8, 12, 'Superset with the lateral raises that follow'], ['Lateral Raise', 3, 15, 20],
-  ['Overhead Tricep Extension', 3, 8, 12, 'Superset with the lateral raises that follow'], ['Lateral Raise', 3, 15, 20]
+  ['Tricep Pushdown', 3, 8, 12, '', 'triceps-1'], ['Lateral Raise', 3, 15, 20, '', 'triceps-1'],
+  ['Overhead Tricep Extension', 3, 8, 12, '', 'triceps-2'], ['Lateral Raise', 3, 15, 20, '', 'triceps-2']
 ];
 const pplLegs = [['Romanian Deadlift', 3, 8, 12], ['Leg Press', 3, 8, 12], ['Leg Curl', 3, 8, 12], ['Calf Raise', 5, 8, 12]];
 // Pull, push and legs twice a week. The pull days alternate deadlifts and rows, the push days bench and overhead press.
@@ -221,7 +222,8 @@ const redditPpl = {
     const weight = program.trainingMaxes[lift.key];
     const main = [...repeatSets(pplStraightSets[lift.key], { weight, reps:5 }), { weight, reps:5, amrap:true }];
     return [{ name:lift.name, weight, reps:'5', rest:mainLiftRest, plan:main },
-      ...plan.accessories.map(([name, sets, reps, repsMax, note]) => ({ name, weight:'', reps:String(reps), rest:accessoryRest(name), ...(note ? { note } : {}), plan:repeatSets(sets, { weight:'', reps, repsMax }) }))];
+      ...plan.accessories.map(([name, sets, reps, repsMax, note, group]) => ({ name, weight:'', reps:String(reps), rest:accessoryRest(name), ...(note ? { note } : {}),
+        ...(group ? { group } : {}), plan:repeatSets(sets, { weight:'', reps, repsMax }) }))];
   },
   // The main lift moves after every session: up when every set got its reps, down 10% after a third miss in a row.
   // A session where the main lift was not attempted changes nothing.

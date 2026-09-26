@@ -351,16 +351,17 @@ def run_structure(t, check, request):
     t.start_server('fresh.db')  # the harness only asks /api/auth/me, which never opens the database
     schema = schema_of(t.db_path('fresh.db'))
     check('a new database has every table before any request touches it', schema['tables'] == tables, schema['tables'])
-    check('it is at schema version 4', schema['version'] == 4, schema['version'])
+    check('it is at schema version 5', schema['version'] == 5, schema['version'])
     check('with the client_id column and its unique index',
           'client_id' in schema['columns'] and 'workouts_user_client' in schema['indexes'], schema)
     check('with a column for the training program', 'program_json' in schema['state_columns'], schema['state_columns'])
+    check('and one for notes kept with each exercise', 'notes_json' in schema['state_columns'], schema['state_columns'])
     check('with an email for each account, and its unique index',
           'email' in schema['user_columns'] and 'users_email' in schema['user_indexes'], schema)
     check('in write-ahead-log mode', schema['journal'] == 'wal', schema['journal'])
     legacy = schema_of(t.db_path('legacy.db'))
-    check('the database from before client_id (A3) is now at version 4 too', legacy['version'] == 4, legacy['version'])
-    check('and has the training program column', 'program_json' in legacy['state_columns'], legacy['state_columns'])
+    check('the database from before client_id (A3) is now at version 5 too', legacy['version'] == 5, legacy['version'])
+    check('and has the training program and exercise notes columns', {'program_json', 'notes_json'} <= set(legacy['state_columns']), legacy['state_columns'])
     check('and the email column, and the table of reset codes',
           'email' in legacy['user_columns'] and 'password_resets' in legacy['tables'], legacy)
 
@@ -380,7 +381,7 @@ def run_structure(t, check, request):
     kept = db.execute("SELECT name, client_id FROM workouts").fetchall()
     db.close()
     check('an unversioned database that already has client_id upgrades cleanly',
-          schema['version'] == 4 and schema['columns'].count('client_id') == 1 and kept == [('Kept', 'k1')], f'{schema} {kept}')
+          schema['version'] == 5 and schema['columns'].count('client_id') == 1 and kept == [('Kept', 'k1')], f'{schema} {kept}')
 
     path = t.db_path('newer.db')
     db = sqlite3.connect(path)
@@ -455,6 +456,10 @@ def run_structure(t, check, request):
         ('a program that is text', good(program='Wendler 5/3/1')),
         ('a program label that is a number', good(program={'name': 'Wendler 5/3/1', 'label': 2})),
         ('a 2000-character name', good(name='x' * 2000)),
+        ('a superset group that is a number', good(exercises=exercise(group=1))),
+        ('an effort that is a word', good(exercises=exercise(sets=[{'weight': 100, 'reps': 5, 'rir': 'easy'}]))),
+        ('an effort below zero', good(exercises=exercise(sets=[{'weight': 100, 'reps': 5, 'rir': -1}]))),
+        ('an effort above ten', good(exercises=exercise(sets=[{'weight': 100, 'reps': 5, 'rir': 11}]))),
     ]
     for label, body in refused:
         status, _, reply = request('POST', '/api/workouts', json.dumps(body).encode(), json_headers, token=token)
@@ -470,6 +475,8 @@ def run_structure(t, check, request):
         ('a missing name, notes and createdAt', {'exercises': []}),
         ('a workout from a training program',
          good(program={'name': 'Wendler 5/3/1', 'cycle': 1, 'week': 2, 'label': 'Cycle 1, week 2 · 3s week'})),
+        ('a superset, and each set with the reps it had left',
+         good(exercises=exercise(group='s1', sets=[{'weight': 100, 'reps': 5, 'rir': 2}, {'weight': 100, 'reps': 5, 'rir': 0}]))),
     ]
     for label, body in accepted:
         status, _, reply = request('POST', '/api/workouts', json.dumps(body).encode(), json_headers, token=token)
@@ -531,6 +538,17 @@ def run_structure(t, check, request):
     check('saving only settings leaves the program alone', state.get('program') == program and state['templates'] == [template], state)
     status, _, _ = request('PUT', '/api/state', json.dumps({'program': None}).encode(), json_headers, token=token)
     state = t.api('GET', '/api/state', token=token)[0]
+    for label, body, expected in [
+        ('notes that are a list', {'exerciseNotes': []}, 400),
+        ('a note that is a number', {'exerciseNotes': {'squat': 5}}, 400),
+        ('a note over 2000 characters', {'exerciseNotes': {'squat': 'x' * 2001}}, 400),
+        ('valid exercise notes', {'exerciseNotes': {'squat': 'Safeties on 7', 'bench press': 'Grip on the rings'}}, 200),
+    ]:
+        status, _, reply = request('PUT', '/api/state', json.dumps(body).encode(), json_headers, token=token)
+        check(f'PUT /api/state with {label} -> {expected}', status == expected, f'{status} {reply}')
+    state = t.api('GET', '/api/state', token=token)[0]
+    check('the notes are stored, and nothing else changed', state.get('exerciseNotes') == {'squat': 'Safeties on 7', 'bench press': 'Grip on the rings'}
+          and state['templates'] == [template] and state['settings'].get('restDuration') == 75, state)
     check('a null program ends it', status == 200 and state.get('program', 'missing') is None and state['settings'].get('restDuration') == 75, f'{status} {state}')
     for label, session, expected in [('text', 'running', 400), ('a list', [], 400), ('null', None, 200),
                                      ('an object', {'name': 'Push', 'exercises': [], 'currentIndex': 0}, 200)]:
@@ -823,7 +841,8 @@ def run_export(t, check, request):
         t.api('POST', '/api/workouts', workout, source)
     state = {'settings': {'restDuration': 120, 'unit': 'kg'},
              'templates': [{'id': 'custom-1', 'name': 'Mine', 'exercises': [{'name': 'Row', 'reps': '8'}]}],
-             'program': {'definition': 'wendler531', 'unit': 'kg', 'trainingMaxes': {'squat': 100}}}
+             'program': {'definition': 'wendler531', 'unit': 'kg', 'trainingMaxes': {'squat': 100}},
+             'exerciseNotes': {'bench press': 'Grip on the rings', 'squat': 'Safeties on 7'}}
     t.api('PUT', '/api/state', state, source)
 
     status, headers, export = request('GET', '/api/export', token=source)
@@ -837,8 +856,9 @@ def run_export(t, check, request):
     check('as it was saved: sets, unit, notes, duration and clientId', names and export['workouts'][0]['exercises'] == finished['exercises']
           and export['workouts'][0]['unit'] == 'kg' and export['workouts'][0]['notes'] == 'felt strong'
           and export['workouts'][0]['duration'] == 3000 and export['workouts'][0]['clientId'] == 'export-1', export.get('workouts', [None])[0])
-    check('with the templates, program and settings',
-          export.get('templates') == state['templates'] and export.get('program') == state['program'] and export.get('settings') == state['settings'])
+    check('with the templates, program, settings and exercise notes',
+          export.get('templates') == state['templates'] and export.get('program') == state['program'] and export.get('settings') == state['settings']
+          and export.get('exerciseNotes') == state['exerciseNotes'], export.get('exerciseNotes'))
     check('and whose account it was', export.get('account') == {'username': 'exporter', 'email': 'exporter@example.test'}, export.get('account'))
 
     # Five hours behind UTC, 02:00 UTC on the 10th is still the 9th.
@@ -861,18 +881,22 @@ def run_export(t, check, request):
     print('A24 importing adds what is missing and never duplicates or overwrites')
     target = register('importer')
     t.api('POST', '/api/workouts', {'name': 'Already Mine', 'notes': '', 'exercises': [{'name': 'Curl', 'weight': 20, 'reps': 10}]}, target)
+    t.api('PUT', '/api/state', {'exerciseNotes': {'squat': 'My own squat note'}}, target)
     status, _, result = import_file(export, target)
     check('an export imports into another account', status == 200 and result == {'workouts': 2, 'alreadyHere': 0, 'templates': 1, 'settings': True,
-                                                                                  'program': True}, f'{status} {result}')
+                                                                                  'program': True, 'notes': 1}, f'{status} {result}')
     mine = {w['name']: w for w in workouts_of(target)}
     check('its workouts arrive as they were, beside what was there',
           set(mine) == {'Already Mine', 'Form Workout', '=SUM(A1) Push'} and mine['=SUM(A1) Push']['exercises'] == finished['exercises']
           and mine['=SUM(A1) Push']['createdAt'] == finished['createdAt'], sorted(mine))
     imported_state = t.api('GET', '/api/state', token=target)[0]
-    check('with the templates, program and settings', imported_state == {k: state[k] for k in ('settings', 'templates', 'program')}, imported_state)
+    check('with the templates, program and settings', {k: imported_state[k] for k in ('settings', 'templates', 'program')}
+          == {k: state[k] for k in ('settings', 'templates', 'program')}, imported_state)
+    check("and the notes for exercises that had none, keeping the account's own",
+          imported_state['exerciseNotes'] == {'squat': 'My own squat note', 'bench press': 'Grip on the rings'}, imported_state['exerciseNotes'])
     status, _, result = import_file(export, target)
     check('importing the same file again adds nothing', status == 200 and result == {'workouts': 0, 'alreadyHere': 2, 'templates': 0,
-                                                                                     'settings': False, 'program': False}, f'{status} {result}')
+                                                                                     'settings': False, 'program': False, 'notes': 0}, f'{status} {result}')
     check('so nothing is there twice', len(workouts_of(target)) == 3, len(workouts_of(target)))
     status, _, result = import_file(export, source)
     check('nor into the account it came from, even the workout with no clientId', status == 200 and result['workouts'] == 0

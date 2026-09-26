@@ -320,3 +320,36 @@ html[data-theme="dark"] .hold-timer.running { background:#303653; }
 .summary-records li { padding:10px 12px; color:#22634c; background:#edf9f2; border:1px solid #b9e3ca; border-radius:10px; font-size:.9rem; }
 html[data-theme="dark"] .summary-records li { color:#a5e5c2; background:#193b2d; border-color:#2f654b; }
 @media (max-width:620px) { .swap-fields{grid-template-columns:1fr 1fr}.swap-fields input{grid-column:1/-1}.add-exercise-fields .add-exercise-timed{grid-row:2}.add-exercise-fields button{grid-row:3}.summary-stats{grid-template-columns:1fr 1fr} }
+
+/* A note kept with an exercise, shown whenever it comes up. */
+.exercise-note { margin:4px 0 8px; padding:8px 12px; color:var(--ink); background:#fff8e6; border-left:3px solid #d9912f; border-radius:6px; font-size:.9rem; white-space:pre-line; }
+html[data-theme="dark"] .exercise-note { background:#3a3122; }
+.note-actions { display:flex; gap:8px; margin-top:8px; }
+.superset-line { margin:0 0 6px; color:var(--accent); font-weight:600; }
+.active-exercise-heading { flex-wrap:wrap; }
+.jump-superset { margin-left:4px; padding:1px 6px; color:var(--accent); background:#eef0ff; border-radius:6px; font-size:.75rem; font-weight:600; }
+html[data-theme="dark"] .jump-superset { background:#303653; }
+/* Go heavier, with a button that fills in the weight. */
+.progression-hint { margin:6px 0 0; color:#22634c; font-size:.9rem; }
+html[data-theme="dark"] .progression-hint { color:#a5e5c2; }
+.progression-hint .link-button { padding:0 4px; }
+.past-sessions { margin-top:8px; font-size:.88rem; }
+.past-sessions summary { color:var(--accent); font-weight:700; cursor:pointer; }
+.past-sessions ul { display:grid; gap:6px; margin:8px 0; padding:0; list-style:none; }
+.past-sessions li { display:grid; gap:2px; }
+.past-sessions li span:first-child { color:var(--muted); font-size:.82rem; }
+.past-sessions-link { color:var(--accent); font-weight:600; }
+/* Reps left in the tank, tapped before Complete set. */
+.effort-choices { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:10px; color:var(--muted); font-size:.85rem; }
+.effort-choices span { flex-basis:100%; }
+.effort-choices button { flex:1; max-width:64px; }
+.effort-choices button { min-width:44px; padding:8px 10px; }
+.effort-choices button[aria-pressed="true"] { color:#fff; background:var(--accent); }
+.set-effort { display:block; color:var(--muted); font-size:.75rem; font-weight:400; }
+.template-exercise-row .template-superset { grid-column:1 / -1; margin:0; }
+/* Every session of one exercise, on Progress. */
+.session-list { display:grid; gap:8px; margin:14px 0 0; padding:0; list-style:none; }
+.session-list li { display:grid; gap:4px; padding:10px 14px; border:1px solid var(--line); border-radius:10px; color:var(--muted); font-size:.88rem; }
+.session-list li div { display:flex; flex-wrap:wrap; gap:4px 10px; align-items:baseline; }
+.session-list li strong { color:var(--ink); }
+.workout-details li strong a { color:inherit; text-decoration:underline; text-decoration-color:var(--line); text-underline-offset:3px; }

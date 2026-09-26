@@ -393,9 +393,27 @@ def run(t):
     for _ in range(3):
         cdp.ev("document.getElementById('nextExerciseBtn').click()")
         cdp.pause(0.2)
-    check('a superset says so', text('activeExerciseName') == 'Tricep Pushdown'
-          and text('activeExerciseTarget') == 'Set 1 of 3: 8–12 reps. Superset with the lateral raises that follow.', text('activeExerciseTarget'))
+    check('a superset says so', text('activeExerciseName') == 'Tricep Pushdown' and visible('supersetLine')
+          and text('supersetLine') == 'Superset with Lateral Raise: a set of each in turn, then rest.'
+          and text('activeExerciseTarget') == 'Set 1 of 3: 8–12 reps.', f"{text('supersetLine')} / {text('activeExerciseTarget')}")
+    jump = cdp.ev("[...document.querySelectorAll('#exerciseJump .jump-name')].map(n => n.textContent)")
+    check('and the exercise list marks both as a superset', jump[3:5] == ['4. Tricep Pushdown superset', '5. Lateral Raise superset'], jump)
+    complete_set(10)
+    check('a set of the first goes straight on to the second, with no rest', text('activeExerciseName') == 'Lateral Raise' and not visible('restPanel'),
+          f"{text('activeExerciseName')} rest={visible('restPanel')}")
+    complete_set(15)
+    check('a set of the second ends the round: rest, and back to the first', text('activeExerciseName') == 'Tricep Pushdown' and visible('restPanel')
+          and cdp.ev("document.getElementById('restToggleBtn').textContent") == 'Pause rest', f"{text('activeExerciseName')} rest={visible('restPanel')}")
+    for reps in (10, 15, 10, 15):
+        complete_set(reps)
+    counts = cdp.ev("activeSession.exercises.slice(3, 5).map(e => e.sets.length)")
+    check('three rounds do every planned set of both', counts == [3, 3] and text('activeExerciseName') == 'Lateral Raise', f"{counts} {text('activeExerciseName')}")
+    cdp.ev("document.getElementById('nextExerciseBtn').click()")
+    cdp.pause(0.2)
+    check('Next goes on past the superset', text('activeExerciseName') == 'Overhead Tricep Extension', text('activeExerciseName'))
     finish_workout()
+    groups = [e.get('group') for e in (t.workouts()[0]['exercises'] if t.workouts() else [])]
+    check('the saved workout keeps the superset', groups.count('triceps-1') == 2, groups)
     check('a short + set keeps the weight and counts the miss', 'Bench Press stays at 135 lbs: 1 missed session in a row. A third drops it 10%.' in text('formFeedback'), text('formFeedback'))
     state = program() or {}
     check('the miss is kept', state.get('trainingMaxes', {}).get('bench') == 135 and state.get('stalls', {}).get('bench') == 1, state)
