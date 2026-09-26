@@ -212,12 +212,16 @@ def run_security(t, check, request):
     check('a different case of the same username shares the limit', login(main, 'TARGET', 'wrong-guess-7')[0] == 429)
 
     # Each failed sign-in costs a full-strength hash (0.15 s here, more under load), so the window must
-    # comfortably outlast five of them; the wait is then measured from the first failure.
+    # comfortably outlast five of them; the wait is then measured from the first failure. The server notes a
+    # failure after hashing, just before it answers, so the clock starts once the first answer is back: timed
+    # from before the request, a hash slowed by the other suites made the wait end with that failure still
+    # inside the window.
     window = 8
     quick = t.start_server('quick.db', {'LOGIN_WINDOW': str(window)})
     quick.api('POST', '/api/auth/register', {'username': 'target', 'email': 'target@example.test', 'password': 'right-password'})
+    login(quick, 'target', 'wrong-password-0')
     first_failure = time.monotonic()
-    for n in range(5):
+    for n in range(1, 5):
         login(quick, 'target', f'wrong-password-{n}')
     check(f'with a {window} second window the limit applies too', login(quick, 'target', 'right-password')[0] == 429)
     time.sleep(max(0, first_failure + window + 0.5 - time.monotonic()))
