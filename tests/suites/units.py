@@ -184,6 +184,23 @@ def run(t):
     check('and its card says so', 'dumbbells up to about 22.5 kg' in card, card)
     cdp.ev("document.getElementById('cancelProgram').click()")
 
+    # ------------------------------------------------------------------ K8b a unit changed elsewhere
+    print('K8b a unit changed on another device')
+    api('PUT', '/api/state', {'settings': {**server_settings(), 'unit': 'lbs'}}, token)
+    for attempt in range(3):
+        # The page starts from this device's copy (kilograms) and learns of pounds from the server as it loads.
+        open_tracker()
+        cdp.wait("initialLoadDone")
+        cdp.pause(0.3)
+        cdp.ev("document.querySelector('#savedWorkoutList [data-action=view]').click()")
+        shown = details('Seed Push')
+        # The newest Seed Push is the one logged in kilograms in K3.
+        if shown != [f'Bench Press{kg_in_lbs} lbs × 5']:
+            break
+    check('the saved workouts follow it, however the page load goes', shown == [f'Bench Press{kg_in_lbs} lbs × 5']
+          and cdp.ev("document.querySelector('.unit-label').textContent") == 'lbs', shown)
+    choose_unit('kg')
+
     # ------------------------------------------------------------------ K9 the server
     print('K9  the server keeps units honest')
     status, _, reply = t.request('POST', '/api/workouts', json.dumps({'name': 'Stones', 'unit': 'stone', 'exercises': []}).encode(), {'Content-Type': 'application/json'}, token=token)

@@ -2,6 +2,7 @@ const exercises = [];
 let editingWorkout = null;
 // The saved workouts as last loaded, so the list's buttons act without asking the server again.
 let savedWorkouts = [];
+let savedWorkoutsLoaded = false;
 // Weight/reps an exercise had when its logged sets were loaded for editing; used to tell whether the user changed them.
 const setBaselines = new WeakMap();
 let activeSession = null;
@@ -463,6 +464,7 @@ async function loadSavedWorkouts() {
   try {
     const workouts = await getSavedWorkouts();
     savedWorkouts = workouts;
+    savedWorkoutsLoaded = true;
     renderSavedWorkouts(workouts);
     lastPerformance = buildLastPerformance([...workouts, ...readPendingWorkouts()]);
     saveLastPerformance();
@@ -801,7 +803,8 @@ function applyUnit() {
     persistActiveSession();
   }
   if (activeSession) renderActiveWorkout();
-  if (initialLoadDone) renderSavedWorkouts(savedWorkouts);
+  // Once the list has loaded, whenever that was: the unit can arrive from the server while the page is still loading.
+  if (savedWorkoutsLoaded) renderSavedWorkouts(savedWorkouts);
   renderTemplates();
 }
 
