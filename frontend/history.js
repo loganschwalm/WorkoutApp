@@ -103,6 +103,12 @@ function showHistory(workouts) {
   renderCalendar();
 }
 
+// A day's label is its tooltip, which only a mouse shows, so tapping a day writes it under the calendar too.
+$('trainingCalendar').onclick = event => {
+  const day = event.target.closest('.calendar-day[title]');
+  if (day) $('calendarDetail').textContent = day.title;
+};
+
 // A new weekly goal from Settings counts at once, and a new unit shows every weight in it.
 window.addEventListener('settingschange', () => {
   if (historyWorkouts) renderHistory(historyWorkouts);

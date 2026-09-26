@@ -390,6 +390,9 @@ def run(t):
     check('month names head the weeks they start in', state['months'] >= 3, state['months'])
     check('this week counts toward the default goal of 3', state['summary'] == 'This week: 2 of 3 workouts', state['summary'])
     check('an unfinished week does not break the streak: last week and the one before', state['streak'] == '2-week streak · best 3', state['streak'])
+    cdp.ev(f"document.querySelector('.calendar-day[data-date=\"{today.isoformat()}\"]').click()")
+    detail = cdp.ev("document.getElementById('calendarDetail').textContent")
+    check('tapping a day writes its workouts under the calendar, for phones', 'Today A' in detail and 'Today B' in detail, detail)
     rest = cdp.ev("document.querySelector('.calendar-day:not(.trained):not(.future)').title")
     check('a day without a workout says rest', rest.endswith(': rest'), rest)
 

@@ -52,13 +52,19 @@ own workouts, templates, and settings.
   beside the weight.
 - For barbell lifts (going by the exercise's name), see the plates to load on each side of a 45 lb
   bar, down to 1.25s: 187.5 lbs is 45 + 25 + 1.25. A weight the plates cannot make says what they do.
+  In kilograms it is a 20 kg bar with 25, 20, 15, 10, 5, 2.5 and 1.25 kg plates, and the weight
+  buttons step 2.5 kg.
 - See how you did last time on each exercise; its weight and reps are prefilled, and after each set the next one defaults to the set you just logged.
 - View completed sets during the workout, correct a set's weight or reps in place, or remove a set that was logged by mistake.
+  Remove takes it away at once, and the banner says which set went ("Removed set 2 of Bench Press
+  (105 lbs × 6)") with an Undo button for 10 seconds that puts it back in its place, even after
+  moving on to another exercise.
 - Go back to a previous exercise, or add an exercise in the middle of a workout.
 - Exercises with no logged sets count as skipped and are left out of the saved workout, so they never appear as done in History or Progress.
 - Automatically start a configurable rest timer after each set. It sits under the set entry and stays
   on screen while you scroll.
-- Pause and reset the rest timer.
+- Pause and reset the rest timer, or give yourself 30 seconds more or less with −30s and +30s,
+  running or paused. Taking it down to nothing ends the rest quietly.
 - Keep accurate rest time even when the screen locks or the tab is in the background; the timer alerts you with a sound and vibration when rest is over (configurable in Settings).
 - Keep the screen awake during a workout (on browsers that support it).
 - Move to the next exercise with the rest timer reset to the configured duration.
@@ -153,12 +159,13 @@ up another replaces it, and the workouts you finished stay in your history. They
   training max if you already know yours. Lifts you have logged are filled in with an estimate from
   your latest sets.
 - Four days a week, one main lift a day, through the 5s, 3s and 5/3/1 weeks and a deload week.
-  Every weight is worked out from your training max and rounded to the nearest 5 or 2.5 lbs.
+  Every weight is worked out from your training max and rounded to the nearest 5 or 2.5 lbs (2.5 or
+  1.25 kg).
 - Choose the assistance work: Boring But Big (5 × 10 of the day's lift at 50%, plus one exercise),
   Triumvirate (two exercises), or the main lifts only. Warm-up sets and the deload week can each be
   turned off.
 - When every day of a cycle is done, the next cycle starts with each training max raised: 5 lbs
-  for the press and bench press, 10 lbs for the deadlift and squat. A lift whose + set fell short of
+  (2.5 kg) for the press and bench press, 10 lbs (5 kg) for the deadlift and squat. A lift whose + set fell short of
   its reps drops to 90% instead, as the program prescribes. The card shows next cycle's numbers in
   advance.
 - Training maxes, rounding and assistance can be changed at any time, and the rest of the cycle
@@ -175,7 +182,8 @@ The linear-progression push/pull/legs program for beginners posted to r/Fitness 
   supersetted with lateral raises.
 - Setting it up asks for a starting weight for each main lift. Lifts you have logged are filled in
   with your heaviest set of 5 or more last time.
-- Each session where the main lift gets all its reps, it goes up 5 lbs, or 10 for the deadlift.
+- Each session where the main lift gets all its reps, it goes up 5 lbs, or 10 for the deadlift
+  (2.5 kg, or 5 kg).
   Miss reps three sessions in a row and it drops 10%. The card shows each lift's working weight and
   any misses in a row.
 - Accessories start from last time's weight. Once every set of one reached the top of its range,
@@ -205,6 +213,8 @@ cable stack with a single handle, and chest press, lat pulldown, leg extension a
   heaviest set of 8 or more last time.
 - Main lifts use double progression. A lift stays at its weight until every set reaches the top of
   its range, then goes up next time: one plate on the machines, 5 lbs a hand on the dumbbells.
+  In kilograms the dumbbells go up 2.5 kg, start at 22.5 kg as the heaviest pair, and the weight
+  stacks step 5, 2.5 or 7.5 kg.
 - Once a dumbbell lift is at your heaviest dumbbells, it stops going up, and the app says to make it
   harder by lowering each rep over 3 seconds and pausing at the bottom.
 - A session with a set below the bottom of the range counts a miss. Three in a row and the lift
@@ -216,6 +226,10 @@ cable stack with a single handle, and chest press, lat pulldown, leg extension a
 
 ### Workout history
 
+- See the last 12 weeks at a glance on the History page: a calendar with a square for each day you
+  trained (tap one to see its workouts), this week's workouts against your weekly goal, your current
+  streak of weeks at the goal, and your best. A week still in progress never breaks the streak; it
+  joins it once it reaches the goal. The goal is in Settings.
 - Review all saved workouts on the History page. The Tracker lists the 10 most recent, with a link
   to the rest. Each shows its name and date (tap it for the sets), Start, and a ⋯ menu to copy it as
   a new workout, edit it, or delete it.
@@ -244,6 +258,12 @@ The gear button opens a settings modal available on every page. Settings include
 - Appearance: match the device's own light or dark mode (the default, which also follows it when it changes
   while the app is open), or always light, or always dark. Pages open in the right theme straight away, with no
   flash of the other, and the sign-in page follows it too.
+- Weight unit: pounds (the default) or kilograms. Everything follows it, from the weight fields to
+  History, Progress and the training programs, which use kilogram steps (2.5 kg jumps, kg
+  dumbbells and weight stacks). Workouts are stored in the unit they were logged in and only
+  converted for showing, so switching units never changes what you logged, and switching back shows
+  it exactly as it was. The workout in progress and your program switch with you.
+- Weekly goal: 1 to 7 workouts a week (3 by default), which the History page's calendar counts.
 - Default rest duration from 15 to 600 seconds.
 - Automatic rest-timer start toggle.
 - End-workout confirmation toggle.
@@ -719,8 +739,8 @@ PORT=9000 WORKOUT_DB=/tmp/scratch.db python backend/server.py
 
 The `tests/` directory holds end-to-end tests that drive a real headless browser against a real
 server, plus a suite that exercises the API directly: no mocking, so a passing check means the
-feature works. Eleven suites cover the workout flow, the training programs, the rest timer, offline syncing, settings and
-templates, the alert settings, in-workout usability, the service worker, the security headers and
+feature works. Twelve suites cover the workout flow, the training programs, the rest timer, offline syncing, settings and
+templates, the alert settings, in-workout usability, kilograms, the training calendar, the service worker, the security headers and
 escaping in the pages, signing in and resetting a password in the browser, and the API itself
 (validation, malformed requests, racing uploads, sign-in throttling, password hashes, emails and
 reset codes, and database upgrades). Reset emails go to a small stand-in mail server inside the tests.

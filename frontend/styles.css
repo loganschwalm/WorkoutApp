@@ -263,3 +263,5 @@ input[type="range"] { padding:0; border:0; background:transparent; accent-color:
 .calendar-day.today { outline:2px solid var(--ink); outline-offset:1px; }
 .calendar-streak { color:var(--accent); font-weight:800; }
 .calendar-note { margin:12px 0 0; font-size:.82rem; }
+.calendar-day[title] { cursor:pointer; }
+.calendar-detail { min-height:1.2em; margin:10px 0 0; color:var(--ink); font-weight:600; }
