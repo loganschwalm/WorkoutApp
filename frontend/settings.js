@@ -135,9 +135,9 @@ function showAccount() {
   const known = Boolean(window.localUsername);
   getSettingElement('accountName').textContent = known ? `Signed in as ${window.localUsername}` : '';
   getSettingElement('accountEmail').textContent = window.localEmail || 'No email yet. Add one so you can reset a forgotten password.';
-  getSettingElement('accountEmail').hidden = getSettingElement('changeEmailButton').hidden = !known;
+  getSettingElement('accountEmail').hidden = getSettingElement('changeEmailButton').hidden = getSettingElement('changePasswordButton').hidden = !known;
   getSettingElement('changeEmailButton').textContent = window.localEmail ? 'Change email' : 'Add email';
-  getSettingElement('emailEditor').hidden = true;
+  getSettingElement('emailEditor').hidden = getSettingElement('passwordEditor').hidden = getSettingElement('accountNotice').hidden = true;
 }
 
 function showEmailError(message) {
@@ -259,7 +259,8 @@ getSettingElement('signOutButton').onclick = async () => {
 getSettingElement('changeEmailButton').onclick = () => {
   getSettingElement('emailSetting').value = window.localEmail || '';
   getSettingElement('emailPassword').value = '';
-  getSettingElement('emailFeedback').hidden = true;
+  getSettingElement('emailFeedback').hidden = getSettingElement('accountNotice').hidden = true;
+  getSettingElement('passwordEditor').hidden = true;
   getSettingElement('emailEditor').hidden = false;
   getSettingElement('emailSetting').focus();
 };
@@ -272,7 +273,44 @@ getSettingElement('importFile').onchange = () => {
   getSettingElement('importFile').value = '';
   if (file) importAccount(file);
 };
-getSettingElement('cancelEmail').onclick =() => { getSettingElement('emailEditor').hidden = true; };
+getSettingElement('cancelEmail').onclick = () => { getSettingElement('emailEditor').hidden = true; };
+getSettingElement('changePasswordButton').onclick = () => {
+  getSettingElement('currentPassword').value = getSettingElement('newPassword').value = '';
+  getSettingElement('passwordFeedback').hidden = getSettingElement('accountNotice').hidden = true;
+  getSettingElement('emailEditor').hidden = true;
+  getSettingElement('passwordEditor').hidden = false;
+  getSettingElement('currentPassword').focus();
+};
+getSettingElement('cancelPassword').onclick = () => { getSettingElement('passwordEditor').hidden = true; };
+getSettingElement('passwordForm').onsubmit = async event => {
+  event.preventDefault();
+  const save = getSettingElement('savePassword');
+  const feedback = getSettingElement('passwordFeedback');
+  const fail = message => { feedback.textContent = message; feedback.hidden = false; };
+  feedback.hidden = true;
+  save.disabled = true;
+  try {
+    let response;
+    try {
+      response = await fetch('/api/account/password', { method:'POST', headers:{ 'Content-Type':'application/json' },
+        body:JSON.stringify({ currentPassword:getSettingElement('currentPassword').value, newPassword:getSettingElement('newPassword').value }) });
+    } catch (error) {
+      fail('Could not reach the server. Try again when you are back online.');
+      return;
+    }
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      fail(result.error || 'Could not change the password. Try again.');
+      return;
+    }
+    getSettingElement('passwordEditor').hidden = true;
+    const notice = getSettingElement('accountNotice');
+    notice.textContent = `Password changed.${result.signedOut ? ` ${result.signedOut === 1 ? 'One other device was' : `${result.signedOut} other devices were`} signed out.` : ''}`;
+    notice.hidden = false;
+  } finally {
+    save.disabled = false;
+  }
+};
 getSettingElement('emailForm').onsubmit = async event => {
   event.preventDefault();
   const save = getSettingElement('saveEmail');

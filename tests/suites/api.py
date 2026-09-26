@@ -168,6 +168,7 @@ def run(t):
     run_accounts(t, check, request)
     run_admin(t, check, request)
     run_export(t, check, request)
+    run_account_security(t, check, request)
     run_bursts(t, check)
 
 
@@ -899,6 +900,114 @@ def run_export(t, check, request):
     check('a whole account of several megabytes is accepted', status == 200 and result['workouts'] == 400, f'{status} {result}')
     status, _, reply = request('POST', '/api/import', None, {'Content-Length': str(50 * 1024 * 1024)}, token=target)
     check('but not an unlimited one -> 413', status == 413, f'{status} {reply!r}')
+
+
+def run_account_security(t, check, request):
+    main = t.server
+    db_path = t.db_path('test.db')
+    json_headers = {'Content-Type': 'application/json'}
+
+    def post(path, body, token=None, headers=None):
+        return request('POST', path, json.dumps(body).encode(), {**json_headers, **(headers or {})}, token=token)
+
+    def session_of(headers):
+        cookie = headers.get('set-cookie', '')
+        return cookie.split('session=')[1].split(';')[0] if 'session=' in cookie else None
+
+    def register(name, password='first-password'):
+        return session_of(post('/api/auth/register', {'username': name, 'email': f'{name}@example.test', 'password': password})[1])
+
+    def sign_in(login, password):
+        status, headers, _ = post('/api/auth/login', {'login': login, 'password': password})
+        return status, session_of(headers)
+
+    def me(token):
+        return main.api('GET', '/api/auth/me', token=token)[0]['user']
+
+    def expires_at(token):
+        db = sqlite3.connect(db_path)
+        row = db.execute('SELECT expires_at FROM sessions WHERE token = ?', (token,)).fetchone()
+        db.close()
+        return row[0] if row else None
+
+    def set_expires_at(token, when):
+        db = sqlite3.connect(db_path)
+        db.execute('UPDATE sessions SET expires_at = ? WHERE token = ?', (when, token))
+        db.commit()
+        db.close()
+
+    # ------------------------------------------------------------------ A26 changing the password
+    print('A26 the password is changed with the current one, and other devices are signed out')
+    here = register('changer')
+    other_device = sign_in('changer', 'first-password')[1]
+    for label, body, expected in [
+        ('a wrong current password', {'currentPassword': 'not-the-password', 'newPassword': 'second-password'}, 403),
+        ('a new password under 8 characters', {'currentPassword': 'first-password', 'newPassword': 'short'}, 400),
+    ]:
+        status, _, reply = post('/api/account/password', body, here)
+        check(f'{label} -> {expected} with a message', status == expected and reply.get('error'), f'{status} {reply}')
+    check('neither changed it, or signed anything out', sign_in('changer', 'first-password')[0] == 200 and me(other_device) is not None)
+    check('signed out -> 401', post('/api/account/password', {'currentPassword': 'first-password', 'newPassword': 'second-password'})[0] == 401)
+    status, _, reply = post('/api/account/password', {'currentPassword': 'first-password', 'newPassword': 'second-password'}, here)
+    check('the right current password changes it', status == 200, f'{status} {reply}')
+    check('the reply counts the other sessions signed out', isinstance(reply, dict) and reply.get('signedOut') == 2, reply)
+    check('this session stays signed in', me(here) is not None and me(here)['username'] == 'changer')
+    check('the other devices are signed out', me(other_device) is None)
+    check('the old password no longer signs in', sign_in('changer', 'first-password')[0] == 401)
+    check('the new one does', sign_in('changer', 'second-password')[0] == 200)
+    guesser = register('guesser')
+    guesses = [post('/api/account/password', {'currentPassword': f'guess-{n}', 'newPassword': 'whatever-new'}, guesser)[0] for n in range(5)]
+    status = post('/api/account/password', {'currentPassword': 'first-password', 'newPassword': 'whatever-new'}, guesser)[0]
+    check('guessing the current password is limited like signing in', guesses == [403] * 5 and status == 429, f'{guesses} {status}')
+
+    # ------------------------------------------------------------------ A27 sessions last from their last use
+    print('A27 a session lasts 30 days from when it was last used')
+    regular = register('regular')
+    status, headers, _ = request('GET', '/api/auth/me', token=regular)
+    check('a session used the day it started is left as it is', status == 200 and 'set-cookie' not in headers, headers.get('set-cookie'))
+    now = int(time.time())
+    set_expires_at(regular, now + 10 * 86400)
+    status, headers, reply = request('GET', '/api/auth/me', token=regular)
+    cookie = headers.get('set-cookie', '')
+    check('one used 20 days in is renewed to a full 30 days', abs(expires_at(regular) - (now + 30 * 86400)) < 60, expires_at(regular) - now)
+    check('and its cookie is sent again, to last as long', f'session={regular};' in cookie and 'Max-Age=2592000' in cookie and 'HttpOnly' in cookie, cookie)
+    check('the answer is otherwise the same', status == 200 and reply['user']['username'] == 'regular', reply)
+    status, headers, _ = request('GET', '/api/auth/me', token=regular)
+    check('using it again the same day sends no cookie', 'set-cookie' not in headers, headers.get('set-cookie'))
+    set_expires_at(regular, now + 5 * 86400)
+    status, headers, _ = request('GET', '/index.html', token=regular)
+    check('opening a page renews it too', status == 200 and f'session={regular};' in headers.get('set-cookie', ''), headers.get('set-cookie'))
+    set_expires_at(regular, now - 60)
+    status, headers, reply = request('GET', '/api/auth/me', token=regular)
+    check('an expired session stays expired', reply['user'] is None and 'set-cookie' not in headers, f"{reply} {headers.get('set-cookie')}")
+
+    # ------------------------------------------------------------------ A28 changes asked for by other pages
+    print('A28 changes asked for by another page on the same site are refused')
+    owner = register('forgery-target')
+    session = {'name': 'In Progress', 'exercises': [], 'currentIndex': 0}
+    post('/api/active-session', {'session': session}, owner)
+    before = len(main.api('GET', '/api/workouts', token=owner)[0]['workouts'])
+    forged = [
+        ('plain text wiping the workout in progress', 'POST', '/api/active-session', b'{"session":null}', {'Content-Type': 'text/plain'}, 415),
+        ('a form adding a workout', 'POST', '/api/workouts', b'name=Forged&exercises=', {'Content-Type': 'application/x-www-form-urlencoded'}, 415),
+        ('a body with no type at all', 'POST', '/api/workouts', b'{"name":"Forged","exercises":[]}', {}, 415),
+        ('JSON from another page on the same site', 'POST', '/api/workouts', b'{"name":"Forged","exercises":[]}',
+         {**json_headers, 'Sec-Fetch-Site': 'same-site'}, 403),
+        ('JSON from another site', 'PUT', '/api/state', b'{"settings":{}}', {**json_headers, 'Sec-Fetch-Site': 'cross-site'}, 403),
+        ('a delete from another page on the same site', 'DELETE', '/api/active-session', None, {'Sec-Fetch-Site': 'same-site'}, 403),
+        ('signing out from another page on the same site', 'POST', '/api/auth/logout', None, {'Sec-Fetch-Site': 'same-site'}, 403),
+    ]
+    for label, method, path, body, headers, expected in forged:
+        status, _, reply = request(method, path, body, headers, token=owner)
+        check(f'{label} -> {expected}', status == expected and isinstance(reply, dict) and reply.get('error'), f'{status} {reply!r}')
+    after = main.api('GET', '/api/active-session', token=owner)[0]['session']
+    check('the workout in progress is untouched', after == session, after)
+    check('no workout was added', len(main.api('GET', '/api/workouts', token=owner)[0]['workouts']) == before)
+    check('and the session is still signed in', me(owner) is not None)
+    status, _, _ = post('/api/workouts', {'name': 'Mine', 'exercises': []}, owner, {'Sec-Fetch-Site': 'same-origin'})
+    check("the site's own pages still make changes", status == 201, status)
+    status, _, _ = request('GET', '/api/workouts', None, {'Sec-Fetch-Site': 'cross-site'}, token=owner)
+    check('reading is not refused (the browser keeps the answer from another site)', status == 200, status)
 
 
 def run_bursts(t, check):

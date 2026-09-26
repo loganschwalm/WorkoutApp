@@ -28,6 +28,8 @@ PROJECT_ROOT = os.path.dirname(SERVER_DIR)
 ROOT = os.environ.get('APP_ROOT', os.path.join(PROJECT_ROOT, 'frontend'))
 DB_PATH = os.environ.get('WORKOUT_DB', os.path.join(PROJECT_ROOT, 'data', 'workouts.db'))
 SESSION_TTL = 60 * 60 * 24 * 30
+# A session in use is renewed to a full SESSION_TTL once this much of it has gone by.
+SESSION_RENEW = 60 * 60 * 24
 # Years of workouts are a few hundred kilobytes, so anything bigger than this is not the app talking.
 MAX_BODY = 1024 * 1024
 # An import carries a whole account at once: room for tens of thousands of workouts.
@@ -607,6 +609,11 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             return None
         return super().send_head()
 
+    def parse_request(self):
+        # One handler answers every request on a keep-alive connection, so nothing is carried over from the last one.
+        self.renewed_cookie = None
+        return super().parse_request()
+
     def send_response(self, *args, **kwargs):
         self.cache_control_sent = False
         super().send_response(*args, **kwargs)
@@ -624,6 +631,10 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
         # that never asks again. Revalidating every time costs a 304 and avoids both.
         if not getattr(self, 'cache_control_sent', False):
             self.send_header('Cache-Control', 'no-cache')
+        # A session renewed while answering this request (see session_user) goes out on whatever the answer is.
+        if getattr(self, 'renewed_cookie', None):
+            self.send_header('Set-Cookie', self.renewed_cookie)
+            self.renewed_cookie = None
         for name, value in SECURITY_HEADERS.items():
             self.send_header(name, value)
         super().end_headers()
@@ -660,6 +671,11 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             # The body is left unread, so this connection cannot carry another request.
             self.close_connection = True
             raise BadRequest('Request body is too large.', HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
+        # A page on another site can send a form or plain text without asking, but JSON only after a CORS check this
+        # server never passes. Browsers that do not say where a request came from (see handle_api) are stopped here.
+        if self.headers.get('Content-Type', '').split(';')[0].strip().lower() != 'application/json':
+            self.close_connection = True
+            raise BadRequest('Send the request body as JSON, with Content-Type: application/json.', HTTPStatus.UNSUPPORTED_MEDIA_TYPE)
         try:
             data = json.loads(self.rfile.read(length) or b'{}')
         except ValueError:  # includes UnicodeDecodeError
@@ -670,6 +686,11 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
 
     def handle_api(self, handler, path):
         try:
+            # The session cookie is SameSite=Lax, which keeps it off requests from other sites, but not from other pages
+            # on the same one: another port on this address, or another subdomain behind the same proxy. Browsers say
+            # where a request came from, so a change asked for by any page but this site's own is refused.
+            if self.command != 'GET' and self.headers.get('Sec-Fetch-Site', '').strip().lower() in ('same-site', 'cross-site'):
+                raise BadRequest('Changes can only be made from this site.', HTTPStatus.FORBIDDEN)
             handler(path)
         except BadRequest as error:
             self.send_json(error.status, {'error': str(error)})
@@ -679,14 +700,23 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             self.close_connection = True
             self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {'error': 'Internal server error.'})
 
+    def session_token(self):
+        token = SimpleCookie(self.headers.get('Cookie', '')).get('session')
+        return token.value if token else None
+
     def session_user(self):
-        cookie = SimpleCookie(self.headers.get('Cookie', ''))
-        token = cookie.get('session')
+        token = self.session_token()
         if not token:
             return None
+        now = int(time.time())
         with connection() as database:
-            row = database.execute('SELECT users.id, users.username, users.email FROM sessions JOIN users ON users.id = sessions.user_id WHERE sessions.token = ? AND sessions.expires_at > ?', (token.value, int(time.time()))).fetchone()
-        return dict(row) if row else None
+            row = database.execute('SELECT users.id, users.username, users.email, sessions.expires_at FROM sessions JOIN users ON users.id = sessions.user_id WHERE sessions.token = ? AND sessions.expires_at > ?', (token, now)).fetchone()
+            # A session lasts SESSION_TTL from when it was last used, not from signing in, so someone who trains every week
+            # stays signed in. Renewed at most once a day, and the cookie with it, or the browser would drop it on time anyway.
+            if row and row['expires_at'] < now + SESSION_TTL - SESSION_RENEW:
+                database.execute('UPDATE sessions SET expires_at = ? WHERE token = ?', (now + SESSION_TTL, token))
+                self.renewed_cookie = self.session_cookie(token, SESSION_TTL)
+        return {key: row[key] for key in ('id', 'username', 'email')} if row else None
 
     def require_user(self):
         user = self.session_user()
@@ -912,6 +942,31 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             database.execute('DELETE FROM password_resets WHERE user_id = ?', (user['id'],))
         self.send_json(HTTPStatus.OK, {'user': {**user, 'email': email}})
 
+    def change_password(self, user):
+        data = self.read_json()
+        current = str(data.get('currentPassword', ''))
+        new = str(data.get('newPassword', ''))
+        if len(new) < 8:
+            raise BadRequest('The new password must be 8+ characters.')
+        # As with the email: the current password is asked again, and wrong ones count as failed sign-ins.
+        throttle_key = (self.client_address[0], user['username'].lower())
+        wait = login_throttle.retry_after(throttle_key)
+        if wait:
+            self.send_wait(wait, 'Too many wrong passwords.')
+            return
+        stored_hash = password_hash(new)
+        with connection() as database:
+            stored = database.execute('SELECT password_hash FROM users WHERE id = ?', (user['id'],)).fetchone()['password_hash']
+            if not password_matches(current, stored):
+                login_throttle.record(throttle_key)
+                # 403, not 401: the session is fine, and a 401 would tell the page it had expired.
+                raise BadRequest('Your current password is not right.', HTTPStatus.FORBIDDEN)
+            database.execute('UPDATE users SET password_hash = ? WHERE id = ?', (stored_hash, user['id']))
+            # Whoever knew the old password is signed out everywhere but here, and a reset code sent for it stops working.
+            signed_out = database.execute('DELETE FROM sessions WHERE user_id = ? AND token != ?', (user['id'], self.session_token())).rowcount
+            database.execute('DELETE FROM password_resets WHERE user_id = ?', (user['id'],))
+        self.send_json(HTTPStatus.OK, {'signedOut': signed_out})
+
     def send_download(self, text, content_type, filename):
         """A file for the browser to save rather than show."""
         body = text.encode()
@@ -994,11 +1049,10 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             self.reset_password()
             return
         if path == '/api/auth/logout':
-            cookie = SimpleCookie(self.headers.get('Cookie', ''))
-            token = cookie.get('session')
+            token = self.session_token()
             if token:
                 with connection() as database:
-                    database.execute('DELETE FROM sessions WHERE token = ?', (token.value,))
+                    database.execute('DELETE FROM sessions WHERE token = ?', (token,))
             self.send_json(HTTPStatus.OK, {'ok': True}, [self.session_cookie('', 0)])
             return
         user = self.require_user()
@@ -1029,6 +1083,8 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             self.send_json(HTTPStatus.OK, {'ok': True})
         elif path == '/api/account/email':
             self.change_email(user)
+        elif path == '/api/account/password':
+            self.change_password(user)
         elif path == '/api/import':
             self.import_account(user)
         else:

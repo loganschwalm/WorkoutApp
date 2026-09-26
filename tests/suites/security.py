@@ -1,8 +1,12 @@
 """The Content-Security-Policy in a real browser, stored text that looks like markup, and closed registration."""
 
+import http.server
 import json
 import sqlite3
+import threading
 import time
+
+from ..harness import free_port
 
 INTERCEPT = False
 
@@ -106,3 +110,52 @@ def run(t):
     cdp.pause(0.5)
     check('a closed server hides it', cdp.ev("getComputedStyle(document.getElementById('registerTab')).display") == 'none')
     check('and stays on Sign in', cdp.ev("document.getElementById('authSubmit').textContent") == 'Sign in')
+
+    # ------------------------------------------------------------------ S4 another page on this address
+    print('S4  a page on another port of this address cannot make changes')
+    in_progress = {'name': 'Still Here', 'exercises': [], 'currentIndex': 0}
+    t.api('POST', '/api/active-session', {'session': in_progress}, t.token)
+    before = len(t.workouts())
+    app = t.base_url
+    # To the browser another port on the same address is the same site, so it sends this page the session cookie.
+    pages = {
+        '/fetch.html': f"""<script>
+          fetch('{app}/api/active-session', {{ method: 'POST', credentials: 'include', headers: {{ 'Content-Type': 'text/plain' }},
+            body: '{{"session":null}}' }}).then(() => 'answered', () => 'unreadable').then(outcome => {{ window.__done = outcome; }});
+        </script>""",
+        '/form.html': f"""<form method="post" enctype="text/plain" action="{app}/api/workouts">
+          <input name='{{"name":"Forged","exercises":[],"x":"' value='"}}'></form><script>document.forms[0].submit();</script>""",
+    }
+
+    class Attacker(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            body = pages.get(self.path, '').encode()
+            self.send_response(200 if body else 404)
+            self.send_header('Content-Type', 'text/html')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+    class QuietServer(http.server.ThreadingHTTPServer):
+        def handle_error(self, request, client_address):
+            pass  # the browser dropping an idle connection as it navigates away
+
+    attacker = QuietServer(('127.0.0.1', free_port()), Attacker)
+    threading.Thread(target=attacker.serve_forever, daemon=True).start()
+    try:
+        elsewhere = f'http://127.0.0.1:{attacker.server_address[1]}'
+        cdp.send('Page.navigate', url=elsewhere + '/fetch.html')
+        check('the other page sends its request', cdp.wait('window.__done !== undefined', timeout=10), '')
+        cdp.pause(0.5)
+        check('which does not wipe the workout in progress', t.active_session() == in_progress, t.active_session())
+        cdp.send('Page.navigate', url=elsewhere + '/form.html')
+        check('a form it submits reaches the server', cdp.wait(f"location.href.startsWith('{app}/api/workouts')", timeout=10), '')
+        cdp.pause(0.5)
+        check('and is refused', 'from this site' in (cdp.ev('document.body.innerText') or ''), cdp.ev('document.body.innerText'))
+        check('adding no workout', len(t.workouts()) == before, len(t.workouts()))
+    finally:
+        attacker.shutdown()
+        attacker.server_close()

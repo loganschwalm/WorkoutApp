@@ -309,6 +309,8 @@ The gear button opens a settings modal available on every page. Settings include
 - Your data: Export, Export sets as CSV, and Import. See [Exporting and importing](#exporting-and-importing).
 - The signed-in account name and a Sign out button. Signing out warns first if a workout has not finished syncing; it stays on the device and uploads the next time you sign in to the same account.
 - The account's email, with a button to add or change it. Changing it asks for your password.
+- Change password: asks for the current password and a new one of 8+ characters, keeps this device signed in, and
+  signs the account out everywhere else.
 
 Settings are saved to your account on the server and cached in the browser, so they persist
 between visits and follow you to another device. A change made offline applies straight away and
@@ -345,7 +347,9 @@ which has every account.
   is signed out everywhere else.
 - Accounts made before accounts had emails keep signing in with their username. Add an email in
   Settings to be able to reset a forgotten password.
-- Sessions last 30 days; signing out ends the session on the server.
+- A session lasts 30 days from when it was last used, so someone who trains every week stays signed in.
+  Signing out ends the session on the server.
+- Change your password in Settings with your current one; every other device is signed out.
 - Registration can be closed once your accounts exist, and the sign-in page then only offers signing in.
 - Repeated wrong passwords for one account are slowed down, and passwords are stored as strong
   one-way hashes. See [Before you expose it](#before-you-expose-it).
@@ -385,7 +389,7 @@ through the mail server you configure.
 Open a **shell on the Proxmox VE host** (Datacenter → your node → Shell, or SSH as `root`) and run:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/loganschwalm/WorkoutApp/main/ct/workout-tracker.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/loganschwalm/WorkoutApp/stable/ct/workout-tracker.sh)"
 ```
 
 A menu offers default settings, advanced settings, or updating an existing install. The script then:
@@ -439,7 +443,7 @@ IP_CONFIG=192.168.1.50/24 \
 GATEWAY=192.168.1.1 \
 DNS_SERVER=192.168.1.1 \
 MEMORY=1024 \
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/loganschwalm/WorkoutApp/main/ct/workout-tracker.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/loganschwalm/WorkoutApp/stable/ct/workout-tracker.sh)"
 ```
 
 | Variable | Default | Meaning |
@@ -489,7 +493,7 @@ update from inside the container:
 
 ```bash
 pct enter <CTID>
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/loganschwalm/WorkoutApp/main/ct/workout-tracker.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/loganschwalm/WorkoutApp/stable/ct/workout-tracker.sh)"
 ```
 
 #### Managing the container
@@ -549,6 +553,11 @@ What is already in place:
   `Referrer-Policy: same-origin`. Directory listings are off.
 - After signing in, the page only returns you to a page on this site, however the sign-in link was
   crafted.
+- Changes come only from this site's own pages. The session cookie already stays off requests from other
+  sites, but another page on the same site (another port on the same address, or another subdomain
+  behind the same proxy) could otherwise send a form or plain text with it. The server refuses any
+  change whose browser says it came from another page (`Sec-Fetch-Site`), and any request body that is
+  not JSON, which a page elsewhere cannot send without a check this server never passes.
 - A connection that sends nothing for 30 seconds is closed, so idle connections cannot pile up until
   the server runs out of room. A client that keeps sending a byte at a time can still hold one open;
   a reverse proxy in front stops that too.
@@ -611,8 +620,8 @@ files SQLite keeps beside the database stay usable by the server. If failed sign
 account wait, that wait still runs its course (up to 15 minutes), or restart the server to end it.
 Without a mail server, "Forgot password?" on the sign-in page tells people to ask you.
 
-There is no way to change your own password from Settings yet, so if you set a temporary password,
-it stays until you set another.
+If you set a temporary password, tell its owner to change it in Settings (Change password) after
+signing in.
 
 ### Password reset emails
 

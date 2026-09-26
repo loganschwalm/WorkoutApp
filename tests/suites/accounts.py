@@ -158,3 +158,41 @@ def run(t):
     cdp.wait("!document.getElementById('authNotice').hidden")
     check('which says to ask whoever runs the server', 'Ask whoever runs it' in text('authNotice'), text('authNotice'))
     check('rather than offering to email a code', not shown('forgotForm') and shown('authForm'))
+
+    # ------------------------------------------------------------------ C7 changing the password
+    print('C7  the password is changed in Settings')
+
+    def status_of_sign_in(password):
+        return t.request('POST', '/api/auth/login', json.dumps({'login': 'tester', 'password': password}).encode(),
+                         {'Content-Type': 'application/json'})[0]
+
+    _, cookie = api('POST', '/api/auth/login', {'login': 'tester', 'password': 'password123'})
+    elsewhere = cookie.split('session=')[1].split(';')[0]
+    t.set_cookie(t.token)
+    t.open_tracker()
+    cdp.wait("window.localUsername === 'tester'")
+    cdp.ev("document.getElementById('settingsButton').click()")
+    check('Settings offers Change password', shown('changePasswordButton') and not shown('passwordEditor'))
+    cdp.ev("document.getElementById('changePasswordButton').click()")
+    check('which opens the password fields', shown('passwordEditor') and cdp.ev('document.activeElement.id') == 'currentPassword')
+    cdp.ev("document.getElementById('settingsForm').requestSubmit()")
+    check('their being empty does not stop Save settings', cdp.wait("document.getElementById('settingsModal').hidden"))
+    cdp.ev("document.getElementById('settingsButton').click(); document.getElementById('changePasswordButton').click()")
+    fill(currentPassword='wrong-password', newPassword='brand-new-password')
+    submit('passwordForm')
+    cdp.wait("!document.getElementById('passwordFeedback').hidden")
+    check('a wrong current password is refused, saying so', 'not right' in text('passwordFeedback'), text('passwordFeedback'))
+    check('without the page thinking it was signed out', cdp.ev("!document.getElementById('sessionExpired')") is True)
+    fill(currentPassword='password123')
+    submit('passwordForm')
+    check('the right one changes it, and says other devices were signed out',
+          cdp.wait("document.getElementById('accountNotice').textContent.startsWith('Password changed.')")
+          and 'signed out' in text('accountNotice'), text('accountNotice'))
+    check('closing the fields', not shown('passwordEditor'))
+    check('the new password signs in, and the old one does not',
+          status_of_sign_in('brand-new-password') == 200 and status_of_sign_in('password123') == 401)
+    check('this browser stays signed in', api('GET', '/api/auth/me', token=t.token)[0]['user'] is not None)
+    check('the other device does not', api('GET', '/api/auth/me', token=elsewhere)[0]['user'] is None)
+    cdp.ev("document.getElementById('changeEmailButton').click()")
+    check('opening the email fields closes the notice', not shown('accountNotice') and shown('emailEditor'))
+    cdp.ev("document.getElementById('cancelSettings').click()")

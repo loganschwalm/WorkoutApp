@@ -141,8 +141,7 @@ html[data-theme="dark"] .session-banner { color:#ffb1ba; background:#482934; bor
 body.has-install-banner { padding-bottom:96px; }
 .account-row { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:16px; padding-top:16px; border-top:1px solid var(--line); }
 .account-row .subtitle { margin:0; overflow-wrap:anywhere; }
-.email-editor + .settings-actions { margin-top:8px; padding-top:8px; border-top:0; }
-.account-details { display:grid; justify-items:start; gap:4px; min-width:0; }
+.email-editor:not([hidden]) ~ .settings-actions { margin-top:8px; padding-top:8px; border-top:0; }.account-details { display:grid; justify-items:start; gap:4px; min-width:0; }
 .account-details .link-button { justify-self:start; padding:0; }
 .email-editor { display:grid; gap:8px; margin-top:12px; padding:4px 14px 14px; border:1px solid var(--line); border-radius:12px; }
 .email-editor label { margin-top:8px; }

@@ -4,7 +4,7 @@
 # Creates an unprivileged Debian LXC, installs the Workout Tracker as a systemd
 # service, and prints the URL. Re-run it later to update.
 #
-#   bash -c "$(curl -fsSL https://raw.githubusercontent.com/loganschwalm/WorkoutApp/main/ct/workout-tracker.sh)"
+#   bash -c "$(curl -fsSL https://raw.githubusercontent.com/loganschwalm/WorkoutApp/stable/ct/workout-tracker.sh)"
 #
 # Run as root on the Proxmox VE host. The same script also runs inside an
 # already-installed container, where it performs an in-place update.
