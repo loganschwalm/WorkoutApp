@@ -152,3 +152,47 @@ def run(t):
     slider = cdp.ev("(() => { const s = getComputedStyle(document.getElementById('soundVolumeSetting')); return { border: s.borderTopWidth, pad: s.paddingTop }; })()")
     check('volume slider is not boxed like a text field', slider['border'] == '0px' and slider['pad'] == '0px', str(slider))
     cdp.send('Emulation.clearDeviceMetricsOverride')
+
+    print('S8  on an iPhone, the alert plays with the ringer silent, taking the audio only while it sounds')
+    open_settings()
+    check('a browser that cannot choose how its sound is treated is not offered the option',
+          cdp.ev("document.getElementById('silentSettingRow').hidden") is True)
+    # Safari's Audio Session API, as an iPhone has it: every type the page asks for is recorded.
+    session = cdp.send('Page.addScriptToEvaluateOnNewDocument', source="""(() => {
+      let type = 'auto'; window.__sessionTypes = [];
+      Object.defineProperty(navigator, 'audioSession', { configurable: true,
+        value: { get type() { return type; }, set type(value) { type = value; window.__sessionTypes.push(value); } } });
+    })();""")['result']['identifier']
+    open_settings()
+    cdp.ev(STUBS)
+    # Headless Chrome only runs sound after a real tap, so what is checked is that the page lets go of it and asks for it back.
+    cdp.ev("""window.__suspends = 0; window.__resumes = 0;
+      const suspend = AudioContext.prototype.suspend; AudioContext.prototype.suspend = function () { window.__suspends++; return suspend.call(this); };
+      const resume = AudioContext.prototype.resume; AudioContext.prototype.resume = function () { window.__resumes++; return resume.call(this); };""")
+    check('Safari is offered it, on by default', cdp.ev("!document.getElementById('silentSettingRow').hidden && document.getElementById('silentSetting').checked") is True)
+    c = test_alert()
+    check('the alert is played as playback audio, which follows the volume buttons', cdp.ev('window.__sessionTypes') == ['playback'] and c['osc'] == 2,
+          f"{cdp.ev('window.__sessionTypes')} {c}")
+    cdp.pause(1.2)
+    check('once it has sounded, the audio is let go so music can carry on', cdp.ev('window.__sessionTypes') == ['playback', 'auto']
+          and cdp.ev('window.__suspends') == 1, f"{cdp.ev('window.__sessionTypes')} {cdp.ev('window.__suspends')}")
+    cdp.ev(RESET)
+    cdp.ev("window.__sessionTypes.length = 0; window.__resumes = 0; document.getElementById('testAlertButton').click()")
+    cdp.pause(0.5)
+    check('the next alert takes it again and still sounds', cdp.ev('window.__sessionTypes') == ['playback'] and counts()['osc'] == 2
+          and cdp.ev('window.__resumes') >= 1, f"{cdp.ev('window.__sessionTypes')} {counts()} {cdp.ev('window.__resumes')}")
+    cdp.pause(1.2)
+    setf('silentSetting', checked=False)
+    cdp.ev('window.__sessionTypes.length = 0')
+    c = test_alert()
+    cdp.pause(0.4)
+    check('turned off, the alert stays ambient audio, as before', cdp.ev('window.__sessionTypes') == [] and counts()['osc'] == 2,
+          f"{cdp.ev('window.__sessionTypes')} {counts()}")
+    setf('soundEnabledSetting', checked=False)
+    check('with sound off it has nothing to do, so it is greyed out', cdp.ev("document.getElementById('silentSetting').disabled") is True)
+    setf('soundEnabledSetting', checked=True)
+    cdp.ev("document.getElementById('settingsForm').requestSubmit()")
+    check('turning it off is saved to the account', t.wait_for(lambda: stored_settings().get('playThroughSilent') is False), stored_settings())
+    open_settings()
+    check('and kept when the page opens again', cdp.ev("document.getElementById('silentSetting').checked") is False)
+    cdp.send('Page.removeScriptToEvaluateOnNewDocument', identifier=session)

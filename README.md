@@ -316,6 +316,10 @@ The gear button opens a settings modal available on every page. Settings include
 - Automatic rest-timer start toggle.
 - End-workout confirmation toggle.
 - Rest-timer alert: play a sound on or off, choose the alert sound (double beep, chime, or long tone), set the volume, and turn vibration on or off. The vibration option only appears on devices that support it.
+- On an iPhone or iPad (Safari 16.4 or later), the alert plays even with the ringer silent, at the media volume the
+  volume buttons set, like a music app. The phone pauses other audio, such as music, while the alert sounds, and the
+  app lets go straight after so the music app can carry on. Turn it off to have the alert follow the Ring/Silent
+  switch instead, leaving your music alone. iPhones do not let web pages vibrate, so there the alert is sound only.
 - A Test alert button plays the alert with the current choices, before you save them.
 - Your data: Export, Export sets as CSV, and Import. See [Exporting and importing](#exporting-and-importing).
 - The signed-in account name and a Sign out button. Signing out warns first if a workout has not finished syncing; it stays on the device and uploads the next time you sign in to the same account.

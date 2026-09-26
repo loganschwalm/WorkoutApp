@@ -2,15 +2,19 @@ let legacyTheme = null;
 try { legacyTheme = localStorage.getItem('workout-tracker-theme'); } catch (error) { /* no storage: follow the device */ }
 // Appearance: 'system' follows the device's light or dark mode; 'light' and 'dark' fix it.
 const themeChoices = ['system', 'light', 'dark'];
-const defaultSettings = { theme:themeChoices.includes(legacyTheme) ? legacyTheme : 'system', restDuration:90, weeklyGoal:3, unit:'lbs', autoRest:true, confirmEnd:true, soundEnabled:true, soundVolume:40, alertSound:'beep', vibrate:true };
+const defaultSettings = { theme:themeChoices.includes(legacyTheme) ? legacyTheme : 'system', restDuration:90, weeklyGoal:3, unit:'lbs', autoRest:true, confirmEnd:true, soundEnabled:true, soundVolume:40, alertSound:'beep', vibrate:true, playThroughSilent:true };
 const getSettingElement = id => document.getElementById(id);
 const canVibrate = typeof navigator.vibrate === 'function';
+// Safari (iOS 16.4 and later) lets a page choose how the phone treats its sound; see playRestAlert.
+const canPlayThroughSilent = 'audioSession' in navigator;
 const alertTones = {
   beep:[{ at:0, freq:880, length:0.18 }, { at:0.25, freq:880, length:0.18 }],
   chime:[{ at:0, freq:659, length:0.22 }, { at:0.2, freq:784, length:0.22 }, { at:0.4, freq:988, length:0.4 }],
   long:[{ at:0, freq:740, length:0.7 }]
 };
 let audioContext = null;
+// Hands the phone's audio back once an alert that took it (see playRestAlert) has finished.
+let audioReleaseTimer = null;
 
 // A 401 from the API means the sign-in expired while the page was open. Offer a way back in without discarding anything on screen.
 const nativeFetch = window.fetch.bind(window);
@@ -58,13 +62,37 @@ function unlockAudio() {
   }
 }
 
+function setAudioSession(type) {
+  try { navigator.audioSession.type = type; } catch (error) { /* not Safari, or it declined: the phone keeps its choice */ }
+}
+
 // Volume 0-100 maps to a peak gain of 0-0.3; the default of 40 is 0.12, a clear but quiet tone.
 function playRestAlert(settings) {
   if (settings.vibrate && navigator.vibrate) navigator.vibrate([200, 100, 200]);
   const level = Math.min(100, Math.max(0, Number(settings.soundVolume) || 0)) / 100 * 0.3;
   if (!settings.soundEnabled || !audioContext || level <= 0) return;
+  const tones = alertTones[settings.alertSound] || alertTones.beep;
+  // An iPhone plays a page's sound as ambient audio, which the Ring/Silent switch mutes. As playback audio, like a music
+  // app's, it follows the volume buttons and plays with the ringer silent, but the phone pauses other audio (music, a
+  // podcast) while it lasts. So playback is taken only for the length of the alert: then the sound is suspended and the
+  // page goes back to ambient, which lets the music app carry on. Suspended, the sound resumes before the next alert.
+  const throughSilent = canPlayThroughSilent && settings.playThroughSilent !== false;
+  clearTimeout(audioReleaseTimer);
+  if (throughSilent) setAudioSession('playback');
+  // Tones scheduled while the sound is suspended wait for it, and play as soon as it resumes.
+  if (audioContext.state === 'suspended') Promise.resolve(audioContext.resume()).catch(() => {});
+  scheduleTones(tones, level);
+  if (throughSilent) {
+    const length = Math.max(...tones.map(note => note.at + note.length)) + 0.3;
+    audioReleaseTimer = setTimeout(() => {
+      Promise.resolve(audioContext.suspend()).catch(() => {}).then(() => setAudioSession('auto'));
+    }, length * 1000);
+  }
+}
+
+function scheduleTones(tones, level) {
   try {
-    (alertTones[settings.alertSound] || alertTones.beep).forEach(note => {
+    tones.forEach(note => {
       const oscillator = audioContext.createOscillator();
       const gain = audioContext.createGain();
       const start = audioContext.currentTime + note.at;
@@ -92,7 +120,7 @@ function readSettingsForm() {
   const soundVolume = Math.min(100, Math.max(0, Number(getSettingElement('soundVolumeSetting').value) || 0));
   const weeklyGoal = weeklyGoalFrom(getSettingElement('weeklyGoalSetting').value);
   const unit = getSettingElement('unitSetting').value === 'kg' ? 'kg' : 'lbs';
-  return { theme:getSettingElement('themeSetting').value, unit, restDuration, weeklyGoal, autoRest:getSettingElement('autoRestSetting').checked, confirmEnd:getSettingElement('confirmEndSetting').checked, soundEnabled:getSettingElement('soundEnabledSetting').checked, soundVolume, alertSound:getSettingElement('alertSoundSetting').value, vibrate:getSettingElement('vibrateSetting').checked };
+  return { theme:getSettingElement('themeSetting').value, unit, restDuration, weeklyGoal, autoRest:getSettingElement('autoRestSetting').checked, confirmEnd:getSettingElement('confirmEndSetting').checked, soundEnabled:getSettingElement('soundEnabledSetting').checked, soundVolume, alertSound:getSettingElement('alertSoundSetting').value, vibrate:getSettingElement('vibrateSetting').checked, playThroughSilent:getSettingElement('silentSetting').checked };
 }
 
 // Tone and volume mean nothing with sound off, and Test alert needs at least one way to alert.
@@ -100,6 +128,7 @@ function syncSoundControls() {
   const soundOn = getSettingElement('soundEnabledSetting').checked;
   getSettingElement('alertSoundSetting').disabled = !soundOn;
   getSettingElement('soundVolumeSetting').disabled = !soundOn;
+  getSettingElement('silentSetting').disabled = !soundOn;
   getSettingElement('testAlertButton').disabled = !soundOn && !(canVibrate && getSettingElement('vibrateSetting').checked);
 }
 
@@ -119,6 +148,9 @@ function applySettings(settings) {
   getSettingElement('soundVolumeSetting').value = settings.soundVolume;
   getSettingElement('vibrateSetting').checked = settings.vibrate;
   getSettingElement('vibrateSettingRow').hidden = !canVibrate;
+  getSettingElement('silentSetting').checked = settings.playThroughSilent !== false;
+  // Only Safari on an iPhone or iPad can choose; everywhere else the alert already follows the media volume.
+  getSettingElement('silentSettingRow').hidden = !canPlayThroughSilent;
   syncSoundControls();
 }
 
