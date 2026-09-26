@@ -270,6 +270,12 @@ def validate_exercises(exercises, field='exercises'):
                 amount(logged.get('reps'), f'{where}.sets[{number}].reps')
 
 
+def weight_unit(value, field='unit'):
+    """A record's weight unit: 'lbs' or 'kg', or missing (meaning lbs, for everything saved before kilograms)."""
+    if value is not None and value not in ('lbs', 'kg'):
+        raise BadRequest(f'{field} must be lbs or kg.')
+
+
 def validate_workout(data):
     """(name, notes, created_at) for storing, after checking the whole workout is a shape the pages can show."""
     name = text(data.get('name', 'Untitled workout'), 'name', 1000)
@@ -278,6 +284,7 @@ def validate_workout(data):
     if not is_number(created_at) or not 0 <= created_at < 10 ** 14:
         raise BadRequest('createdAt must be a time in milliseconds.')
     validate_exercises(data.get('exercises'))
+    weight_unit(data.get('unit'))
     if data.get('clientId') is not None:
         text(data['clientId'], 'clientId', 200)
     # A workout from a training program says where in the program it was, for History to show.
@@ -297,6 +304,7 @@ def validate_program(program):
         raise BadRequest('program must be an object or null.')
     if not text(program.get('definition'), 'program.definition', 100):
         raise BadRequest('program.definition must name the program.')
+    weight_unit(program.get('unit'), 'program.unit')
     maxes = program.get('trainingMaxes')
     if not isinstance(maxes, dict) or len(maxes) > 100:
         raise BadRequest('program.trainingMaxes must be an object.')
@@ -850,6 +858,8 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             session = data.get('session')
             if session is not None and not isinstance(session, dict):
                 raise BadRequest('session must be an object or null.')
+            if session is not None:
+                weight_unit(session.get('unit'), 'session.unit')
             with connection() as database:
                 database.execute('INSERT INTO active_sessions (user_id, payload, updated_at) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET payload=excluded.payload, updated_at=excluded.updated_at', (user['id'], json.dumps(session), int(time.time() * 1000)))
             self.send_json(HTTPStatus.OK, {'ok': True})

@@ -19,14 +19,61 @@ function exerciseKey(name) {
   return String(name).trim().toLowerCase();
 }
 
+// ---- Weight units ---------------------------------------------------------
+// Weights are stored in the unit they were entered in, and every saved workout, program and workout in progress says
+// which ('lbs' when it says nothing: everything from before kilograms existed). What is shown and typed is always the
+// unit chosen in Settings, converted where a record's own unit differs, so switching units never rewrites what was logged.
+
+var KG_PER_LB = 0.45359237;  // var, not const: see the note on $ above
+
+function weightUnit() {
+  return typeof getWorkoutSettings === 'function' && getWorkoutSettings().unit === 'kg' ? 'kg' : 'lbs';
+}
+
+function recordUnit(record) {
+  return record && record.unit === 'kg' ? 'kg' : 'lbs';
+}
+
+// A weight in another unit, to 2 decimals, so converting back gives the weight that was entered. No weight ('') and
+// anything that is not a number stay as they are.
+function convertWeight(value, from, to) {
+  if (from === to || value === '' || value === null || value === undefined) return value;
+  const number = Number(value);
+  if (!Number.isFinite(number)) return value;
+  return Math.round((from === 'lbs' ? number * KG_PER_LB : number / KG_PER_LB) * 100) / 100;
+}
+
+// How a weight reads: up to two decimals and no trailing zeros (45, 101.25, 102.06), so a 1.25 kg step stays exact.
+function formatWeight(value) {
+  const number = Number(value);
+  return value === '' || value === null || value === undefined || !Number.isFinite(number) ? String(value ?? '') : String(Math.round(number * 100) / 100);
+}
+
+// A workout (or a workout in progress) with every weight in `to`: each exercise's weight, its logged sets and its
+// planned sets. One already in that unit comes back as it is, so treat the result as read-only.
+function inUnit(record, to = weightUnit()) {
+  const from = recordUnit(record);
+  if (from === to) return record;
+  const convert = set => ({ ...set, weight:convertWeight(set.weight, from, to) });
+  return { ...record, unit:to, exercises:(record.exercises || []).map(exercise => ({ ...exercise, weight:convertWeight(exercise.weight, from, to),
+    ...(Array.isArray(exercise.sets) ? { sets:exercise.sets.map(convert) } : {}), ...(Array.isArray(exercise.plan) ? { plan:exercise.plan.map(convert) } : {}) })) };
+}
+
+// Every "lbs" label on the page (a <span class="unit-label">) follows the unit.
+function applyUnitLabels() {
+  document.querySelectorAll('.unit-label').forEach(label => { label.textContent = weightUnit(); });
+}
+
 // No weight, or a weight of 0, is a bodyweight exercise. Anything else, even text that is not a number, is shown as is.
 function isBodyweight(weight) {
   return weight === '' || weight === null || weight === undefined || Number(weight) === 0;
 }
 
 // Logged sets written compactly, one part per run of sets at the same weight: "3 × 5 at 185 lbs", "115 lbs × 5, 5, 5,
-// 5, 9", "40 lbs × 5 · 50 lbs × 5", and for bodyweight "3 × 10" or "10, 9, 8 reps".
+// 5, 9", "40 lbs × 5 · 50 lbs × 5", and for bodyweight "3 × 10" or "10, 9, 8 reps". The weights must already be in the
+// unit shown (see inUnit).
 function describeLoggedSets(sets) {
+  const unit = weightUnit();
   const runs = [];
   sets.forEach(set => {
     const last = runs[runs.length - 1];
@@ -36,7 +83,7 @@ function describeLoggedSets(sets) {
   return runs.map(({ weight, reps }) => {
     const repeated = reps.length > 1 && reps.every(rep => String(rep) === String(reps[0]));
     if (isBodyweight(weight)) return repeated ? `${reps.length} × ${reps[0]}` : `${reps.join(', ')} reps`;
-    return repeated ? `${reps.length} × ${reps[0]} at ${weight} lbs` : `${weight} lbs × ${reps.join(', ')}`;
+    return repeated ? `${reps.length} × ${reps[0]} at ${formatWeight(weight)} ${unit}` : `${formatWeight(weight)} ${unit} × ${reps.join(', ')}`;
   }).join(' · ');
 }
 
@@ -45,7 +92,7 @@ function describeLoggedSets(sets) {
 function describeSavedExercise(exercise) {
   if (exercise.sets && !exercise.sets.length) return 'Skipped';
   if (exercise.sets) return describeLoggedSets(exercise.sets);
-  return isBodyweight(exercise.weight) ? `${exercise.reps} reps` : `${exercise.weight} lbs · ${exercise.reps} reps`;
+  return isBodyweight(exercise.weight) ? `${exercise.reps} reps` : `${formatWeight(exercise.weight)} ${weightUnit()} · ${exercise.reps} reps`;
 }
 
 // Where in a training program a saved workout belongs ("Cycle 1, week 2 · 3s week"), or '' for any other workout.

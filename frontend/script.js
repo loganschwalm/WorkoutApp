@@ -123,7 +123,7 @@ function renderSavedWorkouts(workouts) {
   const more = workouts.length > recent.length ? `<li class="more-workouts"><a class="button-link secondary" href="history.html">See all ${workouts.length} workouts in History</a></li>` : '';
   // One row a workout: tapping its name shows what was done, Start is the one button, and everything else (copying,
   // editing, deleting) waits in its ⋯ menu, away from a thumb reaching for Start.
-  list.innerHTML = recent.length ? recent.map(workout => `<li class="saved-workout" data-id="${escapeHTML(workout.id)}"><div class="saved-workout-summary saved-workout-row"><button class="saved-workout-toggle" type="button" data-action="view" aria-expanded="false"><strong>${escapeHTML(workout.name)}</strong><span>${new Date(workout.createdAt).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' })}${workoutProgramLabel(workout) ? ` &middot; ${escapeHTML(workoutProgramLabel(workout))}` : ''}</span></button><div class="row-actions"><button class="primary" type="button" data-action="start">Start</button><details class="row-menu"><summary class="secondary" aria-label="More for ${escapeHTML(workout.name)}">&middot;&middot;&middot;</summary><div class="row-menu-items"><button type="button" data-action="repeat">Copy as new</button><button type="button" data-action="edit">Edit</button><button class="danger" type="button" data-action="delete">Delete</button></div></details></div></div><div class="workout-details" hidden>${workout.notes ? `<p class="workout-note">${escapeHTML(workout.notes)}</p>` : ''}<ul>${workout.exercises.map(item => `<li><strong>${escapeHTML(item.name)}</strong><span>${escapeHTML(describeSavedExercise(item))}</span></li>`).join('')}</ul></div></li>`).join('') + more : '<li class="empty">No saved workouts yet.</li>';
+  list.innerHTML = recent.length ? recent.map(workout => `<li class="saved-workout" data-id="${escapeHTML(workout.id)}"><div class="saved-workout-summary saved-workout-row"><button class="saved-workout-toggle" type="button" data-action="view" aria-expanded="false"><strong>${escapeHTML(workout.name)}</strong><span>${new Date(workout.createdAt).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' })}${workoutProgramLabel(workout) ? ` &middot; ${escapeHTML(workoutProgramLabel(workout))}` : ''}</span></button><div class="row-actions"><button class="primary" type="button" data-action="start">Start</button><details class="row-menu"><summary class="secondary" aria-label="More for ${escapeHTML(workout.name)}">&middot;&middot;&middot;</summary><div class="row-menu-items"><button type="button" data-action="repeat">Copy as new</button><button type="button" data-action="edit">Edit</button><button class="danger" type="button" data-action="delete">Delete</button></div></details></div></div><div class="workout-details" hidden>${workout.notes ? `<p class="workout-note">${escapeHTML(workout.notes)}</p>` : ''}<ul>${inUnit(workout).exercises.map(item => `<li><strong>${escapeHTML(item.name)}</strong><span>${escapeHTML(describeSavedExercise(item))}</span></li>`).join('')}</ul></div></li>`).join('') + more : '<li class="empty">No saved workouts yet.</li>';
   renderRecentWorkouts();
 }
 
@@ -182,7 +182,9 @@ function closeTemplateEditor() {
   editingTemplateId = null;
 }
 
-function loadWorkoutIntoForm(workout, editMode) {
+function loadWorkoutIntoForm(stored, editMode) {
+  // In the unit shown; saving it again stores it in that unit.
+  const workout = inUnit(stored);
   showWorkoutBuilder(editMode);
   editingWorkout = editMode ? workout : null;
   $('workoutName').value = workout.name;
@@ -283,8 +285,8 @@ function buildLastPerformance(workouts) {
   [...workouts].sort((a, b) => b.createdAt - a.createdAt).forEach(workout => workout.exercises.forEach(item => {
     const key = exerciseKey(item.name);
     if (latest[key]) return;
-    if (item.sets && item.sets.length) latest[key] = { date:workout.createdAt, sets:normalizeSets(item.sets) };
-    else if (!item.sets) latest[key] = { date:workout.createdAt, sets:normalizeSets([{ weight:item.weight, reps:item.reps }]) };
+    if (item.sets && item.sets.length) latest[key] = { date:workout.createdAt, unit:recordUnit(workout), sets:normalizeSets(item.sets) };
+    else if (!item.sets) latest[key] = { date:workout.createdAt, unit:recordUnit(workout), sets:normalizeSets([{ weight:item.weight, reps:item.reps }]) };
   }));
   return latest;
 }
@@ -295,22 +297,37 @@ function saveLastPerformance() {
 
 // Updated as soon as a workout is finished, so the next session shows it even if the upload is still waiting.
 function rememberLastPerformance(workout) {
-  workout.exercises.forEach(item => { lastPerformance[exerciseKey(item.name)] = { date:workout.createdAt, sets:normalizeSets(item.sets) }; });
+  workout.exercises.forEach(item => { lastPerformance[exerciseKey(item.name)] = { date:workout.createdAt, unit:recordUnit(workout), sets:normalizeSets(item.sets) }; });
   saveLastPerformance();
 }
 
-// What to load on each side of a 45 lb bar, from standard plates down to the 1.25s that a weight in 2.5 lb steps (as 5/3/1
-// can round to) needs. Only for a lift done with a barbell, which the exercise's name has to tell (it is all a custom
-// exercise has): Bench Press yes, Dumbbell Bench Press or Leg Press no.
-const BAR_WEIGHT = 45;
-const PLATES = [45, 35, 25, 10, 5, 2.5, 1.25];
+// Last time's performance of an exercise in the unit shown, or null. `converted` says it was logged in the other unit,
+// so its weights are exact conversions (102.06 kg) rather than weights anyone loads; see prefillWeight.
+function lastTime(name) {
+  const entry = lastPerformance[exerciseKey(name)];
+  if (!entry) return null;
+  const from = recordUnit(entry), to = weightUnit();
+  return from === to ? entry : { ...entry, unit:to, converted:true, sets:entry.sets.map(set => ({ ...set, weight:convertWeight(set.weight, from, to) })) };
+}
+
+// A weight to fill in for the next set. One converted from the other unit is rounded to the nearest half, which the
+// weight buttons then step from; one logged in this unit is used as it is.
+function prefillWeight(weight, converted) {
+  const number = Number(weight);
+  return converted && weight !== '' && Number.isFinite(number) ? Math.round(number * 2) / 2 : weight;
+}
+
+// What to load on each side of the bar: a 45 lb bar and pound plates down to the 1.25s that a weight in 2.5 lb steps (as
+// 5/3/1 can round to) needs, or a 20 kg bar and kilogram plates. Only for a lift done with a barbell, which the
+// exercise's name has to tell (it is all a custom exercise has): Bench Press yes, Dumbbell Bench Press or Leg Press no.
+const BARBELLS = { lbs:{ bar:45, plates:[45, 35, 25, 10, 5, 2.5, 1.25], name:'45 lb bar' }, kg:{ bar:20, plates:[25, 20, 15, 10, 5, 2.5, 1.25], name:'20 kg bar' } };
 const barbellNames = /\b(barbell|bench|squat|deadlift|rdl|overhead press|military press|push press|ohp|pendlay|bent[- ]over row|power clean|hang clean|good morning|hip thrust)\b/i;
 const notBarbellNames = /\b(dumbbells?|db|kettlebells?|machine|cable|smith|leg press|hack|goblet|split|bulgarian|trap bar|hex bar|landmine|band|dips?|pistol)\b/i;
 
-function platesPerSide(weight) {
-  let left = (weight - BAR_WEIGHT) / 2;
+function platesPerSide(weight, barbell = BARBELLS[weightUnit()]) {
+  let left = (weight - barbell.bar) / 2;
   const plates = [];
-  PLATES.forEach(plate => { while (left >= plate - 1e-9) { plates.push(plate); left -= plate; } });
+  barbell.plates.forEach(plate => { while (left >= plate - 1e-9) { plates.push(plate); left -= plate; } });
   // A weight the plates cannot make exactly (187 lbs) gets the nearest lighter load, and says what that comes to.
   return { plates, makes: weight - Math.round(left * 2 * 100) / 100 };
 }
@@ -318,12 +335,13 @@ function platesPerSide(weight) {
 function showPlates() {
   const exercise = activeSession ? activeSession.exercises[activeSession.currentIndex] : null;
   const weight = Number($('activeWeight').value);
-  const applies = Boolean(exercise) && barbellNames.test(exercise.name) && !notBarbellNames.test(exercise.name) && weight >= BAR_WEIGHT;
+  const barbell = BARBELLS[weightUnit()];
+  const applies = Boolean(exercise) && barbellNames.test(exercise.name) && !notBarbellNames.test(exercise.name) && weight >= barbell.bar;
   $('plateHint').hidden = !applies;
   if (!applies) return;
-  const { plates, makes } = platesPerSide(weight);
-  $('plateHint').textContent = !plates.length ? `Just the ${BAR_WEIGHT} lb bar`
-    : `Each side of a ${BAR_WEIGHT} lb bar: ${plates.join(' + ')}${makes !== weight ? ` (makes ${makes} lbs)` : ''}`;
+  const { plates, makes } = platesPerSide(weight, barbell);
+  $('plateHint').textContent = !plates.length ? `Just the ${barbell.name}`
+    : `Each side of a ${barbell.name}: ${plates.join(' + ')}${makes !== weight ? ` (makes ${formatWeight(makes)} ${weightUnit()})` : ''}`;
 }
 
 function renderActiveProgress() {
@@ -335,8 +353,8 @@ function renderActiveProgress() {
 function renderActiveWorkout() {
   const exercise = activeSession.exercises[activeSession.currentIndex];
   exercise.sets = exercise.sets || [];
-  const previous = lastPerformance[exerciseKey(exercise.name)];
-  const previousFirst = previous ? previous.sets[0] : null;
+  const previous = lastTime(exercise.name);
+  const previousFirst = previous ? { ...previous.sets[0], weight:prefillWeight(previous.sets[0].weight, previous.converted) } : null;
   const lastSet = exercise.sets[exercise.sets.length - 1];
   // A workout from a training program plans every set, so the next set is whichever planned one has not been logged yet.
   const plan = Array.isArray(exercise.plan) && exercise.plan.length ? exercise.plan : null;
@@ -344,7 +362,7 @@ function renderActiveWorkout() {
   $('activeWorkoutTitle').textContent = activeSession.name;
   renderActiveProgress();
   $('activeExerciseName').textContent = exercise.name;
-  $('activeExerciseTarget').textContent = plan ? plannedTarget(exercise, previous) : `Target: ${exercise.reps} reps${exercise.weight ? ` at ${exercise.weight} lbs` : ''}`;
+  $('activeExerciseTarget').textContent = plan ? plannedTarget(exercise, previous) : `Target: ${exercise.reps} reps${exercise.weight ? ` at ${formatWeight(exercise.weight)} ${weightUnit()}` : ''}`;
   $('activePlan').hidden = !plan;
   $('activePlan').innerHTML = plan ? plan.map((set, index) => `<li class="${index < exercise.sets.length ? 'done' : index === exercise.sets.length ? 'current' : 'upcoming'}">${escapeHTML(formatPlannedSet(set))}</li>`).join('') : '';
   $('activeExerciseLast').hidden = !previous;
@@ -362,7 +380,7 @@ function renderActiveWorkout() {
     $('completedReps').value = (lastSet || previousFirst || {}).reps || '';
   }
   showPlates();
-  $('completedSets').innerHTML = exercise.sets.map((set, index) => `<li><span class="set-number">Set ${index + 1}</span><div class="set-field"><input class="set-edit" type="number" inputmode="decimal" min="0" step="0.5" value="${escapeHTML(set.weight || '')}" data-set="${index}" data-field="weight" aria-label="Set ${index + 1} weight in lbs"><span>lbs</span></div><div class="set-field"><input class="set-edit" type="number" inputmode="numeric" min="1" step="1" value="${escapeHTML(set.reps)}" data-set="${index}" data-field="reps" aria-label="Set ${index + 1} reps"><span>reps</span></div><button class="remove" type="button" data-remove-set="${index}" aria-label="Remove set ${index + 1}">Remove</button></li>`).join('');
+  $('completedSets').innerHTML = exercise.sets.map((set, index) => `<li><span class="set-number">Set ${index + 1}</span><div class="set-field"><input class="set-edit" type="number" inputmode="decimal" min="0" step="0.5" value="${escapeHTML(set.weight || '')}" data-set="${index}" data-field="weight" aria-label="Set ${index + 1} weight in ${weightUnit()}"><span>${weightUnit()}</span></div><div class="set-field"><input class="set-edit" type="number" inputmode="numeric" min="1" step="1" value="${escapeHTML(set.reps)}" data-set="${index}" data-field="reps" aria-label="Set ${index + 1} reps"><span>reps</span></div><button class="remove" type="button" data-remove-set="${index}" aria-label="Remove set ${index + 1}">Remove</button></li>`).join('');
   $('activeSyncNotice').hidden = !activeSyncFailed;
 }
 
@@ -387,12 +405,16 @@ function closeActiveWorkout() {
 
 // `template` is a template, a saved workout, or a day of a training program (program.js), whose exercises carry a
 // set-by-set plan and whose programDay says which day of the program it is.
-function startWorkout(template) {
+function startWorkout(stored) {
   if (activeSession && getWorkoutSettings().confirmEnd && !confirm(`Replace your in-progress “${activeSession.name}” workout? Sets you have logged so far will be lost.`)) return;
   stopRestTimer();
   restRemaining = getWorkoutSettings().restDuration;
   $('restPanel').hidden = true;
-  activeSession = { name:template.name, notes:template.notes || '', exercises:template.exercises.map(item => ({ ...item, sets:[] })), currentIndex:0, clientId:newClientId() };
+  // In the unit shown, whatever unit a saved workout was logged in; the session says which, and so will the saved workout.
+  // A weight converted from the other unit becomes one to load, to the nearest half (47.63 kg is 47.5).
+  const template = inUnit(stored);
+  const converted = template !== stored;
+  activeSession = { name:template.name, notes:template.notes || '', exercises:template.exercises.map(item => ({ ...item, weight:prefillWeight(item.weight, converted), sets:[] })), currentIndex:0, clientId:newClientId(), unit:weightUnit() };
   if (template.programDay) activeSession.programDay = template.programDay;
   persistActiveSession();
   renderActiveWorkout();
@@ -416,7 +438,7 @@ async function finishWorkout() {
   }
   const skipped = activeSession.exercises.length - performed.length;
   activeSession.clientId = activeSession.clientId || newClientId();
-  const workout = { name:activeSession.name, notes:activeSession.notes || '', exercises:performed.map(item => ({ name:item.name, weight:Math.max(...item.sets.map(set => Number(set.weight) || 0)), reps:item.sets[item.sets.length - 1].reps, sets:item.sets })), createdAt:Date.now(), clientId:activeSession.clientId };
+  const workout = { name:activeSession.name, notes:activeSession.notes || '', exercises:performed.map(item => ({ name:item.name, weight:Math.max(...item.sets.map(set => Number(set.weight) || 0)), reps:item.sets[item.sets.length - 1].reps, sets:item.sets })), createdAt:Date.now(), clientId:activeSession.clientId, unit:recordUnit(activeSession) };
   if (activeSession.programDay) workout.program = programInfo(activeSession.programDay);
   rememberLastPerformance(workout);
   queuePendingWorkout(workout);
@@ -484,7 +506,8 @@ async function resumeOrStartWorkout(workouts) {
     }
   }
   if (savedSession) {
-    activeSession = savedSession;
+    activeSession = inUnit(savedSession);
+    if (activeSession !== savedSession) persistActiveSession();
     stopRestTimer();
     restRemaining = getWorkoutSettings().restDuration;
     updateRestTimer();
@@ -594,7 +617,18 @@ $('completeSetBtn').onclick = () => {
   if (getWorkoutSettings().autoRest) startRestTimer();
   else { stopRestTimer(); restRemaining = getWorkoutSettings().restDuration; updateRestTimer(); $('restPanel').hidden = false; }
 };
-// −5 and +5 beside the weight: a change of 2.5 lbs a side, the smallest most plate sets make.
+// −5 and +5 beside the weight: a change of 2.5 lbs a side, the smallest most plate sets make. In kilograms, −2.5 and
+// +2.5: 1.25 kg a side.
+function applyWeightStepper() {
+  const step = weightUnit() === 'kg' ? 2.5 : 5;
+  $('weightStepper').querySelectorAll('[data-weight-step]').forEach(button => {
+    const heavier = Number(button.dataset.weightStep) > 0;
+    button.dataset.weightStep = String(heavier ? step : -step);
+    button.textContent = `${heavier ? '+' : '\u2212'}${step}`;
+    button.setAttribute('aria-label', `${step} ${weightUnit()} ${heavier ? 'heavier' : 'lighter'}`);
+  });
+}
+
 $('weightStepper').onclick = e => {
   const step = Number(e.target.closest('[data-weight-step]')?.dataset.weightStep);
   if (!step) return;
@@ -739,7 +773,7 @@ $('saveBtn').onclick = async () => {
     replacedSets += 1;
     return plan;
   });
-  const workout = { ...editingWorkout, name:$('workoutName').value.trim() || 'Untitled workout', notes:$('workoutNotes').value.trim(), exercises:savedExercises, createdAt:timestampFromDateInput($('workoutDate').value) };
+  const workout = { ...editingWorkout, name:$('workoutName').value.trim() || 'Untitled workout', notes:$('workoutNotes').value.trim(), exercises:savedExercises, createdAt:timestampFromDateInput($('workoutDate').value), unit:weightUnit() };
   try {
     await persistWorkout(workout);
     await loadSavedWorkouts();
@@ -757,6 +791,23 @@ window.serverStateReady.then(() => {
   reloadProgram();
   renderTemplates();
 });
+// A change of unit shows everything in the new one. The workout in progress is converted and saved that way; logged
+// workouts are only converted for showing (see inUnit), so switching back and forth never changes them.
+function applyUnit() {
+  applyUnitLabels();
+  applyWeightStepper();
+  if (activeSession && recordUnit(activeSession) !== weightUnit()) {
+    activeSession = inUnit(activeSession);
+    persistActiveSession();
+  }
+  if (activeSession) renderActiveWorkout();
+  if (initialLoadDone) renderSavedWorkouts(savedWorkouts);
+  renderTemplates();
+}
+
+window.addEventListener('settingschange', applyUnit);
+applyUnitLabels();
+applyWeightStepper();
 window.addEventListener('syncchange', event => {
   renderStorageStatus();
   $('activeSyncNotice').hidden = !(event.detail.activeOffline && activeSession);

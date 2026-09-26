@@ -1,6 +1,8 @@
 const colors = ['#5b5ce2', '#e26d5c', '#2a9d8f', '#d9912f', '#c25bd8', '#3c8dcc'];
 let chartData = null;
 let allWorkouts = [];
+// As loaded; allWorkouts is these in the unit shown, and is worked out again when the unit changes.
+let loadedWorkouts = [];
 let selectedMetric = 'weight';
 
 function buildChartData(workouts) {
@@ -93,7 +95,8 @@ function drawChart() {
   const tickStep = maximum / 4;
   const x = index => chartData.points.length === 1 ? left + chartWidth / 2 : left + index / (chartData.points.length - 1) * chartWidth;
   const y = value => top + chartHeight - value / maximum * chartHeight;
-  const metricLabel = selectedMetric === 'weight' ? 'Weight (lbs)' : selectedMetric === 'reps' ? 'Reps' : 'Volume';
+  const unit = weightUnit();
+  const metricLabel = selectedMetric === 'weight' ? `Weight (${unit})` : selectedMetric === 'reps' ? 'Reps' : `Volume (${unit})`;
 
   context.font = '12px system-ui, sans-serif';
   context.lineWidth = 1;
@@ -136,7 +139,7 @@ function drawChart() {
       context.beginPath(); context.arc(x(index), y(value), 4, 0, Math.PI * 2); context.fill();
       context.textAlign = 'left';
       context.font = '11px system-ui, sans-serif';
-      context.fillText(`${Math.round(value).toLocaleString()}${selectedMetric === 'weight' ? ' lbs' : ''}`, x(index) + 7, y(value) - 8);
+      context.fillText(`${Math.round(value).toLocaleString()}${selectedMetric === 'weight' ? ` ${unit}` : ''}`, x(index) + 7, y(value) - 8);
     });
   });
 }
@@ -146,7 +149,7 @@ function renderProgress(workouts) {
   $('chartEmpty').hidden = Boolean(chartData.points.length);
   $('progressChart').hidden = !chartData.points.length;
   $('progressSummary').textContent = workouts.length === allWorkouts.length ? `${workouts.length} saved workout${workouts.length === 1 ? '' : 's'}` : `${workouts.length} of ${allWorkouts.length} workouts`;
-  const labels = { weight:['Heaviest weight', 'Track your heaviest weight by workout type and date.', 'Weight (lbs)'], reps:['Best reps', 'Track your highest completed reps by workout type and date.', 'Reps'], volume:['Total volume', 'Track total weight moved by workout type and date.', 'Volume'] };
+  const labels = { weight:['Heaviest weight', 'Track your heaviest weight by workout type and date.', `Weight (${weightUnit()})`], reps:['Best reps', 'Track your highest completed reps by workout type and date.', 'Reps'], volume:['Total volume', 'Track total weight moved by workout type and date.', 'Volume'] };
   $('progressTitle').textContent = labels[selectedMetric][0];
   $('progressDescription').textContent = labels[selectedMetric][1];
   $('legend').innerHTML = chartData.types.map(type => `<div class="legend-item"><span class="legend-swatch"></span><span>${escapeHTML(type.name)}</span></div>`).join('');
@@ -159,7 +162,8 @@ async function loadProgress() {
   try {
     await window.localReady;
     await flushPendingWorkouts();
-    allWorkouts = await getSavedWorkouts();
+    loadedWorkouts = await getSavedWorkouts();
+    allWorkouts = loadedWorkouts.map(workout => inUnit(workout));
     populateWorkoutTypes(allWorkouts);
     populateExercises(allWorkouts);
     selectedMetric = $('metricFilter').value;
@@ -176,5 +180,12 @@ let selectedExercise = 'all';
 ['metricFilter', 'exerciseFilter', 'workoutTypeFilter', 'startDateFilter', 'endDateFilter'].forEach(id => { $(id).onchange = applyFilters; });
 $('clearFilters').onclick = () => { $('metricFilter').value = 'weight'; $('exerciseFilter').value = 'all'; $('workoutTypeFilter').value = 'all'; $('startDateFilter').value = ''; $('endDateFilter').value = ''; selectedMetric = 'weight'; selectedExercise = 'all'; renderProgress(allWorkouts); };
 window.addEventListener('resize', drawChart);
-window.addEventListener('settingschange', drawChart);
+// The theme changes the chart's colours; the unit changes its numbers.
+window.addEventListener('settingschange', () => {
+  const converted = loadedWorkouts.map(workout => inUnit(workout));
+  if (converted.some((workout, index) => workout !== allWorkouts[index])) {
+    allWorkouts = converted;
+    applyFilters();
+  } else drawChart();
+});
 loadProgress();

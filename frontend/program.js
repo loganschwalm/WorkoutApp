@@ -38,13 +38,24 @@ function estimateOneRepMax(weight, reps) {
   return Math.round(reps <= 1 ? weight : weight * (1 + reps / 30));
 }
 
+// A select's choices and default in a unit. A program can offer weights per unit: choices as a function of the unit,
+// and a default of { lbs, kg }.
+function optionChoices(option, unit) {
+  return typeof option.choices === 'function' ? option.choices(unit) : option.choices;
+}
+
+function optionDefault(option, unit) {
+  return option.default !== null && typeof option.default === 'object' ? option.default[unit] : option.default;
+}
+
 // Each option's stored value, or its default: a check's own default, a select's default choice or else its first.
-function normalizeOptions(definition, given) {
+function normalizeOptions(definition, given, unit) {
   return Object.fromEntries(definition.options.map(option => {
     if (option.type === 'check') return [option.id, typeof given[option.id] === 'boolean' ? given[option.id] : option.default];
-    const choice = option.choices.find(item => String(item.value) === String(given[option.id]))
-      || option.choices.find(item => item.value === option.default);
-    return [option.id, (choice || option.choices[0]).value];
+    const choices = optionChoices(option, unit);
+    const choice = choices.find(item => String(item.value) === String(given[option.id]))
+      || choices.find(item => item.value === optionDefault(option, unit));
+    return [option.id, (choice || choices[0]).value];
   }));
 }
 
@@ -72,8 +83,32 @@ function normalizeProgram(value) {
     cycle:storedNumber(value.lastRollover.cycle),
     changes:value.lastRollover.changes.filter(change => change && definition.lifts.some(lift => lift.key === change.lift)).map(change => ({ lift:change.lift, from:storedNumber(change.from), to:storedNumber(change.to), reset:change.reset === true }))
   } : null;
-  const options = normalizeOptions(definition, value.options && typeof value.options === 'object' ? value.options : {});
-  return { definition:definition.id, startedAt:storedNumber(value.startedAt), cycle:Math.max(1, Math.floor(storedNumber(value.cycle))), trainingMaxes, stalls, options, done, lastRollover:rollover };
+  // The unit its numbers are in; programs from before kilograms existed are in pounds.
+  const unit = recordUnit(value);
+  const options = normalizeOptions(definition, value.options && typeof value.options === 'object' ? value.options : {}, unit);
+  return { definition:definition.id, unit, startedAt:storedNumber(value.startedAt), cycle:Math.max(1, Math.floor(storedNumber(value.cycle))), trainingMaxes, stalls, options, done, lastRollover:rollover };
+}
+
+// The same program in the other unit, for when Settings change it. Its numbers are converted and rounded to steps the
+// program uses in that unit (definition.roundNumber); an option that is a weight (rounding, the heaviest dumbbells)
+// moves to the nearest choice in the new unit; anything else (a percentage) stays. Results already recorded convert too.
+function programInUnit(program, to) {
+  if (!program || program.unit === to) return program;
+  const definition = programDefinition(program);
+  const convert = value => convertWeight(value, program.unit, to);
+  const options = Object.fromEntries(definition.options.map(option => {
+    const value = program.options[option.id];
+    if (!option.weight) return [option.id, value];
+    const target = convert(value);
+    const nearest = optionChoices(option, to).reduce((best, choice) => Math.abs(choice.value - target) < Math.abs(best.value - target) ? choice : best);
+    return [option.id, nearest.value];
+  }));
+  const converted = { ...program, unit:to, options };
+  const round = (lift, value) => definition.roundNumber ? definition.roundNumber(converted, lift, value) : Math.round(value * 2) / 2;
+  converted.trainingMaxes = Object.fromEntries(definition.lifts.map(lift => [lift.key, round(lift, convert(program.trainingMaxes[lift.key]))]));
+  converted.done = Object.fromEntries(Object.entries(program.done).map(([key, entry]) => [key, entry.amrap ? { ...entry, amrap:{ ...entry.amrap, weight:convert(entry.amrap.weight) } } : entry]));
+  if (program.lastRollover) converted.lastRollover = { ...program.lastRollover, changes:program.lastRollover.changes.map(change => ({ ...change, from:convert(change.from), to:convert(change.to) })) };
+  return converted;
 }
 
 function loadProgram() {
@@ -90,8 +125,10 @@ function saveProgram(program) {
 
 // Called once the server's copy has loaded, which may be newer than the one this page started with.
 function reloadProgram() {
-  const settled = settleProgram(loadProgram());
-  if (settled.rolledOver) saveProgram(settled.program);
+  const loaded = loadProgram();
+  const inShownUnit = programInUnit(loaded, weightUnit());
+  const settled = settleProgram(inShownUnit);
+  if (settled.rolledOver || inShownUnit !== loaded) saveProgram(settled.program);
   else {
     currentProgram = settled.program;
     renderProgram();
@@ -144,6 +181,7 @@ function programWorkout(program, week, day) {
   return {
     name:`${definition.shortName} ${programDays(program)[day].name}`,
     notes:'',
+    unit:program.unit,
     exercises:definition.workout(program, week, day),
     programDay:{ definition:definition.id, startedAt:program.startedAt, cycle:program.cycle, week, day, label:blockLabel(program, week) }
   };
@@ -195,7 +233,7 @@ function settleProgram(program) {
 function describeChanges(program, changes) {
   return changes.map(change => {
     const lift = programDefinition(program).lifts.find(item => item.key === change.lift);
-    return `${lift.name} ${change.to} lbs (${change.reset ? 'reset after a missed + set' : `+${Math.round((change.to - change.from) * 100) / 100}`})`;
+    return `${lift.name} ${formatWeight(change.to)} ${weightUnit()} (${change.reset ? 'reset after a missed + set' : `+${Math.round((change.to - change.from) * 100) / 100}`})`;
   }).join(', ');
 }
 
@@ -233,9 +271,9 @@ function formatReps(set) {
   return set.repsMax ? `${set.reps}–${set.repsMax}` : `${set.reps}${set.amrap ? '+' : ''}`;
 }
 
-// "85 lbs × 5+", or "8–12 reps" when the plan leaves the weight to the lifter.
+// "85 lbs × 5+", or "8–12 reps" when the plan leaves the weight to the lifter. Weights are in the unit shown.
 function formatPlannedSet(set) {
-  return set.weight === '' || set.weight === undefined || set.weight === null ? `${formatReps(set)} reps` : `${set.weight} lbs × ${formatReps(set)}`;
+  return set.weight === '' || set.weight === undefined || set.weight === null ? `${formatReps(set)} reps` : `${formatWeight(set.weight)} ${weightUnit()} × ${formatReps(set)}`;
 }
 
 // Accessories with a rep range go up in weight once every set reaches the top of it; says so before the first set.
@@ -257,13 +295,13 @@ function plannedTarget(exercise, previous) {
   }
   const result = amrapResult([exercise]);
   const done = plan.length === 1 ? 'The planned set is done.' : `All ${plan.length} planned sets done.`;
-  return result && result.weight && result.reps ? `${done} Your + set of ${result.weight} lbs × ${result.reps} puts your one-rep max near ${estimateOneRepMax(result.weight, result.reps)} lbs.` : done;
+  return result && result.weight && result.reps ? `${done} Your + set of ${formatWeight(result.weight)} ${weightUnit()} × ${result.reps} puts your one-rep max near ${estimateOneRepMax(result.weight, result.reps)} ${weightUnit()}.` : done;
 }
 
 // Sets written the way programs write them: "4 × 5, 1 × 5+ at 135 lbs", "3 × 8–12", or one by one when the weight
 // changes from set to set: "65 × 5 · 75 × 5 · 85 × 5+".
 function describeSets(sets) {
-  if (!sets.every(set => set.weight === sets[0].weight)) return sets.map(set => `${set.weight} × ${formatReps(set)}`).join(' · ');
+  if (!sets.every(set => set.weight === sets[0].weight)) return sets.map(set => `${formatWeight(set.weight)} × ${formatReps(set)}`).join(' · ');
   const runs = [];
   sets.forEach(set => {
     const last = runs[runs.length - 1];
@@ -271,7 +309,7 @@ function describeSets(sets) {
     else runs.push({ set, count:1 });
   });
   const scheme = runs.map(run => `${run.count} × ${formatReps(run.set)}`).join(', ');
-  return sets[0].weight === '' ? scheme : `${scheme} at ${sets[0].weight} lbs`;
+  return sets[0].weight === '' ? scheme : `${scheme} at ${formatWeight(sets[0].weight)} ${weightUnit()}`;
 }
 
 // "Bench Press 4 × 5, 1 × 5+ at 135 lbs", work sets only.
@@ -285,7 +323,7 @@ function programTemplateCards() {
   return programDefinitions.map(definition => {
     const following = Boolean(currentProgram) && currentProgram.definition === definition.id;
     const action = following ? '<button class="primary" type="button" data-program-action="view">View program</button>' : `<button class="primary" type="button" data-program-action="setup" data-program-id="${escapeHTML(definition.id)}">Set up program</button>`;
-    return `<article class="template-card program-template" data-program-id="${escapeHTML(definition.id)}"><div><div class="template-card-heading"><h3>${escapeHTML(definition.name)}</h3><span class="badge">Program</span></div><p>${escapeHTML(definition.summary)}</p><p class="program-schedule">${escapeHTML(definition.schedule)}${following ? ` · ${definition.block} ${currentProgram.cycle} in progress` : ''}</p></div><div class="template-actions">${action}</div></article>`;
+    return `<article class="template-card program-template" data-program-id="${escapeHTML(definition.id)}"><div><div class="template-card-heading"><h3>${escapeHTML(definition.name)}</h3><span class="badge">Program</span></div><p>${escapeHTML(typeof definition.summary === 'function' ? definition.summary(weightUnit()) : definition.summary)}</p><p class="program-schedule">${escapeHTML(definition.schedule)}${following ? ` · ${definition.block} ${currentProgram.cycle} in progress` : ''}</p></div><div class="template-actions">${action}</div></article>`;
   }).join('');
 }
 
@@ -330,7 +368,7 @@ function renderProgram() {
   $('programNumbersHeading').textContent = definition.numbersLabel;
   $('programMaxes').innerHTML = definition.lifts.map(lift => {
     const note = definition.numberNote(program, lift);
-    return `<li><span>${escapeHTML(lift.name)}</span><strong>${escapeHTML(program.trainingMaxes[lift.key])} lbs</strong><small${note.warn ? ' class="warn"' : ''}>${escapeHTML(note.text)}</small></li>`;
+    return `<li><span>${escapeHTML(lift.name)}</span><strong>${escapeHTML(formatWeight(program.trainingMaxes[lift.key]))} ${weightUnit()}</strong><small${note.warn ? ' class="warn"' : ''}>${escapeHTML(note.text)}</small></li>`;
   }).join('');
   $('programBlockHeading').textContent = `This ${definition.block}`;
   const rows = week => days.map((entry, day) => programDayRow(program, week, day, next)).join('');
@@ -343,16 +381,16 @@ function renderProgram() {
 // A one-rep max read off the most recent logged sets of an exercise (lastPerformance, kept by script.js), so the lifter
 // does not have to work one out; null if the exercise has never been logged with a weight.
 function estimatedOneRepMax(name) {
-  const previous = lastPerformance[exerciseKey(name)];
+  const previous = lastTime(name);
   const best = previous ? Math.max(0, ...previous.sets.filter(set => set.weight > 0 && set.reps > 0).map(set => estimateOneRepMax(set.weight, set.reps))) : 0;
   return best || null;
 }
 
 // The heaviest weight lifted for `reps` or more reps the last time an exercise was done; null if there is none.
 function heaviestSetOf(name, reps) {
-  const previous = lastPerformance[exerciseKey(name)];
+  const previous = lastTime(name);
   const best = previous ? Math.max(0, ...previous.sets.filter(set => set.reps >= reps).map(set => set.weight)) : 0;
-  return best || null;
+  return best ? prefillWeight(best, previous.converted) : null;
 }
 
 function heaviestSetOfFive(name) {
@@ -366,8 +404,8 @@ function optionElementId(option) {
 function optionField(option, value) {
   const id = optionElementId(option);
   if (option.type === 'check') return `<label class="setting-check" id="${id}Field"><input id="${id}" type="checkbox"${value ? ' checked' : ''} /> ${escapeHTML(option.label)}</label>`;
-  const choices = option.choices.map(choice => `<option value="${escapeHTML(choice.value)}"${String(choice.value) === String(value) ? ' selected' : ''}>${escapeHTML(choice.label)}</option>`).join('');
-  const help = option.help || option.choices.some(choice => choice.help) ? `<p class="subtitle program-help" id="${id}Help"></p>` : '';
+  const choices = optionChoices(option, weightUnit()).map(choice => `<option value="${escapeHTML(choice.value)}"${String(choice.value) === String(value) ? ' selected' : ''}>${escapeHTML(choice.label)}</option>`).join('');
+  const help = option.help || optionChoices(option, weightUnit()).some(choice => choice.help) ? `<p class="subtitle program-help" id="${id}Help"></p>` : '';
   return `<div class="program-option" id="${id}Field"><label for="${id}">${escapeHTML(option.label)}</label><select id="${id}">${choices}</select>${help}</div>`;
 }
 
@@ -376,9 +414,9 @@ function readProgramForm() {
   const { definition } = programForm;
   const options = Object.fromEntries(definition.options.map(option => {
     const element = $(optionElementId(option));
-    return [option.id, option.type === 'check' ? element.checked : option.choices.find(choice => String(choice.value) === element.value).value];
+    return [option.id, option.type === 'check' ? element.checked : optionChoices(option, weightUnit()).find(choice => String(choice.value) === element.value).value];
   }));
-  return { oneRepMax:definition.oneRepMaxes && $('programMaxKind').value === '1rm', options };
+  return { oneRepMax:definition.oneRepMaxes && $('programMaxKind').value === '1rm', options, unit:weightUnit() };
 }
 
 // Shows what each number entered works out to, and the help for each option as chosen.
@@ -390,7 +428,7 @@ function syncProgramForm() {
     const id = optionElementId(option);
     if (option.oneRepMaxOnly) $(`${id}Field`).hidden = !form.oneRepMax;
     const help = $(`${id}Help`);
-    if (help) help.textContent = option.choices.find(choice => choice.value === form.options[option.id]).help || option.help || '';
+    if (help) help.textContent = optionChoices(option, form.unit).find(choice => choice.value === form.options[option.id]).help || option.help || '';
   });
   definition.lifts.forEach(lift => {
     $(`programHint-${lift.key}`).textContent = definition.setup.hint(lift, positiveWeight($(`programMax-${lift.key}`).value), form);
@@ -402,7 +440,7 @@ function syncProgramForm() {
 function openProgramForm(definition) {
   const editing = Boolean(currentProgram) && currentProgram.definition === definition.id;
   const replacing = Boolean(currentProgram) && !editing;
-  const options = editing ? currentProgram.options : normalizeOptions(definition, {});
+  const options = editing ? currentProgram.options : normalizeOptions(definition, {}, weightUnit());
   programForm = { definition, editing };
   $('programModalTitle').textContent = `${editing ? 'Edit' : 'Start'} ${definition.name}`;
   $('programMaxKind').value = editing ? 'tm' : '1rm';
@@ -411,7 +449,7 @@ function openProgramForm(definition) {
   $('programMaxInputs').innerHTML = definition.lifts.map(lift => {
     const value = editing ? currentProgram.trainingMaxes[lift.key] : definition.setup.estimate(lift);
     if (!editing && value) estimated += 1;
-    return `<div class="program-max-row"><label for="programMax-${lift.key}">${escapeHTML(lift.name)} (lbs)</label><input id="programMax-${lift.key}" type="number" min="0" step="0.5" inputmode="decimal" value="${escapeHTML(value || '')}" /><span class="program-hint" id="programHint-${lift.key}"></span></div>`;
+    return `<div class="program-max-row"><label for="programMax-${lift.key}">${escapeHTML(lift.name)} (${weightUnit()})</label><input id="programMax-${lift.key}" type="number" min="0" step="0.5" inputmode="decimal" value="${escapeHTML(value || '')}" /><span class="program-hint" id="programHint-${lift.key}"></span></div>`;
   }).join('');
   const current = replacing ? programDefinition(currentProgram).name : '';
   $('programIntro').textContent = [definition.setup.intro(editing), estimated ? definition.setup.estimated : '',
@@ -448,7 +486,7 @@ $('programForm').onsubmit = event => {
   }
   // A number changed by hand starts its run of missed sessions again.
   const stalls = editing ? Object.fromEntries(Object.entries(currentProgram.stalls).filter(([lift]) => trainingMaxes[lift] === currentProgram.trainingMaxes[lift])) : {};
-  const base = editing ? currentProgram : { definition:definition.id, startedAt:Date.now(), cycle:1, done:{}, lastRollover:null };
+  const base = editing ? currentProgram : { definition:definition.id, unit:weightUnit(), startedAt:Date.now(), cycle:1, done:{}, lastRollover:null };
   const settled = settleProgram(normalizeProgram({ ...base, trainingMaxes, stalls, options:form.options }));
   saveProgram(settled.program);
   closeProgramForm();
@@ -494,4 +532,8 @@ $('endProgramBtn').onclick = () => {
   saveProgram(null);
   showFeedback(`${name} ended.`, 'success');
 };
+// A change of unit in Settings converts the program being followed, which saves it (and shows it) in the new unit.
+window.addEventListener('settingschange', () => {
+  if (currentProgram && currentProgram.unit !== weightUnit()) saveProgram(programInUnit(currentProgram, weightUnit()));
+});
 renderProgram();

@@ -31,7 +31,7 @@
         <div class="notes-field"><label for="workoutNotes">Workout notes</label><textarea id="workoutNotes" rows="3" placeholder="How did the session feel? Add cues, goals, or observations."></textarea></div>
         <div class="grid">
           <div class="exercise-input"><label for="exercise">Exercise</label><input id="exercise" type="text" placeholder="e.g. Bench Press" required /></div>
-          <div><label for="weight">Weight (lbs)</label><input id="weight" type="number" inputmode="decimal" min="0" step="0.5" placeholder="0" /></div>
+          <div><label for="weight">Weight (<span class="unit-label">lbs</span>)</label><input id="weight" type="number" inputmode="decimal" min="0" step="0.5" placeholder="0" /></div>
           <div><label for="reps">Reps</label><input id="reps" type="number" inputmode="numeric" min="1" step="1" placeholder="0" required /></div>
           <button class="primary" id="addBtn" type="button">+ Add</button>
         </div>
@@ -44,7 +44,7 @@
       <div class="section-heading"><div><h2 id="activeWorkoutTitle">Active workout</h2><p id="activeWorkoutProgress" class="subtitle"></p></div><button class="secondary" id="endWorkoutBtn" type="button">End workout</button></div>
       <div class="active-exercise"><h3 id="activeExerciseName"></h3><p id="activeExerciseTarget" class="subtitle"></p><p id="activeExerciseLast" class="subtitle" hidden></p><ol class="plan-sets" id="activePlan" aria-label="Planned sets" hidden></ol></div>
       <div class="set-entry">
-        <div class="weight-entry"><label for="activeWeight">Weight (lbs)</label><div class="weight-stepper" id="weightStepper"><button class="secondary" type="button" data-weight-step="-5" aria-label="5 lbs lighter">&minus;5</button><input id="activeWeight" type="number" inputmode="decimal" min="0" step="0.5" placeholder="0" /><button class="secondary" type="button" data-weight-step="5" aria-label="5 lbs heavier">+5</button></div></div>
+        <div class="weight-entry"><label for="activeWeight">Weight (<span class="unit-label">lbs</span>)</label><div class="weight-stepper" id="weightStepper"><button class="secondary" type="button" data-weight-step="-5" aria-label="5 lbs lighter">&minus;5</button><input id="activeWeight" type="number" inputmode="decimal" min="0" step="0.5" placeholder="0" /><button class="secondary" type="button" data-weight-step="5" aria-label="5 lbs heavier">+5</button></div></div>
         <div class="reps-entry"><label for="completedReps">Reps completed</label><input id="completedReps" type="number" inputmode="numeric" min="1" step="1" placeholder="0" /></div>
         <button class="primary" id="completeSetBtn" type="button">Complete set</button>
       </div>
@@ -90,6 +90,7 @@
       <div class="settings-heading"><h2 id="settingsTitle">Settings</h2><button class="modal-close" id="closeSettings" type="button" aria-label="Close settings">&times;</button></div>
       <form id="settingsForm">
         <label for="themeSetting">Appearance</label><select id="themeSetting"><option value="system">Match system</option><option value="light">Light mode</option><option value="dark">Dark mode</option></select>
+        <label for="unitSetting">Weight unit</label><select id="unitSetting"><option value="lbs">Pounds (lbs)</option><option value="kg">Kilograms (kg)</option></select>
         <label for="weeklyGoalSetting">Weekly goal</label><select id="weeklyGoalSetting"><option value="1">1 workout a week</option><option value="2">2 workouts a week</option><option value="3">3 workouts a week</option><option value="4">4 workouts a week</option><option value="5">5 workouts a week</option><option value="6">6 workouts a week</option><option value="7">7 workouts a week</option></select>
         <label for="restDurationSetting">Default rest duration (seconds)</label><input id="restDurationSetting" type="number" inputmode="numeric" min="15" max="600" step="15" />
         <label class="setting-check"><input id="autoRestSetting" type="checkbox" /> Start the rest timer automatically after each set</label>

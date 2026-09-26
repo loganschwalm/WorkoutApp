@@ -2,7 +2,7 @@ let legacyTheme = null;
 try { legacyTheme = localStorage.getItem('workout-tracker-theme'); } catch (error) { /* no storage: follow the device */ }
 // Appearance: 'system' follows the device's light or dark mode; 'light' and 'dark' fix it.
 const themeChoices = ['system', 'light', 'dark'];
-const defaultSettings = { theme:themeChoices.includes(legacyTheme) ? legacyTheme : 'system', restDuration:90, weeklyGoal:3, autoRest:true, confirmEnd:true, soundEnabled:true, soundVolume:40, alertSound:'beep', vibrate:true };
+const defaultSettings = { theme:themeChoices.includes(legacyTheme) ? legacyTheme : 'system', restDuration:90, weeklyGoal:3, unit:'lbs', autoRest:true, confirmEnd:true, soundEnabled:true, soundVolume:40, alertSound:'beep', vibrate:true };
 const getSettingElement = id => document.getElementById(id);
 const canVibrate = typeof navigator.vibrate === 'function';
 const alertTones = {
@@ -91,7 +91,8 @@ function readSettingsForm() {
   const restDuration = Math.min(600, Math.max(15, Number(getSettingElement('restDurationSetting').value) || defaultSettings.restDuration));
   const soundVolume = Math.min(100, Math.max(0, Number(getSettingElement('soundVolumeSetting').value) || 0));
   const weeklyGoal = weeklyGoalFrom(getSettingElement('weeklyGoalSetting').value);
-  return { theme:getSettingElement('themeSetting').value, restDuration, weeklyGoal, autoRest:getSettingElement('autoRestSetting').checked, confirmEnd:getSettingElement('confirmEndSetting').checked, soundEnabled:getSettingElement('soundEnabledSetting').checked, soundVolume, alertSound:getSettingElement('alertSoundSetting').value, vibrate:getSettingElement('vibrateSetting').checked };
+  const unit = getSettingElement('unitSetting').value === 'kg' ? 'kg' : 'lbs';
+  return { theme:getSettingElement('themeSetting').value, unit, restDuration, weeklyGoal, autoRest:getSettingElement('autoRestSetting').checked, confirmEnd:getSettingElement('confirmEndSetting').checked, soundEnabled:getSettingElement('soundEnabledSetting').checked, soundVolume, alertSound:getSettingElement('alertSoundSetting').value, vibrate:getSettingElement('vibrateSetting').checked };
 }
 
 // Tone and volume mean nothing with sound off, and Test alert needs at least one way to alert.
@@ -108,6 +109,7 @@ function applySettings(settings) {
   if (window.setColorTheme) window.setColorTheme(settings.theme);
   else document.documentElement.dataset.theme = settings.theme === 'dark' ? 'dark' : 'light';
   getSettingElement('themeSetting').value = themeChoices.includes(settings.theme) ? settings.theme : 'system';
+  getSettingElement('unitSetting').value = settings.unit === 'kg' ? 'kg' : 'lbs';
   getSettingElement('restDurationSetting').value = settings.restDuration;
   getSettingElement('weeklyGoalSetting').value = String(weeklyGoalFrom(settings.weeklyGoal));
   getSettingElement('autoRestSetting').checked = settings.autoRest;

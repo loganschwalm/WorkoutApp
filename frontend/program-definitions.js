@@ -5,9 +5,11 @@
 //   id, name, shortName, summary, schedule  how the program is listed; workouts are named "<shortName> <day name>"
 //   block                    what one pass through the plan is called ('cycle', 'week'); days are done block by block
 //   numbersLabel             what the one number kept per lift is ('Training maxes', 'Working weights')
-//   lifts                    [{ key, name, increment }], one number each, asked for at setup
+//   lifts                    [{ key, name, ... }], one number each, asked for at setup
 //   oneRepMaxes              true if setup may take one-rep maxes and convert them (see toNumber)
-//   options                  settings asked for at setup: { id, type:'select' | 'check', label, choices, default, help, ... }
+//   options                  settings asked for at setup: { id, type:'select' | 'check', label, choices, default, help, ... };
+//                            choices may be a function of the unit ('lbs' or 'kg') and default a { lbs, kg }, and
+//                            weight:true marks an option that is a weight, moved to the nearest choice when the unit changes
 //   weeks(program)           the weeks of a block, [{ name, summary }]
 //   days(program)            the days of each week, [{ name }]
 //   workout(program, week, day)  the day's exercises; each has a plan, one entry per set: { weight, reps } plus
@@ -16,12 +18,29 @@
 //                            exercises are the finished workout's, with each exercise's plan and logged sets
 //   nextBlock(program)       optional: what changes when a block is complete, e.g. new training maxes
 //   numberNote(program, lift)  { text, warn } under each lift's number on the card
+//   roundNumber(program, lift, value)  optional: a number converted to the program's (new) unit, rounded to a step it uses
 //   setup                    { intro(editing), estimated, estimate(lift), hint(lift, value, form), toNumber(value, form, lift) }
+//
+// A program's numbers and weights are in its own unit, program.unit, which is always the unit shown: switching units
+// converts the program (program.js). A form's unit is form.unit. Rules that depend on the unit (a 5 lb or 2.5 kg jump)
+// give both, as { lbs, kg }, read with perUnit.
 //
 // A program's first exercise each day is its main lift. Stored programs keep their numbers in trainingMaxes whatever
 // numbersLabel calls them, so programs saved by earlier versions still load.
 
-const roundingOption = { id:'rounding', type:'select', label:'Round weights to', choices:[{ value:5, label:'The nearest 5 lbs' }, { value:2.5, label:'The nearest 2.5 lbs' }] };
+// A value that differs by unit, given as { lbs, kg }; anything else is the same in both.
+function perUnit(value, unit) {
+  return value !== null && typeof value === 'object' ? value[unit] : value;
+}
+
+const roundingOption = { id:'rounding', type:'select', label:'Round weights to', weight:true,
+  choices:unit => unit === 'kg' ? [{ value:2.5, label:'The nearest 2.5 kg' }, { value:1.25, label:'The nearest 1.25 kg' }]
+    : [{ value:5, label:'The nearest 5 lbs' }, { value:2.5, label:'The nearest 2.5 lbs' }] };
+
+// Converted numbers land on the program's rounding step.
+function roundToOption(program, lift, value) {
+  return roundToStep(value, program.options.rounding);
+}
 
 function repeatSets(count, set) {
   return Array.from({ length:count }, () => ({ ...set }));
@@ -29,12 +48,12 @@ function repeatSets(count, set) {
 
 // ---- Wendler 5/3/1 --------------------------------------------------------
 
-// In the order the days are trained. Upper-body training maxes go up 5 lbs a cycle, lower-body ones 10.
+// In the order the days are trained. Upper-body training maxes go up 5 lbs (2.5 kg) a cycle, lower-body ones 10 (5 kg).
 const wendlerLifts = [
-  { key:'press', name:'Overhead Press', day:'Press Day', increment:5 },
-  { key:'deadlift', name:'Deadlift', day:'Deadlift Day', increment:10 },
-  { key:'bench', name:'Bench Press', day:'Bench Day', increment:5 },
-  { key:'squat', name:'Back Squat', day:'Squat Day', increment:10 }
+  { key:'press', name:'Overhead Press', day:'Press Day', increment:{ lbs:5, kg:2.5 } },
+  { key:'deadlift', name:'Deadlift', day:'Deadlift Day', increment:{ lbs:10, kg:5 } },
+  { key:'bench', name:'Bench Press', day:'Bench Day', increment:{ lbs:5, kg:2.5 } },
+  { key:'squat', name:'Back Squat', day:'Squat Day', increment:{ lbs:10, kg:5 } }
 ];
 // [percent of the training max, reps]. The last set of a working week is a + set: as many reps as possible, at least the number given.
 const wendlerWeeks = [
@@ -64,7 +83,7 @@ function wendlerNextMaxes(program) {
   return wendlerLifts.map((lift, day) => {
     const from = program.trainingMaxes[lift.key];
     const reset = weeks.some((week, index) => missedAmrap(program.done[dayKey(index, day)]?.amrap));
-    return { lift:lift.key, from, to:reset ? roundToStep(from * 0.9, program.options.rounding) : from + lift.increment, reset };
+    return { lift:lift.key, from, to:reset ? roundToStep(from * 0.9, program.options.rounding) : from + perUnit(lift.increment, program.unit), reset };
   });
 }
 
@@ -110,6 +129,7 @@ const wendler531 = {
     (assistance.exercises[lift.key] || []).forEach(([name, sets, reps]) => exercises.push({ name, weight:'', reps:String(reps), plan:repeatSets(sets, { weight:'', reps }) }));
     return exercises;
   },
+  roundNumber:roundToOption,
   nextBlock(program) {
     const changes = wendlerNextMaxes(program);
     return { trainingMaxes:Object.fromEntries(changes.map(change => [change.lift, change.to])), lastRollover:{ cycle:program.cycle, changes } };
@@ -128,7 +148,7 @@ const wendler531 = {
     hint(lift, value, form) {
       const trainingMax = value && wendler531.setup.toNumber(value, form);
       if (!trainingMax) return '';
-      return form.oneRepMax ? `Training max ${trainingMax} lbs` : `Heaviest set ${roundToStep(trainingMax * 0.95, form.options.rounding)} lbs`;
+      return form.oneRepMax ? `Training max ${formatWeight(trainingMax)} ${form.unit}` : `Heaviest set ${formatWeight(roundToStep(trainingMax * 0.95, form.options.rounding))} ${form.unit}`;
     },
     toNumber:(value, form) => form.oneRepMax ? roundToStep(value * form.options.tmPercent / 100, form.options.rounding) : value
   }
@@ -137,13 +157,13 @@ const wendler531 = {
 // ---- Reddit PPL -----------------------------------------------------------
 // /u/Metallicadpa's "A Linear Progression Based PPL Program for Beginners" (r/Fitness, 2015).
 
-// Weight goes on every session the lift's sets are all done: 5 lbs, or 10 for the deadlift.
+// Weight goes on every session the lift's sets are all done: 5 lbs (2.5 kg), or 10 (5 kg) for the deadlift.
 const pplLifts = [
-  { key:'deadlift', name:'Deadlift', increment:10 },
-  { key:'row', name:'Barbell Row', increment:5 },
-  { key:'bench', name:'Bench Press', increment:5 },
-  { key:'press', name:'Overhead Press', increment:5 },
-  { key:'squat', name:'Back Squat', increment:5 }
+  { key:'deadlift', name:'Deadlift', increment:{ lbs:10, kg:5 } },
+  { key:'row', name:'Barbell Row', increment:{ lbs:5, kg:2.5 } },
+  { key:'bench', name:'Bench Press', increment:{ lbs:5, kg:2.5 } },
+  { key:'press', name:'Overhead Press', increment:{ lbs:5, kg:2.5 } },
+  { key:'squat', name:'Back Squat', increment:{ lbs:5, kg:2.5 } }
 ];
 // Sets of 5 before the last set, a + set of at least 5: deadlifts 1x5+, squats 2x5, 1x5+, the rest 4x5, 1x5+.
 const pplStraightSets = { deadlift:0, row:4, bench:4, press:4, squat:2 };
@@ -182,6 +202,7 @@ const redditPpl = {
   lifts:pplLifts,
   oneRepMaxes:false,
   options:[{ ...roundingOption, help:'Used when a lift drops 10% after three missed sessions.' }],
+  roundNumber:roundToOption,
   weeks:() => [{ name:'Week', summary:'' }],
   days:() => pplDays,
   workout(program, week, day) {
@@ -197,25 +218,26 @@ const redditPpl = {
   afterWorkout(program, day, entry) {
     const lift = pplLifts.find(item => item.key === pplDays[day].lift);
     const weight = program.trainingMaxes[lift.key];
+    const unit = program.unit, increment = perUnit(lift.increment, unit);
     const set = (to, misses) => ({ ...program, trainingMaxes:{ ...program.trainingMaxes, [lift.key]:to }, stalls:{ ...program.stalls, [lift.key]:misses } });
     if (entry.hit === null) return { program, note:'' };
-    if (entry.hit) return { program:set(weight + lift.increment, 0), note:`${lift.name} goes up to ${weight + lift.increment} lbs next time.` };
+    if (entry.hit) return { program:set(weight + increment, 0), note:`${lift.name} goes up to ${formatWeight(weight + increment)} ${unit} next time.` };
     const misses = (program.stalls[lift.key] || 0) + 1;
-    if (misses < 3) return { program:set(weight, misses), note:`${lift.name} stays at ${weight} lbs: ${misses} missed session${misses === 1 ? '' : 's'} in a row. A third drops it 10%.` };
+    if (misses < 3) return { program:set(weight, misses), note:`${lift.name} stays at ${formatWeight(weight)} ${unit}: ${misses} missed session${misses === 1 ? '' : 's'} in a row. A third drops it 10%.` };
     const lowered = pplDeload(program, lift);
-    return { program:set(lowered, 0), note:`${lift.name} missed three sessions in a row, so it drops 10% to ${lowered} lbs.` };
+    return { program:set(lowered, 0), note:`${lift.name} missed three sessions in a row, so it drops 10% to ${formatWeight(lowered)} ${unit}.` };
   },
   numberNote(program, lift) {
     const misses = program.stalls[lift.key] || 0;
-    return misses ? { text:`Missed ${misses} in a row · 3 drops it to ${pplDeload(program, lift)}`, warn:true } : { text:`+${lift.increment} lbs after each good session`, warn:false };
+    return misses ? { text:`Missed ${misses} in a row · 3 drops it to ${formatWeight(pplDeload(program, lift))}`, warn:true } : { text:`+${perUnit(lift.increment, program.unit)} ${program.unit} after each good session`, warn:false };
   },
   setup:{
     intro:editing => editing
       ? 'Change a working weight when it is too heavy or too light. Changing one also clears its run of missed sessions.'
-      : 'Enter a starting weight for each main lift. The program’s advice: work up in sets of 5 until the bar slows down, then take off 5 lbs.',
+      : `Enter a starting weight for each main lift. The program’s advice: work up in sets of 5 until the bar slows down, then take off ${weightUnit() === 'kg' ? '2.5 kg' : '5 lbs'}.`,
     estimated:'Lifts you have logged are filled in with your heaviest set of 5 or more last time.',
     estimate:lift => heaviestSetOfFive(lift.name),
-    hint:lift => `+${lift.increment} lbs each good session`,
+    hint:(lift, value, form) => `+${perUnit(lift.increment, form.unit)} ${form.unit} each good session`,
     toNumber:value => value
   }
 };
@@ -225,14 +247,14 @@ const redditPpl = {
 // cable stack with a single handle, and chest press, lat pulldown, leg extension and leg curl machines. No barbell.
 
 // Double progression: a main lift stays at its weight until every set reaches the top of its rep range, then goes up.
-// Machines go up by one plate of their stack; dumbbells by 5 lbs a hand, until they reach the heaviest pair there is.
+// Machines go up by one plate of their stack; dumbbells by 5 lbs (2.5 kg) a hand, until they reach the heaviest pair.
 const apartmentLifts = [
   { key:'chestPress', name:'Machine Chest Press', sets:4, reps:6, repsMax:10 },
   { key:'splitSquat', name:'Dumbbell Bulgarian Split Squat', sets:3, reps:8, repsMax:12, dumbbell:true, note:'Weight per dumbbell, reps per leg' },
   { key:'pulldown', name:'Lat Pulldown', sets:4, reps:6, repsMax:10 },
   { key:'rdl', name:'Dumbbell Romanian Deadlift', sets:4, reps:8, repsMax:12, dumbbell:true, note:'Weight per dumbbell' }
 ];
-const apartmentDumbbellStep = 5;
+const apartmentDumbbellStep = { lbs:5, kg:2.5 };
 // [name, sets, fewest reps, most reps, note]. The weight is the lifter's call; the app says to go heavier once every
 // set reached the top of the range.
 const apartmentDays = [
@@ -256,8 +278,8 @@ function apartmentLift(key) {
   return apartmentLifts.find(lift => lift.key === key);
 }
 
-function apartmentStep(options, lift) {
-  return lift.dumbbell ? apartmentDumbbellStep : options.machineStep;
+function apartmentStep(options, lift, unit) {
+  return lift.dumbbell ? perUnit(apartmentDumbbellStep, unit) : options.machineStep;
 }
 
 // At or past the heaviest dumbbells there is no heavier weight to move to.
@@ -267,7 +289,7 @@ function apartmentCapped(program, lift) {
 
 // Three sessions in a row below the rep range mean the weight has got ahead of the lifter: take off 10%.
 function apartmentDeload(program, lift) {
-  return roundToStep(program.trainingMaxes[lift.key] * 0.9, apartmentStep(program.options, lift));
+  return roundToStep(program.trainingMaxes[lift.key] * 0.9, apartmentStep(program.options, lift, program.unit));
 }
 
 // Whether every planned set of the day's main lift (its first exercise) was logged at the top of its rep range.
@@ -281,18 +303,21 @@ const apartmentGym = {
   id:'apartment-gym',
   name:'Apartment Gym',
   shortName:'Apartment Gym',
-  summary:'Strength training with dumbbells up to 50 lbs, an adjustable bench, a cable stack with one handle, and chest press, lat pulldown, leg extension and leg curl machines. Upper and lower body twice a week each; a main lift goes up once every set reaches the top of its rep range.',
+  summary:unit => `Strength training with dumbbells up to ${unit === 'kg' ? 'about 22.5 kg' : '50 lbs'}, an adjustable bench, a cable stack with one handle, and chest press, lat pulldown, leg extension and leg curl machines. Upper and lower body twice a week each; a main lift goes up once every set reaches the top of its rep range.`,
   schedule:'4 days a week · upper and lower body twice each',
   block:'week',
   numbersLabel:'Working weights',
   lifts:apartmentLifts,
   oneRepMaxes:false,
   options:[
-    { id:'dumbbellMax', type:'select', label:'Heaviest dumbbells', default:50,
-      choices:[20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 90, 100].map(value => ({ value, label:`${value} lbs each` })),
+    { id:'dumbbellMax', type:'select', label:'Heaviest dumbbells', default:{ lbs:50, kg:22.5 }, weight:true,
+      choices:unit => (unit === 'kg' ? [10, 12.5, 15, 17.5, 20, 22.5, 25, 27.5, 30, 32.5, 35, 37.5, 40, 45, 50] : [20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 90, 100])
+        .map(value => ({ value, label:`${value} ${unit} each` })),
       help:'The dumbbell lifts go up to this and no further. After that the program makes them harder by slowing them down instead.' },
-    { id:'machineStep', type:'select', label:'Weight stack steps',
-      choices:[{ value:10, label:'10 lbs a plate (most stacks)' }, { value:5, label:'5 lbs (half plates or add-on weights)' }, { value:15, label:'15 lbs a plate' }],
+    { id:'machineStep', type:'select', label:'Weight stack steps', weight:true,
+      choices:unit => unit === 'kg'
+        ? [{ value:5, label:'5 kg a plate (most stacks)' }, { value:2.5, label:'2.5 kg (half plates or add-on weights)' }, { value:7.5, label:'7.5 kg a plate' }]
+        : [{ value:10, label:'10 lbs a plate (most stacks)' }, { value:5, label:'5 lbs (half plates or add-on weights)' }, { value:15, label:'15 lbs a plate' }],
       help:'How much the chest press and lat pulldown go up at a time.' }
   ],
   weeks:() => [{ name:'Week', summary:'' }],
@@ -307,6 +332,11 @@ const apartmentGym = {
   // Every set at the top of the range: up a step next time (or, at the heaviest dumbbells, slower reps instead).
   // A set below the bottom of the range counts a miss; the third in a row takes 10% off. Anything between keeps the
   // weight and clears the misses. A session where the main lift was not attempted changes nothing.
+  // A converted number lands on the lift's own step, and a dumbbell lift never above the heaviest pair.
+  roundNumber(program, lift, value) {
+    const rounded = roundToStep(value, apartmentStep(program.options, lift, program.unit));
+    return lift.dumbbell ? Math.min(rounded, program.options.dumbbellMax) : rounded;
+  },
   afterWorkout(program, day, entry, exercises) {
     const lift = apartmentLift(apartmentDays[day].lift);
     const weight = program.trainingMaxes[lift.key];
@@ -316,20 +346,20 @@ const apartmentGym = {
       if (apartmentCapped(program, lift)) {
         return { program:set(weight, 0), note:`${lift.name} reached ${lift.repsMax} reps on every set with your heaviest dumbbells. Keep them, and make it harder: lower each rep over 3 seconds and pause at the bottom.` };
       }
-      const to = lift.dumbbell ? Math.min(weight + apartmentDumbbellStep, program.options.dumbbellMax) : weight + program.options.machineStep;
-      return { program:set(to, 0), note:`${lift.name} goes up to ${to} lbs next time: every set reached ${lift.repsMax} reps.` };
+      const to = lift.dumbbell ? Math.min(weight + perUnit(apartmentDumbbellStep, program.unit), program.options.dumbbellMax) : weight + program.options.machineStep;
+      return { program:set(to, 0), note:`${lift.name} goes up to ${formatWeight(to)} ${program.unit} next time: every set reached ${lift.repsMax} reps.` };
     }
-    if (entry.hit) return { program:set(weight, 0), note:`${lift.name} stays at ${weight} lbs until every set reaches ${lift.repsMax} reps.` };
+    if (entry.hit) return { program:set(weight, 0), note:`${lift.name} stays at ${formatWeight(weight)} ${program.unit} until every set reaches ${lift.repsMax} reps.` };
     const misses = (program.stalls[lift.key] || 0) + 1;
-    if (misses < 3) return { program:set(weight, misses), note:`${lift.name} stays at ${weight} lbs: ${misses} session${misses === 1 ? '' : 's'} in a row below ${lift.reps} reps. A third drops it 10%.` };
+    if (misses < 3) return { program:set(weight, misses), note:`${lift.name} stays at ${formatWeight(weight)} ${program.unit}: ${misses} session${misses === 1 ? '' : 's'} in a row below ${lift.reps} reps. A third drops it 10%.` };
     const lowered = apartmentDeload(program, lift);
-    return { program:set(lowered, 0), note:`${lift.name} fell below ${lift.reps} reps three sessions in a row, so it drops 10% to ${lowered} lbs.` };
+    return { program:set(lowered, 0), note:`${lift.name} fell below ${lift.reps} reps three sessions in a row, so it drops 10% to ${formatWeight(lowered)} ${program.unit}.` };
   },
   numberNote(program, lift) {
     const misses = program.stalls[lift.key] || 0;
-    if (misses) return { text:`Missed ${misses} in a row · 3 drops it to ${apartmentDeload(program, lift)}`, warn:true };
+    if (misses) return { text:`Missed ${misses} in a row · 3 drops it to ${formatWeight(apartmentDeload(program, lift))}`, warn:true };
     if (apartmentCapped(program, lift)) return { text:'Heaviest dumbbells · progress by slowing the reps', warn:false };
-    return { text:`+${apartmentStep(program.options, lift)} lbs once every set reaches ${lift.repsMax}`, warn:false };
+    return { text:`+${apartmentStep(program.options, lift, program.unit)} ${program.unit} once every set reaches ${lift.repsMax}`, warn:false };
   },
   setup:{
     intro:editing => editing
@@ -338,8 +368,8 @@ const apartmentGym = {
     estimated:'Lifts you have logged are filled in with your heaviest set of 8 or more last time.',
     estimate:lift => heaviestSetOf(lift.name, 8),
     hint(lift, value, form) {
-      if (lift.dumbbell && value > form.options.dumbbellMax) return `Capped at ${form.options.dumbbellMax} lbs, your heaviest dumbbells`;
-      return `+${apartmentStep(form.options, lift)} lbs once every set reaches ${lift.repsMax}`;
+      if (lift.dumbbell && value > form.options.dumbbellMax) return `Capped at ${form.options.dumbbellMax} ${form.unit}, your heaviest dumbbells`;
+      return `+${apartmentStep(form.options, lift, form.unit)} ${form.unit} once every set reaches ${lift.repsMax}`;
     },
     // A dumbbell lift cannot start heavier than the heaviest dumbbells.
     toNumber:(value, form, lift) => lift.dumbbell ? Math.min(value, form.options.dumbbellMax) : value
