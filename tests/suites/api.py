@@ -164,6 +164,7 @@ def run(t):
     run_structure(t, check, request)
     run_accounts(t, check, request)
     run_admin(t, check, request)
+    run_bursts(t, check)
 
 
 def login(server, username, password, headers=None):
@@ -775,3 +776,41 @@ def run_admin(t, check, request):
     elapsed = closed_after(b'GET /login.html HTTP/1.1\r\nHost: 127.0.0.1\r\n')
     check('one that stops halfway through a request', elapsed is not None and 1.5 < elapsed < 6, elapsed)
     check('and the server goes on answering', quick.raw('GET', '/login.html')[0] == 200)
+
+
+def run_bursts(t, check):
+    # ------------------------------------------------------------------ A22 many connections at once
+    print('A22 a burst of connections is answered, not refused')
+    # A page load asks for a dozen files at once while the service worker fetches its cache list. With the standard
+    # library's queue of 5 waiting connections, five bursts of 80 lost 90 of 400 requests, and a page that loses a
+    # script breaks (programTemplateCards is not defined).
+    import socket
+
+    outcomes = {'ok': 0, 'failed': 0}
+    lock = threading.Lock()
+
+    def burst(size):
+        barrier = threading.Barrier(size)
+
+        def fetch():
+            barrier.wait()
+            try:
+                connection = socket.create_connection(('127.0.0.1', t.port), timeout=10)
+                connection.sendall(b'GET /program.js HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n')
+                answered = b' 200 ' in connection.recv(64)[:16]
+                connection.close()
+            except OSError:
+                answered = False
+            with lock:
+                outcomes['ok' if answered else 'failed'] += 1
+
+        threads = [threading.Thread(target=fetch) for _ in range(size)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+    for _ in range(5):
+        burst(80)
+    check('five bursts of 80 simultaneous requests are all answered', outcomes == {'ok': 400, 'failed': 0}, outcomes)
+    check('and the server goes on answering', t.raw('GET', '/login.html')[0] == 200)

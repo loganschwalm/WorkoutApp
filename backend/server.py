@@ -909,11 +909,18 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
         self.send_json(HTTPStatus.OK, {'ok': True})
 
 
+class AppServer(http.server.ThreadingHTTPServer):
+    # Connections waiting to be accepted. The standard library allows 5, but one page load asks for a dozen files at
+    # once while the service worker fetches its whole cache list, and past the limit a connection is refused or reset:
+    # the page then runs without one of its scripts. Five bursts of 80 requests lost 90 of 400 at the default.
+    request_queue_size = 128
+
+
 def serve():
     check_mail_settings()
     init_database()
     port = int(os.environ.get('PORT', '6769'))
-    server = http.server.ThreadingHTTPServer(('0.0.0.0', port), AppHandler)
+    server = AppServer(('0.0.0.0', port), AppHandler)
     print(f'Workout Tracker listening on http://0.0.0.0:{port}')
     print(f'Password reset codes are emailed through {SMTP_HOST}:{SMTP_PORT} ({SMTP_SECURITY}).' if SMTP_HOST else
           'Password reset by email is off: set SMTP_HOST to turn it on, or reset passwords with the reset-password command.')
