@@ -47,7 +47,17 @@ own workouts, templates, and settings.
   Start again, with up to three recent workouts and the one you did longest ago first (going round
   push, pull and legs, that is the one due). Templates fold away once you have saved workouts or a
   program, a tap from showing again.
-- Move through exercises one at a time.
+- Move through exercises one at a time, or go straight to any of them: tap "Exercise 2 of 6" for a
+  list of every exercise and how many sets each has, and tap one to go there. Handy when a machine is
+  taken and you do the next free one first.
+- Swap an exercise when its equipment is taken: Swap, beside the exercise's name, does another in its
+  place. The new one keeps the sets and rep range still to do, but not the old weights, so it starts
+  from its own last time. Sets already logged stay with the old exercise, and the new one follows it
+  with the sets left. Swapping back to the original brings its planned weights back.
+- Exercise names are suggested as you type, everywhere an exercise is entered (a new workout, a
+  template, Add an exercise, Swap): everything you have logged, spelled as you last did, and the
+  templates' and your program's exercises. Picking one keeps "Bench press" and "Bench Press" from
+  becoming two exercises.
 - Enter the weight and reps completed for each set, right under the exercise, with −5 and +5 buttons
   beside the weight.
 - For barbell lifts (going by the exercise's name), see the plates to load on each side of a 45 lb
@@ -62,12 +72,25 @@ own workouts, templates, and settings.
 - Go back to a previous exercise, or add an exercise in the middle of a workout.
 - Exercises with no logged sets count as skipped and are left out of the saved workout, so they never appear as done in History or Progress.
 - Automatically start a configurable rest timer after each set. It sits under the set entry and stays
-  on screen while you scroll.
+  on screen while you scroll. An exercise can have a rest of its own: the training programs rest
+  longer after a main lift than after accessories, and a template can set one for each exercise.
+  Everything else uses the default from Settings.
 - Pause and reset the rest timer, or give yourself 30 seconds more or less with −30s and +30s,
   running or paused. Taking it down to nothing ends the rest quietly.
 - Keep accurate rest time even when the screen locks or the tab is in the background; the timer alerts you with a sound and vibration when rest is over (configurable in Settings).
 - Keep the screen awake during a workout (on browsers that support it).
-- Move to the next exercise with the rest timer reset to the configured duration.
+- Move to the next exercise with the rest timer reset to that exercise's rest.
+- Timed exercises, such as a plank or a dead hang, are held for seconds rather than done for reps. The
+  built-in plank is one, and a template exercise or one added mid-workout can be marked Timed. Its set
+  entry asks for seconds, and Start timer counts them down; when they are up, the rest alert sounds
+  and the set logs itself. Stop, or Complete set, ends a hold early with the seconds actually held.
+  History, last time and Progress show holds in seconds.
+- Finishing a workout shows a summary: how long it took, the exercises, sets and volume, and any new
+  personal records, such as "Bench Press: 190 lbs × 3, your heaviest yet (was 185 lbs)". A record is
+  a heavier weight than ever before, else a better estimated one-rep max (more reps at a weight, from
+  sets of up to 12), else more reps in a set of a bodyweight exercise, or a longer hold. An exercise
+  done for the first time has nothing to beat, so it sets no record. Records are worked out on the
+  device, so they show even when the workout was finished offline.
 - Add notes while training; they fold away until you open them, unless the workout already has some.
 - Restore an active workout after refreshing the page.
 - Finish or cancel an active workout.
@@ -126,6 +149,8 @@ Users can also:
 - Duplicate built-in or custom templates.
 - Edit custom template names and exercises.
 - Add, remove, and reorder template exercises.
+- Give a template exercise its own rest, from 15 seconds to 10 minutes (left blank, it uses the
+  default from Settings), or mark it Timed so its count is seconds.
 - Delete custom templates.
 - Start a workout directly from any template.
 - On the Tracker, templates fold away once you have saved workouts or a program; someone new sees
@@ -148,6 +173,13 @@ up another replaces it, and the workouts you finished stay in your history. They
   the main lift ends with a "+" set of as many reps as you can, and the app turns it into an estimated
   one-rep max.
 - Finishing a program workout marks its day done. A day can also be skipped, or done again.
+- Each program exercise has its own rest: 3 minutes after the main lift in 5/3/1 and PPL (2 minutes
+  in Apartment Gym, whose main lifts are sets of 6 to 12), 90 seconds after compound accessories and
+  Boring But Big, and a minute after small single-joint and core work such as curls, raises and face
+  pulls.
+- Swapping the day's main lift for another exercise still counts the day as done, but that workout
+  does not move the lift's weight: the program only tracks the lift it planned. Swapping any other
+  exercise changes nothing.
 - Program workouts are saved like any other, named after their day ("5/3/1 Bench Day",
   "PPL Push (Bench)", "Apartment Gym Upper A"), so Progress charts them. History shows where in the program each came from.
 - The program is saved to your account with your settings and templates. It follows you to another
@@ -233,7 +265,7 @@ cable stack with a single handle, and chest press, lat pulldown, leg extension a
 - Review all saved workouts on the History page. The Tracker lists the 10 most recent, with a link
   to the rest. Each shows its name and date (tap it for the sets), Start, and a ⋯ menu to copy it as
   a new workout, edit it, or delete it.
-- See workout dates, exercises, weights, reps, completed sets, and notes.
+- See workout dates, how long each workout took, exercises, weights, reps, completed sets, and notes.
 - Sets are written compactly: "3 × 5 at 185 lbs", "115 lbs × 5, 5, 5, 5, 9", and bodyweight sets
   as reps ("10, 9, 8 reps") rather than "0 lbs". The last-time line during a workout uses the same
   style.
@@ -243,7 +275,9 @@ cable stack with a single handle, and chest press, lat pulldown, leg extension a
 ### Progress analytics
 
 - View progress as a responsive chart.
-- Track heaviest weight, best reps, or total volume.
+- Track heaviest weight, best reps, or total volume. For a timed exercise, best reps is its longest
+  hold and volume its total time held; across all exercises, holds are left out, since seconds are
+  not reps.
 - Filter by exercise. Names typed differently ("Bench press", "Bench Press ") count as one exercise.
 - Filter by workout type.
 - Filter by start and end date.
@@ -739,8 +773,9 @@ PORT=9000 WORKOUT_DB=/tmp/scratch.db python backend/server.py
 
 The `tests/` directory holds end-to-end tests that drive a real headless browser against a real
 server, plus a suite that exercises the API directly: no mocking, so a passing check means the
-feature works. Twelve suites cover the workout flow, the training programs, the rest timer, offline syncing, settings and
-templates, the alert settings, in-workout usability, kilograms, the training calendar, the service worker, the security headers and
+feature works. Thirteen suites cover the workout flow, the training programs, the rest timer, offline syncing, settings and
+templates, the alert settings, in-workout usability, swapping and timed exercises, rest per exercise, the workout
+summary and personal records, kilograms, the training calendar, the service worker, the security headers and
 escaping in the pages, signing in and resetting a password in the browser, and the API itself
 (validation, malformed requests, racing uploads, sign-in throttling, password hashes, emails and
 reset codes, and database upgrades). Reset emails go to a small stand-in mail server inside the tests.
