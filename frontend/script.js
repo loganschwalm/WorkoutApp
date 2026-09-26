@@ -44,14 +44,25 @@ function showWorkoutBuilder(editing = false) {
   $('workoutBuilderCard').scrollIntoView({ behavior:'smooth', block:'start' });
 }
 
-// The banner sticks to the top of the screen so a message is seen wherever the page is scrolled; successes dismiss themselves.
-function showFeedback(message, type = 'error') {
+// The banner sticks to the top of the screen so a message is seen wherever the page is scrolled. Errors stay until
+// dismissed; successes and notes ('info') dismiss themselves. An action ({ label, run }), such as Undo, adds a button
+// that lasts as long as the banner does, so the banner then stays up a little longer.
+function showFeedback(message, type = 'error', action = null) {
   const feedback = $('formFeedback');
   feedback.textContent = message;
+  if (action) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'feedback-action';
+    button.textContent = action.label;
+    // Kept from reaching the banner, whose own click dismisses it; running the action decides what shows next.
+    button.onclick = event => { event.stopPropagation(); clearFeedback(); action.run(); };
+    feedback.append(' ', button);
+  }
   feedback.className = `form-feedback ${type}`;
   feedback.hidden = false;
   clearTimeout(feedbackTimer);
-  if (type === 'success') feedbackTimer = setTimeout(clearFeedback, 6000);
+  if (type !== 'error') feedbackTimer = setTimeout(clearFeedback, action ? 10000 : 6000);
 }
 
 function clearFeedback() {
@@ -607,12 +618,28 @@ $('completedSets').onchange = e => {
   clearFeedback();
   persistActiveSession();
 };
+// Remove takes the set away at once, with no question asked mid-workout, and the banner offers it back for a few
+// seconds in case the tap was a slip. Undo puts it back in its place, even after moving on to another exercise.
 $('completedSets').onclick = e => {
   const button = e.target.closest('[data-remove-set]');
   if (!button || !activeSession) return;
-  activeSession.exercises[activeSession.currentIndex].sets.splice(Number(button.dataset.removeSet), 1);
+  const session = activeSession;
+  const exercise = session.exercises[session.currentIndex];
+  const index = Number(button.dataset.removeSet);
+  const [removed] = exercise.sets.splice(index, 1);
+  if (!removed) return;
   persistActiveSession();
   renderActiveWorkout();
+  showFeedback(`Removed set ${index + 1} of ${exercise.name} (${describeLoggedSets([removed])}).`, 'info', { label:'Undo', run:() => {
+    if (activeSession !== session || !session.exercises.includes(exercise)) {
+      showFeedback('That set cannot come back: its workout has ended.');
+      return;
+    }
+    exercise.sets.splice(Math.min(index, exercise.sets.length), 0, removed);
+    persistActiveSession();
+    renderActiveWorkout();
+    showFeedback(`Set ${index + 1} of ${exercise.name} is back.`, 'success');
+  } });
 };
 $('activeAddName').oninput = () => markInvalid($('activeAddName'), false);
 $('activeAddReps').oninput = () => markInvalid($('activeAddReps'), false);

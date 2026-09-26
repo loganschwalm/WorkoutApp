@@ -477,3 +477,59 @@ def run(t):
           and field('activeNotes') == 'Pause the reps.', field('activeNotes'))
     end_workout()
     cdp.send('Emulation.clearDeviceMetricsOverride')
+
+    # ---- U: undoing a removed set
+    print('U   a removed set can be put back')
+    open_tracker()
+    start(0)
+    cdp.pause(0.4)
+    log(100, 8); log(105, 6); log(110, 4)
+    cdp.pause(0.3)
+
+    def remove_set(index):
+        cdp.ev(f"document.querySelector('#completedSets [data-remove-set=\"{index}\"]').click()")
+        cdp.pause(0.2)
+
+    def undo():
+        cdp.ev("document.querySelector('#formFeedback .feedback-action').click()")
+        cdp.pause(0.2)
+
+    def local_sets(exercise=0):
+        return safe_ev(f'readLocalActive().session.exercises[{exercise}].sets.map(s => [s.weight, s.reps])', [])
+
+    remove_set(1)
+    check('Remove takes the set away at once', [r['weight'] for r in rows()] == ['100', '110'] and local_sets() == [[100, 8], [110, 4]], f'{rows()} {local_sets()}')
+    banner = cdp.ev("(() => { const f = document.getElementById('formFeedback'); const b = f.querySelector('.feedback-action'); return { text: f.textContent, kind: f.className, button: b && b.textContent, shown: !f.hidden }; })()")
+    check('the banner says which set went, and offers Undo', banner['shown'] and banner['text'].startswith('Removed set 2 of Bench Press (105 lbs × 6).')
+          and banner['button'] == 'Undo' and 'info' in banner['kind'], banner)
+    undo()
+    check('Undo puts it back in its place', [(r['label'], r['weight'], r['reps']) for r in rows()] == [('Set 1', '100', '8'), ('Set 2', '105', '6'), ('Set 3', '110', '4')], rows())
+    check('and says so', text('formFeedback') == 'Set 2 of Bench Press is back.' and cdp.ev("!document.querySelector('#formFeedback .feedback-action')") is True, text('formFeedback'))
+    check('the restored set is saved on this device', local_sets() == [[100, 8], [105, 6], [110, 4]], local_sets())
+    check('and reaches the server', wait_for(lambda: (server_session() or {}).get('exercises', [{}])[0].get('sets', []) == [{'reps': 8, 'weight': 100}, {'reps': 6, 'weight': 105}, {'reps': 4, 'weight': 110}]),
+          (server_session() or {}).get('exercises', [{}])[0].get('sets'))
+
+    remove_set(2)
+    cdp.ev("document.getElementById('nextExerciseBtn').click()")
+    cdp.pause(0.3)
+    undo()
+    check('Undo after moving on restores the set to its own exercise', local_sets(0) == [[100, 8], [105, 6], [110, 4]]
+          and cdp.ev('activeSession.currentIndex') == 1 and text('activeExerciseName') == 'Overhead Press', f"{local_sets(0)} {text('activeExerciseName')}")
+    cdp.ev("document.getElementById('prevExerciseBtn').click()")
+    cdp.pause(0.3)
+    check('where it shows again', len(rows()) == 3, rows())
+
+    remove_set(0)
+    cdp.ev("document.getElementById('formFeedback').click()")
+    cdp.pause(0.2)
+    check('dismissing the banner lets the removal stand', cdp.ev("document.getElementById('formFeedback').hidden") is True and local_sets() == [[105, 6], [110, 4]], local_sets())
+    remove_set(0)
+    log(120, 3)
+    check('a new message replaces the offer', cdp.ev("!document.querySelector('#formFeedback .feedback-action')") is True and local_sets() == [[110, 4], [120, 3]], local_sets())
+
+    remove_set(0)
+    no_confirm()
+    end_workout()
+    undo()
+    check('once the workout has ended, Undo says it is too late', text('formFeedback') == 'That set cannot come back: its workout has ended.'
+          and cdp.ev("document.getElementById('activeWorkout').hidden") is True, text('formFeedback'))

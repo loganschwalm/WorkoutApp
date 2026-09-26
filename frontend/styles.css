@@ -27,6 +27,9 @@ header { display:flex; justify-content:space-between; align-items:flex-end; gap:
 .form-feedback.success { color:#22634c; background:#edf9f2; border-color:#b9e3ca; }
 html[data-theme="dark"] .form-feedback { color:#ffb1ba; background:#482934; border-color:#6d3b49; }
 html[data-theme="dark"] .form-feedback.success { color:#a5e5c2; background:#193b2d; border-color:#2f654b; }
+.form-feedback.info { color:var(--ink); background:#eef0ff; border-color:#d5d9fb; }
+html[data-theme="dark"] .form-feedback.info { color:var(--ink); background:#2b3150; border-color:#3d4570; }
+.feedback-action { margin-left:6px; padding:4px 12px; color:inherit; background:transparent; border:1px solid currentColor; border-radius:8px; font-weight:800; }
 #formFeedback { cursor:pointer; }
 #formFeedback::after { content:"\00d7"; float:right; margin-left:12px; font-size:1.25rem; line-height:1; opacity:.6; }
 .settings-button { width:40px; height:40px; padding:0; font-size:1.2rem; line-height:1; }
