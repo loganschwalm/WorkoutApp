@@ -261,6 +261,7 @@ function renderActiveWorkout() {
 
 // Going to another exercise, ending a workout or starting one closes whatever was open for the exercise before.
 function closeExercisePanels() {
+  $('exerciseMenu').open = false;
   stopHold();
   showExerciseJump(false);
   showSwap(false);
@@ -279,13 +280,27 @@ function goToExercise(index) {
   persistActiveSession();
 }
 
+// While a workout goes on it has the Tracker to itself: the program, recent workouts, templates and saved workouts
+// wait behind one button under it, so there is nothing to scroll past between sets.
+function showActiveCard(shown) {
+  $('activeWorkout').hidden = !shown;
+  document.body.classList.toggle('training', shown);
+  showOtherCards(false);
+}
+
+function showOtherCards(open) {
+  document.body.classList.toggle('showing-all', open);
+  $('otherCardsToggle').setAttribute('aria-expanded', String(open));
+  $('otherCardsToggle').textContent = open ? 'Hide the rest of the Tracker' : 'Show the rest of the Tracker';
+}
+
 // Takes the workout off the screen. closeActiveWorkout also records that it ended, for the server to be told.
 function hideActiveWorkout() {
   closeExercisePanels();
   activeSession = null;
   stopRestTimer();
   $('restPanel').hidden = true;
-  $('activeWorkout').hidden = true;
+  showActiveCard(false);
   syncWakeLock();
 }
 
@@ -320,7 +335,7 @@ function startWorkout(stored) {
   renderActiveWorkout();
   // Notes fold away under the set entry, unless the workout brings some with it.
   $('activeNotesToggle').open = Boolean(activeSession.notes);
-  $('activeWorkout').hidden = false;
+  showActiveCard(true);
   syncWakeLock();
   $('activeWorkout').scrollIntoView({ behavior:'smooth', block:'start' });
 }
@@ -415,7 +430,7 @@ function showSavedSession(savedSession) {
   $('restPanel').hidden = true;
   renderActiveWorkout();
   $('activeNotesToggle').open = Boolean(activeSession.notes);
-  $('activeWorkout').hidden = false;
+  showActiveCard(true);
   syncWakeLock();
 }
 
@@ -533,6 +548,7 @@ function logSet() {
 $('completeSetBtn').onclick = logSet;
 $('completedReps').oninput = () => { markInvalid($('completedReps'), false); syncHoldDisplay(); };
 $('activeWorkoutProgress').onclick = () => showExerciseJump($('exerciseJump').hidden);
+$('otherCardsToggle').onclick = () => showOtherCards(!document.body.classList.contains('showing-all'));
 $('exerciseJump').onclick = e => {
   const button = e.target.closest('[data-jump]');
   if (!button || !activeSession) return;

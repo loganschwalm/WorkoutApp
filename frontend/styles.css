@@ -1,4 +1,4 @@
-:root { --bg:#f4f7fb; --card:#fff; --ink:#172033; --muted:#687386; --accent:#5b5ce2; --line:#e3e8f0; }
+:root { --bg:#f4f7fb; --card:#fff; --ink:#172033; --muted:#687386; --accent:#5b5ce2; --line:#e3e8f0; --tab-bar:0px; }
 html[data-theme="dark"] { color-scheme:dark; --bg:#151923; --card:#202532; --ink:#edf1fa; --muted:#aab4c7; --accent:#8183f4; --line:#353d4e; }
 * { box-sizing:border-box; }
 /* The hidden attribute always wins. A class that sets display (flex, grid) would otherwise override it and
@@ -113,6 +113,12 @@ html[data-theme="dark"] .danger, html[data-theme="dark"] .remove { color:#ff9eaa
 .weight-stepper input { flex:1; min-width:0; text-align:center; }
 .weight-stepper button { flex:none; width:52px; padding:0; }
 .plate-hint { margin:10px 0 0; color:var(--muted); font-size:.88rem; }
+/* The plates for each side of the bar, each drawn to its size. */
+.plates { display:inline-flex; align-items:center; gap:3px; margin-left:4px; vertical-align:middle; }
+.plate { display:inline-grid; place-items:center; min-width:22px; padding:0 4px; color:#fff; background:var(--accent); border-radius:4px; font-size:.7rem; font-weight:800; line-height:1; }
+.plate-size-0 { height:36px; } .plate-size-1 { height:32px; } .plate-size-2 { height:28px; } .plate-size-3 { height:24px; }
+.plate-size-4 { height:20px; opacity:.85; } .plate-size-5 { height:18px; opacity:.75; } .plate-size-6 { height:16px; min-width:18px; opacity:.65; }
+.visually-hidden { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
 .notes-input { margin-top:12px; }
 .set-list { display:grid; gap:8px; margin:18px 0 0; padding:0; list-style:none; }
 .set-list li { display:grid; grid-template-columns:3.4rem minmax(0,1fr) minmax(0,1fr) auto; align-items:center; gap:10px; padding:8px 11px; background:#f8f9fd; border:1px solid var(--line); border-radius:8px; }
@@ -154,7 +160,7 @@ html[data-theme="dark"] .link-button.danger-link { color:#ff9eaa; }
 .data-section .subtitle, .data-section .auth-feedback { margin:0; }
 .data-actions { display:flex; flex-wrap:wrap; gap:8px; }
 .account-editor-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:6px; }
-.rest-panel { position:sticky; top:12px; z-index:4; display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:16px; padding:10px 10px 10px 16px; background:#eef0ff; border-radius:12px; box-shadow:0 8px 22px rgba(36,48,90,.12); }
+.rest-panel { position:sticky; top:12px; bottom:calc(12px + var(--tab-bar)); z-index:4; display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:16px; padding:10px 10px 10px 16px; background:#eef0ff; border-radius:12px; box-shadow:0 8px 22px rgba(36,48,90,.12); }
 html[data-theme="dark"] .rest-panel { background:#303653; }
 .rest-time { display:flex; align-items:baseline; gap:10px; }
 .rest-time span { color:var(--accent); font-size:1.5rem; font-weight:800; font-variant-numeric:tabular-nums; }
@@ -282,6 +288,10 @@ input[type="range"] { padding:0; border:0; background:transparent; accent-color:
 .calendar-note { margin:12px 0 0; font-size:.82rem; }
 .calendar-day[title] { cursor:pointer; }
 .calendar-detail { min-height:1.2em; margin:10px 0 0; color:var(--ink); font-weight:600; }
+/* During a workout the Tracker is only the workout: the rest waits behind the button under it. */
+.other-cards-toggle { display:none; }
+body.training .other-cards-toggle { display:block; margin:14px auto 0; }
+body.training:not(.showing-all) .between-workouts { display:none; }
 /* During a workout: "Exercise 2 of 6" opens the list of exercises to go to any of them. */
 .progress-toggle { margin:8px 0 0; padding:2px 0; color:var(--muted); background:none; font-size:1rem; font-weight:400; text-align:left; }
 .progress-toggle:hover { color:var(--ink); transform:none; }
@@ -298,7 +308,8 @@ html[data-theme="dark"] .exercise-jump .done .jump-sets::before { color:#a5e5c2;
 /* Swap, beside the exercise's name, opens a field for the exercise to do instead. */
 .active-exercise-heading { display:flex; align-items:baseline; gap:8px; margin-bottom:6px; }
 .active-exercise-heading h3 { margin:0; }
-.active-exercise-heading .link-button { flex:none; padding:4px 6px; }
+.exercise-menu { flex:none; margin-left:auto; }
+.exercise-menu > summary { height:32px; }
 .swap-panel { margin:8px 0 12px; padding:12px 14px; border:1px solid var(--line); border-radius:12px; }
 .swap-fields { display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:8px; }
 .swap-panel .subtitle { margin:10px 0 0; font-size:.85rem; line-height:1.45; }
@@ -327,7 +338,7 @@ html[data-theme="dark"] .summary-records li { color:#a5e5c2; background:#193b2d;
 html[data-theme="dark"] .exercise-note { background:#3a3122; }
 .note-actions { display:flex; gap:8px; margin-top:8px; }
 .superset-line { margin:0 0 6px; color:var(--accent); font-weight:600; }
-.active-exercise-heading { flex-wrap:wrap; }
+.active-exercise-heading { align-items:center; }
 .jump-superset { margin-left:4px; padding:1px 6px; color:var(--accent); background:#eef0ff; border-radius:6px; font-size:.75rem; font-weight:600; }
 html[data-theme="dark"] .jump-superset { background:#303653; }
 /* Go heavier, with a button that fills in the weight. */
@@ -354,3 +365,23 @@ html[data-theme="dark"] .progression-hint { color:#a5e5c2; }
 .session-list li div { display:flex; flex-wrap:wrap; gap:4px 10px; align-items:baseline; }
 .session-list li strong { color:var(--ink); }
 .workout-details li strong a { color:inherit; text-decoration:underline; text-decoration-color:var(--line); text-underline-offset:3px; }
+/* On a phone: a small header (the title and Settings), and the pages as a tab bar along the bottom, in reach of a thumb.
+   The install bar and the pinned rest timer sit above the tab bar, and the page leaves room for it at the bottom. */
+@media (max-width:620px) {
+  :root { --tab-bar:60px; }
+  body { padding-bottom:calc(var(--tab-bar) + env(safe-area-inset-bottom)); }
+  .shell { padding-top:16px; }
+  header { flex-wrap:nowrap; align-items:center; gap:12px; margin-bottom:16px; }
+  header > div:first-child { min-width:0; }
+  header .subtitle { display:none; }
+  h1 { font-size:1.75rem; letter-spacing:-.04em; }
+  .header-actions { flex:none; }
+  .site-nav { position:fixed; left:0; right:0; bottom:0; z-index:8; order:0; width:auto; gap:6px; height:calc(var(--tab-bar) + env(safe-area-inset-bottom));
+    padding:8px 12px calc(8px + env(safe-area-inset-bottom)); background:var(--card); border-top:1px solid var(--line); box-shadow:0 -8px 24px rgba(16,21,35,.08); }
+  .site-nav a { display:grid; flex:1; place-items:center; padding:0; font-size:.92rem; }
+  .site-nav a.active { color:var(--accent); background:#eef0ff; }
+  html[data-theme="dark"] .site-nav a.active { background:#303653; }
+  .install-banner { bottom:var(--tab-bar); }
+  body.has-install-banner { padding-bottom:calc(96px + var(--tab-bar)); }
+}
+body.has-install-banner .rest-panel { bottom:calc(84px + var(--tab-bar)); }

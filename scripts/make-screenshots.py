@@ -165,9 +165,9 @@ def main():
         cdp.ev("confirm = () => true; document.getElementById('endWorkoutBtn').click()")
         cdp.pause(0.5)
 
-        # Progress, every workout type on one chart.
+        # Progress, every workout type on one chart (it opens on the most logged exercise, so all of them are asked for).
         browser.viewport(DESKTOP)
-        browser.open('/progress.html', "document.querySelectorAll('#legend .legend-item').length >= 3")
+        browser.open('/progress.html?exercise=all', "document.querySelectorAll('#legend .legend-item').length >= 3")
         browser.save('progress.png', bottom=browser.edge('main .card', margin=40))
 
         # History in dark mode, down to the end of the second workout.

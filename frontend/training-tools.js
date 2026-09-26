@@ -70,8 +70,12 @@ function showPlates() {
   $('plateHint').hidden = !applies;
   if (!applies) return;
   const { plates, makes } = platesPerSide(weight, barbell);
-  $('plateHint').textContent = !plates.length ? `Just the ${barbell.name}`
-    : `Each side of a ${barbell.name}: ${plates.join(' + ')}${makes !== weight ? ` (makes ${formatWeight(makes)} ${weightUnit()})` : ''}`;
+  if (!plates.length) { $('plateHint').textContent = `Just the ${barbell.name}`; return; }
+  // Each plate drawn to its size, the heaviest tallest, in the order they go on. The " + " between them is only for
+  // screen readers, which read the whole line as "Each side of a 45 lb bar: 45 + 25 + 2.5".
+  $('plateHint').innerHTML = `<span>Each side of a ${escapeHTML(barbell.name)}: </span><span class="plates">`
+    + plates.map(plate => `<span class="plate plate-size-${barbell.plates.indexOf(plate)}">${plate}</span>`).join('<span class="visually-hidden"> + </span>')
+    + '</span>' + (makes !== weight ? `<span> (makes ${escapeHTML(formatWeight(makes))} ${weightUnit()})</span>` : '');
 }
 
 // ---- Swapping an exercise ---------------------------------------------------
@@ -351,6 +355,8 @@ $('effortChoices').onclick = e => {
 };
 
 $('swapToggle').onclick = () => showSwap($('swapPanel').hidden);
+// Whatever is picked from the exercise's ⋯ menu closes it.
+$('exerciseMenu').querySelector('.row-menu-items').addEventListener('click', e => { if (e.target.closest('button')) $('exerciseMenu').open = false; });
 $('swapCancel').onclick = () => showSwap(false);
 $('swapBtn').onclick = swapExercise;
 $('swapName').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); swapExercise(); } };

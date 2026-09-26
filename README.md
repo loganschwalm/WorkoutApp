@@ -47,11 +47,15 @@ own workouts, templates, and settings.
   Start again, with up to three recent workouts and the one you did longest ago first (going round
   push, pull and legs, that is the one due). Templates fold away once you have saved workouts or a
   program, a tap from showing again.
+- During a workout the Tracker is only the workout: the program, Start again, templates and saved
+  workouts wait behind "Show the rest of the Tracker" under it, and come back when the workout ends.
+- On a phone the header is just the page's name and Settings, and Tracker, Progress and History are a
+  tab bar along the bottom of the screen, in reach of a thumb.
 - Move through exercises one at a time, or go straight to any of them: tap "Exercise 2 of 6" for a
   list of every exercise and how many sets each has, and tap one to go there. Handy when a machine is
   taken and you do the next free one first.
-- Swap an exercise when its equipment is taken: Swap, beside the exercise's name, does another in its
-  place. The new one keeps the sets and rep range still to do, but not the old weights, so it starts
+- Swap an exercise when its equipment is taken: Swap exercise, in the ⋯ menu beside the exercise's
+  name, does another in its place. The new one keeps the sets and rep range still to do, but not the old weights, so it starts
   from its own last time. Sets already logged stay with the old exercise, and the new one follows it
   with the sets left. Swapping back to the original brings its planned weights back.
 - Exercise names are suggested as you type, everywhere an exercise is entered (a new workout, a
@@ -61,7 +65,8 @@ own workouts, templates, and settings.
 - Enter the weight and reps completed for each set, right under the exercise, with −5 and +5 buttons
   beside the weight.
 - For barbell lifts (going by the exercise's name), see the plates to load on each side of a 45 lb
-  bar, down to 1.25s: 187.5 lbs is 45 + 25 + 1.25. A weight the plates cannot make says what they do.
+  bar, down to 1.25s, drawn to size: 187.5 lbs is 45 + 25 + 1.25. A weight the plates cannot make says
+  what they do.
   In kilograms it is a 20 kg bar with 25, 20, 15, 10, 5, 2.5 and 1.25 kg plates, and the weight
   buttons step 2.5 kg.
 - See how you did last time on each exercise; its weight and reps are prefilled, and after each set the next one defaults to the set you just logged.
@@ -72,7 +77,7 @@ own workouts, templates, and settings.
 - Go back to a previous exercise, or add an exercise in the middle of a workout.
 - Exercises with no logged sets count as skipped and are left out of the saved workout, so they never appear as done in History or Progress.
 - Automatically start a configurable rest timer after each set. It sits under the set entry and stays
-  on screen while you scroll. An exercise can have a rest of its own: the training programs rest
+  on screen while you scroll, at the top of the screen or, above it, at the bottom. An exercise can have a rest of its own: the training programs rest
   longer after a main lift than after accessories, and a template can set one for each exercise.
   Everything else uses the default from Settings.
 - Pause and reset the rest timer, or give yourself 30 seconds more or less with −30s and +30s,
@@ -92,7 +97,7 @@ own workouts, templates, and settings.
   done for the first time has nothing to beat, so it sets no record. Records are worked out on the
   device, so they show even when the workout was finished offline.
 - Add notes while training; they fold away until you open them, unless the workout already has some.
-- Keep a note with an exercise ("seat on 4", "grip on the rings"): Add note, beside the exercise's name,
+- Keep a note with an exercise ("seat on 4", "grip on the rings"): Add note, in the exercise's ⋯ menu,
   saves it to your account, and it shows under that exercise whenever it comes up, in any workout.
   Save it empty to remove it.
 - Past sessions, under last time's numbers, lists the last five times you did the exercise, with a link
@@ -108,7 +113,7 @@ own workouts, templates, and settings.
   optional, shows beside each logged set, in Past sessions and on Progress, and a set with none left
   keeps Go heavier quiet. Settings can turn it off.
 - Supersets: exercises done as one, a set of each in turn and a rest only when the round is done. Pair
-  an exercise with the next mid-workout (Superset with next, beside its name), or tick "Superset with
+  an exercise with the next mid-workout (Superset with next, in its ⋯ menu), or tick "Superset with
   the next exercise" in the template editor. Next exercise moves on past the whole superset, and an
   exercise added mid-superset goes after it. Reddit PPL does its triceps and lateral raises this way.
 - Restore an active workout after refreshing the page.

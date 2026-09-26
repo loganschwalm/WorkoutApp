@@ -409,9 +409,35 @@ def run(t):
     check('weight, reps and Complete set come straight after the exercise',
           top('completeSetBtn') < top('completedSets') and top('completeSetBtn') < top('activeNotesToggle'),
           f"set {top('completeSetBtn')} sets {top('completedSets')} notes {top('activeNotesToggle')}")
-    check('Complete set is on the first screen of a phone', cdp.ev("document.getElementById('completeSetBtn').getBoundingClientRect().bottom <= innerHeight") is True,
+    check('Complete set is on the first screen of a phone, above the tab bar',
+          cdp.ev("document.getElementById('completeSetBtn').getBoundingClientRect().bottom <= document.querySelector('.site-nav').getBoundingClientRect().top") is True,
           cdp.ev("document.getElementById('completeSetBtn').getBoundingClientRect().bottom"))
     check('with the notes folded away', cdp.ev("document.getElementById('activeNotesToggle').open") is False)
+
+    # A phone's header is the title and Settings; the pages are a tab bar along the bottom of the screen.
+    bar = cdp.ev("(r => ({ top: r.top, bottom: r.bottom, vh: innerHeight, position: getComputedStyle(document.querySelector('.site-nav')).position }))"
+                 "(document.querySelector('.site-nav').getBoundingClientRect())")
+    check('on a phone the pages are a tab bar along the bottom', bar['position'] == 'fixed' and abs(bar['bottom'] - bar['vh']) < 1, bar)
+    check("and the header leaves out the page's tagline", cdp.ev("getComputedStyle(document.querySelector('header .subtitle')).display") == 'none')
+
+    def shown(selector):
+        return cdp.ev(f"[...document.querySelectorAll('{selector}')].map(e => getComputedStyle(e).display !== 'none')")
+
+    check('during a workout the rest of the Tracker is out of the way', shown('.between-workouts') == [False] * 4 and visible('otherCardsToggle')
+          and shown('#otherCardsToggle') == [True], shown('.between-workouts'))
+    cdp.ev("document.getElementById('otherCardsToggle').click()")
+    check('one button under the workout brings it back', shown('.between-workouts')[2:] == [True, True]
+          and text('otherCardsToggle') == 'Hide the rest of the Tracker', shown('.between-workouts'))
+    cdp.ev("document.getElementById('otherCardsToggle').click()")
+    check('and puts it away again', shown('.between-workouts') == [False] * 4, shown('.between-workouts'))
+
+    # Swap, the note and the superset are in one menu beside the exercise's name.
+    cdp.ev("document.getElementById('exerciseMenu').open = true")
+    cdp.ev("document.getElementById('swapToggle').click()")
+    cdp.pause(0.2)
+    check("Swap is in the exercise's menu, which closes once it is picked",
+          cdp.ev("document.getElementById('exerciseMenu').open") is False and visible('swapPanel'))
+    cdp.ev("document.getElementById('swapCancel').click()")
 
     def set_weight(value):
         cdp.ev(f"(i => {{ i.value = '{value}'; i.dispatchEvent(new Event('input', {{ bubbles: true }})); }})(document.getElementById('activeWeight'))")
@@ -437,10 +463,13 @@ def run(t):
 
     set_weight(135)
     check('Bench Press shows the plates for each side of the bar', plates() == 'Each side of a 45 lb bar: 45', plates())
+    check('drawn as plates', cdp.ev("[...document.querySelectorAll('#plateHint .plate')].map(p => p.className)") == ['plate plate-size-0'])
     step(5)
     check('which follow the weight as it changes', plates() == 'Each side of a 45 lb bar: 45 + 2.5', plates())
     set_weight(190)
     check('down to the 2.5s', plates() == 'Each side of a 45 lb bar: 45 + 25 + 2.5', plates())
+    check('each drawn to its size', cdp.ev("[...document.querySelectorAll('#plateHint .plate')].map(p => p.getBoundingClientRect().height)")
+          == sorted(cdp.ev("[...document.querySelectorAll('#plateHint .plate')].map(p => p.getBoundingClientRect().height)"), reverse=True))
     set_weight(187.5)
     check('and the 1.25s a program rounded to 2.5 lbs needs', plates() == 'Each side of a 45 lb bar: 45 + 25 + 1.25', plates())
     set_weight(187)
@@ -466,7 +495,15 @@ def run(t):
     cdp.pause(0.3)
     pinned = cdp.ev("(r => ({ top: r.top, bottom: r.bottom, vh: innerHeight }))(document.getElementById('restPanel').getBoundingClientRect())")
     check('and stays on screen while the page scrolls past it', pinned['top'] >= 0 and pinned['bottom'] <= pinned['vh'], pinned)
+    # The list of exercises open above it pushes it off the bottom of the screen, where it waits above the tab bar.
+    cdp.ev("document.getElementById('activeWorkoutProgress').click(); document.getElementById('addActiveExercise').open = true; scrollTo(0, 0)")
+    cdp.pause(0.3)
+    pinned = cdp.ev("(r => ({ top: r.top, bottom: r.bottom, bar: document.querySelector('.site-nav').getBoundingClientRect().top,"
+                    " below: document.getElementById('completedSets').getBoundingClientRect().top }))(document.getElementById('restPanel').getBoundingClientRect())")
+    check('or scrolled above it, at the bottom of the screen over the tab bar', pinned['below'] > pinned['bar'] and 0 <= pinned['top'] and pinned['bottom'] <= pinned['bar'], pinned)
     end_workout()
+    check('once the workout ends the rest of the Tracker is back', shown('.between-workouts')[2:] == [True, True] and not cdp.ev("getComputedStyle(document.getElementById('otherCardsToggle')).display !== 'none'"),
+          shown('.between-workouts'))
 
     noted = api('POST', '/api/workouts', {'name': 'Noted Day', 'notes': 'Pause the reps.', 'createdAt': t.t0 + 7 * 86400000,
                                           'exercises': [ex('Bench Press', 135, 5, [(5, 135)])]}, token)[0]['id']
