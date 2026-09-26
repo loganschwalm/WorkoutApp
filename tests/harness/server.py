@@ -84,7 +84,8 @@ class AppServer:
         headers = dict(headers or {})
         if token:
             headers['Cookie'] = f'session={token}'
-        conn.putrequest(method, path)
+        # http.client adds its own Accept-Encoding: identity unless told not to, which would come before one given here.
+        conn.putrequest(method, path, skip_accept_encoding='Accept-Encoding' in headers)
         if body is not None and 'Content-Length' not in headers:
             headers['Content-Length'] = str(len(body))
         for name, value in headers.items():

@@ -341,15 +341,7 @@ function rememberLastPerformance(workout) {
 // The best each exercise has done in every saved workout (and any still uploading), kept on this device so a finished
 // workout can be told its records at once, online or not. Weights are kept in pounds whatever they were logged in, so
 // workouts in either unit compare. Per exercise: the heaviest weight, the best estimated one-rep max, the most reps in
-// a set without weight, and for a timed exercise the longest hold. One-rep maxes come only from sets of up to 12 reps,
-// beyond which the estimate stops meaning much.
-const ONE_REP_MAX_REPS = 12;
-
-// Epley's formula, as estimateOneRepMax in program.js, to 2 decimals so that close results still compare.
-function exactOneRepMax(weight, reps) {
-  return Math.round((reps <= 1 ? weight : weight * (1 + reps / 30)) * 100) / 100;
-}
-
+// a set without weight, and for a timed exercise the longest hold. One-rep maxes come from exactOneRepMax in common.js.
 function bestsOf(workouts) {
   const bests = {};
   workouts.forEach(workout => workout.exercises.forEach(item => {

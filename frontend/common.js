@@ -107,6 +107,16 @@ function describeSavedExercise(exercise) {
   return isBodyweight(exercise.weight) ? count : `${formatWeight(exercise.weight)} ${weightUnit()} · ${count}`;
 }
 
+// ---- Estimated one-rep max -------------------------------------------------
+// Epley's formula, as estimateOneRepMax in program.js, to 2 decimals so that close results still compare. Only sets of up
+// to ONE_REP_MAX_REPS reps count, beyond which the estimate stops meaning much. A window property, not a const: a
+// script.js from before this moved here, served from the cache for one load, declares its own (see the note on $).
+window.ONE_REP_MAX_REPS = 12;
+
+function exactOneRepMax(weight, reps) {
+  return Math.round((reps <= 1 ? weight : weight * (1 + reps / 30)) * 100) / 100;
+}
+
 // "1 set", "3 sets".
 function plural(count, word) {
   return `${count} ${word}${count === 1 ? '' : 's'}`;

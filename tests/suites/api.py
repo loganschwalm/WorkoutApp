@@ -2,6 +2,7 @@
 
 import csv
 import datetime
+import gzip
 import hashlib
 import io
 import json
@@ -10,6 +11,8 @@ import socket
 import sqlite3
 import threading
 import time
+
+from ..harness import REPO_ROOT
 
 INTERCEPT = False
 BROWSER = False
@@ -169,6 +172,8 @@ def run(t):
     run_admin(t, check, request)
     run_export(t, check, request)
     run_account_security(t, check, request)
+    run_compression(t, check, request)
+    run_deletion(t, check, request)
     run_bursts(t, check)
 
 
@@ -1008,6 +1013,116 @@ def run_account_security(t, check, request):
     check("the site's own pages still make changes", status == 201, status)
     status, _, _ = request('GET', '/api/workouts', None, {'Sec-Fetch-Site': 'cross-site'}, token=owner)
     check('reading is not refused (the browser keeps the answer from another site)', status == 200, status)
+
+
+def run_compression(t, check, request):
+    gz = {'Accept-Encoding': 'gzip, deflate, br'}
+    frontend = os.path.join(REPO_ROOT, 'frontend')
+
+    def register(name):
+        cookie = t.api('POST', '/api/auth/register', {'username': name, 'email': f'{name}@example.test', 'password': 'password123'})[1]
+        return cookie.split('session=')[1].split(';')[0]
+
+    print('A29 text is sent gzipped to browsers that take it')
+    with open(os.path.join(frontend, 'script.js'), 'rb') as file:
+        script = file.read()
+    status, headers, body = request('GET', '/script.js', None, gz)
+    check('a script is gzipped', status == 200 and headers.get('content-encoding') == 'gzip' and 'Accept-Encoding' in headers.get('vary', ''),
+          f"{status} {headers.get('content-encoding')} {headers.get('vary')}")
+    check('to a fraction of its size', isinstance(body, bytes) and len(body) < len(script) / 2 and headers.get('content-length') == str(len(body)),
+          f"{len(body) if isinstance(body, bytes) else body!r} of {len(script)}")
+    check('and unpacks to the file exactly', isinstance(body, bytes) and gzip.decompress(body) == script)
+    check('with its type and date as before', headers.get('content-type') == 'text/javascript; charset=utf-8' and headers.get('last-modified'), headers)
+    status, _, body = request('GET', '/script.js', None, {**gz, 'If-Modified-Since': headers.get('last-modified', '')})
+    check('an unchanged script is still a 304', status == 304 and not body, status)
+    status, headers, body = request('GET', '/script.js')
+    check('a client that does not ask for gzip gets the file as it is', status == 200 and 'content-encoding' not in headers and body == script, headers.get('content-encoding'))
+    status, headers, _ = request('GET', '/script.js', None, {'Accept-Encoding': 'gzip;q=0, identity'})
+    check('nor one that refuses it', status == 200 and 'content-encoding' not in headers, headers.get('content-encoding'))
+    status, headers, _ = request('GET', '/icons/icon-192.png', None, gz)
+    check('images, already compressed, go as they are', status == 200 and 'content-encoding' not in headers, headers.get('content-encoding'))
+    busy = register('compressed')
+    status, headers, body = request('GET', '/', None, gz, token=busy)
+    check('the Tracker page at / is gzipped too', status == 200 and headers.get('content-encoding') == 'gzip'
+          and b'<title>Workout Tracker</title>' in gzip.decompress(body), f"{status} {headers.get('content-encoding')}")
+    status, headers, _ = request('GET', '/progress.html', None, gz)
+    check('and signed out, the redirect to sign in is unchanged', status == 303, status)
+
+    for n in range(10):
+        t.api('POST', '/api/workouts', {'name': f'Workout {n}', 'notes': 'Felt good. ' * 10, 'exercises': [t.ex('Squat', 100 + n, 5, [(5, 100 + n)] * 5)]}, busy)
+    plain = request('GET', '/api/workouts', token=busy)
+    status, headers, body = request('GET', '/api/workouts', None, gz, token=busy)
+    check('the workouts list is gzipped', status == 200 and headers.get('content-encoding') == 'gzip' and headers.get('content-length') == str(len(body)),
+          f"{status} {headers.get('content-encoding')}")
+    check('and unpacks to the same JSON', isinstance(body, bytes) and json.loads(gzip.decompress(body)) == plain[2])
+    status, headers, _ = request('GET', '/api/auth/me', None, gz, token=busy)
+    check('a small answer is not worth gzipping', status == 200 and 'content-encoding' not in headers, headers.get('content-encoding'))
+    status, headers, body = request('GET', '/api/export.csv', None, gz, token=busy)
+    check('an export is gzipped on its way too', status == 200 and headers.get('content-encoding') == 'gzip'
+          and gzip.decompress(body).decode('utf-8').lstrip('﻿').startswith('Date,Workout'), f"{status} {headers.get('content-encoding')}")
+
+
+def run_deletion(t, check, request):
+    main = t.server
+    json_headers = {'Content-Type': 'application/json'}
+
+    def post(path, body, token=None):
+        return request('POST', path, json.dumps(body).encode(), json_headers, token=token)
+
+    def session_of(headers):
+        cookie = headers.get('set-cookie', '')
+        return cookie.split('session=')[1].split(';')[0] if 'session=' in cookie else None
+
+    def register(name):
+        return session_of(post('/api/auth/register', {'username': name, 'email': f'{name}@example.test', 'password': 'password123'})[1])
+
+    def me(token):
+        return main.api('GET', '/api/auth/me', token=token)[0]['user']
+
+    def rows_of(user_id):
+        db = sqlite3.connect(t.db_path('test.db'))
+        counts = {table: db.execute(f'SELECT COUNT(*) FROM {table} WHERE user_id = ?', (user_id,)).fetchone()[0]
+                  for table in ('sessions', 'workouts', 'active_sessions', 'user_state')}
+        counts['users'] = db.execute('SELECT COUNT(*) FROM users WHERE id = ?', (user_id,)).fetchone()[0]
+        db.close()
+        return counts
+
+    print('A30 an account is deleted, with everything in it, with its password')
+    leaver = register('leaver')
+    leaver_id = me(leaver)['id']
+    other_device = session_of(post('/api/auth/login', {'login': 'leaver', 'password': 'password123'})[1])
+    main.api('POST', '/api/workouts', {'name': 'Mine', 'exercises': [t.ex('Squat', 100, 5, [(5, 100)])]}, leaver)
+    main.api('PUT', '/api/state', {'settings': {'restDuration': 120}, 'templates': [], 'program': None}, leaver)
+    main.api('POST', '/api/active-session', {'session': {'name': 'Going', 'exercises': [], 'currentIndex': 0}}, leaver)
+    status, _, reply = post('/api/account/delete', {'password': 'wrong-password'}, leaver)
+    check('a wrong password -> 403, and nothing is deleted', status == 403 and reply.get('error') and me(leaver) is not None
+          and rows_of(leaver_id)['workouts'] == 1, f'{status} {reply}')
+    check('signed out -> 401', post('/api/account/delete', {'password': 'password123'})[0] == 401)
+    status, headers, reply = post('/api/account/delete', {'password': 'password123'}, leaver)
+    check('the right password deletes it', status == 200, f'{status} {reply}')
+    check('and clears the cookie', 'session=;' in headers.get('set-cookie', '') and 'Max-Age=0' in headers.get('set-cookie', ''), headers.get('set-cookie'))
+    check('with every workout, setting, session and workout in progress', rows_of(leaver_id) == {'sessions': 0, 'workouts': 0, 'active_sessions': 0,
+                                                                                                  'user_state': 0, 'users': 0}, rows_of(leaver_id))
+    check('so no device is signed in to it any more', me(leaver) is None and me(other_device) is None)
+    check('and it no longer signs in', post('/api/auth/login', {'login': 'leaver', 'password': 'password123'})[0] == 401)
+    check('its username and email are free again', register('leaver') is not None)
+    guesser = register('careful')
+    guesses = [post('/api/account/delete', {'password': f'guess-{n}'}, guesser)[0] for n in range(5)]
+    status = post('/api/account/delete', {'password': 'password123'}, guesser)[0]
+    check('guessing the password here is limited like signing in', guesses == [403] * 5 and status == 429 and me(guesser) is not None, f'{guesses} {status}')
+
+    print('A31 an admin deletes an account from the command line')
+    register('removable')
+    main.api('POST', '/api/workouts', {'name': 'Theirs', 'exercises': [t.ex('Row', 80, 8, [(8, 80)])]}, register('removable2'))
+    code, out, err = main.admin('delete-user', 'removable')
+    check('without a terminal to ask at, it needs --yes', code == 1 and '--yes' in err and 'Nothing was changed' in err and
+          main.admin('users')[1].count('removable ') == 1, f'{code} {out!r} {err!r}')
+    code, out, err = main.admin('delete-user', 'removable2@example.test', '--yes')
+    check('with --yes it deletes it, by username or email, and says how much went', code == 0 and out.strip() == 'Deleted removable2 and their 1 workout.',
+          f'{code} {out!r} {err!r}')
+    check('and the account is gone', 'removable2' not in main.admin('users')[1])
+    code, _, err = main.admin('delete-user', 'nobody-here', '--yes')
+    check('an account that does not exist -> an error', code == 1 and 'No account' in err, err)
 
 
 def run_bursts(t, check):

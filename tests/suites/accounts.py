@@ -196,3 +196,42 @@ def run(t):
     cdp.ev("document.getElementById('changeEmailButton').click()")
     check('opening the email fields closes the notice', not shown('accountNotice') and shown('emailEditor'))
     cdp.ev("document.getElementById('cancelSettings').click()")
+
+    # ------------------------------------------------------------------ C8 deleting the account
+    print('C8  an account is deleted in Settings')
+    _, cookie = api('POST', '/api/auth/register', {'username': 'goodbye', 'email': 'goodbye@example.test', 'password': 'password123'})
+    goodbye = cookie.split('session=')[1].split(';')[0]
+    api('POST', '/api/workouts', {'name': 'Last One', 'exercises': [t.ex('Squat', 100, 5, [(5, 100)])]}, goodbye)
+    t.set_cookie(goodbye)
+    t.open_tracker()
+    cdp.wait("window.localUsername === 'goodbye'")
+    goodbye_id = cdp.ev('localUserId')
+    kept = f"Object.keys(localStorage).filter(key => key.startsWith('workout-tracker-') && key.endsWith('-{goodbye_id}'))"
+    check('this device keeps a copy for the account', len(cdp.ev(kept) or []) > 0, cdp.ev(kept))
+    cdp.ev("document.getElementById('settingsButton').click()")
+    check('Settings offers Delete account', shown('deleteAccountButton') and not shown('deleteEditor'))
+    cdp.ev("document.getElementById('changePasswordButton').click(); document.getElementById('deleteAccountButton').click()")
+    check('which asks for the password, says what goes, and closes the password fields',
+          shown('deleteEditor') and not shown('passwordEditor') and 'Export first' in text('deleteEditor') and cdp.ev('document.activeElement.id') == 'deletePassword')
+    fill(deletePassword='wrong-password')
+    submit('deleteForm')
+    cdp.wait("!document.getElementById('deleteFeedback').hidden")
+    check('a wrong password is refused, and nothing is deleted', 'not right' in text('deleteFeedback')
+          and api('GET', '/api/auth/me', token=goodbye)[0]['user'] is not None, text('deleteFeedback'))
+    cdp.answer = False
+    asked = len(cdp.dialogs)
+    fill(deletePassword='password123')
+    submit('deleteForm')
+    cdp.pause(0.5)
+    check('it asks once more, and saying no deletes nothing', len(cdp.dialogs) == asked + 1 and 'cannot be undone' in cdp.dialogs[-1]
+          and api('GET', '/api/auth/me', token=goodbye)[0]['user'] is not None, cdp.dialogs[asked:])
+    cdp.answer = True
+    submit('deleteForm')
+    check('saying yes deletes it and goes to the sign-in page', cdp.wait("location.pathname === '/login.html'"), cdp.ev('location.href'))
+    cdp.wait("!document.getElementById('authNotice').hidden")
+    check('which says the account was deleted', 'deleted' in text('authNotice'), text('authNotice'))
+    check("and this device's copy of it is gone", cdp.ev(kept) == [], cdp.ev(kept))
+    check('the account is gone from the server', api('GET', '/api/auth/me', token=goodbye)[0]['user'] is None
+          and t.request('POST', '/api/auth/login', json.dumps({'login': 'goodbye', 'password': 'password123'}).encode(),
+                        {'Content-Type': 'application/json'})[0] == 401)
+    t.set_cookie(t.token)

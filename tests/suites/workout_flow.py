@@ -101,6 +101,8 @@ def run(t):
     print('T5  progress chart with several workout types')
     cdp.goto('/progress.html')
     cdp.wait('typeof chartData !== "undefined" && chartData && chartData.points.length > 0')
+    # The page opens on the exercise done most; this is about every workout type at once.
+    cdp.ev("const f = document.getElementById('exerciseFilter'); f.value = 'all'; f.dispatchEvent(new Event('change'))")
     info = cdp.ev("""(() => {
       const arcs = [];
       const original = CanvasRenderingContext2D.prototype.arc;

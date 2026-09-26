@@ -257,6 +257,7 @@ cat >/usr/local/bin/workout-tracker-admin <<'ADMIN'
 #   workout-tracker-admin users                          list every account and its email
 #   workout-tracker-admin reset-password <account>       set a new password (asked for twice)
 #   workout-tracker-admin set-email <account> <email>    add or change an account's email
+#   workout-tracker-admin delete-user <account>          delete an account and its workouts (asks first)
 # Run as root; the server switches to the service's user before it touches the database.
 set -Eeuo pipefail
 . /etc/workout-tracker/install.conf

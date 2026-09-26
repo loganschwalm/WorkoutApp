@@ -136,8 +136,10 @@ function showAccount() {
   getSettingElement('accountName').textContent = known ? `Signed in as ${window.localUsername}` : '';
   getSettingElement('accountEmail').textContent = window.localEmail || 'No email yet. Add one so you can reset a forgotten password.';
   getSettingElement('accountEmail').hidden = getSettingElement('changeEmailButton').hidden = getSettingElement('changePasswordButton').hidden = !known;
+  getSettingElement('deleteAccountButton').hidden = !known;
   getSettingElement('changeEmailButton').textContent = window.localEmail ? 'Change email' : 'Add email';
-  getSettingElement('emailEditor').hidden = getSettingElement('passwordEditor').hidden = getSettingElement('accountNotice').hidden = true;
+  getSettingElement('emailEditor').hidden = getSettingElement('passwordEditor').hidden = getSettingElement('deleteEditor').hidden = true;
+  getSettingElement('accountNotice').hidden = true;
 }
 
 function showEmailError(message) {
@@ -260,7 +262,7 @@ getSettingElement('changeEmailButton').onclick = () => {
   getSettingElement('emailSetting').value = window.localEmail || '';
   getSettingElement('emailPassword').value = '';
   getSettingElement('emailFeedback').hidden = getSettingElement('accountNotice').hidden = true;
-  getSettingElement('passwordEditor').hidden = true;
+  getSettingElement('passwordEditor').hidden = getSettingElement('deleteEditor').hidden = true;
   getSettingElement('emailEditor').hidden = false;
   getSettingElement('emailSetting').focus();
 };
@@ -277,11 +279,46 @@ getSettingElement('cancelEmail').onclick = () => { getSettingElement('emailEdito
 getSettingElement('changePasswordButton').onclick = () => {
   getSettingElement('currentPassword').value = getSettingElement('newPassword').value = '';
   getSettingElement('passwordFeedback').hidden = getSettingElement('accountNotice').hidden = true;
-  getSettingElement('emailEditor').hidden = true;
+  getSettingElement('emailEditor').hidden = getSettingElement('deleteEditor').hidden = true;
   getSettingElement('passwordEditor').hidden = false;
   getSettingElement('currentPassword').focus();
 };
 getSettingElement('cancelPassword').onclick = () => { getSettingElement('passwordEditor').hidden = true; };
+getSettingElement('deleteAccountButton').onclick = () => {
+  getSettingElement('deletePassword').value = '';
+  getSettingElement('deleteFeedback').hidden = getSettingElement('accountNotice').hidden = true;
+  getSettingElement('emailEditor').hidden = getSettingElement('passwordEditor').hidden = true;
+  getSettingElement('deleteEditor').hidden = false;
+  getSettingElement('deletePassword').focus();
+};
+getSettingElement('cancelDelete').onclick = () => { getSettingElement('deleteEditor').hidden = true; };
+getSettingElement('deleteForm').onsubmit = async event => {
+  event.preventDefault();
+  const feedback = getSettingElement('deleteFeedback');
+  const fail = message => { feedback.textContent = message; feedback.hidden = false; };
+  feedback.hidden = true;
+  if (!confirm(`Delete the account ${window.localUsername} and all its workouts? This cannot be undone.`)) return;
+  const button = getSettingElement('confirmDelete');
+  button.disabled = true;
+  try {
+    let response;
+    try {
+      response = await fetch('/api/account/delete', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ password:getSettingElement('deletePassword').value }) });
+    } catch (error) {
+      fail('Could not reach the server. Nothing was deleted; try again when you are back online.');
+      return;
+    }
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      fail(result.error || 'Could not delete the account. Nothing was deleted.');
+      return;
+    }
+    forgetLocalAccount();
+    location.href = '/login.html?deleted=1';
+  } finally {
+    button.disabled = false;
+  }
+};
 getSettingElement('passwordForm').onsubmit = async event => {
   event.preventDefault();
   const save = getSettingElement('savePassword');

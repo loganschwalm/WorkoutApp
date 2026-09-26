@@ -260,6 +260,20 @@ async function loadAccountState() {
   return state;
 }
 
+// Everything kept on this device for the signed-in account, once that account has been deleted: its copies are of
+// nothing now, and anything still waiting to upload has nowhere to go.
+function forgetLocalAccount() {
+  [activeSyncTimer, pendingRetryTimer, stateSyncTimer].forEach(clearTimeout);
+  const suffix = `-${localUserId}`;
+  [...memoryStore.keys()].filter(key => key.endsWith(suffix)).forEach(key => memoryStore.delete(key));
+  try {
+    Object.keys(localStorage).filter(key => key.startsWith('workout-tracker-') && key.endsWith(suffix)).forEach(key => localStorage.removeItem(key));
+    if (JSON.parse(localStorage.getItem(lastUserStorageKey)) === localUserId) localStorage.removeItem(lastUserStorageKey);
+  } catch (error) {
+    // No storage: nothing was kept.
+  }
+}
+
 // ---- Status ---------------------------------------------------------------
 
 // Finished workouts still queued plus an in-progress workout the server has not seen the latest version of.

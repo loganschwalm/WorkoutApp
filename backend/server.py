@@ -2,7 +2,9 @@ import argparse
 import contextlib
 import csv
 import datetime
+import email.utils
 import getpass
+import gzip
 import io
 import hashlib
 import http.server
@@ -86,6 +88,28 @@ SECURITY_HEADERS = {
     'Cross-Origin-Opener-Policy': 'same-origin',
     'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()',
 }
+
+# Files gzipped for browsers that take it: text, which shrinks to about a quarter. Anything smaller than MIN_COMPRESS
+# bytes goes as it is, since gzip's own overhead would eat most of the saving.
+COMPRESSIBLE = ('.html', '.js', '.css', '.json', '.webmanifest', '.svg')
+MIN_COMPRESS = 1024
+# Each file gzipped once, until it changes on disk: {path: ((mtime, size), gzipped bytes)}.
+gzipped_files = {}
+gzipped_files_lock = threading.Lock()
+
+
+def gzipped_file(path, stat):
+    version = (stat.st_mtime_ns, stat.st_size)
+    with gzipped_files_lock:
+        cached = gzipped_files.get(path)
+    if cached and cached[0] == version:
+        return cached[1]
+    with open(path, 'rb') as file:
+        body = gzip.compress(file.read(), mtime=0)
+    with gzipped_files_lock:
+        gzipped_files[path] = (version, body)
+    return body
+
 
 # How long a request waits for another request's write to finish before giving up, in seconds.
 BUSY_TIMEOUT = 10
@@ -369,6 +393,14 @@ def store_state(database, user_id, settings, templates, program):
                      (user_id, json.dumps(settings), json.dumps(templates), json.dumps(program), int(time.time() * 1000)))
 
 
+def delete_account_rows(database, user_id):
+    """Everything an account has, then the account. The tables would cascade, but only with foreign keys on and on
+    databases made since those references existed, so each is emptied by name."""
+    for table in ('sessions', 'workouts', 'active_sessions', 'user_state', 'password_resets'):
+        database.execute(f'DELETE FROM {table} WHERE user_id = ?', (user_id,))
+    database.execute('DELETE FROM users WHERE id = ?', (user_id,))
+
+
 def exported_workouts(database, user_id):
     """Every workout, oldest first, as the pages know them but without this server's ids."""
     workouts = []
@@ -607,7 +639,66 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
         if self.path.startswith('//') or '\\' in unquote(urlparse(self.path).path):
             self.send_error(HTTPStatus.NOT_FOUND)
             return None
-        return super().send_head()
+        compressed = self.send_compressed_file()
+        return super().send_head() if compressed is False else compressed
+
+    def accepts_gzip(self):
+        for part in self.headers.get('Accept-Encoding', '').split(','):
+            name, _, params = part.partition(';')
+            if name.strip().lower() in ('gzip', '*'):
+                # gzip;q=0 is a browser saying it will not take gzip.
+                return not re.fullmatch(r'\s*q\s*=\s*0(\.0*)?\s*', params)
+        return False
+
+    def encoded(self, body):
+        """(body, headers) as sent: gzipped for a browser that takes that, when it is big enough to be worth it."""
+        if len(body) < MIN_COMPRESS:
+            return body, {}
+        if not self.accepts_gzip():
+            return body, {'Vary': 'Accept-Encoding'}
+        return gzip.compress(body, mtime=0), {'Content-Encoding': 'gzip', 'Vary': 'Accept-Encoding'}
+
+    def send_compressed_file(self):
+        """Serve a page, script or stylesheet gzipped, for a browser that takes that. False leaves the file to the standard
+        library, which serves it as it is: to a browser that does not, and for every other file, directory or error."""
+        if not self.accepts_gzip():
+            return False
+        path = self.translate_path(self.path)
+        if os.path.isdir(path):
+            if not urlparse(self.path).path.endswith('/'):
+                return False  # the standard library redirects it to the path with a slash
+            path = os.path.join(path, 'index.html')
+        try:
+            stat = os.stat(path)
+        except OSError:
+            return False
+        if not path.endswith(COMPRESSIBLE) or not os.path.isfile(path) or stat.st_size < MIN_COMPRESS:
+            return False
+        # Unchanged since the browser's copy: the same 304 the standard library would answer.
+        since = self.headers.get('If-Modified-Since')
+        if since and not self.headers.get('If-None-Match'):
+            try:
+                when = email.utils.parsedate_to_datetime(since)
+            except (TypeError, IndexError, OverflowError, ValueError):
+                when = None
+            if when is not None and when.tzinfo is None:
+                when = when.replace(tzinfo=datetime.timezone.utc)
+            if when is not None and when.tzinfo is datetime.timezone.utc:
+                modified = datetime.datetime.fromtimestamp(stat.st_mtime, datetime.timezone.utc).replace(microsecond=0)
+                if modified <= when:
+                    self.send_response(HTTPStatus.NOT_MODIFIED)
+                    self.send_header('Vary', 'Accept-Encoding')
+                    self.end_headers()
+                    return None
+        body = gzipped_file(path, stat)
+        self.send_response(HTTPStatus.OK)
+        self.send_header('Content-Type', self.guess_type(path))
+        self.send_header('Content-Length', str(len(body)))
+        self.send_header('Last-Modified', self.date_time_string(stat.st_mtime))
+        self.send_header('Content-Encoding', 'gzip')
+        self.send_header('Vary', 'Accept-Encoding')
+        self.end_headers()
+        return io.BytesIO(body)
 
     def parse_request(self):
         # One handler answers every request on a keep-alive connection, so nothing is carried over from the last one.
@@ -647,12 +738,12 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
         return f"session={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={max_age}" + ('; Secure' if self.secure_cookies() else '')
 
     def send_json(self, status, payload, cookies=None, headers=None):
-        body = json.dumps(payload).encode()
+        body, encoding = self.encoded(json.dumps(payload).encode())
         self.send_response(status)
         self.send_header('Content-Type', 'application/json; charset=utf-8')
         self.send_header('Content-Length', str(len(body)))
         self.send_header('Cache-Control', 'no-store')
-        for name, value in (headers or {}).items():
+        for name, value in {**encoding, **(headers or {})}.items():
             self.send_header(name, value)
         if cookies:
             for cookie in cookies:
@@ -967,14 +1058,33 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             database.execute('DELETE FROM password_resets WHERE user_id = ?', (user['id'],))
         self.send_json(HTTPStatus.OK, {'signedOut': signed_out})
 
+    def delete_account(self, user):
+        password = str(self.read_json().get('password', ''))
+        # As with the email and password: asked again, and wrong ones count as failed sign-ins.
+        throttle_key = (self.client_address[0], user['username'].lower())
+        wait = login_throttle.retry_after(throttle_key)
+        if wait:
+            self.send_wait(wait, 'Too many wrong passwords.')
+            return
+        with connection() as database:
+            stored = database.execute('SELECT password_hash FROM users WHERE id = ?', (user['id'],)).fetchone()['password_hash']
+            if not password_matches(password, stored):
+                login_throttle.record(throttle_key)
+                raise BadRequest('That password is not right.', HTTPStatus.FORBIDDEN)
+            delete_account_rows(database, user['id'])
+        print(f"Deleted the account {user['username']} at its owner's request.", flush=True)
+        self.send_json(HTTPStatus.OK, {'ok': True}, [self.session_cookie('', 0)])
+
     def send_download(self, text, content_type, filename):
         """A file for the browser to save rather than show."""
-        body = text.encode()
+        body, encoding = self.encoded(text.encode())
         self.send_response(HTTPStatus.OK)
         self.send_header('Content-Type', content_type)
         self.send_header('Content-Length', str(len(body)))
         self.send_header('Cache-Control', 'no-store')
         self.send_header('Content-Disposition', f'attachment; filename="{filename}"')
+        for name, value in encoding.items():
+            self.send_header(name, value)
         self.end_headers()
         self.wfile.write(body)
 
@@ -1085,6 +1195,8 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             self.change_email(user)
         elif path == '/api/account/password':
             self.change_password(user)
+        elif path == '/api/account/delete':
+            self.delete_account(user)
         elif path == '/api/import':
             self.import_account(user)
         else:
@@ -1239,6 +1351,22 @@ def admin_set_email(args):
     print(f"Set the email of {row['username']} to {email}.")
 
 
+def admin_delete_user(args):
+    with connection() as database:
+        row = admin_account(database, args.account)
+        count = database.execute('SELECT COUNT(*) FROM workouts WHERE user_id = ?', (row['id'],)).fetchone()[0]
+    username, workouts = row['username'], f"{count} workout{'' if count == 1 else 's'}"
+    if not args.yes:
+        # Nothing to undo it with, so it is asked for by name; without a terminal to ask at, --yes says it instead.
+        if not sys.stdin.isatty():
+            raise AdminError(f'Deleting {username} and their {workouts} cannot be undone. Add --yes to go ahead. Nothing was changed.')
+        if input(f'This deletes {username} and their {workouts}, and cannot be undone. Type the username to go ahead: ').strip() != username:
+            raise AdminError('That is not the username. Nothing was changed.')
+    with connection() as database:
+        delete_account_rows(database, admin_account(database, username)['id'])
+    print(f'Deleted {username} and their {workouts}.')
+
+
 def main(argv):
     parser = argparse.ArgumentParser(
         prog='server.py', description='Runs the Workout Tracker server. The commands manage its accounts instead, '
@@ -1250,6 +1378,9 @@ def main(argv):
     email = commands.add_parser('set-email', help="add or change an account's email")
     email.add_argument('account', help='its username or current email')
     email.add_argument('email', help='the new email')
+    delete = commands.add_parser('delete-user', help='delete an account and everything in it')
+    delete.add_argument('account', help='its username or email')
+    delete.add_argument('--yes', action='store_true', help='without asking to confirm, as a script needs')
     args = parser.parse_args(argv)
     if args.command is None:
         serve()
@@ -1260,7 +1391,8 @@ def main(argv):
     act_as_database_owner()
     init_database()
     try:
-        {'users': admin_users, 'reset-password': admin_reset_password, 'set-email': admin_set_email}[args.command](args)
+        {'users': admin_users, 'reset-password': admin_reset_password, 'set-email': admin_set_email,
+         'delete-user': admin_delete_user}[args.command](args)
     except AdminError as error:
         print(error, file=sys.stderr)
         return 1

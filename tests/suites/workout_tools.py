@@ -448,6 +448,7 @@ def run(t):
     cdp.wait('chartData && chartData.points.length > 0')
     cdp.pause(0.3)
     series = "Object.fromEntries(chartData.types.map(type => [type.name, [...type.values.values()]]))"
+    set_field('exerciseFilter', 'all')
     set_field('metricFilter', 'reps')
     cdp.pause(0.2)
     check('across all exercises, a hold is not counted as reps', cdp.ev(series).get('Core Day') == [12], cdp.ev(series).get('Core Day'))

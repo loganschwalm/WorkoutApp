@@ -142,7 +142,9 @@ def run(t):
     check('and so does last time’s line during a workout', last.endswith(': 115 lbs × 5, 5, 5, 5, 9'), last)
     t.end_workout()
 
-    settle('/progress.html', f"chartData && chartData.points.length >= {total}")
+    settle('/progress.html', "chartData && chartData.points.length > 0")
+    cdp.ev("const f = document.getElementById('exerciseFilter'); f.value = 'all'; f.dispatchEvent(new Event('change'))")
+    cdp.wait(f"chartData.points.length >= {total}")
     dates = cdp.ev("""(() => {
       const labels = [];
       const original = CanvasRenderingContext2D.prototype.fillText;
@@ -419,4 +421,129 @@ def run(t):
     state = calendar_state()
     check('someone with no workouts yet sees an empty calendar and how to start', state['trained'] == [] and state['summary'] == 'This week: 0 of 3 workouts'
           and state['streak'] == 'Reach 3 in a week to start a streak', state)
+    t.set_cookie(t.token)
+
+    # ------------------------------------------------------------------ P8 the Progress chart and personal records
+    print('P8  Progress spaces workouts by date, writes only the values that fit, and lists personal records')
+    lifter = account('lifter')
+    start = int(time.time() * 1000) - 70 * 86400000
+
+    def lift(day, *exercises):
+        t.api('POST', '/api/workouts', {'name': 'Upper', 'notes': '', 'createdAt': start + day * 86400000, 'exercises': list(exercises)}, lifter)
+
+    def timed(name, *seconds):
+        return {'name': name, 'weight': 0, 'reps': seconds[0], 'timed': True, 'sets': [{'weight': 0, 'reps': s} for s in seconds]}
+
+    def pick(element, value):
+        cdp.ev(f"(e => {{ e.value = {json.dumps(value)}; e.dispatchEvent(new Event('change')); }})(document.getElementById('{element}'))")
+        cdp.pause(0.2)
+
+    ex = t.ex
+    lift(0, ex('Bench Press', 135, 5, [(5, 135)]), ex('Squat', 185, 5, [(5, 185)]), ex('Chin-up', 0, 10, [(10, 0)]), timed('Plank', 60))
+    lift(1, ex('Bench Press', 140, 5, [(5, 140)]), ex('Squat', 190, 5, [(5, 190)]), ex('Curl', 30, 15, [(15, 30)]))
+    lift(30, ex('Bench Press', 150, 3, [(3, 150)]))
+    lift(31, ex('Bench Press', 145, 8, [(8, 145)]), ex('Chin-up', 0, 12, [(12, 0)]), timed('Plank', 90))
+    lift(32, ex('Bench Press', 150, 5, [(5, 150)]))
+    t.set_cookie(lifter)
+    settle('/progress.html', "chartData && chartData.points.length > 0 && document.querySelectorAll('#recordsList .record').length > 0")
+
+    check('the page opens on the exercise done most', cdp.ev("document.getElementById('exerciseFilter').value") == 'bench press',
+          cdp.ev("document.getElementById('exerciseFilter').value"))
+    xs = cdp.ev('drawnPoints.map(point => point.x)') or []
+    ratio = (xs[2] - xs[1]) / (xs[1] - xs[0]) if len(xs) >= 3 and xs[1] != xs[0] else 0
+    check('workouts sit apart by the time between them: 29 days take 29 times the room of 1', 25 < ratio < 33, f'{ratio:.1f} {xs}')
+    label = cdp.ev("document.getElementById('progressChart').getAttribute('aria-label')")
+    check('the chart is described in words for a screen reader', label.startswith('Heaviest weight for Bench Press: 5 workouts from ')
+          and label.endswith('lowest 135 lbs, highest 150 lbs.'), label)
+    point = cdp.ev('drawnPoints[2]')
+    cdp.ev(f"""(() => {{ const chart = document.getElementById('progressChart'); const box = chart.getBoundingClientRect();
+      chart.dispatchEvent(new MouseEvent('click', {{ clientX: box.left + {point['x']} + 3, clientY: box.top + {point['y']} - 2, bubbles: true }})); }})()""")
+    detail = cdp.ev("document.getElementById('chartDetail').textContent")
+    check('tapping a point says what it is', detail == point['text'] and detail.startswith('Upper, ') and detail.endswith(': 150 lbs'), detail)
+
+    pick('metricFilter', 'oneRepMax')
+    values = cdp.ev('[...chartData.types[0].values.values()]')
+    check("the estimated one-rep max is charted from each workout's best set", [round(v, 2) for v in values] == [157.5, 163.33, 165, 183.67, 175], values)
+    check('and titled so', cdp.ev("document.getElementById('progressTitle').textContent") == 'Estimated one-rep max')
+    pick('exerciseFilter', 'curl')
+    empty = cdp.ev("document.getElementById('chartEmpty').textContent")
+    check('an exercise with only long sets has no one-rep max to chart, and says why',
+          cdp.ev('chartData.points.length') == 0 and empty.startswith('Nothing to chart: a one-rep max needs'), empty)
+    pick('exerciseFilter', 'chin-up')
+    check('nor does a bodyweight exercise, rather than a line of zeros', cdp.ev('chartData.points.length') == 0)
+    cdp.ev("document.getElementById('clearFilters').click()")
+    cdp.pause(0.2)
+    shown = cdp.ev("[document.getElementById('metricFilter').value, document.getElementById('exerciseFilter').value]")
+    check('Clear filters goes back to how the page opened', shown == ['weight', 'bench press'], shown)
+
+    records = cdp.ev("[...document.querySelectorAll('#recordsList .record')].map(r => ({ name: r.querySelector('strong').textContent, "
+                     "lines: [...r.querySelectorAll(':scope > span')].map(s => s.textContent) }))") or []
+    names = [record['name'] for record in records]
+    lines = {record['name']: record['lines'] for record in records}
+
+    def day(n):
+        return cdp.ev(f'longDate({start + n * 86400000})')
+
+    check('each exercise has its records, the most recent first', names[0] == 'Bench Press' and set(names[1:3]) == {'Chin-up', 'Plank'}
+          and set(names[3:]) == {'Squat', 'Curl'}, names)
+    check('the heaviest weight with the most reps done at it, and when', lines.get('Bench Press', [None])[0] == f'Heaviest 150 lbs × 5 · {day(32)}', lines.get('Bench Press'))
+    check('the best estimated one-rep max, which need not be the heaviest set', f'Est. one-rep max 184 lbs, from 145 × 8 · {day(31)}' in lines.get('Bench Press', []),
+          lines.get('Bench Press'))
+    check('the most reps without weight', lines.get('Chin-up') == [f'Most reps 12 reps · {day(31)}'], lines.get('Chin-up'))
+    check('the longest hold', lines.get('Plank') == [f'Longest hold 90 s · {day(31)}'], lines.get('Plank'))
+    check('and no one-rep max from sets of more than 12 reps', lines.get('Curl') == [f'Heaviest 30 lbs × 15 · {day(1)}'], lines.get('Curl'))
+    cdp.ev("[...document.querySelectorAll('#recordsList .record')].find(r => r.textContent.startsWith('Squat')).click()")
+    cdp.pause(0.3)
+    check('tapping a record charts that exercise', cdp.ev("document.getElementById('exerciseFilter').value") == 'squat' and cdp.ev('chartData.points.length') == 2)
+
+    # A month of daily sessions: far more points than there is room to write a value over.
+    for n in range(40, 70):
+        lift(n, ex('Bench Press', 150 + n % 3 * 5, 5, [(5, 150 + n % 3 * 5)]))
+    settle('/progress.html', 'chartData && chartData.points.length >= 35')
+    written = cdp.ev("""(() => {
+      const labels = [];
+      const original = CanvasRenderingContext2D.prototype.fillText;
+      CanvasRenderingContext2D.prototype.fillText = function (text, x, y, ...rest) {
+        if (this.font.startsWith('11px')) {
+          const width = this.measureText(text).width;
+          labels.push({ left: this.textAlign === 'right' ? x - width : x, width, y });
+        }
+        return original.call(this, text, x, y, ...rest);
+      };
+      drawChart();
+      CanvasRenderingContext2D.prototype.fillText = original;
+      const last = drawnPoints[drawnPoints.length - 1];
+      const box = document.getElementById('progressChart').clientWidth;
+      return { labels: labels.length, points: drawnPoints.length,
+               overlaps: labels.filter((a, i) => labels.some((b, j) => j > i && a.left < b.left + b.width && b.left < a.left + a.width && Math.abs(a.y - b.y) < 11)).length,
+               clipped: labels.filter(label => label.left < 0 || label.left + label.width > box).length,
+               lastWritten: labels.some(label => Math.abs(label.y - (last.y - 8)) < 0.5 && (Math.abs(label.left - (last.x + 7)) < 0.5 || Math.abs(label.left + label.width - (last.x - 7)) < 0.5)) };
+    })()""")
+    check('only the values with room are written over the points, never overlapping', 1 < written['labels'] < written['points'] and written['overlaps'] == 0, written)
+    check('always including the latest', written['lastWritten'] is True, written)
+    check('none cut off at the edge of the chart', written['clipped'] == 0, written)
+    # Three workout types taking turns on one line, as with push, pull and legs: their values must not collide either.
+    for n in range(70, 100):
+        t.api('POST', '/api/workouts', {'name': ['Push', 'Pull', 'Legs'][n % 3], 'notes': '', 'createdAt': start + n * 86400000,
+                                        'exercises': [ex('Bench Press', 160 + n, 5, [(5, 160 + n)])]}, lifter)
+    cdp.send('Emulation.setDeviceMetricsOverride', width=375, height=800, deviceScaleFactor=1, mobile=True)
+    settle('/progress.html', 'chartData && chartData.types.length >= 4')
+    mixed = cdp.ev(f"""(() => {{
+      const labels = [];
+      const original = CanvasRenderingContext2D.prototype.fillText;
+      CanvasRenderingContext2D.prototype.fillText = function (text, x, y, ...rest) {{
+        if (this.font.startsWith('11px')) {{ const width = this.measureText(text).width; labels.push({{ left: this.textAlign === 'right' ? x - width : x, width, y }}); }}
+        return original.call(this, text, x, y, ...rest);
+      }};
+      drawChart();
+      CanvasRenderingContext2D.prototype.fillText = original;
+      const box = document.getElementById('progressChart').clientWidth;
+      return {{ labels: labels.length, overlaps: labels.filter((a, i) => labels.some((b, j) => j > i && a.left < b.left + b.width && b.left < a.left + a.width && Math.abs(a.y - b.y) < 11)).length,
+               clipped: labels.filter(label => label.left < 0 || label.left + label.width > box).length }};
+    }})()""")
+    check('with several workout types on one line, on a phone, the values still never overlap or run off the edge',
+          mixed['labels'] >= 2 and mixed['overlaps'] == 0 and mixed['clipped'] == 0, mixed)
+    fits = cdp.ev("document.querySelector('.progress-filters').scrollWidth <= document.querySelector('.progress-filters').clientWidth")
+    check('and the filters fit the phone', fits is True)
+    cdp.send('Emulation.clearDeviceMetricsOverride')
     t.set_cookie(t.token)

@@ -277,15 +277,26 @@ cable stack with a single handle, and chest press, lat pulldown, leg extension a
 
 ### Progress analytics
 
-- View progress as a responsive chart.
-- Track heaviest weight, best reps, or total volume. For a timed exercise, best reps is its longest
-  hold and volume its total time held; across all exercises, holds are left out, since seconds are
-  not reps.
+- View progress as a responsive chart. It opens on the exercise you have done most; across all
+  exercises, the heaviest lift of each workout would drown out everything else.
+- Track heaviest weight, estimated one-rep max, best reps, or total volume. The one-rep max is each
+  workout's best set as a one-rep max (Epley's formula, from sets of up to 12 reps), so more reps at a
+  weight count as well as more weight. For a timed exercise, best reps is its longest hold and volume
+  its total time held; across all exercises, holds are left out, since seconds are not reps.
 - Filter by exercise. Names typed differently ("Bench press", "Bench Press ") count as one exercise.
 - Filter by workout type.
 - Filter by start and end date.
 - See filtered workout counts and chart legends.
-- Dates along the chart are spaced so they never overlap, however many workouts it shows.
+- Workouts sit along the chart by date, so a month between two takes more room than a day and the
+  slope is your real rate of progress.
+- Dates and values are written only where they have room, so they never overlap, however many
+  workouts the chart shows; the latest value is always written. Tap any point to see its value.
+- The chart is described in words for screen readers: what it shows, over how many workouts, and the
+  lowest and highest values.
+- Personal records, under the chart: for each exercise, the heaviest weight (with the most reps done at
+  it), the best estimated one-rep max and the set it came from, the most reps without weight, and the
+  longest hold, each with the day it was set. The most recent record comes first, and tapping one
+  charts that exercise.
 - Review repeated workouts as separate progress points.
 
 ### Settings
@@ -311,6 +322,8 @@ The gear button opens a settings modal available on every page. Settings include
 - The account's email, with a button to add or change it. Changing it asks for your password.
 - Change password: asks for the current password and a new one of 8+ characters, keeps this device signed in, and
   signs the account out everywhere else.
+- Delete account: asks for your password, and once more to be sure, then deletes the account and
+  everything in it from the server, and this device's copy of it. Export first to keep a copy.
 
 Settings are saved to your account on the server and cached in the browser, so they persist
 between visits and follow you to another device. A change made offline applies straight away and
@@ -350,6 +363,8 @@ which has every account.
 - A session lasts 30 days from when it was last used, so someone who trains every week stays signed in.
   Signing out ends the session on the server.
 - Change your password in Settings with your current one; every other device is signed out.
+- Delete your account in Settings, with your password. Every workout, template, setting and session
+  goes with it.
 - Registration can be closed once your accounts exist, and the sign-in page then only offers signing in.
 - Repeated wrong passwords for one account are slowed down, and passwords are stored as strong
   one-way hashes. See [Before you expose it](#before-you-expose-it).
@@ -519,8 +534,8 @@ For the whole container, use a normal Proxmox `vzdump` backup job. Because the d
 
 #### Managing accounts
 
-The install also adds `workout-tracker-admin`, which lists accounts, sets a new password, or changes an
-email while the app keeps running. See [Resetting a password](#resetting-a-password).
+The install also adds `workout-tracker-admin`, which lists accounts, sets a new password, changes an
+email, or deletes an account while the app keeps running. See [Resetting a password](#resetting-a-password).
 
 ### Before you expose it
 
@@ -606,6 +621,7 @@ shown, and the account is signed out everywhere, so tell its owner the new passw
 workout-tracker-admin users                           # every account and its email
 workout-tracker-admin reset-password alex             # by username or email
 workout-tracker-admin set-email alex alex@example.com # add or correct an email
+workout-tracker-admin delete-user alex                # asks you to type the username; --yes for a script
 
 # Docker Compose
 docker compose exec workout-tracker python /app/server.py reset-password alex

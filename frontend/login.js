@@ -107,6 +107,9 @@ fetch('/api/auth/me').then(response => response.json()).then(info => {
   if (mode === 'register') setMode('login');
 }).catch(() => {});
 
+// Settings sends someone here after deleting their account.
+if (new URLSearchParams(location.search).has('deleted')) showNotice('Your account and everything in it have been deleted.');
+
 loginTab.onclick = () => setMode('login');
 registerTab.onclick = () => setMode('register');
 document.querySelectorAll('[data-back]').forEach(button => { button.onclick = () => setMode('login'); });
