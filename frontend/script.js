@@ -1,3 +1,6 @@
+// The Tracker: the form for writing a workout down, the saved and recent workouts, the workout in progress, and
+// starting the page. Its helpers load before it: rest-timer.js, records.js, templates.js and training-tools.js.
+
 const exercises = [];
 let editingWorkout = null;
 // The saved workouts as last loaded, so the list's buttons act without asking the server again.
@@ -6,34 +9,9 @@ let savedWorkoutsLoaded = false;
 // Weight/reps an exercise had when its logged sets were loaded for editing; used to tell whether the user changed them.
 const setBaselines = new WeakMap();
 let activeSession = null;
-let restInterval = null;
-let restEndsAt = null;
-let wakeLock = null;
-let wakeLockRequesting = false;
 let workoutsReachable = true;
 let initialLoadDone = false;
 let feedbackTimer = null;
-let lastPerformance = {};
-let personalBests = {};
-let restRemaining = getWorkoutSettings().restDuration;
-// The countdown for a set of a timed exercise, from an end time like the rest timer's.
-let holdInterval = null;
-let holdEndsAt = null;
-let holdLength = 0;
-let customTemplates = loadCustomTemplates();
-// Notes kept with each exercise from one workout to the next, by exerciseKey ("bench press": "Grip on the rings").
-let exerciseNotes = loadExerciseNotes();
-// How many reps the next set had left, when that is asked (Settings); null until one of the buttons is tapped.
-let effortChoice = null;
-let editingTemplateId = null;
-let templateDraftExercises = [];
-const templates = [
-  { name:'Push Day', exercises:[{ name:'Bench Press', weight:'', reps:'8' }, { name:'Overhead Press', weight:'', reps:'8' }, { name:'Tricep Pushdown', weight:'', reps:'12' }] },
-  { name:'Pull Day', exercises:[{ name:'Deadlift', weight:'', reps:'5' }, { name:'Barbell Row', weight:'', reps:'8' }, { name:'Lat Pulldown', weight:'', reps:'10' }, { name:'Bicep Curl', weight:'', reps:'12' }] },
-  { name:'Leg Day', exercises:[{ name:'Back Squat', weight:'', reps:'8' }, { name:'Romanian Deadlift', weight:'', reps:'10' }, { name:'Leg Press', weight:'', reps:'10' }, { name:'Calf Raise', weight:'', reps:'15' }] },
-  { name:'Upper Body', exercises:[{ name:'Bench Press', weight:'', reps:'8' }, { name:'Pull-up', weight:'', reps:'8' }, { name:'Dumbbell Row', weight:'', reps:'10' }, { name:'Lateral Raise', weight:'', reps:'12' }] },
-  { name:'Full Body', exercises:[{ name:'Goblet Squat', weight:'', reps:'10' }, { name:'Push-up', weight:'', reps:'10' }, { name:'Dumbbell Row', weight:'', reps:'10' }, { name:'Plank', weight:'', reps:'30', timed:true }] }
-];
 
 function dateInputValue(timestamp) {
   const date = new Date(timestamp);
@@ -88,11 +66,13 @@ function markInvalid(element, invalid) {
 function persistWorkout(workout) {
   const method = workout.id ? 'PUT' : 'POST';
   const path = workout.id ? `/api/workouts/${workout.id}` : '/api/workouts';
-  return fetch(path, { method, headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(workout) }).then(response => response.ok ? response.json() : Promise.reject(new Error('Unable to save workout.')));
+  return fetch(path, { method, headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(workout) })
+    .then(response => response.ok ? response.json() : Promise.reject(new Error('Unable to save workout.')));
 }
 
 function deleteWorkout(id) {
-  return fetch(`/api/workouts/${id}`, { method:'DELETE' }).then(response => response.ok ? response.json() : Promise.reject(new Error('Unable to delete workout.')));
+  return fetch(`/api/workouts/${id}`, { method:'DELETE' })
+    .then(response => response.ok ? response.json() : Promise.reject(new Error('Unable to delete workout.')));
 }
 
 // Saved on this device immediately; offline.js uploads it in the background (activeSession === null records that the workout ended).
@@ -101,31 +81,22 @@ function persistActiveSession() {
 }
 
 function getActiveSession() {
-  return syncFetch('/api/active-session').then(response => response.ok ? response.json() : Promise.reject(new Error('Unable to load active workout.'))).then(result => result.session);
-}
-
-// Kept per account by offline.js, which uploads a change as soon as the server can be reached.
-function loadCustomTemplates() {
-  const stored = readLocalState('templates');
-  return stored && Array.isArray(stored.value) ? stored.value : [];
-}
-
-function loadExerciseNotes() {
-  const stored = readLocalState('exerciseNotes');
-  return stored && stored.value && typeof stored.value === 'object' && !Array.isArray(stored.value) ? stored.value : {};
-}
-
-function saveCustomTemplates() {
-  saveLocalState('templates', customTemplates);
-}
-
-function getAllTemplates() {
-  return [...templates.map((template, index) => ({ ...template, id:`built-in-${index}`, builtIn:true })), ...customTemplates.map(template => ({ ...template, builtIn:false }))];
+  return syncFetch('/api/active-session')
+    .then(response => response.ok ? response.json() : Promise.reject(new Error('Unable to load active workout.')))
+    .then(result => result.session);
 }
 
 function render() {
   const list = $('exerciseList');
-  list.innerHTML = exercises.length ? exercises.map((item, i) => `<li class="exercise"><input class="exercise-edit" type="text" list="exerciseNames" autocomplete="off" value="${escapeHTML(item.name)}" data-index="${i}" data-field="name" aria-label="Exercise name"><input class="exercise-edit" type="number" inputmode="decimal" min="0" step="0.5" value="${escapeHTML(item.weight || '')}" data-index="${i}" data-field="weight" aria-label="Exercise weight"><input class="exercise-edit" type="number" inputmode="numeric" min="1" step="1" value="${escapeHTML(item.reps)}" data-index="${i}" data-field="reps" aria-label="Exercise reps"><button class="remove" type="button" data-index="${i}">Remove</button></li>`).join('') : '<li class="empty">Your exercises will appear here.</li>';
+  list.innerHTML = exercises.length ? exercises.map((item, i) => '<li class="exercise">'
+    + `<input class="exercise-edit" type="text" list="exerciseNames" autocomplete="off" value="${escapeHTML(item.name)}"`
+    + ` data-index="${i}" data-field="name" aria-label="Exercise name">`
+    + `<input class="exercise-edit" type="number" inputmode="decimal" min="0" step="0.5" value="${escapeHTML(item.weight || '')}"`
+    + ` data-index="${i}" data-field="weight" aria-label="Exercise weight">`
+    + `<input class="exercise-edit" type="number" inputmode="numeric" min="1" step="1" value="${escapeHTML(item.reps)}"`
+    + ` data-index="${i}" data-field="reps" aria-label="Exercise reps">`
+    + `<button class="remove" type="button" data-index="${i}">Remove</button></li>`).join('')
+    : '<li class="empty">Your exercises will appear here.</li>';
   $('count').textContent = `${exercises.length} exercise${exercises.length === 1 ? '' : 's'}`;
 }
 
@@ -135,10 +106,23 @@ const recentWorkoutLimit = 10;
 function renderSavedWorkouts(workouts) {
   const list = $('savedWorkoutList');
   const recent = workouts.slice(0, recentWorkoutLimit);
-  const more = workouts.length > recent.length ? `<li class="more-workouts"><a class="button-link secondary" href="history.html">See all ${workouts.length} workouts in History</a></li>` : '';
+  const more = workouts.length > recent.length
+    ? `<li class="more-workouts"><a class="button-link secondary" href="history.html">See all ${workouts.length} workouts in History</a></li>` : '';
   // One row a workout: tapping its name shows what was done, Start is the one button, and everything else (copying,
   // editing, deleting) waits in its ⋯ menu, away from a thumb reaching for Start.
-  list.innerHTML = recent.length ? recent.map(workout => `<li class="saved-workout" data-id="${escapeHTML(workout.id)}"><div class="saved-workout-summary saved-workout-row"><button class="saved-workout-toggle" type="button" data-action="view" aria-expanded="false"><strong>${escapeHTML(workout.name)}</strong><span>${escapeHTML(describeWorkoutDate(workout))}</span></button><div class="row-actions"><button class="primary" type="button" data-action="start">Start</button><details class="row-menu"><summary class="secondary" aria-label="More for ${escapeHTML(workout.name)}">&middot;&middot;&middot;</summary><div class="row-menu-items"><button type="button" data-action="repeat">Copy as new</button><button type="button" data-action="edit">Edit</button><button class="danger" type="button" data-action="delete">Delete</button></div></details></div></div><div class="workout-details" hidden>${workout.notes ? `<p class="workout-note">${escapeHTML(workout.notes)}</p>` : ''}<ul>${inUnit(workout).exercises.map(item => `<li><strong>${escapeHTML(item.name)}</strong><span>${escapeHTML(describeSavedExercise(item))}</span></li>`).join('')}</ul></div></li>`).join('') + more : '<li class="empty">No saved workouts yet.</li>';
+  list.innerHTML = recent.length ? recent.map(workout => `<li class="saved-workout" data-id="${escapeHTML(workout.id)}">`
+    + '<div class="saved-workout-summary saved-workout-row">'
+    + '<button class="saved-workout-toggle" type="button" data-action="view" aria-expanded="false">'
+    + `<strong>${escapeHTML(workout.name)}</strong><span>${escapeHTML(describeWorkoutDate(workout))}</span></button>`
+    + '<div class="row-actions"><button class="primary" type="button" data-action="start">Start</button>'
+    + `<details class="row-menu"><summary class="secondary" aria-label="More for ${escapeHTML(workout.name)}">&middot;&middot;&middot;</summary>`
+    + '<div class="row-menu-items"><button type="button" data-action="repeat">Copy as new</button><button type="button" data-action="edit">Edit</button>'
+    + '<button class="danger" type="button" data-action="delete">Delete</button></div></details></div></div>'
+    + `<div class="workout-details" hidden>${workout.notes ? `<p class="workout-note">${escapeHTML(workout.notes)}</p>` : ''}`
+    + `<ul>${inUnit(workout).exercises.map(item => `<li><strong>${escapeHTML(item.name)}</strong>`
+      + `<span>${escapeHTML(describeSavedExercise(item))}</span></li>`).join('')}</ul>`
+    + '</div></li>').join('') + more
+    : '<li class="empty">No saved workouts yet.</li>';
   renderRecentWorkouts();
 }
 
@@ -154,29 +138,10 @@ function renderRecentWorkouts() {
   }
   const recent = [...picked.values()].sort((a, b) => a.createdAt - b.createdAt);
   $('recentCard').hidden = !recent.length;
-  $('recentList').innerHTML = recent.map((workout, index) => `<li class="recent-workout"><div><strong>${escapeHTML(workout.name)}</strong><span>Last done ${new Date(workout.createdAt).toLocaleDateString(undefined, { month:'short', day:'numeric' })} &middot; ${workout.exercises.length} exercise${workout.exercises.length === 1 ? '' : 's'}</span></div><button class="${index === 0 ? 'primary' : 'secondary'}" type="button" data-recent-id="${escapeHTML(workout.id)}">Start</button></li>`).join('');
-}
-
-// Templates fold away once there is something else to start from (saved workouts or a program), so someone new sees
-// them straight away and everyone else sees their own workouts first. The Show/Hide button's choice holds while the
-// page is open. Until the first load says whether there is anything, they stay folded, so they never jump away.
-let templatesChoice = null;
-
-function syncTemplateArea() {
-  const hasOwn = savedWorkouts.length > 0 || Object.keys(lastPerformance).length > 0 || Boolean(currentProgram);
-  const open = templatesChoice ?? (!hasOwn && initialLoadDone);
-  $('templateArea').hidden = !open;
-  $('templatesToggle').textContent = open ? 'Hide templates' : `Show templates (${programDefinitions.length + getAllTemplates().length})`;
-  $('templatesToggle').setAttribute('aria-expanded', String(open));
-}
-
-// Training programs (program.js) come first, then the single-workout templates. program.js calls this when the program
-// changes, which also changes what Start again offers and whether the templates stay folded.
-function renderTemplates() {
-  $('templateList').innerHTML = programTemplateCards() + getAllTemplates().map(template => `<article class="template-card"><div><h3>${escapeHTML(template.name)}</h3><p>${template.exercises.map(item => `${escapeHTML(item.name)} (${escapeHTML(item.reps)} ${isTimed(item) ? 's' : 'reps'})`).join(' &middot; ')}</p></div><div class="template-actions"><button class="primary" type="button" data-template-action="start" data-template-id="${escapeHTML(template.id)}">Start workout</button><button class="secondary" type="button" data-template-action="duplicate" data-template-id="${escapeHTML(template.id)}">Duplicate</button>${template.builtIn ? '' : `<button class="secondary" type="button" data-template-action="edit" data-template-id="${escapeHTML(template.id)}">Edit</button><button class="danger" type="button" data-template-action="delete" data-template-id="${escapeHTML(template.id)}">Delete</button>`}</div></article>`).join('');
-  renderRecentWorkouts();
-  syncTemplateArea();
-  renderExerciseSuggestions();
+  $('recentList').innerHTML = recent.map((workout, index) => `<li class="recent-workout"><div><strong>${escapeHTML(workout.name)}</strong>`
+    + `<span>Last done ${new Date(workout.createdAt).toLocaleDateString(undefined, { month:'short', day:'numeric' })}`
+    + ` &middot; ${workout.exercises.length} exercise${workout.exercises.length === 1 ? '' : 's'}</span></div>`
+    + `<button class="${index === 0 ? 'primary' : 'secondary'}" type="button" data-recent-id="${escapeHTML(workout.id)}">Start</button></li>`).join('');
 }
 
 // Names suggested wherever an exercise is typed (the <datalist> every exercise field uses): everything logged, spelled
@@ -188,49 +153,11 @@ function renderExerciseSuggestions() {
   [...savedWorkouts, ...readPendingWorkouts()].sort((a, b) => b.createdAt - a.createdAt).forEach(workout => workout.exercises.forEach(item => add(item.name)));
   Object.values(lastPerformance).sort((a, b) => b.date - a.date).forEach(entry => add(entry.name));
   getAllTemplates().forEach(template => template.exercises.forEach(item => add(item.name)));
-  if (currentProgram) programDays(currentProgram).forEach((entry, day) => programDefinition(currentProgram).workout(currentProgram, 0, day).forEach(item => add(item.name)));
-  $('exerciseNames').innerHTML = [...names.values()].sort((a, b) => a.localeCompare(b, undefined, { sensitivity:'base' })).map(name => `<option value="${escapeHTML(name)}"></option>`).join('');
-}
-
-// Each exercise of a template: its name and whether it is timed, then its reps (or seconds), an optional rest after each
-// set (blank for the default in Settings), and the buttons to move or remove it.
-function renderTemplateExerciseEditor() {
-  $('templateExerciseEditor').innerHTML = templateDraftExercises.map((exercise, index) => `<div class="template-exercise-row"><div class="template-exercise-name"><label for="templateExercise${index}">Exercise</label><input id="templateExercise${index}" type="text" list="exerciseNames" autocomplete="off" value="${escapeHTML(exercise.name)}" data-template-field="name" data-index="${index}" required /></div><label class="setting-check template-timed"><input type="checkbox" data-template-field="timed" data-index="${index}"${exercise.timed ? ' checked' : ''} /> Timed</label><div><label for="templateReps${index}" id="templateReps${index}Label">${exercise.timed ? 'Seconds' : 'Reps'}</label><input id="templateReps${index}" type="number" inputmode="numeric" min="1" value="${escapeHTML(exercise.reps)}" data-template-field="reps" data-index="${index}" required /></div><div><label for="templateRest${index}">Rest (s)</label><input id="templateRest${index}" type="number" inputmode="numeric" min="15" max="600" step="1" placeholder="${getWorkoutSettings().restDuration}" value="${escapeHTML(exercise.rest || '')}" data-template-field="rest" data-index="${index}" /></div>${index < templateDraftExercises.length - 1 ? `<label class="setting-check template-superset"><input type="checkbox" data-template-field="superset" data-index="${index}"${exercise.superset ? ' checked' : ''} /> Superset with the next exercise</label>` : ''}<div class="template-row-actions"><button class="secondary" type="button" data-template-row-action="up" data-index="${index}" aria-label="Move exercise up">&#8593;</button><button class="secondary" type="button" data-template-row-action="down" data-index="${index}" aria-label="Move exercise down">&#8595;</button><button class="danger" type="button" data-template-row-action="remove" data-index="${index}" aria-label="Remove exercise">&times;</button></div></div>`).join('');
-}
-
-// What a template keeps of an exercise: its name and reps, and its rest, timing and superset when it has them.
-function templateExercise(item) {
-  return { name:item.name, reps:item.reps, ...(item.rest ? { rest:item.rest } : {}), ...(isTimed(item) ? { timed:true } : {}), ...(item.group ? { group:item.group } : {}) };
-}
-
-// A template's exercises with the editor's "Superset with the next" ticks turned into groups: each run of exercises
-// joined that way shares one group, which is how a workout knows its supersets.
-function withSupersetGroups(drafts) {
-  let group = null, count = 0;
-  return drafts.map((item, index) => {
-    const { superset, group:old, ...exercise } = item;
-    const joinsNext = Boolean(superset) && index < drafts.length - 1;
-    const joinedByPrevious = index > 0 && Boolean(drafts[index - 1].superset);
-    if (!joinsNext && !joinedByPrevious) return exercise;
-    if (!joinedByPrevious) group = `s${++count}`;
-    return { ...exercise, group };
-  });
-}
-
-function openTemplateEditor(template = null) {
-  editingTemplateId = template?.id || null;
-  $('templateModalTitle').textContent = template ? 'Edit template' : 'Create template';
-  $('templateName').value = template?.name || '';
-  templateDraftExercises = template ? template.exercises.map((item, index, all) => ({ ...templateExercise(item), superset:Boolean(item.group) && all[index + 1]?.group === item.group }))
-    : [{ name:'', reps:'8' }];
-  renderTemplateExerciseEditor();
-  $('templateModal').hidden = false;
-  $('templateName').focus();
-}
-
-function closeTemplateEditor() {
-  $('templateModal').hidden = true;
-  editingTemplateId = null;
+  if (currentProgram) {
+    programDays(currentProgram).forEach((entry, day) => programDefinition(currentProgram).workout(currentProgram, 0, day).forEach(item => add(item.name)));
+  }
+  $('exerciseNames').innerHTML = [...names.values()].sort((a, b) => a.localeCompare(b, undefined, { sensitivity:'base' }))
+    .map(name => `<option value="${escapeHTML(name)}"></option>`).join('');
 }
 
 function loadWorkoutIntoForm(stored, editMode) {
@@ -251,285 +178,6 @@ function loadWorkoutIntoForm(stored, editMode) {
   render();
 }
 
-function updateRestTimer() {
-  $('timerDisplay').textContent = clockTime(restRemaining);
-}
-
-// The rest after a set: the current exercise's own (a program gives main lifts longer than accessories, and a template
-// can set one), or else the default from Settings.
-function restDuration() {
-  const exercise = activeSession ? activeSession.exercises[activeSession.currentIndex] : null;
-  const own = Number(exercise?.rest);
-  return own > 0 ? own : getWorkoutSettings().restDuration;
-}
-
-// The countdown is derived from an end timestamp, not from counting ticks, so it stays correct when the browser
-// throttles timers (locked screen, background tab) and catches up as soon as the page runs again.
-function syncRestRemaining() {
-  if (restEndsAt !== null) restRemaining = Math.max(0, Math.ceil((restEndsAt - Date.now()) / 1000));
-}
-
-function tickRest() {
-  syncRestRemaining();
-  updateRestTimer();
-  if (restRemaining <= 0) {
-    stopRestTimer();
-    playRestAlert(getWorkoutSettings());
-  }
-}
-
-function runRestTimer() {
-  clearInterval(restInterval);
-  restEndsAt = Date.now() + restRemaining * 1000;
-  $('restToggleBtn').textContent = 'Pause rest';
-  restInterval = setInterval(tickRest, 250);
-}
-
-function stopRestTimer() {
-  clearInterval(restInterval);
-  restInterval = null;
-  restEndsAt = null;
-  $('restToggleBtn').textContent = 'Start rest';
-}
-
-// −30s and +30s: more rest after a heavy set, less after an easy one, running or paused. Running, it moves the end time
-// itself (so a part-second is kept), and taking it down to nothing ends the rest quietly: you asked for it, so no alert.
-const REST_ADJUST_LIMIT = 60 * 60;
-
-function adjustRest(seconds) {
-  if (restInterval) {
-    restEndsAt = Math.min(Date.now() + REST_ADJUST_LIMIT * 1000, restEndsAt + seconds * 1000);
-    syncRestRemaining();
-    if (restRemaining <= 0) stopRestTimer();
-  } else {
-    restRemaining = Math.min(REST_ADJUST_LIMIT, Math.max(0, restRemaining + seconds));
-  }
-  updateRestTimer();
-}
-
-function startRestTimer() {
-  restRemaining = restDuration();
-  $('restPanel').hidden = false;
-  updateRestTimer();
-  runRestTimer();
-}
-
-// Keeps the screen awake during a workout so the timer can alert you; the browser drops the lock whenever the page is hidden.
-async function syncWakeLock() {
-  const wanted = Boolean(activeSession) && !document.hidden && 'wakeLock' in navigator;
-  if (wanted && !wakeLock && !wakeLockRequesting) {
-    wakeLockRequesting = true;
-    try {
-      wakeLock = await navigator.wakeLock.request('screen');
-      wakeLock.addEventListener('release', () => { wakeLock = null; });
-    } catch (error) {
-      console.error('Unable to keep the screen awake.', error);
-    } finally {
-      wakeLockRequesting = false;
-    }
-  } else if (!wanted && wakeLock) {
-    await wakeLock.release();
-  }
-}
-
-function normalizeSets(sets) {
-  return sets.map(set => ({ weight:Number(set.weight) || 0, reps:Number(set.reps) || 0, ...(set.rir !== undefined && set.rir !== null ? { rir:Number(set.rir) } : {}) }));
-}
-
-// The most recent real performance of each exercise (skipped exercises are ignored); shown and used to prefill the next session.
-function buildLastPerformance(workouts) {
-  const latest = {};
-  [...workouts].sort((a, b) => b.createdAt - a.createdAt).forEach(workout => workout.exercises.forEach(item => {
-    const key = exerciseKey(item.name);
-    if (latest[key]) return;
-    // The name as it was typed, for suggesting it (the key is lowercased).
-    const entry = { name:String(item.name).trim(), date:workout.createdAt, unit:recordUnit(workout) };
-    if (item.sets && item.sets.length) latest[key] = { ...entry, sets:normalizeSets(item.sets) };
-    else if (!item.sets) latest[key] = { ...entry, sets:normalizeSets([{ weight:item.weight, reps:item.reps }]) };
-  }));
-  return latest;
-}
-
-function saveLastPerformance() {
-  writeLocal(localKey('lastperf'), lastPerformance);
-}
-
-// Updated as soon as a workout is finished, so the next session shows it even if the upload is still waiting.
-function rememberLastPerformance(workout) {
-  workout.exercises.forEach(item => { lastPerformance[exerciseKey(item.name)] = { name:String(item.name).trim(), date:workout.createdAt, unit:recordUnit(workout), sets:normalizeSets(item.sets) }; });
-  saveLastPerformance();
-  renderExerciseSuggestions();
-}
-
-// ---- Personal records -----------------------------------------------------
-// The best each exercise has done in every saved workout (and any still uploading), kept on this device so a finished
-// workout can be told its records at once, online or not. Weights are kept in pounds whatever they were logged in, so
-// workouts in either unit compare. Per exercise: the heaviest weight, the best estimated one-rep max, the most reps in
-// a set without weight, and for a timed exercise the longest hold. One-rep maxes come from exactOneRepMax in common.js.
-function bestsOf(workouts) {
-  const bests = {};
-  workouts.forEach(workout => workout.exercises.forEach(item => {
-    // The workout form saves an exercise without sets: its weight and reps are its one set.
-    const sets = item.sets || [{ weight:item.weight, reps:item.reps }];
-    if (!sets.length) return;
-    const key = exerciseKey(item.name);
-    const best = bests[key] || (bests[key] = { weight:0, oneRepMax:0, reps:0, seconds:0 });
-    sets.forEach(set => {
-      const reps = Number(set.reps) || 0;
-      const weight = convertWeight(Number(set.weight) || 0, recordUnit(workout), 'lbs');
-      if (isTimed(item)) best.seconds = Math.max(best.seconds, reps);
-      else if (weight > 0) {
-        best.weight = Math.max(best.weight, weight);
-        if (reps >= 1 && reps <= ONE_REP_MAX_REPS) best.oneRepMax = Math.max(best.oneRepMax, exactOneRepMax(weight, reps));
-      } else best.reps = Math.max(best.reps, reps);
-    });
-  }));
-  return bests;
-}
-
-function rememberBests(workout) {
-  Object.entries(bestsOf([workout])).forEach(([key, best]) => {
-    const had = personalBests[key];
-    personalBests[key] = had ? Object.fromEntries(Object.keys(best).map(field => [field, Math.max(had[field] || 0, best[field])])) : best;
-  });
-  writeLocal(localKey('bests'), personalBests);
-}
-
-// What a finished workout did better than every workout before it, a sentence each. An exercise done for the first
-// time has nothing to beat, so it sets no record, and each exercise names its best record only: a heavier weight, else
-// a better estimated one-rep max (more reps at a weight), else more reps without weight; or a timed exercise's longer hold.
-function newRecords(workout, before) {
-  const from = recordUnit(workout), unit = weightUnit();
-  const fromPounds = pounds => `${formatWeight(convertWeight(pounds, 'lbs', unit))} ${unit}`;
-  const exercises = new Map();
-  workout.exercises.forEach(item => {
-    const key = exerciseKey(item.name);
-    if (!exercises.has(key)) exercises.set(key, { name:String(item.name).trim(), timed:isTimed(item), sets:[] });
-    // Sets as done, with each weight in pounds too, to compare.
-    exercises.get(key).sets.push(...(item.sets || []).map(set => ({ reps:Number(set.reps) || 0, weight:Number(set.weight) || 0, pounds:convertWeight(Number(set.weight) || 0, from, 'lbs') })));
-  });
-  const records = [];
-  exercises.forEach(({ name, timed, sets }, key) => {
-    const best = before[key];
-    if (!best || !sets.length) return;
-    const top = score => sets.reduce((a, b) => score(b) > score(a) ? b : a);
-    const done = set => `${formatWeight(convertWeight(set.weight, from, unit))} ${unit} × ${set.reps}`;
-    if (timed) {
-      const longest = top(set => set.reps);
-      if (best.seconds && longest.reps > best.seconds) records.push(`${name}: held ${longest.reps} s, your longest yet (was ${best.seconds} s)`);
-      return;
-    }
-    const heaviest = top(set => set.pounds);
-    if (best.weight && heaviest.pounds > best.weight) {
-      records.push(`${name}: ${done(heaviest)}, your heaviest yet (was ${fromPounds(best.weight)})`);
-      return;
-    }
-    const counted = sets.filter(set => set.pounds > 0 && set.reps >= 1 && set.reps <= ONE_REP_MAX_REPS);
-    const strongest = counted.length ? counted.reduce((a, b) => exactOneRepMax(b.pounds, b.reps) > exactOneRepMax(a.pounds, a.reps) ? b : a) : null;
-    if (strongest && best.oneRepMax && exactOneRepMax(strongest.pounds, strongest.reps) > best.oneRepMax) {
-      const estimate = value => `${Math.round(convertWeight(value, 'lbs', unit))} ${unit}`;
-      records.push(`${name}: ${done(strongest)}, an estimated one-rep max of ${estimate(exactOneRepMax(strongest.pounds, strongest.reps))}, your best yet (was ${estimate(best.oneRepMax)})`);
-      return;
-    }
-    const most = top(set => set.pounds > 0 ? 0 : set.reps);
-    if (best.reps && most.pounds === 0 && most.reps > best.reps) records.push(`${name}: ${most.reps} reps in a set, your most yet (was ${best.reps})`);
-  });
-  return records;
-}
-
-// ---- The summary of a finished workout -------------------------------------
-// How long it took, how much was done, and any new personal records; it stays until Done or the next workout starts.
-function showWorkoutSummary(workout, records) {
-  const shown = inUnit(workout);
-  const sets = shown.exercises.reduce((total, item) => total + item.sets.length, 0);
-  // Weight × reps of every set with a weight; a hold's seconds are not reps, so timed exercises are left out.
-  const volume = shown.exercises.filter(item => !isTimed(item)).reduce((total, item) => total + item.sets.reduce((sum, set) => sum + (Number(set.weight) || 0) * (Number(set.reps) || 0), 0), 0);
-  const stats = [
-    ...(workout.duration ? [[formatDuration(workout.duration), 'Time']] : []),
-    [String(shown.exercises.length), shown.exercises.length === 1 ? 'Exercise' : 'Exercises'],
-    [String(sets), sets === 1 ? 'Set' : 'Sets'],
-    ...(volume ? [[`${Math.round(volume).toLocaleString()} ${weightUnit()}`, 'Volume']] : [])
-  ];
-  $('summaryName').textContent = workout.name;
-  $('summaryStats').innerHTML = stats.map(([value, label]) => `<li><strong>${escapeHTML(value)}</strong><span>${escapeHTML(label)}</span></li>`).join('');
-  $('summaryRecords').hidden = !records.length;
-  $('summaryRecordList').innerHTML = records.map(record => `<li>${escapeHTML(record)}</li>`).join('');
-  $('workoutSummary').hidden = false;
-  $('workoutSummary').scrollIntoView({ behavior:'smooth', block:'start' });
-}
-
-// Last time's performance of an exercise in the unit shown, or null. `converted` says it was logged in the other unit,
-// so its weights are exact conversions (102.06 kg) rather than weights anyone loads; see prefillWeight.
-function lastTime(name) {
-  const entry = lastPerformance[exerciseKey(name)];
-  if (!entry) return null;
-  const from = recordUnit(entry), to = weightUnit();
-  return from === to ? entry : { ...entry, unit:to, converted:true, sets:entry.sets.map(set => ({ ...set, weight:convertWeight(set.weight, from, to) })) };
-}
-
-// A weight to fill in for the next set. One converted from the other unit is rounded to the nearest half, which the
-// weight buttons then step from; one logged in this unit is used as it is.
-function prefillWeight(weight, converted) {
-  const number = Number(weight);
-  return converted && weight !== '' && Number.isFinite(number) ? Math.round(number * 2) / 2 : weight;
-}
-
-// What to load on each side of the bar: a 45 lb bar and pound plates down to the 1.25s that a weight in 2.5 lb steps (as
-// 5/3/1 can round to) needs, or a 20 kg bar and kilogram plates. Only for a lift done with a barbell, which the
-// exercise's name has to tell (it is all a custom exercise has): Bench Press yes, Dumbbell Bench Press or Leg Press no.
-const BARBELLS = { lbs:{ bar:45, plates:[45, 35, 25, 10, 5, 2.5, 1.25], name:'45 lb bar' }, kg:{ bar:20, plates:[25, 20, 15, 10, 5, 2.5, 1.25], name:'20 kg bar' } };
-const barbellNames = /\b(barbell|bench|squat|deadlift|rdl|overhead press|military press|push press|ohp|pendlay|bent[- ]over row|power clean|hang clean|good morning|hip thrust)\b/i;
-const notBarbellNames = /\b(dumbbells?|db|kettlebells?|machine|cable|smith|leg press|hack|goblet|split|bulgarian|trap bar|hex bar|landmine|band|dips?|pistol)\b/i;
-
-function platesPerSide(weight, barbell = BARBELLS[weightUnit()]) {
-  let left = (weight - barbell.bar) / 2;
-  const plates = [];
-  barbell.plates.forEach(plate => { while (left >= plate - 1e-9) { plates.push(plate); left -= plate; } });
-  // A weight the plates cannot make exactly (187 lbs) gets the nearest lighter load, and says what that comes to.
-  return { plates, makes: weight - Math.round(left * 2 * 100) / 100 };
-}
-
-function isBarbellExercise(exercise) {
-  return Boolean(exercise) && barbellNames.test(exercise.name) && !notBarbellNames.test(exercise.name);
-}
-
-// Warm-up sets to work up to a barbell lift's working weight: the empty bar for 10, then about 40%, 60% and 80% of the
-// weight for 5, 3 and 2, to the nearest 5 lbs (2.5 kg), each heavier than the one before and lighter than the work.
-function warmupSets(weight, barbell = BARBELLS[weightUnit()]) {
-  if (!(weight > barbell.bar)) return [];
-  const step = weightUnit() === 'kg' ? 2.5 : 5;
-  const sets = [{ weight:barbell.bar, reps:10 }];
-  [[0.4, 5], [0.6, 3], [0.8, 2]].forEach(([share, reps]) => {
-    const load = Math.round(weight * share / step) * step;
-    if (load > sets[sets.length - 1].weight && load < weight) sets.push({ weight:load, reps });
-  });
-  return sets;
-}
-
-// Before the first set of a barbell lift, the warm-up to its weight (Settings can turn this off). A program that plans
-// its own warm-ups (5/3/1's) already says them set by set.
-function showWarmups() {
-  const exercise = activeSession ? activeSession.exercises[activeSession.currentIndex] : null;
-  const planned = exercise && Array.isArray(exercise.plan) && exercise.plan.some(set => set.warmup);
-  const sets = exercise && getWorkoutSettings().warmupSets !== false && isBarbellExercise(exercise) && !isTimed(exercise) && !planned && !exercise.sets.length
-    ? warmupSets(Number($('activeWeight').value)) : [];
-  $('warmupHint').hidden = !sets.length;
-  if (sets.length) $('warmupHint').textContent = `Warm up first: ${sets.map(set => `${formatWeight(set.weight)} × ${set.reps}`).join(', ')} (${weightUnit()})`;
-}
-
-function showPlates() {
-  showWarmups();
-  const exercise = activeSession ? activeSession.exercises[activeSession.currentIndex] : null;
-  const weight = Number($('activeWeight').value);
-  const barbell = BARBELLS[weightUnit()];
-  const applies = isBarbellExercise(exercise) && weight >= barbell.bar;
-  $('plateHint').hidden = !applies;
-  if (!applies) return;
-  const { plates, makes } = platesPerSide(weight, barbell);
-  $('plateHint').textContent = !plates.length ? `Just the ${barbell.name}`
-    : `Each side of a ${barbell.name}: ${plates.join(' + ')}${makes !== weight ? ` (makes ${formatWeight(makes)} ${weightUnit()})` : ''}`;
-}
-
 // "Exercise 2 of 6" opens a list of every exercise and how far each has got, to go straight to any of them: when a
 // machine is taken, do one that is free and come back.
 function renderActiveProgress() {
@@ -543,7 +191,10 @@ function renderActiveProgress() {
     const planned = Array.isArray(exercise.plan) ? exercise.plan.length : 0;
     const done = planned ? sets >= planned : sets > 0;
     const status = planned ? `${sets} of ${plural(planned, 'set')}` : sets ? plural(sets, 'set') : 'No sets yet';
-    return `<li><button type="button" data-jump="${index}"${index === currentIndex ? ' aria-current="step"' : ''}${done ? ' class="done"' : ''}><span class="jump-name">${index + 1}. ${escapeHTML(exercise.name)}${supersetMembers(activeSession, index).length > 1 ? ' <span class="jump-superset">superset</span>' : ''}</span><span class="jump-sets">${escapeHTML(status)}</span></button></li>`;
+    const superset = supersetMembers(activeSession, index).length > 1 ? ' <span class="jump-superset">superset</span>' : '';
+    return `<li><button type="button" data-jump="${index}"${index === currentIndex ? ' aria-current="step"' : ''}${done ? ' class="done"' : ''}>`
+      + `<span class="jump-name">${index + 1}. ${escapeHTML(exercise.name)}${superset}</span>`
+      + `<span class="jump-sets">${escapeHTML(status)}</span></button></li>`;
   }).join('');
 }
 
@@ -565,11 +216,16 @@ function renderActiveWorkout() {
   $('activeWorkoutTitle').textContent = activeSession.name;
   renderActiveProgress();
   $('activeExerciseName').textContent = exercise.name;
-  $('activeExerciseTarget').textContent = plan ? plannedTarget(exercise, previous) : `Target: ${exercise.reps} ${timed ? 'seconds' : 'reps'}${exercise.weight ? ` at ${formatWeight(exercise.weight)} ${weightUnit()}` : ''}`;
+  $('activeExerciseTarget').textContent = plan ? plannedTarget(exercise, previous)
+    : `Target: ${exercise.reps} ${timed ? 'seconds' : 'reps'}${exercise.weight ? ` at ${formatWeight(exercise.weight)} ${weightUnit()}` : ''}`;
   $('activePlan').hidden = !plan;
-  $('activePlan').innerHTML = plan ? plan.map((set, index) => `<li class="${index < exercise.sets.length ? 'done' : index === exercise.sets.length ? 'current' : 'upcoming'}">${escapeHTML(formatPlannedSet(set))}</li>`).join('') : '';
+  const planState = index => index < exercise.sets.length ? 'done' : index === exercise.sets.length ? 'current' : 'upcoming';
+  $('activePlan').innerHTML = plan ? plan.map((set, index) => `<li class="${planState(index)}">${escapeHTML(formatPlannedSet(set))}</li>`).join('') : '';
   $('activeExerciseLast').hidden = !previous;
-  if (previous) $('activeExerciseLast').textContent = `Last time (${new Date(previous.date).toLocaleDateString(undefined, { month:'short', day:'numeric' })}): ${describeLoggedSets(previous.sets, timed)}`;
+  if (previous) {
+    const when = new Date(previous.date).toLocaleDateString(undefined, { month:'short', day:'numeric' });
+    $('activeExerciseLast').textContent = `Last time (${when}): ${describeLoggedSets(previous.sets, timed)}`;
+  }
   $('completedRepsLabel').textContent = timed ? 'Seconds' : 'Reps completed';
   $('holdTimer').hidden = !timed;
   $('activeNotes').value = activeSession.notes || '';
@@ -592,7 +248,13 @@ function renderActiveWorkout() {
   renderPastSessions(exercise);
   renderEffort(exercise);
   const count = timed ? { unit:'s', label:'seconds' } : { unit:'reps', label:'reps' };
-  $('completedSets').innerHTML = exercise.sets.map((set, index) => `<li><span class="set-number">Set ${index + 1}${set.rir !== undefined && set.rir !== null ? `<small class="set-effort">${Number(set.rir) >= 4 ? '4+' : set.rir} left</small>` : ''}</span><div class="set-field"><input class="set-edit" type="number" inputmode="decimal" min="0" step="0.5" value="${escapeHTML(set.weight || '')}" data-set="${index}" data-field="weight" aria-label="Set ${index + 1} weight in ${weightUnit()}"><span>${weightUnit()}</span></div><div class="set-field"><input class="set-edit" type="number" inputmode="numeric" min="1" step="1" value="${escapeHTML(set.reps)}" data-set="${index}" data-field="reps" aria-label="Set ${index + 1} ${count.label}"><span>${count.unit}</span></div><button class="remove" type="button" data-remove-set="${index}" aria-label="Remove set ${index + 1}">Remove</button></li>`).join('');
+  const effort = set => set.rir !== undefined && set.rir !== null ? `<small class="set-effort">${Number(set.rir) >= 4 ? '4+' : set.rir} left</small>` : '';
+  $('completedSets').innerHTML = exercise.sets.map((set, index) => `<li><span class="set-number">Set ${index + 1}${effort(set)}</span>`
+    + `<div class="set-field"><input class="set-edit" type="number" inputmode="decimal" min="0" step="0.5" value="${escapeHTML(set.weight || '')}"`
+    + ` data-set="${index}" data-field="weight" aria-label="Set ${index + 1} weight in ${weightUnit()}"><span>${weightUnit()}</span></div>`
+    + `<div class="set-field"><input class="set-edit" type="number" inputmode="numeric" min="1" step="1" value="${escapeHTML(set.reps)}" data-set="${index}"`
+    + ` data-field="reps" aria-label="Set ${index + 1} ${count.label}"><span>${count.unit}</span></div>`
+    + `<button class="remove" type="button" data-remove-set="${index}" aria-label="Remove set ${index + 1}">Remove</button></li>`).join('');
   syncHoldDisplay();
   $('activeSyncNotice').hidden = !activeSyncFailed;
 }
@@ -635,7 +297,8 @@ function closeActiveWorkout() {
 // `template` is a template, a saved workout, or a day of a training program (program.js), whose exercises carry a
 // set-by-set plan and whose programDay says which day of the program it is.
 function startWorkout(stored) {
-  if (activeSession && getWorkoutSettings().confirmEnd && !confirm(`Replace your in-progress “${activeSession.name}” workout? Sets you have logged so far will be lost.`)) return;
+  const replacing = `Replace your in-progress “${activeSession?.name}” workout? Sets you have logged so far will be lost.`;
+  if (activeSession && getWorkoutSettings().confirmEnd && !confirm(replacing)) return;
   closeExercisePanels();
   stopRestTimer();
   $('restPanel').hidden = true;
@@ -645,7 +308,11 @@ function startWorkout(stored) {
   const template = inUnit(stored);
   const converted = template !== stored;
   // startedAt times the workout, for its summary and History.
-  activeSession = { name:template.name, notes:template.notes || '', exercises:template.exercises.map(item => ({ ...item, weight:prefillWeight(item.weight, converted), sets:[] })), currentIndex:0, clientId:newClientId(), unit:weightUnit(), startedAt:Date.now() };
+  activeSession = {
+    name:template.name, notes:template.notes || '',
+    exercises:template.exercises.map(item => ({ ...item, weight:prefillWeight(item.weight, converted), sets:[] })),
+    currentIndex:0, clientId:newClientId(), unit:weightUnit(), startedAt:Date.now()
+  };
   if (template.programDay) activeSession.programDay = template.programDay;
   restRemaining = restDuration();
   updateRestTimer();
@@ -672,10 +339,13 @@ async function finishWorkout() {
   const skipped = activeSession.exercises.length - performed.length;
   activeSession.clientId = activeSession.clientId || newClientId();
   // Each exercise keeps whether it is timed and its own rest, so starting the workout again brings them back.
-  const exercises = performed.map(item => ({ name:item.name, weight:Math.max(...item.sets.map(set => Number(set.weight) || 0)), reps:item.sets[item.sets.length - 1].reps, sets:item.sets,
+  const exercises = performed.map(item => ({
+    name:item.name, weight:Math.max(...item.sets.map(set => Number(set.weight) || 0)), reps:item.sets[item.sets.length - 1].reps, sets:item.sets,
     ...(isTimed(item) ? { timed:true } : {}), ...(Number(item.rest) > 0 ? { rest:Number(item.rest) } : {}), ...(item.group ? { group:item.group } : {}) }));
   const finishedAt = Date.now();
-  const workout = { name:activeSession.name, notes:activeSession.notes || '', exercises, createdAt:finishedAt, clientId:activeSession.clientId, unit:recordUnit(activeSession) };
+  const workout = {
+    name:activeSession.name, notes:activeSession.notes || '', exercises, createdAt:finishedAt, clientId:activeSession.clientId, unit:recordUnit(activeSession)
+  };
   // In seconds; a workout started before sessions were timed has no duration.
   if (activeSession.startedAt > 0 && finishedAt > activeSession.startedAt) workout.duration = Math.round((finishedAt - activeSession.startedAt) / 1000);
   if (activeSession.programDay) workout.program = programInfo(activeSession.programDay);
@@ -689,8 +359,10 @@ async function finishWorkout() {
   closeActiveWorkout();
   showWorkoutSummary(workout, records);
   const synced = await flushPendingWorkouts();
-  const note = (skipped ? ` ${skipped} exercise${skipped === 1 ? '' : 's'} with no sets ${skipped === 1 ? 'was' : 'were'} left out.` : '') + (programNote ? ` ${programNote}` : '');
-  showFeedback(synced ? `“${workout.name}” saved successfully.${note}` : `“${workout.name}” is saved on this device and will sync when the server is reachable again.${note}`, 'success');
+  const note = (skipped ? ` ${skipped} exercise${skipped === 1 ? '' : 's'} with no sets ${skipped === 1 ? 'was' : 'were'} left out.` : '')
+    + (programNote ? ` ${programNote}` : '');
+  showFeedback(synced ? `“${workout.name}” saved successfully.${note}`
+    : `“${workout.name}” is saved on this device and will sync when the server is reachable again.${note}`, 'success');
 }
 
 function renderStorageStatus() {
@@ -804,69 +476,19 @@ $('exerciseList').oninput = e => {
   const field = e.target.dataset.field;
   if (index !== undefined && field) exercises[+index][field] = e.target.value;
 };
-$('exerciseList').onclick = e => { if (e.target.classList.contains('remove') && e.target.dataset.index !== undefined) { exercises.splice(+e.target.dataset.index, 1); render(); } };
+$('exerciseList').onclick = e => {
+  if (e.target.classList.contains('remove') && e.target.dataset.index !== undefined) { exercises.splice(+e.target.dataset.index, 1); render(); }
+};
 $('activeNotes').oninput = () => { if (activeSession) { activeSession.notes = $('activeNotes').value; persistActiveSession(); } };
-$('clearBtn').onclick = () => { editingWorkout = null; exercises.length = 0; $('workoutName').value = ''; $('workoutDate').value = dateInputValue(Date.now()); $('workoutNotes').value = ''; $('saveBtn').textContent = 'Save workout'; render(); $('workoutBuilderCard').hidden = true; };
-$('templateList').onclick = e => {
-  const action = e.target.dataset.templateAction;
-  const templateId = e.target.dataset.templateId;
-  if (!action || !templateId) return;
-  const template = getAllTemplates().find(item => item.id === templateId);
-  if (!template) return;
-  if (action === 'start') startWorkout(template);
-  if (action === 'edit') openTemplateEditor(template);
-  if (action === 'duplicate') {
-    customTemplates.push({ id:`custom-${Date.now()}`, name:`${template.name} Copy`, exercises:template.exercises.map(templateExercise) });
-    saveCustomTemplates();
-    renderTemplates();
-    showFeedback(`Created a copy of “${template.name}”.`, 'success');
-  }
-  if (action === 'delete' && confirm(`Delete template “${template.name}”?`)) {
-    customTemplates = customTemplates.filter(item => item.id !== template.id);
-    saveCustomTemplates();
-    renderTemplates();
-  }
-};
-$('templateExerciseEditor').oninput = e => {
-  const index = Number(e.target.dataset.index);
-  const field = e.target.dataset.templateField;
-  if (!field || !templateDraftExercises[index]) return;
-  if (field === 'superset') { templateDraftExercises[index].superset = e.target.checked; return; }
-  if (field !== 'timed') { templateDraftExercises[index][field] = e.target.value; return; }
-  // A timed exercise's count is in seconds, which its label says.
-  templateDraftExercises[index].timed = e.target.checked;
-  $(`templateReps${index}Label`).textContent = e.target.checked ? 'Seconds' : 'Reps';
-};
-$('templateExerciseEditor').onclick = e => {
-  const action = e.target.dataset.templateRowAction;
-  const index = Number(e.target.dataset.index);
-  if (!action || !templateDraftExercises[index]) return;
-  if (action === 'remove' && templateDraftExercises.length > 1) templateDraftExercises.splice(index, 1);
-  if (action === 'up' && index > 0) [templateDraftExercises[index - 1], templateDraftExercises[index]] = [templateDraftExercises[index], templateDraftExercises[index - 1]];
-  if (action === 'down' && index < templateDraftExercises.length - 1) [templateDraftExercises[index + 1], templateDraftExercises[index]] = [templateDraftExercises[index], templateDraftExercises[index + 1]];
-  renderTemplateExerciseEditor();
-};
-$('addTemplateExercise').onclick = () => { templateDraftExercises.push({ name:'', reps:'8' }); renderTemplateExerciseEditor(); };
-$('createTemplateBtn').onclick = () => openTemplateEditor();
-$('closeTemplate').onclick = closeTemplateEditor;
-$('cancelTemplate').onclick = closeTemplateEditor;
-$('templateModal').onclick = event => { if (event.target === $('templateModal')) closeTemplateEditor(); };
-$('templateForm').onsubmit = event => {
-  event.preventDefault();
-  const name = $('templateName').value.trim();
-  // A rest left blank uses the default in Settings; one given is kept within the range Settings allows.
-  const restOf = value => value === '' || value === undefined || !(Number(value) > 0) ? null : Math.min(600, Math.max(15, Math.round(Number(value))));
-  const validExercises = withSupersetGroups(templateDraftExercises.filter(item => item.name.trim() && Number(item.reps) >= 1)
-    .map(item => ({ ...templateExercise({ name:item.name.trim(), reps:String(Math.floor(Number(item.reps))), rest:restOf(item.rest), timed:item.timed === true }), superset:item.superset })));
-  if (!name || !validExercises.length) return showFeedback('Add a template name and at least one valid exercise.');
-  if (editingTemplateId) {
-    const existing = customTemplates.find(item => item.id === editingTemplateId);
-    if (existing) { existing.name = name; existing.exercises = validExercises; }
-  } else customTemplates.push({ id:`custom-${Date.now()}`, name, exercises:validExercises });
-  saveCustomTemplates();
-  renderTemplates();
-  closeTemplateEditor();
-  showFeedback(`Template “${name}” saved.`, 'success');
+$('clearBtn').onclick = () => {
+  editingWorkout = null;
+  exercises.length = 0;
+  $('workoutName').value = '';
+  $('workoutDate').value = dateInputValue(Date.now());
+  $('workoutNotes').value = '';
+  $('saveBtn').textContent = 'Save workout';
+  render();
+  $('workoutBuilderCard').hidden = true;
 };
 function logSet() {
   const exercise = activeSession.exercises[activeSession.currentIndex];
@@ -877,7 +499,11 @@ function logSet() {
   const weightValue = $('activeWeight').value;
   markInvalid($('completedReps'), !reps || reps < 1);
   markInvalid($('activeWeight'), weightValue !== '' && Number(weightValue) < 0);
-  if (!reps || reps < 1) { showFeedback(timed ? 'Enter the seconds held for this set.' : 'Enter the reps completed for this set.'); $('completedReps').focus(); return; }
+  if (!reps || reps < 1) {
+    showFeedback(timed ? 'Enter the seconds held for this set.' : 'Enter the reps completed for this set.');
+    $('completedReps').focus();
+    return;
+  }
   if (weightValue !== '' && Number(weightValue) < 0) { showFeedback('Weight cannot be negative.'); $('activeWeight').focus(); return; }
   clearFeedback();
   const weight = Number(weightValue) || 0;
@@ -904,324 +530,7 @@ function logSet() {
   if (first !== null && first !== index) moveWithinSuperset(first);
 }
 
-// ---- Timed exercises --------------------------------------------------------
-// A set of a timed exercise is a hold. Start timer counts down the seconds in the Seconds field; when they are up it
-// sounds the rest alert and logs the set by itself, since hands are busy holding the plank. Stop (or Complete set)
-// ends it early, filling in the seconds actually held.
-function holdRemaining() {
-  return Math.max(0, Math.ceil((holdEndsAt - Date.now()) / 1000));
-}
-
-function syncHoldDisplay() {
-  if (!holdInterval) $('holdDisplay').textContent = clockTime(Math.max(0, Math.floor(Number($('completedReps').value)) || 0));
-}
-
-function tickHold() {
-  const left = holdRemaining();
-  $('holdDisplay').textContent = clockTime(left);
-  if (left > 0) return;
-  stopHold();
-  playRestAlert(getWorkoutSettings());
-  $('completedReps').value = String(holdLength);
-  logSet();
-}
-
-function startHold() {
-  const length = Math.floor(Number($('completedReps').value));
-  if (!(length >= 1)) { showFeedback('Enter the seconds to hold, then start the timer.'); $('completedReps').focus(); return; }
-  clearFeedback();
-  unlockAudio();
-  // The rest is over once the next set starts.
-  stopRestTimer();
-  $('restPanel').hidden = true;
-  holdLength = length;
-  holdEndsAt = Date.now() + length * 1000;
-  $('holdBtn').textContent = 'Stop';
-  $('holdTimer').classList.add('running');
-  clearInterval(holdInterval);
-  holdInterval = setInterval(tickHold, 250);
-  tickHold();
-}
-
-// Stopped by hand (early), the seconds held so far are filled in; stopped because the workout moved on, nothing is.
-function stopHold(early = false) {
-  if (!holdInterval) return;
-  clearInterval(holdInterval);
-  holdInterval = null;
-  if (early) $('completedReps').value = String(Math.max(1, holdLength - holdRemaining()));
-  holdEndsAt = null;
-  $('holdBtn').textContent = 'Start timer';
-  $('holdTimer').classList.remove('running');
-  syncHoldDisplay();
-}
-
-// ---- Swapping an exercise ---------------------------------------------------
-// Swap does another exercise in this one's place, for when its equipment is taken. The new exercise keeps the sets and
-// rep range still to do, but not the weights: those were for the old exercise, so the new one starts from its own last
-// time. Sets already logged stay with the old exercise, and the new one follows it with the sets left. Swapping back to
-// the original brings its planned weights back. A program's main lift that is swapped out does not move the program's
-// weights (mainLiftHit in program.js), though the day still counts as done.
-function showSwap(open) {
-  $('swapPanel').hidden = !open;
-  $('swapToggle').setAttribute('aria-expanded', String(open));
-  if (!open || !activeSession) return;
-  const exercise = activeSession.exercises[activeSession.currentIndex];
-  const logged = exercise.sets.length;
-  const planned = Array.isArray(exercise.plan) ? exercise.plan.length : 0;
-  const main = Boolean(activeSession.programDay) && activeSession.currentIndex === 0 && planned > 0;
-  $('swapName').value = '';
-  markInvalid($('swapName'), false);
-  $('swapHelp').textContent = [
-    logged ? `${loggedSetsStay(logged, exercise.name)}, and the new exercise gets ${planned ? `the ${plural(planned - logged, 'set')} left` : 'the sets from here on'}.`
-      : `The new exercise keeps ${planned ? `the ${plural(planned, 'planned set')} and their reps` : `the target of ${exercise.reps} ${isTimed(exercise) ? 'seconds' : 'reps'}`}, with weights of your own.`,
-    main ? `${exercise.name} is this day's main lift, so while it is swapped out the program leaves its weight alone.` : ''
-  ].filter(Boolean).join(' ');
-  $('swapName').focus();
-}
-
-// "The set you logged stays with Bench Press", "The 2 sets you logged stay with Bench Press".
-function loggedSetsStay(count, name) {
-  return count === 1 ? `The set you logged stays with ${name}` : `The ${count} sets you logged stay with ${name}`;
-}
-
-function withoutSets(exercise) {
-  const { sets, swappedFrom, swappedOut, ...rest } = exercise;
-  return rest;
-}
-
-function swapExercise() {
-  const name = $('swapName').value.trim();
-  markInvalid($('swapName'), !name);
-  if (!name) { showFeedback('Enter the exercise to do instead.'); $('swapName').focus(); return; }
-  const session = activeSession, index = session.currentIndex, exercise = session.exercises[index];
-  if (exerciseKey(name) === exerciseKey(exercise.name)) { showSwap(false); return; }
-  const logged = exercise.sets.length;
-  const plan = Array.isArray(exercise.plan) && exercise.plan.length ? exercise.plan : null;
-  if (plan && logged >= plan.length) { showFeedback(`Every planned set of ${exercise.name} is done. Add an exercise instead.`); return; }
-  // What the workout had here before any swap, to come back to.
-  const original = exercise.swappedFrom || withoutSets(exercise);
-  const left = plan ? plan.length - logged : 0;
-  const replacement = exerciseKey(name) === exerciseKey(original.name)
-    ? { ...original, ...(Array.isArray(original.plan) && left ? { plan:original.plan.slice(-left) } : {}), sets:[] }
-    : { name, weight:'', reps:exercise.reps, sets:[], swappedFrom:original, ...(isTimed(exercise) ? { timed:true } : {}), ...(exercise.rest ? { rest:exercise.rest } : {}),
-      ...(plan ? { plan:plan.slice(logged).map(set => ({ weight:'', reps:set.reps, ...(set.repsMax ? { repsMax:set.repsMax } : {}), ...(set.warmup ? { warmup:true } : {}) })) } : {}),
-      ...(exercise.group ? { group:exercise.group } : {}) };
-  closeExercisePanels();
-  if (logged) {
-    // The sets done stay with the exercise they were done on, which ends there.
-    exercise.swappedOut = true;
-    if (plan) exercise.plan = plan.slice(0, logged);
-    session.exercises.splice(index + 1, 0, replacement);
-    session.currentIndex = index + 1;
-  } else session.exercises[index] = replacement;
-  persistActiveSession();
-  renderActiveWorkout();
-  showFeedback(`Swapped ${exercise.name} for ${replacement.name}.${logged ? ` ${loggedSetsStay(logged, exercise.name)}.` : ''}`, 'success');
-}
-
-// ---- Notes kept with an exercise ----------------------------------------------
-// A note ("seat on 4") belongs to the exercise, not the workout: it shows whenever that exercise comes up. A program's
-// own setup notes (Apartment Gym's "Bench at 30–45°") are part of its target line instead.
-function noteFor(name) {
-  return exerciseNotes[exerciseKey(name)] || '';
-}
-
-function renderExerciseNote() {
-  if (!activeSession) return;
-  const note = noteFor(activeSession.exercises[activeSession.currentIndex].name);
-  $('exerciseNote').hidden = !note;
-  $('exerciseNote').textContent = note;
-  $('noteToggle').textContent = note ? 'Edit note' : 'Add note';
-}
-
-function showNotePanel(open) {
-  $('notePanel').hidden = !open;
-  $('noteToggle').setAttribute('aria-expanded', String(open));
-  if (!open || !activeSession) return;
-  $('noteText').value = noteFor(activeSession.exercises[activeSession.currentIndex].name);
-  $('noteText').focus();
-}
-
-function saveExerciseNote() {
-  const name = activeSession.exercises[activeSession.currentIndex].name;
-  const note = $('noteText').value.trim();
-  exerciseNotes = { ...exerciseNotes };
-  if (note) exerciseNotes[exerciseKey(name)] = note;
-  else delete exerciseNotes[exerciseKey(name)];
-  saveLocalState('exerciseNotes', exerciseNotes);
-  showNotePanel(false);
-  renderExerciseNote();
-  showFeedback(note ? `Note saved for ${name}.` : `Note removed from ${name}.`, 'success');
-}
-
-// ---- Supersets ----------------------------------------------------------------
-// Exercises next to each other with the same group are a superset: one set of each in turn, and the rest only once the
-// round is done. Next moves on past the whole superset.
-
-// The positions of the exercises in the superset the one at `index` is in: just [index] when it is in none.
-function supersetMembers(session, index) {
-  const group = session.exercises[index]?.group;
-  if (!group) return [index];
-  let first = index, last = index;
-  while (first > 0 && session.exercises[first - 1].group === group) first -= 1;
-  while (last < session.exercises.length - 1 && session.exercises[last + 1].group === group) last += 1;
-  return Array.from({ length:last - first + 1 }, (entry, offset) => first + offset);
-}
-
-// Whether an exercise still has sets to do: a planned one until its plan is done, any other for as long as the superset
-// goes on (Next ends it). One swapped out is done.
-function hasSetsLeft(exercise) {
-  if (exercise.swappedOut) return false;
-  return Array.isArray(exercise.plan) && exercise.plan.length ? exercise.sets.length < exercise.plan.length : true;
-}
-
-// After a set, the next exercise in the round, or null when the round is done (or it is no superset).
-function nextInRound(session, index) {
-  const members = supersetMembers(session, index);
-  if (members.length < 2) return null;
-  return members.find(member => member > index && hasSetsLeft(session.exercises[member])) ?? null;
-}
-
-function firstWithSetsLeft(session, index) {
-  return supersetMembers(session, index).find(member => hasSetsLeft(session.exercises[member])) ?? null;
-}
-
-// To another exercise of the superset, leaving the rest timer as it is.
-function moveWithinSuperset(index) {
-  closeExercisePanels();
-  activeSession.currentIndex = index;
-  persistActiveSession();
-  renderActiveWorkout();
-}
-
-// Groups made or broken mid-workout kept tidy: one group to a run of neighbours, and none on an exercise left on its own.
-function tidySupersets(session) {
-  const seen = new Set();
-  let index = 0;
-  while (index < session.exercises.length) {
-    const members = supersetMembers(session, index);
-    const group = session.exercises[index].group;
-    if (group && (members.length < 2 || seen.has(group))) {
-      const fresh = members.length < 2 ? null : `s${Date.now().toString(36)}${index}`;
-      members.forEach(member => { if (fresh) session.exercises[member].group = fresh; else delete session.exercises[member].group; });
-    }
-    if (session.exercises[index].group) seen.add(session.exercises[index].group);
-    index = members[members.length - 1] + 1;
-  }
-}
-
-function renderSuperset() {
-  const session = activeSession, index = session.currentIndex;
-  const members = supersetMembers(session, index);
-  const inOne = members.length > 1;
-  $('supersetLine').hidden = !inOne;
-  if (inOne) {
-    const others = members.filter(member => member !== index).map(member => session.exercises[member].name);
-    $('supersetLine').textContent = `Superset with ${others.join(' and ')}: a set of each in turn, then rest.`;
-  }
-  $('supersetToggle').hidden = !inOne && index === session.exercises.length - 1;
-  $('supersetToggle').textContent = inOne ? 'Leave superset' : 'Superset with next';
-}
-
-function toggleSuperset() {
-  const session = activeSession, index = session.currentIndex, exercise = session.exercises[index];
-  if (supersetMembers(session, index).length > 1) {
-    delete exercise.group;
-    tidySupersets(session);
-    showFeedback(`${exercise.name} is no longer in a superset.`, 'success');
-  } else {
-    const next = session.exercises[index + 1];
-    if (!next) return;
-    exercise.group = next.group || `s${Date.now().toString(36)}`;
-    next.group = exercise.group;
-    tidySupersets(session);
-    showFeedback(`${exercise.name} and ${next.name} are now a superset.`, 'success');
-  }
-  persistActiveSession();
-  renderActiveWorkout();
-}
-
-// ---- Go heavier ---------------------------------------------------------------
-// For an exercise with no plan (a template or a workout done before), once every set at last time's weight reached its
-// target, it says to go up a step: 5 lbs or 2.5 kg, as the weight buttons do. The target is the exercise's reps, or the
-// first set's if that was more, so a set that fell away (8, 8, 6) does not count as reaching it. A set logged with no
-// reps left means the weight is still enough. A program says this in its own way.
-function progressionFor(exercise, previous) {
-  if (!previous || isTimed(exercise) || (Array.isArray(exercise.plan) && exercise.plan.length) || exercise.sets.length) return null;
-  const top = Math.max(0, ...previous.sets.map(set => Number(set.weight) || 0));
-  const target = Number(exercise.reps);
-  if (!(top > 0) || !(target >= 1)) return null;
-  const atTop = previous.sets.filter(set => (Number(set.weight) || 0) === top);
-  const needed = Math.max(target, Number(atTop[0].reps) || 0);
-  if (!atTop.every(set => Number(set.reps) >= needed) || atTop.some(set => set.rir === 0)) return null;
-  const step = weightUnit() === 'kg' ? 2.5 : 5;
-  return { from:top, to:Math.round(top / step) * step + step, reps:needed };
-}
-
-function renderProgression(exercise, previous) {
-  const hint = progressionFor(exercise, previous);
-  $('progressionHint').hidden = !hint;
-  if (!hint) return;
-  const unit = weightUnit();
-  $('progressionText').textContent = `Last time every set at ${formatWeight(hint.from)} ${unit} reached ${hint.reps} ${hint.reps === 1 ? 'rep' : 'reps'}: time to go heavier.`;
-  $('progressionUse').textContent = `Use ${formatWeight(hint.to)} ${unit}`;
-  $('progressionUse').dataset.weight = String(hint.to);
-}
-
-// ---- Past sessions ------------------------------------------------------------
-// The last few times this exercise was done, from saved workouts and any still uploading, newest first, with a link to
-// all of them on the Progress page.
-const pastSessionLimit = 5;
-
-function pastSessionsOf(name) {
-  const key = exerciseKey(name);
-  return [...savedWorkouts, ...readPendingWorkouts()]
-    .filter(workout => workout.exercises.some(item => exerciseKey(item.name) === key && (!item.sets || item.sets.length)))
-    .sort((a, b) => b.createdAt - a.createdAt)
-    .slice(0, pastSessionLimit)
-    .map(workout => {
-      const items = inUnit(workout).exercises.filter(item => exerciseKey(item.name) === key && (!item.sets || item.sets.length));
-      const efforts = describeEfforts(items.flatMap(item => item.sets || []));
-      return { date:workout.createdAt, name:workout.name, sets:items.map(describeSavedExercise).join(' · ') + (efforts ? ` · ${efforts}` : '') };
-    });
-}
-
-function renderPastSessions(exercise) {
-  const sessions = pastSessionsOf(exercise.name);
-  $('pastSessions').hidden = !sessions.length;
-  $('pastSessionList').innerHTML = sessions.map(session => `<li><span>${escapeHTML(new Date(session.date).toLocaleDateString(undefined, { month:'short', day:'numeric' }))} · ${escapeHTML(session.name)}</span><span>${escapeHTML(session.sets)}</span></li>`).join('');
-  $('exerciseHistoryLink').href = `progress.html?exercise=${encodeURIComponent(exerciseKey(exercise.name))}`;
-}
-
-// ---- Effort -------------------------------------------------------------------
-// How many more reps a set had in it, tapped before Complete set: 0 (none) to 4 or more. Optional, and asked only when
-// Settings says so; a timed hold is not asked.
-function effortAsked(exercise) {
-  return getWorkoutSettings().trackEffort !== false && !isTimed(exercise);
-}
-
-function renderEffort(exercise) {
-  $('effortChoices').hidden = !effortAsked(exercise);
-  $('effortChoices').querySelectorAll('[data-effort]').forEach(button => button.setAttribute('aria-pressed', String(Number(button.dataset.effort) === effortChoice)));
-}
-
-$('noteToggle').onclick = () => showNotePanel($('notePanel').hidden);
-$('noteCancel').onclick = () => showNotePanel(false);
-$('noteSave').onclick = saveExerciseNote;
-$('supersetToggle').onclick = toggleSuperset;
-$('progressionUse').onclick = () => {
-  $('activeWeight').value = $('progressionUse').dataset.weight;
-  $('activeWeight').dispatchEvent(new Event('input', { bubbles:true }));
-};
-$('effortChoices').onclick = e => {
-  const button = e.target.closest('[data-effort]');
-  if (!button || !activeSession) return;
-  // Tapping the one already chosen takes it back.
-  effortChoice = effortChoice === Number(button.dataset.effort) ? null : Number(button.dataset.effort);
-  renderEffort(activeSession.exercises[activeSession.currentIndex]);
-};
 $('completeSetBtn').onclick = logSet;
-$('holdBtn').onclick = () => { if (holdInterval) stopHold(true); else startHold(); };
 $('completedReps').oninput = () => { markInvalid($('completedReps'), false); syncHoldDisplay(); };
 $('activeWorkoutProgress').onclick = () => showExerciseJump($('exerciseJump').hidden);
 $('exerciseJump').onclick = e => {
@@ -1230,48 +539,6 @@ $('exerciseJump').onclick = e => {
   const index = Number(button.dataset.jump);
   showExerciseJump(false);
   if (index !== activeSession.currentIndex && activeSession.exercises[index]) goToExercise(index);
-};
-$('swapToggle').onclick = () => showSwap($('swapPanel').hidden);
-$('swapCancel').onclick = () => showSwap(false);
-$('swapBtn').onclick = swapExercise;
-$('swapName').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); swapExercise(); } };
-$('swapName').oninput = () => markInvalid($('swapName'), false);
-$('summaryDone').onclick = () => { $('workoutSummary').hidden = true; };
-// −5 and +5 beside the weight: a change of 2.5 lbs a side, the smallest most plate sets make. In kilograms, −2.5 and
-// +2.5: 1.25 kg a side.
-function applyWeightStepper() {
-  const step = weightUnit() === 'kg' ? 2.5 : 5;
-  $('weightStepper').querySelectorAll('[data-weight-step]').forEach(button => {
-    const heavier = Number(button.dataset.weightStep) > 0;
-    button.dataset.weightStep = String(heavier ? step : -step);
-    button.textContent = `${heavier ? '+' : '\u2212'}${step}`;
-    button.setAttribute('aria-label', `${step} ${weightUnit()} ${heavier ? 'heavier' : 'lighter'}`);
-  });
-}
-
-$('weightStepper').onclick = e => {
-  const step = Number(e.target.closest('[data-weight-step]')?.dataset.weightStep);
-  if (!step) return;
-  const input = $('activeWeight');
-  input.value = String(Math.max(0, (Number(input.value) || 0) + step));
-  input.dispatchEvent(new Event('input', { bubbles:true }));
-};
-$('activeWeight').oninput = () => { markInvalid($('activeWeight'), false); showPlates(); };
-$('restToggleBtn').onclick = () => {
-  unlockAudio();
-  if (restInterval) { syncRestRemaining(); updateRestTimer(); stopRestTimer(); }
-  else {
-    if (restRemaining <= 0) restRemaining = restDuration();
-    updateRestTimer();
-    runRestTimer();
-  }
-};
-$('restResetBtn').onclick = () => { stopRestTimer(); restRemaining = restDuration(); updateRestTimer(); };
-$('restAdjust').onclick = e => {
-  const button = e.target.closest('[data-rest-adjust]');
-  if (!button) return;
-  unlockAudio();
-  adjustRest(Number(button.dataset.restAdjust));
 };
 // Next goes on past the superset the current exercise is in, which is done as rounds rather than one exercise at a time.
 $('nextExerciseBtn').onclick = () => {
@@ -1290,7 +557,11 @@ $('completedSets').onchange = e => {
   const set = activeSession.exercises[activeSession.currentIndex].sets[index];
   if (!set) return;
   const value = e.target.value;
-  if (field === 'reps' && (!value || Number(value) < 1)) { showFeedback(isTimed(activeSession.exercises[activeSession.currentIndex]) ? 'Seconds must be at least 1.' : 'Reps must be at least 1.'); e.target.value = set.reps; return; }
+  if (field === 'reps' && (!value || Number(value) < 1)) {
+    showFeedback(isTimed(activeSession.exercises[activeSession.currentIndex]) ? 'Seconds must be at least 1.' : 'Reps must be at least 1.');
+    e.target.value = set.reps;
+    return;
+  }
   if (field === 'weight' && value !== '' && Number(value) < 0) { showFeedback('Weight cannot be negative.'); e.target.value = set.weight || ''; return; }
   set[field] = Number(value) || 0;
   clearFeedback();
@@ -1332,10 +603,15 @@ $('activeAddBtn').onclick = () => {
   markInvalid($('activeAddName'), !name);
   markInvalid($('activeAddReps'), !reps || Number(reps) < 1);
   if (!name) { showFeedback('Enter an exercise name before adding it.'); $('activeAddName').focus(); return; }
-  if (!reps || Number(reps) < 1) { showFeedback(timed ? 'Enter at least 1 target second for this exercise.' : 'Enter at least 1 target rep for this exercise.'); $('activeAddReps').focus(); return; }
+  if (!reps || Number(reps) < 1) {
+    showFeedback(timed ? 'Enter at least 1 target second for this exercise.' : 'Enter at least 1 target rep for this exercise.');
+    $('activeAddReps').focus();
+    return;
+  }
   // After the superset the current exercise is in, if it is in one, so the new exercise does not split it.
   const members = supersetMembers(activeSession, activeSession.currentIndex);
-  activeSession.exercises.splice(members[members.length - 1] + 1, 0, { name, weight:'', reps:String(Math.floor(Number(reps))), ...(timed ? { timed:true } : {}), sets:[] });
+  const added = { name, weight:'', reps:String(Math.floor(Number(reps))), ...(timed ? { timed:true } : {}), sets:[] };
+  activeSession.exercises.splice(members[members.length - 1] + 1, 0, added);
   $('activeAddTimed').checked = false;
   $('activeAddRepsLabel').textContent = 'Target reps';
   persistActiveSession();
@@ -1390,10 +666,6 @@ $('recentList').onclick = e => {
   const workout = button && savedWorkouts.find(item => item.id === Number(button.dataset.recentId));
   if (workout) startWorkout(workout);
 };
-$('templatesToggle').onclick = () => {
-  templatesChoice = $('templateArea').hidden;
-  syncTemplateArea();
-};
 $('saveBtn').onclick = async () => {
   if (!exercises.length) { showFeedback('Add at least one exercise before saving the workout.'); return; }
   if (!$('workoutDate').value) { showFeedback('Choose a workout date before saving.'); $('workoutDate').focus(); return; }
@@ -1405,11 +677,15 @@ $('saveBtn').onclick = async () => {
     replacedSets += 1;
     return plan;
   });
-  const workout = { ...editingWorkout, name:$('workoutName').value.trim() || 'Untitled workout', notes:$('workoutNotes').value.trim(), exercises:savedExercises, createdAt:timestampFromDateInput($('workoutDate').value), unit:weightUnit() };
+  const workout = {
+    ...editingWorkout, name:$('workoutName').value.trim() || 'Untitled workout', notes:$('workoutNotes').value.trim(), exercises:savedExercises,
+    createdAt:timestampFromDateInput($('workoutDate').value), unit:weightUnit()
+  };
   try {
     await persistWorkout(workout);
     await loadSavedWorkouts();
-    showFeedback(`“${workout.name}” saved successfully.${replacedSets ? ' Set-by-set details were replaced for exercises whose weight or reps you changed.' : ''}`, 'success');
+    const replaced = replacedSets ? ' Set-by-set details were replaced for exercises whose weight or reps you changed.' : '';
+    showFeedback(`“${workout.name}” saved successfully.${replaced}`, 'success');
     $('clearBtn').click();
   } catch (error) {
     showFeedback('This workout could not be saved. Check your connection and try again.');
@@ -1448,7 +724,6 @@ window.addEventListener('syncchange', event => {
   $('activeSyncNotice').hidden = !(event.detail.activeOffline && activeSession);
   if (event.detail.uploaded && initialLoadDone) loadSavedWorkouts();
 });
-document.addEventListener('visibilitychange', () => { if (!document.hidden && restInterval) tickRest(); if (!document.hidden && holdInterval) tickHold(); syncWakeLock(); });
 window.localReady.then(() => {
   lastPerformance = readLocal(localKey('lastperf')) || {};
   personalBests = readLocal(localKey('bests')) || {};
