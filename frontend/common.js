@@ -50,13 +50,16 @@ function formatWeight(value) {
 }
 
 // A workout (or a workout in progress) with every weight in `to`: each exercise's weight, its logged sets and its
-// planned sets. One already in that unit comes back as it is, so treat the result as read-only.
+// planned sets, and those of the exercise it was swapped for, if it was. One already in that unit comes back as it is,
+// so treat the result as read-only.
 function inUnit(record, to = weightUnit()) {
   const from = recordUnit(record);
   if (from === to) return record;
   const convert = set => ({ ...set, weight:convertWeight(set.weight, from, to) });
-  return { ...record, unit:to, exercises:(record.exercises || []).map(exercise => ({ ...exercise, weight:convertWeight(exercise.weight, from, to),
-    ...(Array.isArray(exercise.sets) ? { sets:exercise.sets.map(convert) } : {}), ...(Array.isArray(exercise.plan) ? { plan:exercise.plan.map(convert) } : {}) })) };
+  const exerciseIn = exercise => ({ ...exercise, weight:convertWeight(exercise.weight, from, to),
+    ...(Array.isArray(exercise.sets) ? { sets:exercise.sets.map(convert) } : {}), ...(Array.isArray(exercise.plan) ? { plan:exercise.plan.map(convert) } : {}),
+    ...(exercise.swappedFrom ? { swappedFrom:exerciseIn(exercise.swappedFrom) } : {}) });
+  return { ...record, unit:to, exercises:(record.exercises || []).map(exerciseIn) };
 }
 
 // Every "lbs" label on the page (a <span class="unit-label">) follows the unit.
@@ -69,10 +72,15 @@ function isBodyweight(weight) {
   return weight === '' || weight === null || weight === undefined || Number(weight) === 0;
 }
 
+// A timed exercise (a plank, a dead hang) is held rather than repeated: its reps, and its sets' reps, are seconds.
+function isTimed(exercise) {
+  return Boolean(exercise) && exercise.timed === true;
+}
+
 // Logged sets written compactly, one part per run of sets at the same weight: "3 × 5 at 185 lbs", "115 lbs × 5, 5, 5,
-// 5, 9", "40 lbs × 5 · 50 lbs × 5", and for bodyweight "3 × 10" or "10, 9, 8 reps". The weights must already be in the
-// unit shown (see inUnit).
-function describeLoggedSets(sets) {
+// 5, 9", "40 lbs × 5 · 50 lbs × 5", and for bodyweight "3 × 10" or "10, 9, 8 reps". Sets of a timed exercise are in
+// seconds: "3 × 30 s", "45, 40 s". The weights must already be in the unit shown (see inUnit).
+function describeLoggedSets(sets, timed = false) {
   const unit = weightUnit();
   const runs = [];
   sets.forEach(set => {
@@ -80,10 +88,11 @@ function describeLoggedSets(sets) {
     if (last && String(last.weight) === String(set.weight ?? '')) last.reps.push(set.reps);
     else runs.push({ weight:set.weight ?? '', reps:[set.reps] });
   });
+  const each = timed ? ' s' : '';
   return runs.map(({ weight, reps }) => {
     const repeated = reps.length > 1 && reps.every(rep => String(rep) === String(reps[0]));
-    if (isBodyweight(weight)) return repeated ? `${reps.length} × ${reps[0]}` : `${reps.join(', ')} reps`;
-    return repeated ? `${reps.length} × ${reps[0]} at ${formatWeight(weight)} ${unit}` : `${formatWeight(weight)} ${unit} × ${reps.join(', ')}`;
+    if (isBodyweight(weight)) return repeated ? `${reps.length} × ${reps[0]}${each}` : `${reps.join(', ')}${timed ? ' s' : ' reps'}`;
+    return repeated ? `${reps.length} × ${reps[0]}${each} at ${formatWeight(weight)} ${unit}` : `${formatWeight(weight)} ${unit} × ${reps.join(', ')}${each}`;
   }).join(' · ');
 }
 
@@ -91,8 +100,28 @@ function describeLoggedSets(sets) {
 // weight and reps it was saved with (the workout form saves those without sets).
 function describeSavedExercise(exercise) {
   if (exercise.sets && !exercise.sets.length) return 'Skipped';
-  if (exercise.sets) return describeLoggedSets(exercise.sets);
-  return isBodyweight(exercise.weight) ? `${exercise.reps} reps` : `${formatWeight(exercise.weight)} ${weightUnit()} · ${exercise.reps} reps`;
+  if (exercise.sets) return describeLoggedSets(exercise.sets, isTimed(exercise));
+  const count = `${exercise.reps} ${isTimed(exercise) ? 's' : 'reps'}`;
+  return isBodyweight(exercise.weight) ? count : `${formatWeight(exercise.weight)} ${weightUnit()} · ${count}`;
+}
+
+// A length of time as a clock: 90 is "1:30".
+function clockTime(seconds) {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
+// How long a workout took, to the minute: "48 min", "1 h 5 min".
+function formatDuration(seconds) {
+  const minutes = Math.max(1, Math.round(seconds / 60));
+  return minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h${minutes % 60 ? ` ${minutes % 60} min` : ''}`;
+}
+
+// The line under a saved workout's name: its date, how long it took if that was recorded, and where it sits in a program.
+function describeWorkoutDate(workout) {
+  const parts = [new Date(workout.createdAt).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' })];
+  if (Number(workout.duration) > 0) parts.push(formatDuration(Number(workout.duration)));
+  if (workoutProgramLabel(workout)) parts.push(workoutProgramLabel(workout));
+  return parts.join(' · ');
 }
 
 // Where in a training program a saved workout belongs ("Cycle 1, week 2 · 3s week"), or '' for any other workout.

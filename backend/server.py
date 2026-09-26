@@ -264,6 +264,11 @@ def validate_exercises(exercises, field='exercises'):
         text(exercise.get('name'), f'{where}.name', 1000)
         amount(exercise.get('weight'), f'{where}.weight')
         amount(exercise.get('reps'), f'{where}.reps')
+        # The rest timer's seconds after each set, when the exercise has its own; and whether it is held for seconds.
+        if exercise.get('rest') is not None and not (is_number(exercise['rest']) and 0 < exercise['rest'] <= 3600):
+            raise BadRequest(f'{where}.rest must be a number of seconds, up to an hour.')
+        if exercise.get('timed') is not None and not isinstance(exercise['timed'], bool):
+            raise BadRequest(f'{where}.timed must be true or false.')
         if exercise.get('sets') is not None:
             for number, logged in enumerate(listed(exercise['sets'], f'{where}.sets', 1000)):
                 amount(logged.get('weight'), f'{where}.sets[{number}].weight')
@@ -285,6 +290,9 @@ def validate_workout(data):
         raise BadRequest('createdAt must be a time in milliseconds.')
     validate_exercises(data.get('exercises'))
     weight_unit(data.get('unit'))
+    # How long the workout took, in seconds, when it was timed from start to finish.
+    if data.get('duration') is not None and not (is_number(data['duration']) and 0 <= data['duration'] < 10 ** 9):
+        raise BadRequest('duration must be a number of seconds.')
     if data.get('clientId') is not None:
         text(data['clientId'], 'clientId', 200)
     # A workout from a training program says where in the program it was, for History to show.

@@ -30,7 +30,7 @@
         <div class="workout-name"><div class="workout-field"><label for="workoutName">Workout name</label><input id="workoutName" type="text" placeholder="e.g. Push Day" /></div><div class="workout-field"><label for="workoutDate">Workout date</label><input id="workoutDate" type="date" /></div><button class="secondary" id="clearBtn" type="button">Cancel</button></div>
         <div class="notes-field"><label for="workoutNotes">Workout notes</label><textarea id="workoutNotes" rows="3" placeholder="How did the session feel? Add cues, goals, or observations."></textarea></div>
         <div class="grid">
-          <div class="exercise-input"><label for="exercise">Exercise</label><input id="exercise" type="text" placeholder="e.g. Bench Press" required /></div>
+          <div class="exercise-input"><label for="exercise">Exercise</label><input id="exercise" type="text" list="exerciseNames" autocomplete="off" placeholder="e.g. Bench Press" required /></div>
           <div><label for="weight">Weight (<span class="unit-label">lbs</span>)</label><input id="weight" type="number" inputmode="decimal" min="0" step="0.5" placeholder="0" /></div>
           <div><label for="reps">Reps</label><input id="reps" type="number" inputmode="numeric" min="1" step="1" placeholder="0" required /></div>
           <button class="primary" id="addBtn" type="button">+ Add</button>
@@ -41,20 +41,30 @@
     </section>
 
     <section class="card active-workout" id="activeWorkout" hidden>
-      <div class="section-heading"><div><h2 id="activeWorkoutTitle">Active workout</h2><p id="activeWorkoutProgress" class="subtitle"></p></div><button class="secondary" id="endWorkoutBtn" type="button">End workout</button></div>
-      <div class="active-exercise"><h3 id="activeExerciseName"></h3><p id="activeExerciseTarget" class="subtitle"></p><p id="activeExerciseLast" class="subtitle" hidden></p><ol class="plan-sets" id="activePlan" aria-label="Planned sets" hidden></ol></div>
+      <div class="section-heading"><div><h2 id="activeWorkoutTitle">Active workout</h2><button class="progress-toggle" id="activeWorkoutProgress" type="button" aria-expanded="false" aria-controls="exerciseJump"></button></div><button class="secondary" id="endWorkoutBtn" type="button">End workout</button></div>
+      <ol class="exercise-jump" id="exerciseJump" aria-label="Go to an exercise" hidden></ol>
+      <div class="active-exercise"><div class="active-exercise-heading"><h3 id="activeExerciseName"></h3><button class="link-button" id="swapToggle" type="button" aria-expanded="false" aria-controls="swapPanel">Swap</button></div>
+        <div class="swap-panel" id="swapPanel" hidden><label for="swapName">Do this instead</label><div class="swap-fields"><input id="swapName" type="text" list="exerciseNames" autocomplete="off" placeholder="e.g. Dumbbell Bench Press" /><button class="primary" id="swapBtn" type="button">Swap</button><button class="secondary" id="swapCancel" type="button">Cancel</button></div><p class="subtitle" id="swapHelp"></p></div>
+        <p id="activeExerciseTarget" class="subtitle"></p><p id="activeExerciseLast" class="subtitle" hidden></p><ol class="plan-sets" id="activePlan" aria-label="Planned sets" hidden></ol></div>
       <div class="set-entry">
         <div class="weight-entry"><label for="activeWeight">Weight (<span class="unit-label">lbs</span>)</label><div class="weight-stepper" id="weightStepper"><button class="secondary" type="button" data-weight-step="-5" aria-label="5 lbs lighter">&minus;5</button><input id="activeWeight" type="number" inputmode="decimal" min="0" step="0.5" placeholder="0" /><button class="secondary" type="button" data-weight-step="5" aria-label="5 lbs heavier">+5</button></div></div>
-        <div class="reps-entry"><label for="completedReps">Reps completed</label><input id="completedReps" type="number" inputmode="numeric" min="1" step="1" placeholder="0" /></div>
+        <div class="reps-entry"><label for="completedReps" id="completedRepsLabel">Reps completed</label><input id="completedReps" type="number" inputmode="numeric" min="1" step="1" placeholder="0" /></div>
         <button class="primary" id="completeSetBtn" type="button">Complete set</button>
       </div>
+      <div class="hold-timer" id="holdTimer" hidden><div class="hold-time"><strong>Hold</strong><span id="holdDisplay">0:30</span></div><button class="secondary" id="holdBtn" type="button">Start timer</button></div>
       <p class="plate-hint" id="plateHint" hidden></p>
       <div class="rest-panel" id="restPanel" hidden><div class="rest-time"><strong>Rest</strong><span id="timerDisplay">1:30</span><div class="rest-adjust" id="restAdjust"><button class="secondary" type="button" data-rest-adjust="-30" aria-label="30 seconds less rest">&minus;30s</button><button class="secondary" type="button" data-rest-adjust="30" aria-label="30 seconds more rest">+30s</button></div></div><div class="rest-actions"><button class="secondary" id="restToggleBtn" type="button">Start rest</button><button class="secondary" id="restResetBtn" type="button">Reset</button></div></div>
       <ul class="set-list" id="completedSets"></ul>
       <p class="subtitle" id="activeSyncNotice" role="status" hidden>Can&rsquo;t reach the server. Your sets are saved on this device and will sync automatically.</p>
       <details class="add-exercise" id="activeNotesToggle"><summary>Workout notes</summary><textarea class="notes-input" id="activeNotes" rows="3" aria-label="Workout notes" placeholder="Add notes while you train."></textarea></details>
-      <details class="add-exercise" id="addActiveExercise"><summary>Add an exercise</summary><div class="add-exercise-fields"><div><label for="activeAddName">Exercise</label><input id="activeAddName" type="text" placeholder="e.g. Dips" /></div><div><label for="activeAddReps">Target reps</label><input id="activeAddReps" type="number" inputmode="numeric" min="1" step="1" placeholder="0" /></div><button class="secondary" id="activeAddBtn" type="button">Add next</button></div></details>
+      <details class="add-exercise" id="addActiveExercise"><summary>Add an exercise</summary><div class="add-exercise-fields"><div><label for="activeAddName">Exercise</label><input id="activeAddName" type="text" list="exerciseNames" autocomplete="off" placeholder="e.g. Dips" /></div><div><label for="activeAddReps" id="activeAddRepsLabel">Target reps</label><input id="activeAddReps" type="number" inputmode="numeric" min="1" step="1" placeholder="0" /></div><button class="secondary" id="activeAddBtn" type="button">Add next</button><label class="setting-check add-exercise-timed"><input id="activeAddTimed" type="checkbox" /> Timed, in seconds rather than reps</label></div></details>
       <div class="footer-actions"><span class="subtitle">Log each set, then continue when ready.</span><div class="footer-buttons"><button class="secondary" id="prevExerciseBtn" type="button" hidden>Previous</button><button class="primary" id="nextExerciseBtn" type="button">Next exercise</button></div></div>
+    </section>
+
+    <section class="card workout-summary" id="workoutSummary" aria-labelledby="summaryTitle" hidden>
+      <div class="section-heading"><div><h2 id="summaryTitle">Workout complete</h2><p class="subtitle" id="summaryName"></p></div><button class="secondary" id="summaryDone" type="button">Done</button></div>
+      <ul class="summary-stats" id="summaryStats"></ul>
+      <div class="summary-records" id="summaryRecords" hidden><h3>New personal records</h3><ul id="summaryRecordList"></ul></div>
     </section>
 
     <section class="card" id="programCard" hidden>
@@ -85,6 +95,8 @@
       <ul class="saved-workout-list" id="savedWorkoutList"><li class="empty">No saved workouts yet.</li></ul>
     </section>
   </main>
+  <!-- Suggested exercise names for every exercise field on the page: whatever has been logged or is in a template. -->
+  <datalist id="exerciseNames"></datalist>
   <div class="modal-backdrop" id="settingsModal" hidden>
     <section class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
       <div class="settings-heading"><h2 id="settingsTitle">Settings</h2><button class="modal-close" id="closeSettings" type="button" aria-label="Close settings">&times;</button></div>

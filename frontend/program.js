@@ -196,9 +196,15 @@ function programInfo(programDay) {
 
 // ---- Progress -------------------------------------------------------------
 
+// An exercise done in place of the program's (Swap, in script.js) is not the lift the program is tracking.
+function isSwappedIn(exercise) {
+  return Boolean(exercise && exercise.swappedFrom);
+}
+
 // How the + set went, read from a workout's exercises: whatever was logged in the + set's place in the plan.
 function amrapResult(exercises) {
   for (const exercise of exercises) {
+    if (isSwappedIn(exercise)) continue;
     const plan = Array.isArray(exercise.plan) ? exercise.plan : [];
     const index = plan.findIndex(set => set && set.amrap);
     if (index === -1) continue;
@@ -212,10 +218,11 @@ function missedAmrap(result) {
   return Boolean(result) && result.reps < result.target;
 }
 
-// Whether the day's main lift (its first exercise) got every planned rep of every work set; null if it was not tried.
+// Whether the day's main lift (its first exercise) got every planned rep of every work set; null if it was not tried,
+// or was swapped for another exercise, before or partway through its sets.
 function mainLiftHit(exercises) {
   const main = exercises[0];
-  if (!main || !Array.isArray(main.plan) || !(main.sets || []).length) return null;
+  if (!main || isSwappedIn(main) || main.swappedOut || !Array.isArray(main.plan) || !(main.sets || []).length) return null;
   return main.plan.every((set, index) => set.warmup || (Boolean(main.sets[index]) && storedNumber(main.sets[index].reps) >= storedNumber(set.reps)));
 }
 
@@ -262,7 +269,9 @@ function completeProgramWorkout(session) {
   const entry = { at:Date.now(), skipped:false, amrap:amrapResult(session.exercises), hit:mainLiftHit(session.exercises) };
   const definition = programDefinition(program);
   const progress = definition.afterWorkout ? definition.afterWorkout(program, programDay.day, entry, session.exercises) : { program, note:'' };
-  return [progress.note, recordProgramDay(progress.program, programDay.week, programDay.day, entry)].filter(Boolean).join(' ');
+  const main = session.exercises[0];
+  const swapped = main && (isSwappedIn(main) || main.swappedOut) ? `${isSwappedIn(main) ? main.swappedFrom.name : main.name} was swapped out, so this workout does not count toward its progress.` : '';
+  return [swapped, progress.note, recordProgramDay(progress.program, programDay.week, programDay.day, entry)].filter(Boolean).join(' ');
 }
 
 // ---- Formatting -----------------------------------------------------------

@@ -14,6 +14,7 @@
 //   days(program)            the days of each week, [{ name }]
 //   workout(program, week, day)  the day's exercises; each has a plan, one entry per set: { weight, reps } plus
 //                            repsMax for a rep range, amrap for a + set, warmup, percent. A weight of '' is the lifter's call.
+//                            An exercise's rest is the seconds the rest timer counts after each of its sets.
 //   afterWorkout(program, day, entry, exercises)  optional: progress made by one session, as { program, note };
 //                            exercises are the finished workout's, with each exercise's plan and logged sets
 //   nextBlock(program)       optional: what changes when a block is complete, e.g. new training maxes
@@ -44,6 +45,15 @@ function roundToOption(program, lift, value) {
 
 function repeatSets(count, set) {
   return Array.from({ length:count }, () => ({ ...set }));
+}
+
+// Rest after a set, in seconds, as the programs advise: longest after a heavy main lift, less after other compound
+// accessories, and a minute after small single-joint and core work.
+const mainLiftRest = 180;
+const isolationNames = /\b(raises?|curls?|pushdowns?|extensions?|fly|face pulls?|pallof press|woodchop)\b/i;
+
+function accessoryRest(name) {
+  return isolationNames.test(name) ? 60 : 90;
 }
 
 // ---- Wendler 5/3/1 --------------------------------------------------------
@@ -117,16 +127,16 @@ const wendler531 = {
     const warmups = program.options.warmups && !weekPlan.deload ? wendlerWarmups.map(entry => set(entry, { warmup:true })) : [];
     const main = [...warmups, ...weekPlan.sets.map((entry, index) => set(entry, !weekPlan.deload && index === weekPlan.sets.length - 1 ? { amrap:true } : {}))];
     const top = main[main.length - 1];
-    const exercises = [{ name:lift.name, weight:top.weight, reps:String(top.reps), plan:main }];
+    const exercises = [{ name:lift.name, weight:top.weight, reps:String(top.reps), rest:mainLiftRest, plan:main }];
     // The deload week is the main lift alone, to recover.
     if (weekPlan.deload) return exercises;
     const assistance = wendlerAssistance.find(item => item.id === program.options.assistance);
     const extra = assistance.supplemental;
     if (extra) {
       const weight = roundToStep(trainingMax * extra.percent / 100, program.options.rounding);
-      exercises.push({ name:`${lift.name} (${extra.label})`, weight, reps:String(extra.reps), plan:repeatSets(extra.sets, { percent:extra.percent, weight, reps:extra.reps }) });
+      exercises.push({ name:`${lift.name} (${extra.label})`, weight, reps:String(extra.reps), rest:accessoryRest(lift.name), plan:repeatSets(extra.sets, { percent:extra.percent, weight, reps:extra.reps }) });
     }
-    (assistance.exercises[lift.key] || []).forEach(([name, sets, reps]) => exercises.push({ name, weight:'', reps:String(reps), plan:repeatSets(sets, { weight:'', reps }) }));
+    (assistance.exercises[lift.key] || []).forEach(([name, sets, reps]) => exercises.push({ name, weight:'', reps:String(reps), rest:accessoryRest(name), plan:repeatSets(sets, { weight:'', reps }) }));
     return exercises;
   },
   roundNumber:roundToOption,
@@ -210,8 +220,8 @@ const redditPpl = {
     const lift = pplLifts.find(item => item.key === plan.lift);
     const weight = program.trainingMaxes[lift.key];
     const main = [...repeatSets(pplStraightSets[lift.key], { weight, reps:5 }), { weight, reps:5, amrap:true }];
-    return [{ name:lift.name, weight, reps:'5', plan:main },
-      ...plan.accessories.map(([name, sets, reps, repsMax, note]) => ({ name, weight:'', reps:String(reps), ...(note ? { note } : {}), plan:repeatSets(sets, { weight:'', reps, repsMax }) }))];
+    return [{ name:lift.name, weight, reps:'5', rest:mainLiftRest, plan:main },
+      ...plan.accessories.map(([name, sets, reps, repsMax, note]) => ({ name, weight:'', reps:String(reps), rest:accessoryRest(name), ...(note ? { note } : {}), plan:repeatSets(sets, { weight:'', reps, repsMax }) }))];
   },
   // The main lift moves after every session: up when every set got its reps, down 10% after a third miss in a row.
   // A session where the main lift was not attempted changes nothing.
@@ -326,8 +336,9 @@ const apartmentGym = {
     const plan = apartmentDays[day];
     const lift = apartmentLift(plan.lift);
     const weight = program.trainingMaxes[lift.key];
-    return [{ name:lift.name, weight, reps:String(lift.reps), ...(lift.note ? { note:lift.note } : {}), plan:repeatSets(lift.sets, { weight, reps:lift.reps, repsMax:lift.repsMax }) },
-      ...plan.accessories.map(([name, sets, reps, repsMax, note]) => ({ name, weight:'', reps:String(reps), ...(note ? { note } : {}), plan:repeatSets(sets, { weight:'', reps, repsMax }) }))];
+    // The main lifts are sets of 6 to 12 on machines and dumbbells, so they rest two minutes rather than three.
+    return [{ name:lift.name, weight, reps:String(lift.reps), rest:120, ...(lift.note ? { note:lift.note } : {}), plan:repeatSets(lift.sets, { weight, reps:lift.reps, repsMax:lift.repsMax }) },
+      ...plan.accessories.map(([name, sets, reps, repsMax, note]) => ({ name, weight:'', reps:String(reps), rest:accessoryRest(name), ...(note ? { note } : {}), plan:repeatSets(sets, { weight:'', reps, repsMax }) }))];
   },
   // Every set at the top of the range: up a step next time (or, at the heaviest dumbbells, slower reps instead).
   // A set below the bottom of the range counts a miss; the third in a row takes 10% off. Anything between keeps the

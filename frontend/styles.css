@@ -166,7 +166,10 @@ html[data-theme="dark"] .rest-panel { background:#303653; }
 .template-card .template-actions { display:flex; flex-wrap:wrap; gap:8px; }
 .template-card .template-actions button { align-self:auto; }
 .template-exercise-heading { display:flex; justify-content:space-between; align-items:center; margin-top:14px; }
-.template-exercise-row { display:grid; grid-template-columns:1fr 82px auto; gap:8px; align-items:end; margin-top:10px; }
+.template-exercise-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto; gap:8px; align-items:end; margin-top:10px; }
+.template-exercise-row + .template-exercise-row { padding-top:10px; border-top:1px solid var(--line); }
+.template-exercise-name { grid-column:1 / span 2; }
+.template-exercise-row .template-timed { align-self:end; margin:0 0 12px; }
 .template-exercise-row .template-row-actions { display:flex; gap:4px; }
 .template-exercise-row button { width:32px; height:42px; padding:0; }
 .template-modal { max-height:min(720px,90vh); overflow:auto; }
@@ -249,7 +252,7 @@ input[type="range"] { padding:0; border:0; background:transparent; accent-color:
 .settings-modal form > .test-alert { justify-self:start; margin-top:10px; }
 .settings-modal :disabled { opacity:.5; cursor:not-allowed; }
 .settings-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:20px; padding-top:18px; border-top:1px solid var(--line); }
-@media (max-width:620px) { .shell{padding-top:25px}.date{display:none}.grid{grid-template-columns:1fr 1fr}.grid .exercise-input{grid-column:1/-1}.grid button{width:100%}.exercise{grid-template-columns:1fr auto auto}.exercise .remove{grid-column:1/-1; width:100%}.workout-name{align-items:stretch; flex-direction:column}.saved-workout-summary{align-items:flex-start; flex-direction:column}.saved-workout-summary.saved-workout-row{align-items:center; flex-direction:row; gap:10px}.workout-details li{align-items:flex-start; flex-direction:column; gap:3px}.header-actions{align-items:flex-end; flex-direction:column; gap:8px}.site-nav{order:3; width:100%; justify-content:center} header{align-items:flex-start; flex-wrap:wrap}.template-grid{grid-template-columns:1fr}.set-entry{grid-template-columns:1fr 1fr}.set-entry .weight-entry{grid-column:1/-1}.set-entry > button{width:100%}.section-heading-actions{align-items:flex-end; flex-direction:column; gap:8px}.progress-filters{grid-template-columns:1fr 1fr}.progress-filters > div:nth-child(1), .progress-filters > div:nth-child(2), .progress-filters button{grid-column:1/-1}.progress-filters button{width:100%}.template-exercise-row{grid-template-columns:1fr 1fr}.template-exercise-row .template-row-actions{grid-column:1/-1} }
+@media (max-width:620px) { .shell{padding-top:25px}.date{display:none}.grid{grid-template-columns:1fr 1fr}.grid .exercise-input{grid-column:1/-1}.grid button{width:100%}.exercise{grid-template-columns:1fr auto auto}.exercise .remove{grid-column:1/-1; width:100%}.workout-name{align-items:stretch; flex-direction:column}.saved-workout-summary{align-items:flex-start; flex-direction:column}.saved-workout-summary.saved-workout-row{align-items:center; flex-direction:row; gap:10px}.workout-details li{align-items:flex-start; flex-direction:column; gap:3px}.header-actions{align-items:flex-end; flex-direction:column; gap:8px}.site-nav{order:3; width:100%; justify-content:center} header{align-items:flex-start; flex-wrap:wrap}.template-grid{grid-template-columns:1fr}.set-entry{grid-template-columns:1fr 1fr}.set-entry .weight-entry{grid-column:1/-1}.set-entry > button{width:100%}.section-heading-actions{align-items:flex-end; flex-direction:column; gap:8px}.progress-filters{grid-template-columns:1fr 1fr}.progress-filters > div:nth-child(1), .progress-filters > div:nth-child(2), .progress-filters button{grid-column:1/-1}.progress-filters button{width:100%} }
 @media (max-width:620px) { .set-list li{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.set-number{grid-column:1; grid-row:1}.set-list .remove{grid-column:2; grid-row:1; justify-self:end}.footer-actions{flex-direction:column}.footer-buttons button{flex:1}.add-exercise-fields{grid-template-columns:1fr 1fr}.add-exercise-fields button{grid-column:1/-1} }
 @media (max-width:620px) { .program-heading{align-items:stretch; flex-direction:column; gap:0}.program-heading .section-heading-actions{align-items:stretch; flex-direction:row; margin:12px 0 16px}.program-heading .section-heading-actions button{flex:1}.program-next{align-items:stretch; flex-direction:column}.program-next-actions button{flex:1}.program-maxes{grid-template-columns:1fr 1fr}.program-day{flex-wrap:wrap}.program-day-actions{width:100%; justify-content:space-between}.program-day-actions button{margin-left:auto}.program-max-inputs{grid-template-columns:1fr} }
 /* The training calendar on the History page: a column per week, a row per weekday, squares that shrink on a phone. */
@@ -265,3 +268,42 @@ input[type="range"] { padding:0; border:0; background:transparent; accent-color:
 .calendar-note { margin:12px 0 0; font-size:.82rem; }
 .calendar-day[title] { cursor:pointer; }
 .calendar-detail { min-height:1.2em; margin:10px 0 0; color:var(--ink); font-weight:600; }
+/* During a workout: "Exercise 2 of 6" opens the list of exercises to go to any of them. */
+.progress-toggle { margin:8px 0 0; padding:2px 0; color:var(--muted); background:none; font-size:1rem; font-weight:400; text-align:left; }
+.progress-toggle:hover { color:var(--ink); transform:none; }
+.progress-toggle::after { content:"\25BE"; margin-left:6px; font-size:.8em; }
+.progress-toggle[aria-expanded="true"]::after { content:"\25B4"; }
+.exercise-jump { display:grid; gap:2px; margin:0 0 16px; padding:6px; list-style:none; border:1px solid var(--line); border-radius:12px; }
+.exercise-jump button { display:flex; justify-content:space-between; align-items:baseline; gap:12px; width:100%; padding:10px 12px; color:var(--ink); background:none; font-weight:600; text-align:left; }
+.exercise-jump button:hover { background:var(--bg); transform:none; }
+.exercise-jump button[aria-current] { color:var(--accent); background:#eef0ff; }
+html[data-theme="dark"] .exercise-jump button[aria-current] { background:#303653; }
+.exercise-jump .jump-sets { flex:none; color:var(--muted); font-size:.85rem; font-weight:400; }
+.exercise-jump .done .jump-sets::before { content:"\2713\00a0"; color:#22634c; }
+html[data-theme="dark"] .exercise-jump .done .jump-sets::before { color:#a5e5c2; }
+/* Swap, beside the exercise's name, opens a field for the exercise to do instead. */
+.active-exercise-heading { display:flex; align-items:baseline; gap:8px; margin-bottom:6px; }
+.active-exercise-heading h3 { margin:0; }
+.active-exercise-heading .link-button { flex:none; padding:4px 6px; }
+.swap-panel { margin:8px 0 12px; padding:12px 14px; border:1px solid var(--line); border-radius:12px; }
+.swap-fields { display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:8px; }
+.swap-panel .subtitle { margin:10px 0 0; font-size:.85rem; line-height:1.45; }
+/* A timed exercise's hold: the seconds counting down, and the button to start or stop them. */
+.hold-timer { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:12px; padding:10px 10px 10px 16px; border:1px solid var(--line); border-radius:12px; }
+.hold-timer.running { background:#eef0ff; border-color:var(--accent); }
+html[data-theme="dark"] .hold-timer.running { background:#303653; }
+.hold-time { display:flex; align-items:baseline; gap:10px; }
+.hold-time span { color:var(--accent); font-size:1.5rem; font-weight:800; font-variant-numeric:tabular-nums; }
+.hold-timer button { padding:9px 16px; }
+.add-exercise-fields .add-exercise-timed { grid-column:1 / -1; margin-top:0; }
+/* The summary of a finished workout. */
+.workout-summary h2 { margin-bottom:0; }
+.summary-stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(110px, 1fr)); gap:10px; margin:18px 0 0; padding:0; list-style:none; }
+.summary-stats li { display:grid; gap:3px; padding:12px; border:1px solid var(--line); border-radius:10px; }
+.summary-stats strong { font-size:1.2rem; }
+.summary-stats span { color:var(--muted); font-size:.8rem; }
+.summary-records h3 { margin:20px 0 8px; font-size:.95rem; }
+.summary-records ul { display:grid; gap:6px; margin:0; padding:0; list-style:none; }
+.summary-records li { padding:10px 12px; color:#22634c; background:#edf9f2; border:1px solid #b9e3ca; border-radius:10px; font-size:.9rem; }
+html[data-theme="dark"] .summary-records li { color:#a5e5c2; background:#193b2d; border-color:#2f654b; }
+@media (max-width:620px) { .swap-fields{grid-template-columns:1fr 1fr}.swap-fields input{grid-column:1/-1}.add-exercise-fields .add-exercise-timed{grid-row:2}.add-exercise-fields button{grid-row:3}.summary-stats{grid-template-columns:1fr 1fr} }

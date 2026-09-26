@@ -4,16 +4,26 @@ let allWorkouts = [];
 // As loaded; allWorkouts is these in the unit shown, and is worked out again when the unit changes.
 let loadedWorkouts = [];
 let selectedMetric = 'weight';
+// Exercises whose most recent log is timed (a plank): their "reps" are seconds held.
+let timedExercises = new Set();
+
+// Whether the chart is of a timed exercise, whose best reps are its longest hold and whose volume is its time held.
+function chartingTimed() {
+  return selectedExercise !== 'all' && timedExercises.has(selectedExercise);
+}
 
 function buildChartData(workouts) {
   const types = new Map();
   const points = [];
+  const timed = chartingTimed();
   [...workouts].sort((a, b) => a.createdAt - b.createdAt).forEach((workout, index) => {
     const name = workout.name || 'Untitled workout';
-    // An exercise saved with an empty set list was skipped, so it has no result to chart.
-    const matchingExercises = (selectedExercise === 'all' ? workout.exercises : workout.exercises.filter(item => exerciseKey(item.name) === selectedExercise)).filter(item => !item.sets || item.sets.length);
+    // An exercise saved with an empty set list was skipped, so it has no result to chart. Across all exercises, timed
+    // ones are left out: their seconds are not reps, and would count as the best reps or the most volume.
+    const matchingExercises = (selectedExercise === 'all' ? workout.exercises.filter(item => !isTimed(item)) : workout.exercises.filter(item => exerciseKey(item.name) === selectedExercise)).filter(item => !item.sets || item.sets.length);
     const values = matchingExercises.map(item => {
       if (selectedMetric === 'reps') return Math.max(...(item.sets || []).map(set => Number(set.reps) || 0), Number(item.reps) || 0);
+      if (selectedMetric === 'volume' && timed) return item.sets?.length ? item.sets.reduce((total, set) => total + (Number(set.reps) || 0), 0) : Number(item.reps) || 0;
       if (selectedMetric === 'volume') return item.sets?.length ? item.sets.reduce((total, set) => total + (Number(set.weight) || 0) * (Number(set.reps) || 0), 0) : (Number(item.weight) || 0) * (Number(item.reps) || 0);
       return Math.max(...(item.sets || []).map(set => Number(set.weight) || 0), Number(item.weight) || 0);
     });
@@ -49,9 +59,12 @@ function populateWorkoutTypes(workouts) {
 function populateExercises(workouts) {
   const selected = $('exerciseFilter').value;
   const labels = new Map();
+  timedExercises = new Set();
   [...workouts].sort((a, b) => b.createdAt - a.createdAt).forEach(workout => workout.exercises.forEach(item => {
     const key = exerciseKey(item.name);
-    if (key && !labels.has(key)) labels.set(key, String(item.name).trim());
+    if (!key || labels.has(key)) return;
+    labels.set(key, String(item.name).trim());
+    if (isTimed(item)) timedExercises.add(key);
   }));
   const options = [...labels].sort(([, a], [, b]) => a.localeCompare(b, undefined, { sensitivity:'base' }));
   $('exerciseFilter').innerHTML = '<option value="all">All exercises</option>' + options.map(([key, label]) => `<option value="${escapeHTML(key)}">${escapeHTML(label)}</option>`).join('');
@@ -96,7 +109,9 @@ function drawChart() {
   const x = index => chartData.points.length === 1 ? left + chartWidth / 2 : left + index / (chartData.points.length - 1) * chartWidth;
   const y = value => top + chartHeight - value / maximum * chartHeight;
   const unit = weightUnit();
-  const metricLabel = selectedMetric === 'weight' ? `Weight (${unit})` : selectedMetric === 'reps' ? 'Reps' : `Volume (${unit})`;
+  const timed = chartingTimed();
+  const metricLabel = selectedMetric === 'weight' ? `Weight (${unit})` : timed ? 'Seconds' : selectedMetric === 'reps' ? 'Reps' : `Volume (${unit})`;
+  const pointUnit = selectedMetric === 'weight' ? ` ${unit}` : timed ? ' s' : '';
 
   context.font = '12px system-ui, sans-serif';
   context.lineWidth = 1;
@@ -139,7 +154,7 @@ function drawChart() {
       context.beginPath(); context.arc(x(index), y(value), 4, 0, Math.PI * 2); context.fill();
       context.textAlign = 'left';
       context.font = '11px system-ui, sans-serif';
-      context.fillText(`${Math.round(value).toLocaleString()}${selectedMetric === 'weight' ? ` ${unit}` : ''}`, x(index) + 7, y(value) - 8);
+      context.fillText(`${Math.round(value).toLocaleString()}${pointUnit}`, x(index) + 7, y(value) - 8);
     });
   });
 }
@@ -149,7 +164,9 @@ function renderProgress(workouts) {
   $('chartEmpty').hidden = Boolean(chartData.points.length);
   $('progressChart').hidden = !chartData.points.length;
   $('progressSummary').textContent = workouts.length === allWorkouts.length ? `${workouts.length} saved workout${workouts.length === 1 ? '' : 's'}` : `${workouts.length} of ${allWorkouts.length} workouts`;
-  const labels = { weight:['Heaviest weight', 'Track your heaviest weight by workout type and date.', `Weight (${weightUnit()})`], reps:['Best reps', 'Track your highest completed reps by workout type and date.', 'Reps'], volume:['Total volume', 'Track total weight moved by workout type and date.', 'Volume'] };
+  const labels = chartingTimed()
+    ? { weight:['Heaviest weight', 'Track the heaviest weight you have held by workout type and date.'], reps:['Longest hold', 'Track your longest hold, in seconds, by workout type and date.'], volume:['Total time held', 'Track the seconds held in each workout, all sets together.'] }
+    : { weight:['Heaviest weight', 'Track your heaviest weight by workout type and date.'], reps:['Best reps', 'Track your highest completed reps by workout type and date.'], volume:['Total volume', 'Track total weight moved by workout type and date.'] };
   $('progressTitle').textContent = labels[selectedMetric][0];
   $('progressDescription').textContent = labels[selectedMetric][1];
   $('legend').innerHTML = chartData.types.map(type => `<div class="legend-item"><span class="legend-swatch"></span><span>${escapeHTML(type.name)}</span></div>`).join('');
