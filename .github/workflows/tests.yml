@@ -25,8 +25,8 @@ jobs:
       - name: Let Chrome use its sandbox
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
 
-      - name: Check the installer's shell syntax
-        run: bash -n ct/workout-tracker.sh
+      - name: Check the shell scripts' syntax
+        run: for script in ct/workout-tracker.sh scripts/docker-backup.sh; do bash -n "$script"; done
 
       # Four suites at a time on the runner's four cores, so timing checks are not starved.
       - name: Run the tests

@@ -240,16 +240,52 @@ UNIT
 
 cat >/usr/local/bin/workout-tracker-backup <<'BACKUP'
 #!/usr/bin/env bash
-# Consistent snapshot of the Workout Tracker database, safe while it is running.
+# Consistent snapshot of the Workout Tracker database, safe while it is running:
+#   workout-tracker-backup [directory]      (default /var/backups/workout-tracker)
+# The newest BACKUP_KEEP snapshots in the directory are kept (14 unless install.conf says otherwise) and older ones
+# removed. workout-tracker-backup.timer runs it every day; running it by hand is fine too.
 set -Eeuo pipefail
 . /etc/workout-tracker/install.conf
 dest="${1:-/var/backups/workout-tracker}"
+keep="${BACKUP_KEEP:-14}"
+[[ "$keep" =~ ^[1-9][0-9]*$ ]] || keep=14
+# Every account's workouts are in here: readable by root only.
+umask 077
 mkdir -p "$dest"
+chmod 0700 "$dest"
 out="$dest/workouts-$(date +%Y%m%d-%H%M%S).db"
 sqlite3 "$DATA_DIR/workouts.db" ".backup '$out'"
+# The timestamp in each name sorts oldest to newest, so everything past the newest $keep goes.
+find "$dest" -maxdepth 1 -name 'workouts-*.db' -printf '%f\n' | sort -r | tail -n +"$((keep + 1))" | while read -r old; do
+  rm -f -- "$dest/$old"
+done
 echo "$out"
 BACKUP
 chmod 0755 /usr/local/bin/workout-tracker-backup
+
+# Every day at about half past three, or at the next start if the container was off then (Persistent).
+cat >/etc/systemd/system/workout-tracker-backup.service <<'UNIT'
+[Unit]
+Description=Workout Tracker database backup
+After=workout-tracker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/workout-tracker-backup
+Nice=10
+UNIT
+cat >/etc/systemd/system/workout-tracker-backup.timer <<'UNIT'
+[Unit]
+Description=Back up the Workout Tracker database every day
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+UNIT
 
 cat >/usr/local/bin/workout-tracker-admin <<'ADMIN'
 #!/usr/bin/env bash
@@ -269,6 +305,7 @@ chmod 0755 /usr/local/bin/workout-tracker-admin
 step "starting service"
 systemctl daemon-reload
 systemctl enable --quiet workout-tracker
+systemctl enable --quiet --now workout-tracker-backup.timer
 systemctl restart workout-tracker
 
 for _attempt in $(seq 1 30); do
@@ -297,6 +334,7 @@ SERVICE_USER='$SERVICE_USER'
 APP_PORT='$APP_PORT'
 PORT_DEFAULT_MOVED='${PORT_DEFAULT_MOVED:-}'
 BRANCH_DEFAULT_MOVED='${BRANCH_DEFAULT_MOVED:-}'
+BACKUP_KEEP='${BACKUP_KEEP:-14}'
 EOF
 }
 
@@ -577,7 +615,8 @@ ${GN}  $APP is ready.${CL}
   Restart      pct exec $CTID -- systemctl restart $SERVICE
   App files    $APP_DIR
   Database     $DATA_DIR/workouts.db
-  Backup       pct exec $CTID -- workout-tracker-backup
+  Backups      every day, the newest 14 kept in /var/backups/workout-tracker
+               (or now: pct exec $CTID -- workout-tracker-backup)
 
   Open the URL and register the first account. Registration is open to anyone
   who can reach the port, so create your accounts now and keep the app on a

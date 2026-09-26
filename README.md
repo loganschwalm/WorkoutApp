@@ -412,6 +412,7 @@ data/                   SQLite database when run from a git checkout (gitignored
 ct/workout-tracker.sh   Proxmox VE one-line installer and updater
 scripts/make-icons.py   Regenerates the app icons in frontend/icons/
 scripts/make-screenshots.py  Regenerates docs/screenshots/ from demo data (needs the test requirements)
+scripts/docker-backup.sh     Daily backups for a Docker Compose install (see Docker Compose)
 docs/screenshots/       The screenshots in this README
 Dockerfile              Container image definition
 docker-entrypoint.py    Container start: hands the data volume to the unprivileged user, then runs the server
@@ -549,11 +550,33 @@ pct exec <CTID> -- systemctl restart workout-tracker # restart
 
 #### Backups
 
-The install adds a `workout-tracker-backup` helper that takes a consistent snapshot while the app
-keeps running, which a plain file copy of a live SQLite database does not give you:
+The database is backed up every day, at about half past three (or at the next start, if the container
+was off then), to `/var/backups/workout-tracker` inside the container. The newest 14 backups are kept and
+older ones removed. The directory and its files are readable by root only, since they hold every
+account's workouts. Each backup is a consistent snapshot taken while the app keeps running, which a
+plain file copy of a live SQLite database does not give you. Sessions are stored as hashes, so a backup
+cannot be used to sign in.
 
 ```bash
-pct exec <CTID> -- workout-tracker-backup            # writes to /var/backups/workout-tracker
+pct exec <CTID> -- workout-tracker-backup                                 # one now, as well
+pct exec <CTID> -- ls -l /var/backups/workout-tracker                     # what is there
+pct exec <CTID> -- systemctl list-timers workout-tracker-backup.timer     # when the next one runs
+```
+
+To keep a different number, set `BACKUP_KEEP='30'` (say) in `/etc/workout-tracker/install.conf`
+inside the container. Updates keep it. To keep backups off the container too, copy that directory
+somewhere else now and then, or use a Proxmox `vzdump` job as below.
+
+To restore one, stop the app, put the backup in place of the database, and start it again. Take a
+backup of the current database first if you might want it back.
+
+```bash
+pct enter <CTID>
+systemctl stop workout-tracker
+cp /var/backups/workout-tracker/workouts-20260926-033012.db /var/lib/workout-tracker/workouts.db
+rm -f /var/lib/workout-tracker/workouts.db-wal /var/lib/workout-tracker/workouts.db-shm
+chown workout:workout /var/lib/workout-tracker/workouts.db
+systemctl start workout-tracker
 ```
 
 For the whole container, use a normal Proxmox `vzdump` backup job. Because the database sits at
@@ -582,12 +605,16 @@ What is already in place:
   are upgraded to that strength the next time they sign in.
 - After 5 failed sign-ins for one account from one address, that pair has to wait until the oldest
   failure is 15 minutes old, even with the right password. Signing in by email and by username count
-  toward the same limit, and so do wrong passwords when changing the email in Settings. Behind a reverse
-  proxy every request comes from the proxy's address, so the limit then works per account.
+  toward the same limit, and so do wrong passwords given in Settings to change the email or password,
+  or to delete the account. Behind a reverse proxy every request comes from the proxy's address, so the
+  limit then works per account.
 - A password reset code works once, for 15 minutes, and stops working after 5 wrong tries. Each email
-  address is sent at most 5 codes an hour. The reply is the same whether or not an account uses the
-  address, so the reset form cannot be used to find out who has an account. A successful reset signs
-  the account out everywhere else.
+  address is sent at most 5 codes an hour, and after 10 wrong codes for an address in a day, however
+  many codes were sent, none is tried until the oldest of those is a day old. The replies and limits
+  are the same whether or not an account uses the address, so the reset form cannot be used to find
+  out who has an account. A successful reset signs the account out everywhere else.
+- Sessions are stored as a SHA-256 hash of their token, so a copy of the database (a backup, say)
+  cannot be used to sign in. Upgrading rehashed the existing sessions, so nobody was signed out.
 - Emails are not verified: the app takes the address you type. A mistyped address only means reset
   codes go astray, and you can correct it in Settings.
 - Every response carries a strict Content-Security-Policy (only this site's own scripts and styles,
@@ -621,6 +648,7 @@ The server reads these environment variables:
 | `LOGIN_ATTEMPTS` | `5` | Failed sign-ins per username and address before a wait |
 | `LOGIN_WINDOW` | `900` | Seconds a failed sign-in is remembered |
 | `REQUEST_TIMEOUT` | `30` | Seconds a connection may send nothing before it is closed |
+| `RESET_GUESSES` | `10` | Wrong reset codes per email address in a day before its codes stop being tried |
 | `SMTP_HOST` | *(none)* | Mail server for password reset emails. Unset, "Forgot password?" says to ask whoever runs the server |
 | `SMTP_PORT` | `587` | `465` with `SMTP_SECURITY=ssl`, `25` with `none` |
 | `SMTP_SECURITY` | `starttls` | `starttls`, `ssl` (TLS from the start), or `none` (a relay on a trusted network) |
@@ -749,13 +777,20 @@ docker compose down && git pull && docker compose up -d --build   # update
 `git clone` gets `main`, which takes every push as it lands. To only update to commits whose tests have
 passed, switch the checkout to `stable` once with `git checkout stable`; `git pull` then follows it.
 
-To back up, take a consistent snapshot inside the running container and copy it out. A plain copy of
+To back up, `scripts/docker-backup.sh` takes a consistent snapshot inside the running container and
+copies it out to `/var/backups/workout-tracker` on the host, keeping the newest 14. A plain copy of
 `workouts.db` is not enough: recent changes can still be in the `workouts.db-wal` file beside it.
 
 ```bash
-docker compose exec workout-tracker python -c \
-  "import sqlite3; sqlite3.connect('/app/data/workouts.db').backup(sqlite3.connect('/app/data/backup.db'))"
-docker compose cp workout-tracker:/app/data/backup.db ./workouts-backup.db
+scripts/docker-backup.sh                      # one now
+KEEP=30 scripts/docker-backup.sh /mnt/nas     # keep 30, somewhere else
+```
+
+To run it every day, add a line like this to `/etc/cron.d/workout-tracker-backup` on the Docker host,
+with the path to your checkout:
+
+```cron
+30 3 * * * root /path/to/workout-tracker/scripts/docker-backup.sh
 ```
 
 ### Manual install on any Linux host
@@ -900,9 +935,10 @@ browser's site data only loses whatever had not uploaded yet.
 
 Include the SQLite file in your backup plan: it is at `/var/lib/workout-tracker/workouts.db` in an
 LXC install, and in the `workout_data` volume under Docker. The database runs in write-ahead-log mode,
-so recent changes can sit in `workouts.db-wal` next to it. Back up with SQLite's backup (the LXC's
-`workout-tracker-backup` helper, or `sqlite3 workouts.db ".backup copy.db"`) rather than copying the
-file while the server runs.
+so recent changes can sit in `workouts.db-wal` next to it. Back up with SQLite's backup rather than
+copying the file while the server runs: a Proxmox install does this every day on its own (see
+[Backups](#backups)), and `scripts/docker-backup.sh` does it for Docker. On a manual install,
+`sqlite3 workouts.db ".backup copy.db"` does the same.
 
 ## Technology
 

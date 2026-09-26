@@ -147,6 +147,11 @@ def run(t):
     check('a retry of an old upload is recognised', again['id'] == solo_id, f'{again} vs {solo_id}')
     check('neither retry added a row', len(legacy.api('GET', '/api/workouts', token='legacy-token')[0]['workouts']) == 4)
     db = sqlite3.connect(legacy_path)
+    stored = [row[0] for row in db.execute('SELECT token FROM sessions')]
+    db.close()
+    check("its sessions were rehashed in place, so the upgrade signed nobody out",
+          stored == [hashlib.sha256(b'legacy-token').hexdigest()], stored)
+    db = sqlite3.connect(legacy_path)
     indexes = [row[1] for row in db.execute("PRAGMA index_list('workouts')")]
     db.close()
     check('the unique index now exists', 'workouts_user_client' in indexes, str(indexes))
@@ -291,10 +296,12 @@ def run_security(t, check, request):
     login(main, 'tester', 'password123')
     db = sqlite3.connect(db_path)
     stale = db.execute("SELECT COUNT(*) FROM sessions WHERE token LIKE 'stale-%'").fetchone()[0]
-    live = db.execute('SELECT COUNT(*) FROM sessions WHERE token = ?', (t.token,)).fetchone()[0]
+    live = db.execute('SELECT COUNT(*) FROM sessions WHERE token = ?', (hashlib.sha256(t.token.encode()).hexdigest(),)).fetchone()[0]
+    raw = db.execute('SELECT COUNT(*) FROM sessions WHERE token = ?', (t.token,)).fetchone()[0]
     db.close()
     check('signing in clears sessions that have expired', stale == 0, stale)
     check('and keeps the ones that have not', live == 1 and main.api('GET', '/api/auth/me', token=t.token)[0]['user'] is not None)
+    check('a session is stored as a hash of its token, never the token itself', raw == 0, raw)
 
     # ------------------------------------------------------------------ A10 headers
     print('A10 every response carries the security headers and an exact content type')
@@ -351,7 +358,7 @@ def run_structure(t, check, request):
     t.start_server('fresh.db')  # the harness only asks /api/auth/me, which never opens the database
     schema = schema_of(t.db_path('fresh.db'))
     check('a new database has every table before any request touches it', schema['tables'] == tables, schema['tables'])
-    check('it is at schema version 5', schema['version'] == 5, schema['version'])
+    check('it is at schema version 6', schema['version'] == 6, schema['version'])
     check('with the client_id column and its unique index',
           'client_id' in schema['columns'] and 'workouts_user_client' in schema['indexes'], schema)
     check('with a column for the training program', 'program_json' in schema['state_columns'], schema['state_columns'])
@@ -360,7 +367,7 @@ def run_structure(t, check, request):
           'email' in schema['user_columns'] and 'users_email' in schema['user_indexes'], schema)
     check('in write-ahead-log mode', schema['journal'] == 'wal', schema['journal'])
     legacy = schema_of(t.db_path('legacy.db'))
-    check('the database from before client_id (A3) is now at version 5 too', legacy['version'] == 5, legacy['version'])
+    check('the database from before client_id (A3) is now at version 6 too', legacy['version'] == 6, legacy['version'])
     check('and has the training program and exercise notes columns', {'program_json', 'notes_json'} <= set(legacy['state_columns']), legacy['state_columns'])
     check('and the email column, and the table of reset codes',
           'email' in legacy['user_columns'] and 'password_resets' in legacy['tables'], legacy)
@@ -381,7 +388,7 @@ def run_structure(t, check, request):
     kept = db.execute("SELECT name, client_id FROM workouts").fetchall()
     db.close()
     check('an unversioned database that already has client_id upgrades cleanly',
-          schema['version'] == 5 and schema['columns'].count('client_id') == 1 and kept == [('Kept', 'k1')], f'{schema} {kept}')
+          schema['version'] == 6 and schema['columns'].count('client_id') == 1 and kept == [('Kept', 'k1')], f'{schema} {kept}')
 
     path = t.db_path('newer.db')
     db = sqlite3.connect(path)
@@ -715,6 +722,26 @@ def run_accounts(t, check, request):
     check('a reset lifts the sign-in wait (A17) from this address', reset('limited@example.test', code, 'reset-password')[0] == 200
           and sign_in('limited', 'reset-password') == 200)
 
+    # ------------------------------------------------------------------ A32 guessing across codes
+    print('A32 wrong codes are counted per address across every code, ten a day')
+    post('/api/auth/register', {'username': 'guessed', 'email': 'guessed@example.test', 'password': 'password123'})
+    post('/api/auth/forgot-password', {'email': 'guessed@example.test'})
+    first = code_for('guessed@example.test', 1)
+    wrong = [reset('guessed@example.test', other_code(first, n), 'new-password-1')[0] for n in range(1, 6)]
+    # A new code used to start the tries over; now the wrong ones so far still count.
+    post('/api/auth/forgot-password', {'email': 'guessed@example.test'})
+    second = code_for('guessed@example.test', 2)
+    wrong += [reset('guessed@example.test', other_code(second, n), 'new-password-1')[0] for n in range(1, 6)]
+    status, headers, reply = reset('guessed@example.test', second, 'new-password-1')
+    check('after ten wrong codes in a day, even the right one waits', wrong == [400] * 10 and status == 429
+          and int(headers.get('retry-after', 0)) > 80000 and 'Too many wrong codes' in reply.get('error', ''), f'{wrong} {status} {reply}')
+    check('saying how long, in hours', reply.get('error', '').endswith('Try again in 24 hours.'), reply)
+    check('and the password is unchanged', sign_in('guessed', 'password123') == 200)
+    ghost_wrong = [reset('nobody-here@example.test', f'{n:06d}', 'new-password-1')[0] for n in range(10)]
+    status, _, ghost_reply = reset('nobody-here@example.test', '000000', 'new-password-1')
+    check('an address with no account is limited the same way, so the limit says nothing about which have one',
+          ghost_wrong == [400] * 10 and status == 429 and ghost_reply.get('error') == reply.get('error'), f'{ghost_wrong} {status} {ghost_reply}')
+
 
 def run_admin(t, check, request):
     main, mail = t.server, t.mail
@@ -955,13 +982,13 @@ def run_account_security(t, check, request):
 
     def expires_at(token):
         db = sqlite3.connect(db_path)
-        row = db.execute('SELECT expires_at FROM sessions WHERE token = ?', (token,)).fetchone()
+        row = db.execute('SELECT expires_at FROM sessions WHERE token = ?', (hashlib.sha256(token.encode()).hexdigest(),)).fetchone()
         db.close()
         return row[0] if row else None
 
     def set_expires_at(token, when):
         db = sqlite3.connect(db_path)
-        db.execute('UPDATE sessions SET expires_at = ? WHERE token = ?', (when, token))
+        db.execute('UPDATE sessions SET expires_at = ? WHERE token = ?', (when, hashlib.sha256(token.encode()).hexdigest()))
         db.commit()
         db.close()
 

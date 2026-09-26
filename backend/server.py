@@ -70,6 +70,10 @@ SMTP_TIMEOUT = 20
 RESET_CODE_TTL = 15 * 60
 RESET_CODE_ATTEMPTS = 5
 RESET_EMAILS = 5
+# Wrong codes per address, counted across every code sent to it: after RESET_GUESSES in a day, no code for that address
+# is even compared until the oldest wrong one is a day old. Without this, asking for a new code started the tries over,
+# which allowed 25 guesses an hour. With it, a six-digit code holds out against guessing for centuries.
+RESET_GUESSES = int(os.environ.get('RESET_GUESSES', '10'))
 
 # OWASP's recommendation for PBKDF2-HMAC-SHA256. Hashes record their own count, so raising it later only
 # needs this number changed: each account is rehashed the next time it signs in.
@@ -118,14 +122,21 @@ BUSY_TIMEOUT = 10
 class BadRequest(Exception):
     """A request the client got wrong; answered with its status and message instead of a dropped connection."""
 
-    def __init__(self, message, status=HTTPStatus.BAD_REQUEST):
+    def __init__(self, message, status=HTTPStatus.BAD_REQUEST, headers=None):
         super().__init__(message)
         self.status = status
+        self.headers = headers or {}
 
 
 # ---- Schema -------------------------------------------------------------------------------------------------
 # Each migration moves the database up one version, and PRAGMA user_version records how many have run. Add new
 # ones to the end and never change one that has shipped: databases in the wild have already run it.
+
+def session_hash(token):
+    """What the sessions table keeps of a session's token. A token is 32 random bytes, so a plain SHA-256 is enough: there
+    is nothing to guess, only a copy of the database to make useless."""
+    return hashlib.sha256(token.encode()).hexdigest()
+
 
 def migration_1_tables(database):
     # IF NOT EXISTS: databases from before versioning already have these tables, at user_version 0.
@@ -210,7 +221,16 @@ def migration_5_exercise_notes(database):
     database.execute("ALTER TABLE user_state ADD COLUMN notes_json TEXT NOT NULL DEFAULT '{}'")
 
 
-MIGRATIONS = [migration_1_tables, migration_2_client_ids, migration_3_programs, migration_4_emails, migration_5_exercise_notes]
+def migration_6_hashed_sessions(database):
+    # Sessions are kept as a SHA-256 of their token rather than the token itself, so a copy of the database (a backup,
+    # say) cannot be used to sign in. The column keeps its name. Each session is rehashed where it stands, so nobody is
+    # signed out by the upgrade.
+    for (token,) in database.execute('SELECT token FROM sessions').fetchall():
+        database.execute('UPDATE sessions SET token = ? WHERE token = ?', (session_hash(token), token))
+
+
+MIGRATIONS = [migration_1_tables, migration_2_client_ids, migration_3_programs, migration_4_emails, migration_5_exercise_notes,
+              migration_6_hashed_sessions]
 
 
 def init_database():
@@ -573,6 +593,17 @@ class Throttle:
 login_throttle = Throttle(LOGIN_ATTEMPTS, LOGIN_WINDOW)
 # Reset codes asked for per email address, whether or not an account uses it, so the limit never says which do.
 reset_throttle = Throttle(RESET_EMAILS, 60 * 60)
+# Wrong reset codes per email address, whether or not an account uses it, so this limit never says which do either.
+reset_guess_throttle = Throttle(RESET_GUESSES, 24 * 60 * 60)
+
+
+def wait_words(seconds):
+    """How long a wait is, as a person would say it: "3 minutes", "5 hours"."""
+    minutes = (seconds + 59) // 60
+    if minutes < 120:
+        return f"{minutes} minute{'' if minutes == 1 else 's'}"
+    hours = (minutes + 59) // 60
+    return f'{hours} hours'
 
 
 def find_account(database, login):
@@ -812,7 +843,7 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
                 raise BadRequest('Changes can only be made from this site.', HTTPStatus.FORBIDDEN)
             handler(path)
         except BadRequest as error:
-            self.send_json(error.status, {'error': str(error)})
+            self.send_json(error.status, {'error': str(error)}, headers=error.headers)
         except Exception:
             # Without this the client sees a dropped connection and no reason; log the cause and say so instead.
             traceback.print_exc()
@@ -829,11 +860,11 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             return None
         now = int(time.time())
         with connection() as database:
-            row = database.execute('SELECT users.id, users.username, users.email, sessions.expires_at FROM sessions JOIN users ON users.id = sessions.user_id WHERE sessions.token = ? AND sessions.expires_at > ?', (token, now)).fetchone()
+            row = database.execute('SELECT users.id, users.username, users.email, sessions.expires_at FROM sessions JOIN users ON users.id = sessions.user_id WHERE sessions.token = ? AND sessions.expires_at > ?', (session_hash(token), now)).fetchone()
             # A session lasts SESSION_TTL from when it was last used, not from signing in, so someone who trains every week
             # stays signed in. Renewed at most once a day, and the cookie with it, or the browser would drop it on time anyway.
             if row and row['expires_at'] < now + SESSION_TTL - SESSION_RENEW:
-                database.execute('UPDATE sessions SET expires_at = ? WHERE token = ?', (now + SESSION_TTL, token))
+                database.execute('UPDATE sessions SET expires_at = ? WHERE token = ?', (now + SESSION_TTL, session_hash(token)))
                 self.renewed_cookie = self.session_cookie(token, SESSION_TTL)
         return {key: row[key] for key in ('id', 'username', 'email')} if row else None
 
@@ -919,12 +950,11 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
         now = int(time.time())
         token = secrets.token_urlsafe(32)
         database.execute('DELETE FROM sessions WHERE expires_at <= ?', (now,))
-        database.execute('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)', (token, user_id, now + SESSION_TTL))
+        database.execute('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)', (session_hash(token), user_id, now + SESSION_TTL))
         return self.session_cookie(token, SESSION_TTL)
 
     def send_wait(self, wait, message):
-        self.send_json(HTTPStatus.TOO_MANY_REQUESTS, {'error': f'{message} Try again in {(wait + 59) // 60} minute(s).'},
-                       headers={'Retry-After': str(wait)})
+        self.send_json(HTTPStatus.TOO_MANY_REQUESTS, {'error': f'{message} Try again in {wait_words(wait)}.'}, headers={'Retry-After': str(wait)})
 
     def register(self):
         if not ALLOW_REGISTRATION:
@@ -1014,6 +1044,10 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             raise BadRequest('Enter the 6-digit code from the email.')
         if len(password) < 8:
             raise BadRequest('Password must be 8+ characters.')
+        wait = reset_guess_throttle.retry_after(email)
+        if wait:
+            self.send_wait(wait, 'Too many wrong codes for this address.')
+            return
         stored_hash = password_hash(password)
         with connection() as database:
             user = database.execute('SELECT id, username, email FROM users WHERE email = ?', (email,)).fetchone()
@@ -1032,26 +1066,30 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
                 cookie = self.start_session(database, user['id'])
         # Raised only now, so the counted try is committed rather than rolled back with the refusal.
         if not accepted:
+            reset_guess_throttle.record(email)
             raise BadRequest('That code is wrong or has expired. Check the newest email, or send a new code.')
+        reset_guess_throttle.clear(email)
         login_throttle.clear((self.client_address[0], user['username'].lower()))
         self.send_json(HTTPStatus.OK, {'user': public_user(user)}, [cookie])
+
+    def confirm_password(self, database, user, password, wrong='That password is not right.'):
+        """Check the signed-in account's password, asked again before a change only its owner should make: a signed-in
+        page may not be its owner's. Wrong ones count as failed sign-ins, and the same wait applies."""
+        throttle_key = (self.client_address[0], user['username'].lower())
+        wait = login_throttle.retry_after(throttle_key)
+        if wait:
+            raise BadRequest(f'Too many wrong passwords. Try again in {wait_words(wait)}.', HTTPStatus.TOO_MANY_REQUESTS, {'Retry-After': str(wait)})
+        stored = database.execute('SELECT password_hash FROM users WHERE id = ?', (user['id'],)).fetchone()['password_hash']
+        if not password_matches(str(password or ''), stored):
+            login_throttle.record(throttle_key)
+            # 403, not 401: the session is fine, and a 401 would tell the page it had expired.
+            raise BadRequest(wrong, HTTPStatus.FORBIDDEN)
 
     def change_email(self, user):
         data = self.read_json()
         email = email_address(data.get('email'))
-        password = str(data.get('password', ''))
-        # A signed-in page may not be its owner's, so the password is asked again, and wrong ones count as failed sign-ins.
-        throttle_key = (self.client_address[0], user['username'].lower())
-        wait = login_throttle.retry_after(throttle_key)
-        if wait:
-            self.send_wait(wait, 'Too many wrong passwords.')
-            return
         with connection() as database:
-            stored = database.execute('SELECT password_hash FROM users WHERE id = ?', (user['id'],)).fetchone()['password_hash']
-            if not password_matches(password, stored):
-                login_throttle.record(throttle_key)
-                # 403, not 401: the session is fine, and a 401 would tell the page it had expired.
-                raise BadRequest('That password is not right.', HTTPStatus.FORBIDDEN)
+            self.confirm_password(database, user, data.get('password'))
             if database.execute('SELECT 1 FROM users WHERE email = ? AND id != ?', (email, user['id'])).fetchone():
                 raise BadRequest('Another account already uses that email.', HTTPStatus.CONFLICT)
             database.execute('UPDATE users SET email = ? WHERE id = ?', (email, user['id']))
@@ -1065,38 +1103,19 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
         new = str(data.get('newPassword', ''))
         if len(new) < 8:
             raise BadRequest('The new password must be 8+ characters.')
-        # As with the email: the current password is asked again, and wrong ones count as failed sign-ins.
-        throttle_key = (self.client_address[0], user['username'].lower())
-        wait = login_throttle.retry_after(throttle_key)
-        if wait:
-            self.send_wait(wait, 'Too many wrong passwords.')
-            return
         stored_hash = password_hash(new)
         with connection() as database:
-            stored = database.execute('SELECT password_hash FROM users WHERE id = ?', (user['id'],)).fetchone()['password_hash']
-            if not password_matches(current, stored):
-                login_throttle.record(throttle_key)
-                # 403, not 401: the session is fine, and a 401 would tell the page it had expired.
-                raise BadRequest('Your current password is not right.', HTTPStatus.FORBIDDEN)
+            self.confirm_password(database, user, current, 'Your current password is not right.')
             database.execute('UPDATE users SET password_hash = ? WHERE id = ?', (stored_hash, user['id']))
             # Whoever knew the old password is signed out everywhere but here, and a reset code sent for it stops working.
-            signed_out = database.execute('DELETE FROM sessions WHERE user_id = ? AND token != ?', (user['id'], self.session_token())).rowcount
+            signed_out = database.execute('DELETE FROM sessions WHERE user_id = ? AND token != ?', (user['id'], session_hash(self.session_token()))).rowcount
             database.execute('DELETE FROM password_resets WHERE user_id = ?', (user['id'],))
         self.send_json(HTTPStatus.OK, {'signedOut': signed_out})
 
     def delete_account(self, user):
-        password = str(self.read_json().get('password', ''))
-        # As with the email and password: asked again, and wrong ones count as failed sign-ins.
-        throttle_key = (self.client_address[0], user['username'].lower())
-        wait = login_throttle.retry_after(throttle_key)
-        if wait:
-            self.send_wait(wait, 'Too many wrong passwords.')
-            return
+        password = self.read_json().get('password')
         with connection() as database:
-            stored = database.execute('SELECT password_hash FROM users WHERE id = ?', (user['id'],)).fetchone()['password_hash']
-            if not password_matches(password, stored):
-                login_throttle.record(throttle_key)
-                raise BadRequest('That password is not right.', HTTPStatus.FORBIDDEN)
+            self.confirm_password(database, user, password)
             delete_account_rows(database, user['id'])
         print(f"Deleted the account {user['username']} at its owner's request.", flush=True)
         self.send_json(HTTPStatus.OK, {'ok': True}, [self.session_cookie('', 0)])
@@ -1188,7 +1207,7 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             token = self.session_token()
             if token:
                 with connection() as database:
-                    database.execute('DELETE FROM sessions WHERE token = ?', (token,))
+                    database.execute('DELETE FROM sessions WHERE token = ?', (session_hash(token),))
             self.send_json(HTTPStatus.OK, {'ok': True}, [self.session_cookie('', 0)])
             return
         user = self.require_user()

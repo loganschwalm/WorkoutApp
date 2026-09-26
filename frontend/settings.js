@@ -172,14 +172,9 @@ function showAccount() {
   getSettingElement('accountEmail').hidden = getSettingElement('changeEmailButton').hidden = getSettingElement('changePasswordButton').hidden = !known;
   getSettingElement('deleteAccountButton').hidden = !known;
   getSettingElement('changeEmailButton').textContent = window.localEmail ? 'Change email' : 'Add email';
-  getSettingElement('emailEditor').hidden = getSettingElement('passwordEditor').hidden = getSettingElement('deleteEditor').hidden = true;
-  getSettingElement('accountNotice').hidden = true;
+  showAccountPanel(null);
 }
 
-function showEmailError(message) {
-  getSettingElement('emailFeedback').textContent = message;
-  getSettingElement('emailFeedback').hidden = false;
-}
 
 // ---- Your data ------------------------------------------------------------
 // Export saves the account to a file: all of it as JSON, which Import reads back (here or on another server), or every
@@ -292,14 +287,6 @@ getSettingElement('signOutButton').onclick = async () => {
   }
   location.href = '/login.html';
 };
-getSettingElement('changeEmailButton').onclick = () => {
-  getSettingElement('emailSetting').value = window.localEmail || '';
-  getSettingElement('emailPassword').value = '';
-  getSettingElement('emailFeedback').hidden = getSettingElement('accountNotice').hidden = true;
-  getSettingElement('passwordEditor').hidden = getSettingElement('deleteEditor').hidden = true;
-  getSettingElement('emailEditor').hidden = false;
-  getSettingElement('emailSetting').focus();
-};
 getSettingElement('exportButton').onclick = () => exportAccount(false);
 getSettingElement('exportCsvButton').onclick = () => exportAccount(true);
 getSettingElement('importButton').onclick = () => getSettingElement('importFile').click();
@@ -309,103 +296,86 @@ getSettingElement('importFile').onchange = () => {
   getSettingElement('importFile').value = '';
   if (file) importAccount(file);
 };
-getSettingElement('cancelEmail').onclick = () => { getSettingElement('emailEditor').hidden = true; };
-getSettingElement('changePasswordButton').onclick = () => {
-  getSettingElement('currentPassword').value = getSettingElement('newPassword').value = '';
-  getSettingElement('passwordFeedback').hidden = getSettingElement('accountNotice').hidden = true;
-  getSettingElement('emailEditor').hidden = getSettingElement('deleteEditor').hidden = true;
-  getSettingElement('passwordEditor').hidden = false;
-  getSettingElement('currentPassword').focus();
+
+// ---- The account's panels ------------------------------------------------
+// Change email, Change password and Delete account each open a panel under the account, one at a time. Each asks for the
+// password again and sends its own form. `start` fills the panel as it opens, `send` gives what to send (or nothing, to
+// stop: a question answered no), and `done` takes the server's answer.
+const offlineMessage = 'Could not reach the server. Try again when you are back online.';
+const accountPanels = {
+  email:{
+    editor:'emailEditor', open:'changeEmailButton', cancel:'cancelEmail', form:'emailForm', submit:'saveEmail', feedback:'emailFeedback', focus:'emailSetting',
+    path:'/api/account/email', offline:offlineMessage, failed:'Could not save the email. Try again.',
+    start:() => { getSettingElement('emailSetting').value = window.localEmail || ''; getSettingElement('emailPassword').value = ''; },
+    send:() => ({ email:getSettingElement('emailSetting').value, password:getSettingElement('emailPassword').value }),
+    done:result => { window.localEmail = result.user.email; showAccount(); }
+  },
+  password:{
+    editor:'passwordEditor', open:'changePasswordButton', cancel:'cancelPassword', form:'passwordForm', submit:'savePassword', feedback:'passwordFeedback',
+    focus:'currentPassword', path:'/api/account/password', offline:offlineMessage, failed:'Could not change the password. Try again.',
+    start:() => { getSettingElement('currentPassword').value = getSettingElement('newPassword').value = ''; },
+    send:() => ({ currentPassword:getSettingElement('currentPassword').value, newPassword:getSettingElement('newPassword').value }),
+    done:result => {
+      getSettingElement('passwordEditor').hidden = true;
+      const others = result.signedOut === 1 ? 'One other device was' : `${result.signedOut} other devices were`;
+      getSettingElement('accountNotice').textContent = `Password changed.${result.signedOut ? ` ${others} signed out.` : ''}`;
+      getSettingElement('accountNotice').hidden = false;
+    }
+  },
+  delete:{
+    editor:'deleteEditor', open:'deleteAccountButton', cancel:'cancelDelete', form:'deleteForm', submit:'confirmDelete', feedback:'deleteFeedback', focus:'deletePassword',
+    path:'/api/account/delete', offline:'Could not reach the server. Nothing was deleted; try again when you are back online.',
+    failed:'Could not delete the account. Nothing was deleted.',
+    start:() => { getSettingElement('deletePassword').value = ''; },
+    send:() => confirm(`Delete the account ${window.localUsername} and all its workouts? This cannot be undone.`)
+      && { password:getSettingElement('deletePassword').value },
+    done:() => { forgetLocalAccount(); location.href = '/login.html?deleted=1'; }
+  }
 };
-getSettingElement('cancelPassword').onclick = () => { getSettingElement('passwordEditor').hidden = true; };
-getSettingElement('deleteAccountButton').onclick = () => {
-  getSettingElement('deletePassword').value = '';
-  getSettingElement('deleteFeedback').hidden = getSettingElement('accountNotice').hidden = true;
-  getSettingElement('emailEditor').hidden = getSettingElement('passwordEditor').hidden = true;
-  getSettingElement('deleteEditor').hidden = false;
-  getSettingElement('deletePassword').focus();
-};
-getSettingElement('cancelDelete').onclick = () => { getSettingElement('deleteEditor').hidden = true; };
-getSettingElement('deleteForm').onsubmit = async event => {
-  event.preventDefault();
-  const feedback = getSettingElement('deleteFeedback');
+
+// Opens one panel and closes the others; null closes them all.
+function showAccountPanel(name) {
+  Object.entries(accountPanels).forEach(([key, panel]) => { getSettingElement(panel.editor).hidden = key !== name; });
+  getSettingElement('accountNotice').hidden = true;
+  if (!name) return;
+  const panel = accountPanels[name];
+  getSettingElement(panel.feedback).hidden = true;
+  panel.start();
+  getSettingElement(panel.focus).focus();
+}
+
+async function sendAccountPanel(panel) {
+  const feedback = getSettingElement(panel.feedback);
   const fail = message => { feedback.textContent = message; feedback.hidden = false; };
   feedback.hidden = true;
-  if (!confirm(`Delete the account ${window.localUsername} and all its workouts? This cannot be undone.`)) return;
-  const button = getSettingElement('confirmDelete');
+  const body = panel.send();
+  if (!body) return;
+  const button = getSettingElement(panel.submit);
   button.disabled = true;
   try {
     let response;
     try {
-      response = await fetch('/api/account/delete', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ password:getSettingElement('deletePassword').value }) });
+      response = await fetch(panel.path, { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(body) });
     } catch (error) {
-      fail('Could not reach the server. Nothing was deleted; try again when you are back online.');
+      fail(panel.offline);
       return;
     }
     const result = await response.json().catch(() => ({}));
     if (!response.ok) {
-      fail(result.error || 'Could not delete the account. Nothing was deleted.');
+      fail(result.error || panel.failed);
       return;
     }
-    forgetLocalAccount();
-    location.href = '/login.html?deleted=1';
+    panel.done(result);
   } finally {
     button.disabled = false;
   }
-};
-getSettingElement('passwordForm').onsubmit = async event => {
-  event.preventDefault();
-  const save = getSettingElement('savePassword');
-  const feedback = getSettingElement('passwordFeedback');
-  const fail = message => { feedback.textContent = message; feedback.hidden = false; };
-  feedback.hidden = true;
-  save.disabled = true;
-  try {
-    let response;
-    try {
-      response = await fetch('/api/account/password', { method:'POST', headers:{ 'Content-Type':'application/json' },
-        body:JSON.stringify({ currentPassword:getSettingElement('currentPassword').value, newPassword:getSettingElement('newPassword').value }) });
-    } catch (error) {
-      fail('Could not reach the server. Try again when you are back online.');
-      return;
-    }
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      fail(result.error || 'Could not change the password. Try again.');
-      return;
-    }
-    getSettingElement('passwordEditor').hidden = true;
-    const notice = getSettingElement('accountNotice');
-    notice.textContent = `Password changed.${result.signedOut ? ` ${result.signedOut === 1 ? 'One other device was' : `${result.signedOut} other devices were`} signed out.` : ''}`;
-    notice.hidden = false;
-  } finally {
-    save.disabled = false;
-  }
-};
-getSettingElement('emailForm').onsubmit = async event => {
-  event.preventDefault();
-  const save = getSettingElement('saveEmail');
-  getSettingElement('emailFeedback').hidden = true;
-  save.disabled = true;
-  try {
-    let response;
-    try {
-      response = await fetch('/api/account/email', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ email:getSettingElement('emailSetting').value, password:getSettingElement('emailPassword').value }) });
-    } catch (error) {
-      showEmailError('Could not reach the server. Try again when you are back online.');
-      return;
-    }
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      showEmailError(result.error || 'Could not save the email. Try again.');
-      return;
-    }
-    window.localEmail = result.user.email;
-    showAccount();
-  } finally {
-    save.disabled = false;
-  }
-};
+}
+
+Object.entries(accountPanels).forEach(([name, panel]) => {
+  getSettingElement(panel.open).onclick = () => showAccountPanel(name);
+  getSettingElement(panel.cancel).onclick = () => { getSettingElement(panel.editor).hidden = true; };
+  getSettingElement(panel.form).onsubmit = event => { event.preventDefault(); sendAccountPanel(panel); };
+});
 getSettingElement('settingsForm').onsubmit = event => {
   event.preventDefault();
   const settings = readSettingsForm();
