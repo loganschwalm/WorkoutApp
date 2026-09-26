@@ -341,3 +341,79 @@ def run(t):
     check('someone new sees the templates straight away, and no Start again',
           cdp.ev("!document.getElementById('templateArea').hidden && document.getElementById('recentCard').hidden") is True)
     t.set_cookie(t.token)
+
+    # ------------------------------------------------------------------ the training calendar
+    print('C   the training calendar and weekly streak')
+    import datetime as dt
+    calendar = account('calendar')
+    today = dt.date.today()
+    monday = today - dt.timedelta(days=today.weekday())
+
+    def at(day, hour=12):
+        return int(dt.datetime.combine(day, dt.time(hour)).timestamp() * 1000)
+
+    def week(offset, weekdays):
+        return [at(monday + dt.timedelta(weeks=offset, days=d)) for d in weekdays]
+
+    # This week: two today. Last week and the week before: three each. Three weeks back: one. Then a run of three
+    # weeks of three, five to seven weeks back: the best streak so far.
+    plan = [('Today A', [at(today, 0) + 30 * 60000]), ('Today B', [at(today, 0) + 45 * 60000]),
+            ('Last week', week(-1, (0, 2, 4))), ('Two weeks back', week(-2, (1, 3, 5))), ('Three weeks back', week(-3, (2,))),
+            ('Five weeks back', week(-5, (0, 2, 4))), ('Six weeks back', week(-6, (0, 2, 4))), ('Seven weeks back', week(-7, (0, 2, 4)))]
+    for name, times in plan:
+        for created in times:
+            t.api('POST', '/api/workouts', {'name': name, 'createdAt': created, 'exercises': [t.ex('Squat', 100, 5, [(5, 100)])]}, calendar)
+    t.set_cookie(calendar)
+    cdp.goto('/history.html')
+    cdp.wait("document.querySelectorAll('.calendar-day').length > 0")
+    cdp.pause(0.4)
+
+    def calendar_state():
+        return cdp.ev("""(() => ({
+          summary: document.getElementById('calendarSummary').textContent,
+          streak: document.getElementById('streakSummary').textContent,
+          days: document.querySelectorAll('.calendar-day').length,
+          trained: [...document.querySelectorAll('.calendar-day.trained')].map(d => d.dataset.date),
+          today: [...document.querySelectorAll('.calendar-day.today')].map(d => [d.dataset.date, d.className, d.title]),
+          future: document.querySelectorAll('.calendar-day.future').length,
+          first: document.querySelector('.calendar-day').dataset.date,
+          months: [...document.querySelectorAll('.calendar-month')].filter(m => m.textContent).length }))()""")
+
+    state = calendar_state()
+    expected_days = sorted({dt.date.fromtimestamp(created / 1000).isoformat() for _, times in plan for created in times})
+    check('12 weeks of days, Monday first', state['days'] == 84 and state['first'] == (monday - dt.timedelta(weeks=11)).isoformat(), state)
+    check('every day with a workout is filled, and only those', sorted(state['trained']) == expected_days, f"{sorted(state['trained'])} vs {expected_days}")
+    check('today is marked, filled darker for two workouts, and names them',
+          state['today'] and state['today'][0][0] == today.isoformat() and 'many' in state['today'][0][1]
+          and 'Today A' in state['today'][0][2] and 'Today B' in state['today'][0][2], state['today'])
+    check('the rest of this week is left blank', state['future'] == 6 - today.weekday(), state['future'])
+    check('month names head the weeks they start in', state['months'] >= 3, state['months'])
+    check('this week counts toward the default goal of 3', state['summary'] == 'This week: 2 of 3 workouts', state['summary'])
+    check('an unfinished week does not break the streak: last week and the one before', state['streak'] == '2-week streak · best 3', state['streak'])
+    rest = cdp.ev("document.querySelector('.calendar-day:not(.trained):not(.future)').title")
+    check('a day without a workout says rest', rest.endswith(': rest'), rest)
+
+    cdp.ev("document.getElementById('settingsButton').click()")
+    check('the weekly goal is in Settings, at 3', cdp.ev("document.getElementById('weeklyGoalSetting').value") == '3')
+    cdp.ev("document.getElementById('weeklyGoalSetting').value = '2'; document.getElementById('settingsForm').requestSubmit()")
+    cdp.pause(0.4)
+    state = calendar_state()
+    check('a goal of 2 counts at once: this week is reached', state['summary'] == 'This week: 2 workouts · goal of 2 reached', state['summary'])
+    check('and joins the streak, which is now the best', state['streak'] == '3-week streak', state['streak'])
+    check('the goal is saved to the account', t.wait_for(lambda: t.api('GET', '/api/state', token=calendar)[0]['settings'].get('weeklyGoal') == 2))
+    cdp.ev("document.getElementById('settingsButton').click()")
+    cdp.ev("document.getElementById('weeklyGoalSetting').value = '4'; document.getElementById('settingsForm').requestSubmit()")
+    cdp.pause(0.4)
+    state = calendar_state()
+    check('a goal no week has reached means no streak, and no best', state['streak'] == 'Reach 4 in a week to start a streak'
+          and state['summary'] == 'This week: 2 of 4 workouts', state)
+
+    empty = account('nocalendar')
+    t.set_cookie(empty)
+    cdp.goto('/history.html')
+    cdp.wait("document.querySelectorAll('.calendar-day').length > 0")
+    cdp.pause(0.3)
+    state = calendar_state()
+    check('someone with no workouts yet sees an empty calendar and how to start', state['trained'] == [] and state['summary'] == 'This week: 0 of 3 workouts'
+          and state['streak'] == 'Reach 3 in a week to start a streak', state)
+    t.set_cookie(t.token)
