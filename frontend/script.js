@@ -233,6 +233,21 @@ function stopRestTimer() {
   $('restToggleBtn').textContent = 'Start rest';
 }
 
+// −30s and +30s: more rest after a heavy set, less after an easy one, running or paused. Running, it moves the end time
+// itself (so a part-second is kept), and taking it down to nothing ends the rest quietly: you asked for it, so no alert.
+const REST_ADJUST_LIMIT = 60 * 60;
+
+function adjustRest(seconds) {
+  if (restInterval) {
+    restEndsAt = Math.min(Date.now() + REST_ADJUST_LIMIT * 1000, restEndsAt + seconds * 1000);
+    syncRestRemaining();
+    if (restRemaining <= 0) stopRestTimer();
+  } else {
+    restRemaining = Math.min(REST_ADJUST_LIMIT, Math.max(0, restRemaining + seconds));
+  }
+  updateRestTimer();
+}
+
 function startRestTimer() {
   restRemaining = getWorkoutSettings().restDuration;
   $('restPanel').hidden = false;
@@ -598,6 +613,12 @@ $('restToggleBtn').onclick = () => {
   }
 };
 $('restResetBtn').onclick = () => { stopRestTimer(); restRemaining = getWorkoutSettings().restDuration; updateRestTimer(); };
+$('restAdjust').onclick = e => {
+  const button = e.target.closest('[data-rest-adjust]');
+  if (!button) return;
+  unlockAudio();
+  adjustRest(Number(button.dataset.restAdjust));
+};
 $('nextExerciseBtn').onclick = () => {
   if (activeSession.currentIndex === activeSession.exercises.length - 1) finishWorkout();
   else goToExercise(activeSession.currentIndex + 1);

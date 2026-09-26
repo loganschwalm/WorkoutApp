@@ -152,7 +152,11 @@ body.has-install-banner { padding-bottom:96px; }
 html[data-theme="dark"] .rest-panel { background:#303653; }
 .rest-time { display:flex; align-items:baseline; gap:10px; }
 .rest-time span { color:var(--accent); font-size:1.5rem; font-weight:800; font-variant-numeric:tabular-nums; }
-.rest-actions { display:flex; gap:8px; }
+.rest-actions { display:flex; gap:8px; margin-left:auto; }
+/* −30s and +30s sit by the time. On a narrow screen the panel wraps, the pause and reset buttons going under. */
+.rest-panel { flex-wrap:wrap; }
+.rest-adjust { display:flex; gap:6px; align-self:center; }
+.rest-adjust button { padding:6px 10px; font-size:.82rem; background:var(--card); }
 .rest-actions button { padding:9px 13px; background:var(--card); }
 .template-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:14px; }
 .template-card { display:flex; flex-direction:column; justify-content:space-between; gap:16px; padding:16px; border:1px solid var(--line); border-radius:12px; }

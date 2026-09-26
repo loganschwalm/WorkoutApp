@@ -49,7 +49,7 @@
         <button class="primary" id="completeSetBtn" type="button">Complete set</button>
       </div>
       <p class="plate-hint" id="plateHint" hidden></p>
-      <div class="rest-panel" id="restPanel" hidden><div class="rest-time"><strong>Rest</strong><span id="timerDisplay">1:30</span></div><div class="rest-actions"><button class="secondary" id="restToggleBtn" type="button">Start rest</button><button class="secondary" id="restResetBtn" type="button">Reset</button></div></div>
+      <div class="rest-panel" id="restPanel" hidden><div class="rest-time"><strong>Rest</strong><span id="timerDisplay">1:30</span><div class="rest-adjust" id="restAdjust"><button class="secondary" type="button" data-rest-adjust="-30" aria-label="30 seconds less rest">&minus;30s</button><button class="secondary" type="button" data-rest-adjust="30" aria-label="30 seconds more rest">+30s</button></div></div><div class="rest-actions"><button class="secondary" id="restToggleBtn" type="button">Start rest</button><button class="secondary" id="restResetBtn" type="button">Reset</button></div></div>
       <ul class="set-list" id="completedSets"></ul>
       <p class="subtitle" id="activeSyncNotice" role="status" hidden>Can&rsquo;t reach the server. Your sets are saved on this device and will sync automatically.</p>
       <details class="add-exercise" id="activeNotesToggle"><summary>Workout notes</summary><textarea class="notes-input" id="activeNotes" rows="3" aria-label="Workout notes" placeholder="Add notes while you train."></textarea></details>
