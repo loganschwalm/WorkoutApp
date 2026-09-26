@@ -310,7 +310,7 @@ def run(t):
     open_tracker()
     cdp.wait("document.querySelectorAll('#savedWorkoutList .saved-workout').length >= 3")
     names = cdp.ev("[...document.querySelectorAll('#templateList .program-template h3')].map(h => h.textContent)")
-    check('Reddit PPL is listed after 5/3/1', names == ['Wendler 5/3/1', 'Reddit PPL'], names)
+    check('Reddit PPL is listed after 5/3/1', names[:2] == ['Wendler 5/3/1', 'Reddit PPL'], names)
     click(f'{PPL} [data-program-action=setup]')
     check('its own setup dialog opens', text('programModalTitle') == 'Start Reddit PPL' and 'sets of 5 until the bar slows down' in text('programIntro'), text('programIntro'))
     check('asking for starting weights, not one-rep maxes', visible('programMaxKindField') is False)
@@ -457,3 +457,205 @@ def run(t):
     click('#endProgramBtn')
     check('PPL workouts stay in the history', sum(w['name'].startswith('PPL') for w in t.workouts()) == 4, [w['name'] for w in t.workouts()])
     check('no Content-Security-Policy violations with PPL either', violations() == [], violations())
+
+    run_apartment_gym(t, text, visible, field, set_field, click, server_program, program, chips, complete_set, finish_workout, violations)
+
+
+# Every exercise of each Apartment Gym day, in order. The equipment is dumbbells, an adjustable bench, a cable stack
+# with one handle, and chest press, lat pulldown, leg extension and leg curl machines; nothing else.
+APARTMENT_DAYS = [
+    ['Machine Chest Press', 'Incline Dumbbell Press', 'Single-Arm Cable Pulldown', 'Single-Arm Cable Row', 'Dumbbell Lateral Raise', 'Single-Arm Cable Pushdown'],
+    ['Dumbbell Bulgarian Split Squat', 'Single-Leg Dumbbell Romanian Deadlift', 'Leg Curl', 'Leg Extension', 'Single-Leg Dumbbell Calf Raise', 'Pallof Press'],
+    ['Lat Pulldown', 'Dumbbell Bench Press', 'Chest-Supported Dumbbell Row', 'Seated Dumbbell Shoulder Press', 'Single-Arm Cable Rear Delt Fly', 'Dumbbell Hammer Curl'],
+    ['Dumbbell Romanian Deadlift', 'Goblet Squat', 'Dumbbell Step-Up', 'Leg Curl', 'Leg Extension', 'Cable Woodchop'],
+]
+# What each exercise needs, from the list above.
+APARTMENT_EQUIPMENT = {
+    'dumbbells': ('Dumbbell', 'Goblet Squat'),
+    'cable stack': ('Cable', 'Pallof Press'),
+    'machines': ('Machine Chest Press', 'Lat Pulldown', 'Leg Curl', 'Leg Extension'),
+}
+APARTMENT = '#templateList .program-template[data-program-id="apartment-gym"]'
+
+
+def run_apartment_gym(t, text, visible, field, set_field, click, server_program, program, chips, complete_set, finish_workout, violations):
+    cdp, check, wait_for = t.cdp, t.check, t.wait_for
+
+    def numbers():
+        return cdp.ev("[...document.querySelectorAll('#programMaxes li')].map(li => li.textContent)") or []
+
+    def day_rows():
+        return cdp.ev("[...document.querySelectorAll('#programWeeks .program-day')].map(li => li.querySelector('div').textContent)") or []
+
+    def maxes():
+        return (program() or {}).get('trainingMaxes', {})
+
+    def start_day(day):
+        click(f'#programWeeks [data-program-action=start][data-day="{day}"]')
+
+    def main_lift(reps):
+        """Log the main lift's sets with these reps each, then finish without the accessories."""
+        for count in reps:
+            complete_set(count)
+        finish_workout()
+
+    # ------------------------------------------------------------------ P15 offered and set up
+    print('P15 Apartment Gym is offered, and set up for its equipment')
+    t.open_tracker()
+    names = cdp.ev("[...document.querySelectorAll('#templateList .program-template h3')].map(h => h.textContent)")
+    check('Apartment Gym is listed after the other programs', names == ['Wendler 5/3/1', 'Reddit PPL', 'Apartment Gym'], names)
+    card = cdp.ev(f"document.querySelector('{APARTMENT}').textContent")
+    check('its card says what it needs and how often', 'dumbbells up to 50 lbs' in card and '4 days a week · upper and lower body twice each' in card, card)
+    click(f'{APARTMENT} [data-program-action=setup]')
+    check('its setup dialog opens', text('programModalTitle') == 'Start Apartment Gym' and 'Dumbbell weights are per hand.' in text('programIntro'), text('programIntro'))
+    check('asking for starting weights, not one-rep maxes', visible('programMaxKindField') is False)
+    controls = cdp.ev("[...document.querySelectorAll('#programOptions select, #programOptions input')].map(e => e.id)")
+    check('with its equipment as the options', controls == ['programDumbbellMax', 'programMachineStep'], controls)
+    check('the heaviest dumbbells default to 50 lbs, the stack to 10-lb plates',
+          field('programDumbbellMax') == '50' and field('programMachineStep') == '10', f"{field('programDumbbellMax')} {field('programMachineStep')}")
+    prefilled = {lift: field(f'programMax-{lift}') for lift in ('chestPress', 'splitSquat', 'pulldown', 'rdl')}
+    check('a logged lift starts from its heaviest set of 8 or more', prefilled == {'chestPress': '', 'splitSquat': '', 'pulldown': '100', 'rdl': ''}, prefilled)
+    check('and the intro says so', 'heaviest set of 8 or more' in text('programIntro'), text('programIntro'))
+    check('machines go up a plate, dumbbells 5 lbs, at the top of the range',
+          text('programHint-chestPress') == '+10 lbs once every set reaches 10' and text('programHint-splitSquat') == '+5 lbs once every set reaches 12',
+          f"{text('programHint-chestPress')} / {text('programHint-splitSquat')}")
+    set_field('programMax-splitSquat', 60)
+    check('a dumbbell weight above the heaviest pair is capped', text('programHint-splitSquat') == 'Capped at 50 lbs, your heaviest dumbbells', text('programHint-splitSquat'))
+    set_field('programMachineStep', 5)
+    check('the stack step changes the machine hints', text('programHint-chestPress') == '+5 lbs once every set reaches 10', text('programHint-chestPress'))
+    set_field('programMachineStep', 10)
+    set_field('programMax-chestPress', 100)
+    set_field('programMax-rdl', 40)
+    cdp.ev("document.getElementById('programForm').requestSubmit()")
+    cdp.pause(0.5)
+    state = program() or {}
+    check('it starts with the split squat capped at 50', maxes() == {'chestPress': 100, 'splitSquat': 50, 'pulldown': 100, 'rdl': 40}, maxes())
+    check('and its options stored as numbers', state.get('options') == {'dumbbellMax': 50, 'machineStep': 10}, state.get('options'))
+    check('the program card shows it', text('programTitle') == 'Apartment Gym' and text('programSummary') == 'Week 1 · 0 of 4 workouts done', text('programSummary'))
+    check('a working weight for each main lift', numbers() == [
+        'Machine Chest Press100 lbs+10 lbs once every set reaches 10',
+        'Dumbbell Bulgarian Split Squat50 lbsHeaviest dumbbells · progress by slowing the reps',
+        'Lat Pulldown100 lbs+10 lbs once every set reaches 10',
+        'Dumbbell Romanian Deadlift40 lbs+5 lbs once every set reaches 12'], numbers())
+    check('the week is upper and lower body twice', day_rows() == [
+        'Upper AMachine Chest Press 4 × 6–10 at 100 lbs', 'Lower ADumbbell Bulgarian Split Squat 3 × 8–12 at 50 lbs',
+        'Upper BLat Pulldown 4 × 6–10 at 100 lbs', 'Lower BDumbbell Romanian Deadlift 4 × 8–12 at 40 lbs'], day_rows())
+    planned = cdp.ev("[0, 1, 2, 3].map(day => programDefinition(currentProgram).workout(currentProgram, 0, day).map(e => e.name))")
+    check('each day is exactly its planned exercises', planned == APARTMENT_DAYS, planned)
+    unusable = [name for day in planned or [] for name in day if not any(word in name for words in APARTMENT_EQUIPMENT.values() for word in words)]
+    check('every exercise uses only the listed equipment', planned and not unusable, unusable)
+    # A deadlift is fine only as a dumbbell Romanian deadlift; there is no barbell to pull from the floor.
+    needs_more = [name for day in planned or [] for name in day
+                  if any(word in name for word in ('Barbell', 'Back Squat', 'Pull-up', 'Chin-up', 'Dip', 'Leg Press')) or ('Deadlift' in name and 'Dumbbell' not in name)]
+    check('nothing needs a barbell, rack, pull-up bar, dip station or leg press', planned and not needs_more, needs_more)
+    ranges = cdp.ev("[0, 1, 2, 3].flatMap(day => programDefinition(currentProgram).workout(currentProgram, 0, day).map(e => e.plan.every(s => s.repsMax > s.reps)))")
+    check('every set of every exercise is a rep range', ranges and all(ranges), ranges)
+    lines = cdp.ev("[...document.querySelectorAll('#programNext li')].map(li => li.textContent)")
+    check('the next workout lists the day', lines == ['Machine Chest Press 4 × 6–10 at 100 lbs', 'Incline Dumbbell Press 3 × 8–12', 'Single-Arm Cable Pulldown 3 × 10–12',
+                                                   'Single-Arm Cable Row 3 × 10–12', 'Dumbbell Lateral Raise 3 × 12–15', 'Single-Arm Cable Pushdown 3 × 10–15'], lines)
+    check('the program reaches the server', wait_for(lambda: (server_program() or {}).get('definition') == 'apartment-gym'), server_program())
+
+    # ------------------------------------------------------------------ P16 top of the range
+    print('P16 every set at the top of the range adds weight')
+    known = t.ids()
+    click('#programNext [data-program-action=start]')
+    check('it starts as the day’s workout', cdp.ev("document.getElementById('activeWorkoutTitle').textContent") == 'Apartment Gym Upper A'
+          and [c[0] for c in chips()] == ['100 lbs × 6–10'] * 4, chips())
+    check('planned as a rep range at the working weight', text('activeExerciseTarget') == 'Set 1 of 4: 100 lbs × 6–10.'
+          and field('activeWeight') == '100' and field('completedReps') == '6', text('activeExerciseTarget'))
+    for _ in range(4):
+        complete_set(10)
+    cdp.ev("document.getElementById('nextExerciseBtn').click()")
+    cdp.pause(0.3)
+    check('accessories come with their setup notes', text('activeExerciseName') == 'Incline Dumbbell Press'
+          and text('activeExerciseTarget') == 'Set 1 of 3: 8–12 reps. Bench at 30–45°.' and field('activeWeight') == '', text('activeExerciseTarget'))
+    finish_workout()
+    check('the workout is saved', wait_for(lambda: len(t.ids() - known) == 1), '')
+    saved = next((w for w in t.workouts() if w['id'] not in known), {})
+    check('under the day’s name, labelled with its week', saved.get('name') == 'Apartment Gym Upper A' and (saved.get('program') or {}).get('label') == 'Week 1',
+          json.dumps({k: saved.get(k) for k in ('name', 'program')}))
+    feedback = text('formFeedback')
+    check('the machine goes up a plate, and says so', 'Machine Chest Press goes up to 110 lbs next time: every set reached 10 reps.' in feedback
+          and 'Next in Apartment Gym: Lower A.' in feedback, feedback)
+    check('the new weight is kept, and the day marked done', maxes().get('chestPress') == 110
+          and 'Done' in cdp.ev("document.querySelectorAll('#programWeeks .program-day')[0].textContent"), maxes())
+    check('and reaches the server', wait_for(lambda: (server_program() or {}).get('trainingMaxes', {}).get('chestPress') == 110), server_program())
+
+    # ------------------------------------------------------------------ P17 the heaviest dumbbells, and within the range
+    print('P17 the heaviest dumbbells, and a session inside the range')
+    click('#programNext [data-program-action=start]')
+    check('the split squat says the weight is per dumbbell and the reps per leg',
+          text('activeExerciseTarget') == 'Set 1 of 3: 50 lbs × 8–12. Weight per dumbbell, reps per leg.' and [c[0] for c in chips()] == ['50 lbs × 8–12'] * 3, text('activeExerciseTarget'))
+    main_lift([12, 12, 12])
+    check('at the heaviest dumbbells the weight stays and the reps get slower', 'Dumbbell Bulgarian Split Squat reached 12 reps on every set with your heaviest dumbbells.'
+          in text('formFeedback') and 'lower each rep over 3 seconds' in text('formFeedback'), text('formFeedback'))
+    check('the split squat stays at 50', maxes().get('splitSquat') == 50, maxes())
+    click('#programNext [data-program-action=start]')
+    check('Upper B starts with the pulldown', [c[0] for c in chips()] == ['100 lbs × 6–10'] * 4, chips())
+    main_lift([9, 8, 7, 6])
+    check('reps inside the range keep the weight until the top', 'Lat Pulldown stays at 100 lbs until every set reaches 10 reps.' in text('formFeedback'), text('formFeedback'))
+    check('with no miss counted', maxes().get('pulldown') == 100 and not (program() or {}).get('stalls', {}).get('pulldown'), program())
+
+    # ------------------------------------------------------------------ P18 below the range, and the next week
+    print('P18 reps below the range, the next week, and the 10% drop')
+    click('#programNext [data-program-action=start]')
+    check('Lower B starts with the Romanian deadlift', [c[0] for c in chips()] == ['40 lbs × 8–12'] * 4, chips())
+    main_lift([10, 9, 8, 6])
+    feedback = text('formFeedback')
+    check('a set below the range keeps the weight and counts a miss',
+          'Dumbbell Romanian Deadlift stays at 40 lbs: 1 session in a row below 8 reps. A third drops it 10%.' in feedback, feedback)
+    check('the fourth day finishes the week', 'Week 1 of Apartment Gym is complete. Next in Apartment Gym: Upper A.' in feedback, feedback)
+    state = program() or {}
+    check('week 2 starts with the new weights', state.get('cycle') == 2 and state.get('done') == {} and text('programSummary') == 'Week 2 · 0 of 4 workouts done'
+          and 'Machine Chest Press 4 × 6–10 at 110 lbs' in text('programNext'), text('programSummary'))
+    note = cdp.ev("(() => { const s = document.querySelectorAll('#programMaxes li small')[3]; return [s.textContent, s.className]; })()")
+    check('the miss is shown as a warning', note == ['Missed 1 in a row · 3 drops it to 35', 'warn'], note)
+    start_day(3)
+    main_lift([8, 8, 7, 7])
+    check('a second miss in a row is counted', '2 sessions in a row below 8 reps' in text('formFeedback'), text('formFeedback'))
+    row = cdp.ev("document.querySelectorAll('#programWeeks .program-day')[3].textContent")
+    check('and the day says it missed reps', 'Done (missed reps)' in row, row)
+    start_day(3)
+    main_lift([7, 7, 7, 7])
+    check('the third drops the weight 10%', 'Dumbbell Romanian Deadlift fell below 8 reps three sessions in a row, so it drops 10% to 35 lbs.' in text('formFeedback'), text('formFeedback'))
+    check('and clears the misses', maxes().get('rdl') == 35 and not (program() or {}).get('stalls', {}).get('rdl'), program())
+
+    # ------------------------------------------------------------------ P19 changing the equipment
+    print('P19 changing the equipment settings')
+    click('#editProgramBtn')
+    check('editing shows the working weights and equipment', text('programModalTitle') == 'Edit Apartment Gym'
+          and field('programMax-chestPress') == '110' and field('programDumbbellMax') == '50', field('programMax-chestPress'))
+    set_field('programDumbbellMax', 60)
+    set_field('programMachineStep', 5)
+    check('heavier dumbbells let the split squat go up again', text('programHint-splitSquat') == '+5 lbs once every set reaches 12', text('programHint-splitSquat'))
+    cdp.ev("document.getElementById('programForm').requestSubmit()")
+    cdp.pause(0.4)
+    check('the new equipment is kept', (program() or {}).get('options') == {'dumbbellMax': 60, 'machineStep': 5}, (program() or {}).get('options'))
+    check('and the card says so', numbers()[1] == 'Dumbbell Bulgarian Split Squat50 lbs+5 lbs once every set reaches 12'
+          and numbers()[0] == 'Machine Chest Press110 lbs+5 lbs once every set reaches 10', numbers())
+    start_day(1)
+    main_lift([12, 12, 12])
+    check('the split squat now goes up', 'Dumbbell Bulgarian Split Squat goes up to 55 lbs next time' in text('formFeedback') and maxes().get('splitSquat') == 55, text('formFeedback'))
+    start_day(0)
+    main_lift([10, 10, 10, 10])
+    check('the chest press goes up by the smaller step', 'Machine Chest Press goes up to 115 lbs next time' in text('formFeedback') and maxes().get('chestPress') == 115, text('formFeedback'))
+    click('#editProgramBtn')
+    set_field('programDumbbellMax', 45)
+    check('lighter dumbbells cap a heavier working weight', text('programHint-splitSquat') == 'Capped at 45 lbs, your heaviest dumbbells', text('programHint-splitSquat'))
+    cdp.ev("document.getElementById('programForm').requestSubmit()")
+    cdp.pause(0.4)
+    check('and it is lowered to them', maxes() == {'chestPress': 115, 'splitSquat': 45, 'pulldown': 100, 'rdl': 35}, maxes())
+    check('the server has it all', wait_for(lambda: (server_program() or {}).get('trainingMaxes') == {'chestPress': 115, 'splitSquat': 45, 'pulldown': 100, 'rdl': 35}), server_program())
+
+    # ------------------------------------------------------------------ P20 history and ending it
+    print('P20 the workouts stay in the history')
+    cdp.goto('/history.html')
+    cdp.wait("document.querySelectorAll('.history-workout').length > 0")
+    cdp.pause(0.4)
+    listed = cdp.ev("document.getElementById('historyList').textContent")
+    check('History lists them under their day, with their week', 'Apartment Gym Lower A' in listed and 'Week 2' in listed, listed[:300])
+    t.open_tracker()
+    t.cdp.answer = True
+    click('#endProgramBtn')
+    check('ending the program keeps its workouts', sum(w['name'].startswith('Apartment Gym') for w in t.workouts()) == 8, [w['name'] for w in t.workouts()])
+    check('no Content-Security-Policy violations with Apartment Gym either', violations() == [], violations())

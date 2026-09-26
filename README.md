@@ -129,20 +129,21 @@ Custom templates are saved to your account on the server, and cached in the brow
 still work while the server is unreachable. A template created or edited offline uploads when the
 server is reachable again.
 
-The templates also offer two [training programs](#training-programs): Wendler 5/3/1 and Reddit PPL.
+The templates also offer three [training programs](#training-programs): Wendler 5/3/1, Reddit PPL, and Apartment Gym.
 
 ### Training programs
 
 A training program is a whole plan rather than a single workout. You follow one at a time; setting
-up the other replaces it, and the workouts you finished stay in your history. Both work the same way:
+up another replaces it, and the workouts you finished stay in your history. They all work the same way:
 
 - The plan is on the Tracker: the next workout, ready to start or skip, the numbers the program
   works from, and every day of the current cycle or week with its weights.
-- Every set is planned. Each planned set's weight and reps are filled in as you go. The main lift
-  ends with a "+" set of as many reps as you can, and the app turns it into an estimated one-rep max.
+- Every set is planned. Each planned set's weight and reps are filled in as you go. In 5/3/1 and PPL
+  the main lift ends with a "+" set of as many reps as you can, and the app turns it into an estimated
+  one-rep max.
 - Finishing a program workout marks its day done. A day can also be skipped, or done again.
 - Program workouts are saved like any other, named after their day ("5/3/1 Bench Day",
-  "PPL Push (Bench)"), so Progress charts them. History shows where in the program each came from.
+  "PPL Push (Bench)", "Apartment Gym Upper A"), so Progress charts them. History shows where in the program each came from.
 - The program is saved to your account with your settings and templates. It follows you to another
   device and keeps working through a network drop.
 
@@ -181,6 +182,37 @@ The linear-progression push/pull/legs program for beginners posted to r/Fitness 
   the app says to go heavier.
 - Warm-ups are not planned, because the program leaves them to you, so log only the work sets.
 - Working weights can be changed at any time. Changing one clears its misses.
+
+#### Apartment Gym
+
+Strength training for a small gym with no barbell: dumbbells up to 50 lbs, an adjustable bench, a
+cable stack with a single handle, and chest press, lat pulldown, leg extension and leg curl machines.
+
+- Four days a week, upper and lower body twice each, with a rest day wherever it suits you:
+
+  | Day | Main lift | Then |
+  |---|---|---|
+  | Upper A | Machine chest press, 4 × 6–10 | Incline dumbbell press, single-arm cable pulldown, single-arm cable row, dumbbell lateral raise, single-arm cable pushdown |
+  | Lower A | Dumbbell Bulgarian split squat, 3 × 8–12 | Single-leg dumbbell Romanian deadlift, leg curl, leg extension, single-leg dumbbell calf raise, Pallof press |
+  | Upper B | Lat pulldown, 4 × 6–10 | Dumbbell bench press, chest-supported dumbbell row, seated dumbbell shoulder press, single-arm cable rear delt fly, dumbbell hammer curl |
+  | Lower B | Dumbbell Romanian deadlift, 4 × 8–12 | Goblet squat, dumbbell step-up, leg curl, leg extension, cable woodchop |
+
+  The accessories are 3 sets each, in ranges between 8 and 20 reps, with setup notes where they
+  help ("Bench at 30–45°", "One handle, reps per arm").
+- Setting it up asks for a starting weight for each main lift (per hand for the dumbbell lifts), and
+  for your equipment: the heaviest dumbbells you have (50 lbs unless you say otherwise) and how much
+  the weight stacks go up at a time (10, 5 or 15 lbs). Lifts you have logged are filled in with your
+  heaviest set of 8 or more last time.
+- Main lifts use double progression. A lift stays at its weight until every set reaches the top of
+  its range, then goes up next time: one plate on the machines, 5 lbs a hand on the dumbbells.
+- Once a dumbbell lift is at your heaviest dumbbells, it stops going up, and the app says to make it
+  harder by lowering each rep over 3 seconds and pausing at the bottom.
+- A session with a set below the bottom of the range counts a miss. Three in a row and the lift
+  drops 10%. The card shows each lift's working weight and any misses in a row.
+- Accessories start from last time's weight. Once every set of one reached the top of its range,
+  the app says to go heavier.
+- Working weights and equipment can be changed at any time. Lowering the heaviest dumbbells lowers
+  any dumbbell lift that was above them.
 
 ### Workout history
 

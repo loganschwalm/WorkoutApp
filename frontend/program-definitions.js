@@ -7,15 +7,16 @@
 //   numbersLabel             what the one number kept per lift is ('Training maxes', 'Working weights')
 //   lifts                    [{ key, name, increment }], one number each, asked for at setup
 //   oneRepMaxes              true if setup may take one-rep maxes and convert them (see toNumber)
-//   options                  settings asked for at setup: { id, type:'select' | 'check', label, choices, help, ... }
+//   options                  settings asked for at setup: { id, type:'select' | 'check', label, choices, default, help, ... }
 //   weeks(program)           the weeks of a block, [{ name, summary }]
 //   days(program)            the days of each week, [{ name }]
 //   workout(program, week, day)  the day's exercises; each has a plan, one entry per set: { weight, reps } plus
 //                            repsMax for a rep range, amrap for a + set, warmup, percent. A weight of '' is the lifter's call.
-//   afterWorkout(program, day, entry)  optional: progress made by one session, as { program, note }
+//   afterWorkout(program, day, entry, exercises)  optional: progress made by one session, as { program, note };
+//                            exercises are the finished workout's, with each exercise's plan and logged sets
 //   nextBlock(program)       optional: what changes when a block is complete, e.g. new training maxes
 //   numberNote(program, lift)  { text, warn } under each lift's number on the card
-//   setup                    { intro(editing), estimated, estimate(lift), hint(lift, value, form), toNumber(value, form) }
+//   setup                    { intro(editing), estimated, estimate(lift), hint(lift, value, form), toNumber(value, form, lift) }
 //
 // A program's first exercise each day is its main lift. Stored programs keep their numbers in trainingMaxes whatever
 // numbersLabel calls them, so programs saved by earlier versions still load.
@@ -219,4 +220,130 @@ const redditPpl = {
   }
 };
 
-const programDefinitions = [wendler531, redditPpl];
+// ---- Apartment Gym --------------------------------------------------------
+// Strength training on the equipment of a typical apartment gym: dumbbells up to about 50 lbs, an adjustable bench, a
+// cable stack with a single handle, and chest press, lat pulldown, leg extension and leg curl machines. No barbell.
+
+// Double progression: a main lift stays at its weight until every set reaches the top of its rep range, then goes up.
+// Machines go up by one plate of their stack; dumbbells by 5 lbs a hand, until they reach the heaviest pair there is.
+const apartmentLifts = [
+  { key:'chestPress', name:'Machine Chest Press', sets:4, reps:6, repsMax:10 },
+  { key:'splitSquat', name:'Dumbbell Bulgarian Split Squat', sets:3, reps:8, repsMax:12, dumbbell:true, note:'Weight per dumbbell, reps per leg' },
+  { key:'pulldown', name:'Lat Pulldown', sets:4, reps:6, repsMax:10 },
+  { key:'rdl', name:'Dumbbell Romanian Deadlift', sets:4, reps:8, repsMax:12, dumbbell:true, note:'Weight per dumbbell' }
+];
+const apartmentDumbbellStep = 5;
+// [name, sets, fewest reps, most reps, note]. The weight is the lifter's call; the app says to go heavier once every
+// set reached the top of the range.
+const apartmentDays = [
+  { name:'Upper A', lift:'chestPress', accessories:[
+    ['Incline Dumbbell Press', 3, 8, 12, 'Bench at 30–45°'], ['Single-Arm Cable Pulldown', 3, 10, 12, 'Half-kneeling, one handle, reps per arm'],
+    ['Single-Arm Cable Row', 3, 10, 12, 'One handle, reps per arm'], ['Dumbbell Lateral Raise', 3, 12, 15],
+    ['Single-Arm Cable Pushdown', 3, 10, 15, 'One handle, reps per arm']] },
+  { name:'Lower A', lift:'splitSquat', accessories:[
+    ['Single-Leg Dumbbell Romanian Deadlift', 3, 8, 12, 'Reps per leg'], ['Leg Curl', 3, 10, 15], ['Leg Extension', 3, 10, 15],
+    ['Single-Leg Dumbbell Calf Raise', 3, 12, 20, 'Reps per leg'], ['Pallof Press', 3, 10, 12, 'Cable at chest height, reps per side']] },
+  { name:'Upper B', lift:'pulldown', accessories:[
+    ['Dumbbell Bench Press', 3, 8, 12], ['Chest-Supported Dumbbell Row', 3, 8, 12, 'Face down on the bench at 30–45°'],
+    ['Seated Dumbbell Shoulder Press', 3, 8, 12, 'Bench upright'], ['Single-Arm Cable Rear Delt Fly', 3, 12, 15, 'One handle, reps per arm'],
+    ['Dumbbell Hammer Curl', 3, 10, 12]] },
+  { name:'Lower B', lift:'rdl', accessories:[
+    ['Goblet Squat', 3, 10, 15, 'One dumbbell held at the chest'], ['Dumbbell Step-Up', 3, 8, 12, 'Onto a sturdy flat bench, reps per leg'],
+    ['Leg Curl', 3, 8, 12], ['Leg Extension', 3, 12, 15], ['Cable Woodchop', 3, 10, 12, 'One handle, reps per side']] }
+];
+
+function apartmentLift(key) {
+  return apartmentLifts.find(lift => lift.key === key);
+}
+
+function apartmentStep(options, lift) {
+  return lift.dumbbell ? apartmentDumbbellStep : options.machineStep;
+}
+
+// At or past the heaviest dumbbells there is no heavier weight to move to.
+function apartmentCapped(program, lift) {
+  return Boolean(lift.dumbbell) && program.trainingMaxes[lift.key] >= program.options.dumbbellMax;
+}
+
+// Three sessions in a row below the rep range mean the weight has got ahead of the lifter: take off 10%.
+function apartmentDeload(program, lift) {
+  return roundToStep(program.trainingMaxes[lift.key] * 0.9, apartmentStep(program.options, lift));
+}
+
+// Whether every planned set of the day's main lift (its first exercise) was logged at the top of its rep range.
+function reachedTopOfRange(exercises) {
+  const main = exercises[0];
+  if (!main || !Array.isArray(main.plan) || !(main.sets || []).length) return false;
+  return main.plan.every((set, index) => set.warmup || (Boolean(main.sets[index]) && storedNumber(main.sets[index].reps) >= storedNumber(set.repsMax || set.reps)));
+}
+
+const apartmentGym = {
+  id:'apartment-gym',
+  name:'Apartment Gym',
+  shortName:'Apartment Gym',
+  summary:'Strength training with dumbbells up to 50 lbs, an adjustable bench, a cable stack with one handle, and chest press, lat pulldown, leg extension and leg curl machines. Upper and lower body twice a week each; a main lift goes up once every set reaches the top of its rep range.',
+  schedule:'4 days a week · upper and lower body twice each',
+  block:'week',
+  numbersLabel:'Working weights',
+  lifts:apartmentLifts,
+  oneRepMaxes:false,
+  options:[
+    { id:'dumbbellMax', type:'select', label:'Heaviest dumbbells', default:50,
+      choices:[20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 90, 100].map(value => ({ value, label:`${value} lbs each` })),
+      help:'The dumbbell lifts go up to this and no further. After that the program makes them harder by slowing them down instead.' },
+    { id:'machineStep', type:'select', label:'Weight stack steps',
+      choices:[{ value:10, label:'10 lbs a plate (most stacks)' }, { value:5, label:'5 lbs (half plates or add-on weights)' }, { value:15, label:'15 lbs a plate' }],
+      help:'How much the chest press and lat pulldown go up at a time.' }
+  ],
+  weeks:() => [{ name:'Week', summary:'' }],
+  days:() => apartmentDays,
+  workout(program, week, day) {
+    const plan = apartmentDays[day];
+    const lift = apartmentLift(plan.lift);
+    const weight = program.trainingMaxes[lift.key];
+    return [{ name:lift.name, weight, reps:String(lift.reps), ...(lift.note ? { note:lift.note } : {}), plan:repeatSets(lift.sets, { weight, reps:lift.reps, repsMax:lift.repsMax }) },
+      ...plan.accessories.map(([name, sets, reps, repsMax, note]) => ({ name, weight:'', reps:String(reps), ...(note ? { note } : {}), plan:repeatSets(sets, { weight:'', reps, repsMax }) }))];
+  },
+  // Every set at the top of the range: up a step next time (or, at the heaviest dumbbells, slower reps instead).
+  // A set below the bottom of the range counts a miss; the third in a row takes 10% off. Anything between keeps the
+  // weight and clears the misses. A session where the main lift was not attempted changes nothing.
+  afterWorkout(program, day, entry, exercises) {
+    const lift = apartmentLift(apartmentDays[day].lift);
+    const weight = program.trainingMaxes[lift.key];
+    const set = (to, misses) => ({ ...program, trainingMaxes:{ ...program.trainingMaxes, [lift.key]:to }, stalls:{ ...program.stalls, [lift.key]:misses } });
+    if (entry.hit === null) return { program, note:'' };
+    if (reachedTopOfRange(exercises)) {
+      if (apartmentCapped(program, lift)) {
+        return { program:set(weight, 0), note:`${lift.name} reached ${lift.repsMax} reps on every set with your heaviest dumbbells. Keep them, and make it harder: lower each rep over 3 seconds and pause at the bottom.` };
+      }
+      const to = lift.dumbbell ? Math.min(weight + apartmentDumbbellStep, program.options.dumbbellMax) : weight + program.options.machineStep;
+      return { program:set(to, 0), note:`${lift.name} goes up to ${to} lbs next time: every set reached ${lift.repsMax} reps.` };
+    }
+    if (entry.hit) return { program:set(weight, 0), note:`${lift.name} stays at ${weight} lbs until every set reaches ${lift.repsMax} reps.` };
+    const misses = (program.stalls[lift.key] || 0) + 1;
+    if (misses < 3) return { program:set(weight, misses), note:`${lift.name} stays at ${weight} lbs: ${misses} session${misses === 1 ? '' : 's'} in a row below ${lift.reps} reps. A third drops it 10%.` };
+    const lowered = apartmentDeload(program, lift);
+    return { program:set(lowered, 0), note:`${lift.name} fell below ${lift.reps} reps three sessions in a row, so it drops 10% to ${lowered} lbs.` };
+  },
+  numberNote(program, lift) {
+    const misses = program.stalls[lift.key] || 0;
+    if (misses) return { text:`Missed ${misses} in a row · 3 drops it to ${apartmentDeload(program, lift)}`, warn:true };
+    if (apartmentCapped(program, lift)) return { text:'Heaviest dumbbells · progress by slowing the reps', warn:false };
+    return { text:`+${apartmentStep(program.options, lift)} lbs once every set reaches ${lift.repsMax}`, warn:false };
+  },
+  setup:{
+    intro:editing => editing
+      ? 'Change a working weight when it is too heavy or too light. Changing one also clears its run of missed sessions.'
+      : 'Enter a starting weight for each main lift: one you could lift for the bottom of its rep range with two reps to spare. Dumbbell weights are per hand.',
+    estimated:'Lifts you have logged are filled in with your heaviest set of 8 or more last time.',
+    estimate:lift => heaviestSetOf(lift.name, 8),
+    hint(lift, value, form) {
+      if (lift.dumbbell && value > form.options.dumbbellMax) return `Capped at ${form.options.dumbbellMax} lbs, your heaviest dumbbells`;
+      return `+${apartmentStep(form.options, lift)} lbs once every set reaches ${lift.repsMax}`;
+    },
+    // A dumbbell lift cannot start heavier than the heaviest dumbbells.
+    toNumber:(value, form, lift) => lift.dumbbell ? Math.min(value, form.options.dumbbellMax) : value
+  }
+};
+
+const programDefinitions = [wendler531, redditPpl, apartmentGym];

@@ -289,7 +289,7 @@ def run(t):
     check('above the templates and the saved workouts',
           top('#recentCard') < top('#templatesToggle') < top('#savedWorkoutList'), f"{top('#recentCard')} {top('#templatesToggle')}")
     check('with the templates folded away, since there is history', cdp.ev("document.getElementById('templateArea').hidden") is True)
-    check('a button says how many there are', cdp.ev("document.getElementById('templatesToggle').textContent") == 'Show templates (7)',
+    check('a button says how many there are', cdp.ev("document.getElementById('templatesToggle').textContent") == 'Show templates (8)',
           cdp.ev("document.getElementById('templatesToggle').textContent"))
     cdp.ev("document.getElementById('templatesToggle').click()")
     check('and shows them', cdp.ev("!document.getElementById('templateArea').hidden && document.getElementById('templatesToggle').textContent === 'Hide templates'") is True)

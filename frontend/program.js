@@ -38,11 +38,12 @@ function estimateOneRepMax(weight, reps) {
   return Math.round(reps <= 1 ? weight : weight * (1 + reps / 30));
 }
 
-// Each option's stored value, or its default: a select's first choice, a check's own default.
+// Each option's stored value, or its default: a check's own default, a select's default choice or else its first.
 function normalizeOptions(definition, given) {
   return Object.fromEntries(definition.options.map(option => {
     if (option.type === 'check') return [option.id, typeof given[option.id] === 'boolean' ? given[option.id] : option.default];
-    const choice = option.choices.find(item => String(item.value) === String(given[option.id]));
+    const choice = option.choices.find(item => String(item.value) === String(given[option.id]))
+      || option.choices.find(item => item.value === option.default);
     return [option.id, (choice || option.choices[0]).value];
   }));
 }
@@ -222,7 +223,7 @@ function completeProgramWorkout(session) {
   if (!programDay || !program || program.startedAt !== programDay.startedAt || program.cycle !== programDay.cycle || !programWeeks(program)[programDay.week] || !programDays(program)[programDay.day]) return '';
   const entry = { at:Date.now(), skipped:false, amrap:amrapResult(session.exercises), hit:mainLiftHit(session.exercises) };
   const definition = programDefinition(program);
-  const progress = definition.afterWorkout ? definition.afterWorkout(program, programDay.day, entry) : { program, note:'' };
+  const progress = definition.afterWorkout ? definition.afterWorkout(program, programDay.day, entry, session.exercises) : { program, note:'' };
   return [progress.note, recordProgramDay(progress.program, programDay.week, programDay.day, entry)].filter(Boolean).join(' ');
 }
 
@@ -290,7 +291,8 @@ function programTemplateCards() {
 
 function dayStatus(entry) {
   if (entry.skipped) return '<span class="program-status skipped">Skipped</span>';
-  if (!entry.amrap) return '<span class="program-status">Done</span>';
+  // A day with no + set (a rep-range program, or a deload week) still says when its main lift fell short.
+  if (!entry.amrap) return entry.hit === false ? '<span class="program-status missed">Done (missed reps)</span>' : '<span class="program-status">Done</span>';
   const short = missedAmrap(entry.amrap) ? ` (short of ${escapeHTML(entry.amrap.target)})` : entry.hit === false ? ' (missed a set)' : '';
   return `<span class="program-status${short ? ' missed' : ''}">Done · + set ${escapeHTML(entry.amrap.weight)} × ${escapeHTML(entry.amrap.reps)}${short}</span>`;
 }
@@ -346,11 +348,15 @@ function estimatedOneRepMax(name) {
   return best || null;
 }
 
-// The heaviest weight lifted for 5 or more reps the last time an exercise was done; null if there is none.
-function heaviestSetOfFive(name) {
+// The heaviest weight lifted for `reps` or more reps the last time an exercise was done; null if there is none.
+function heaviestSetOf(name, reps) {
   const previous = lastPerformance[exerciseKey(name)];
-  const best = previous ? Math.max(0, ...previous.sets.filter(set => set.reps >= 5).map(set => set.weight)) : 0;
+  const best = previous ? Math.max(0, ...previous.sets.filter(set => set.reps >= reps).map(set => set.weight)) : 0;
   return best || null;
+}
+
+function heaviestSetOfFive(name) {
+  return heaviestSetOf(name, 5);
 }
 
 function optionElementId(option) {
@@ -432,7 +438,7 @@ $('programForm').onsubmit = event => {
     const value = positiveWeight(input.value);
     markInvalid(input, value === null);
     if (value === null) firstInvalid = firstInvalid || input;
-    else trainingMaxes[lift.key] = definition.setup.toNumber(value, form);
+    else trainingMaxes[lift.key] = definition.setup.toNumber(value, form, lift);
   });
   if (firstInvalid) {
     $('programFormError').textContent = 'Enter a weight above zero for every lift.';
