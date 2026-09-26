@@ -122,8 +122,12 @@ function applySettings(settings) {
   syncSoundControls();
 }
 
+// Set by an import, whose workouts, templates and program the page then loads again to show.
+let reloadAfterImport = false;
+
 function closeSettings() {
   getSettingElement('settingsModal').hidden = true;
+  if (reloadAfterImport) location.reload();
 }
 
 // The account's name and email. While the server has not said who is signed in (offline), there is nothing to change.
@@ -141,9 +145,91 @@ function showEmailError(message) {
   getSettingElement('emailFeedback').hidden = false;
 }
 
+// ---- Your data ------------------------------------------------------------
+// Export saves the account to a file: all of it as JSON, which Import reads back (here or on another server), or every
+// logged set as CSV for a spreadsheet. Workouts still waiting on this device upload first, so the file has them too.
+
+function showDataStatus(message, failed = false) {
+  const status = getSettingElement('dataStatus');
+  status.textContent = message;
+  status.className = failed ? 'auth-feedback data-status' : 'subtitle data-status';
+  status.hidden = false;
+}
+
+function setDataButtonsDisabled(disabled) {
+  ['exportButton', 'exportCsvButton', 'importButton'].forEach(id => { getSettingElement(id).disabled = disabled; });
+}
+
+async function exportAccount(asCsv) {
+  setDataButtonsDisabled(true);
+  showDataStatus('Preparing your file…');
+  try {
+    if (!(await flushPendingWorkouts())) throw new Error('Workouts waiting on this device could not be uploaded.');
+    // The browser's time zone, so the dates in the file are the days you trained.
+    const response = await syncFetch(`/api/export${asCsv ? '.csv' : ''}?offset=${-new Date().getTimezoneOffset()}`, {}, 60000);
+    if (!response.ok) throw new Error(`Export failed (${response.status}).`);
+    const name = /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') || '')?.[1] || (asCsv ? 'workout-tracker-sets.csv' : 'workout-tracker.json');
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(await response.blob());
+    link.download = name;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 60000);
+    showDataStatus(`Downloaded ${name}.`);
+  } catch (error) {
+    console.error('Unable to export.', error);
+    showDataStatus('Could not reach the server to export. Try again when you are back online.', true);
+  } finally {
+    setDataButtonsDisabled(false);
+  }
+}
+
+// "Imported 12 workouts (3 were already here), 2 templates and the training program."
+function describeImport(result) {
+  const workouts = plural(result.workouts, 'workout') + (result.alreadyHere ? ` (${result.alreadyHere} ${result.alreadyHere === 1 ? 'was' : 'were'} already here)` : '');
+  const parts = [workouts, result.templates ? plural(result.templates, 'template') : '', result.program ? 'the training program' : '', result.settings ? 'the settings' : ''].filter(Boolean);
+  const list = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0];
+  const changed = result.workouts || result.templates || result.program || result.settings;
+  return `Imported ${list}.${changed ? ' Close Settings to see them.' : ''}`;
+}
+
+async function importAccount(file) {
+  let data = null;
+  try { data = JSON.parse(await file.text()); } catch (error) { /* not JSON: answered below */ }
+  if (!data || !Array.isArray(data.workouts)) {
+    showDataStatus(`${file.name} is not a Workout Tracker export. Choose a .json file saved with Export.`, true);
+    return;
+  }
+  if (!confirm(`Import ${plural(data.workouts.length, 'workout')} from ${file.name}? Workouts already in your account are skipped, and nothing here is replaced.`)) return;
+  setDataButtonsDisabled(true);
+  showDataStatus('Importing…');
+  try {
+    let response;
+    try {
+      response = await syncFetch('/api/import', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(data) }, 120000);
+    } catch (error) {
+      showDataStatus('Could not reach the server to import. Try again when you are back online.', true);
+      return;
+    }
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      showDataStatus(result.error || 'The import failed. Nothing was added.', true);
+      return;
+    }
+    showDataStatus(describeImport(result));
+    // Settings the import brought are taken here now, so saving this form does not put the old ones back.
+    if (result.settings) await loadAccountState().then(() => applySettings(getWorkoutSettings()));
+    reloadAfterImport = reloadAfterImport || Boolean(result.workouts || result.templates || result.program || result.settings);
+  } finally {
+    setDataButtonsDisabled(false);
+  }
+}
+
 function openSettings() {
   applySettings(getWorkoutSettings());
   showAccount();
+  getSettingElement('dataStatus').hidden = true;
   getSettingElement('settingsModal').hidden = false;
   getSettingElement('themeSetting').focus();
 }
@@ -177,7 +263,16 @@ getSettingElement('changeEmailButton').onclick = () => {
   getSettingElement('emailEditor').hidden = false;
   getSettingElement('emailSetting').focus();
 };
-getSettingElement('cancelEmail').onclick = () => { getSettingElement('emailEditor').hidden = true; };
+getSettingElement('exportButton').onclick = () => exportAccount(false);
+getSettingElement('exportCsvButton').onclick = () => exportAccount(true);
+getSettingElement('importButton').onclick = () => getSettingElement('importFile').click();
+getSettingElement('importFile').onchange = () => {
+  const file = getSettingElement('importFile').files[0];
+  // Cleared, so choosing the same file again still counts as a change.
+  getSettingElement('importFile').value = '';
+  if (file) importAccount(file);
+};
+getSettingElement('cancelEmail').onclick =() => { getSettingElement('emailEditor').hidden = true; };
 getSettingElement('emailForm').onsubmit = async event => {
   event.preventDefault();
   const save = getSettingElement('saveEmail');

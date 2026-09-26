@@ -124,6 +124,16 @@ function readRejectedWorkouts() {
   return readLocal(localKey('rejected')) || [];
 }
 
+// Finished workouts carry a clientId; one queued by a build from before that is matched by its contents.
+function sameQueuedWorkout(a, b) {
+  return a.clientId || b.clientId ? a.clientId === b.clientId : JSON.stringify(a) === JSON.stringify(b);
+}
+
+function withoutQueuedWorkout(queue, workout) {
+  const index = queue.findIndex(item => sameQueuedWorkout(item, workout));
+  return index === -1 ? queue : [...queue.slice(0, index), ...queue.slice(index + 1)];
+}
+
 // Resolves true once nothing is left to upload, false if the server could not be reached (a retry is scheduled).
 function flushPendingWorkouts() {
   if (pendingFlush) return pendingFlush;
@@ -147,8 +157,11 @@ function flushPendingWorkouts() {
         reportSyncStatus(uploaded);
         return false;
       }
-      if (rejected) writeLocal(localKey('rejected'), [...readRejectedWorkouts(), queue[0]]);
-      writeLocal(localKey('pending'), readPendingWorkouts().slice(1));
+      // By clientId, never by position: another tab uploading the same queue may have removed this one already, and
+      // dropping whatever is first would then drop a workout that has not been uploaded.
+      const done = queue[0];
+      if (rejected && !readRejectedWorkouts().some(workout => sameQueuedWorkout(workout, done))) writeLocal(localKey('rejected'), [...readRejectedWorkouts(), done]);
+      writeLocal(localKey('pending'), withoutQueuedWorkout(readPendingWorkouts(), done));
       pendingRetryCount = 0;
       if (!rejected) uploaded += 1;
       if (rejected) reportSyncStatus();

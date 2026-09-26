@@ -1,6 +1,9 @@
 """The HTTP API on its own, without a browser: bad input, racing uploads, redirects, database upgrades and accounts."""
 
+import csv
+import datetime
 import hashlib
+import io
 import json
 import os
 import socket
@@ -164,6 +167,7 @@ def run(t):
     run_structure(t, check, request)
     run_accounts(t, check, request)
     run_admin(t, check, request)
+    run_export(t, check, request)
     run_bursts(t, check)
 
 
@@ -780,6 +784,121 @@ def run_admin(t, check, request):
     elapsed = closed_after(b'GET /login.html HTTP/1.1\r\nHost: 127.0.0.1\r\n')
     check('one that stops halfway through a request', elapsed is not None and 1.5 < elapsed < 6, elapsed)
     check('and the server goes on answering', quick.raw('GET', '/login.html')[0] == 200)
+
+
+def run_export(t, check, request):
+    json_headers = {'Content-Type': 'application/json'}
+
+    def register(name):
+        _, cookie = t.api('POST', '/api/auth/register', {'username': name, 'email': f'{name}@example.test', 'password': 'password123'})
+        return cookie.split('session=')[1].split(';')[0]
+
+    def utc_ms(*when):
+        return int(datetime.datetime(*when, tzinfo=datetime.timezone.utc).timestamp() * 1000)
+
+    def import_file(data, token):
+        body = data if isinstance(data, bytes) else json.dumps(data).encode()
+        return request('POST', '/api/import', body, json_headers, token=token)
+
+    def workouts_of(token):
+        return t.api('GET', '/api/workouts', token=token)[0]['workouts']
+
+    print('A23 an account is exported whole, as JSON and as a spreadsheet')
+    source = register('exporter')
+    # From a finished session (it has a clientId), in kilograms, with a timed exercise and a skipped one; its name looks
+    # like a spreadsheet formula. Then one from the workout form, which has no clientId and no sets.
+    finished = {'name': '=SUM(A1) Push', 'notes': 'felt strong', 'createdAt': utc_ms(2026, 3, 10, 2), 'clientId': 'export-1',
+                'unit': 'kg', 'duration': 3000,
+                'exercises': [t.ex('Bench Press', 80, 5, [(5, 80), (5, 82.5)]),
+                              {'name': 'Plank', 'weight': '', 'reps': '60', 'timed': True, 'sets': [{'weight': '', 'reps': 45}]},
+                              t.ex('Dips', 0, 10, [])]}
+    formed = {'name': 'Form Workout', 'notes': '', 'createdAt': utc_ms(2026, 3, 12, 12), 'exercises': [{'name': 'Squat', 'weight': '100', 'reps': '5'}]}
+    for workout in (formed, finished):
+        t.api('POST', '/api/workouts', workout, source)
+    state = {'settings': {'restDuration': 120, 'unit': 'kg'},
+             'templates': [{'id': 'custom-1', 'name': 'Mine', 'exercises': [{'name': 'Row', 'reps': '8'}]}],
+             'program': {'definition': 'wendler531', 'unit': 'kg', 'trainingMaxes': {'squat': 100}}}
+    t.api('PUT', '/api/state', state, source)
+
+    status, headers, export = request('GET', '/api/export', token=source)
+    check('the JSON export is a file to save', status == 200 and headers.get('content-type', '').startswith('application/json')
+          and 'attachment; filename="workout-tracker-' in headers.get('content-disposition', ''), f"{status} {headers.get('content-disposition')}")
+    check('it says what it is', isinstance(export, dict) and export.get('format') == 'workout-tracker-export' and export.get('version') == 1,
+          str(export)[:200])
+    names = [w['name'] for w in export.get('workouts', [])] if isinstance(export, dict) else []
+    check('every workout, oldest first', names == ['=SUM(A1) Push', 'Form Workout'], names)
+    check("without this server's ids", all('id' not in w for w in export.get('workouts', [])))
+    check('as it was saved: sets, unit, notes, duration and clientId', names and export['workouts'][0]['exercises'] == finished['exercises']
+          and export['workouts'][0]['unit'] == 'kg' and export['workouts'][0]['notes'] == 'felt strong'
+          and export['workouts'][0]['duration'] == 3000 and export['workouts'][0]['clientId'] == 'export-1', export.get('workouts', [None])[0])
+    check('with the templates, program and settings',
+          export.get('templates') == state['templates'] and export.get('program') == state['program'] and export.get('settings') == state['settings'])
+    check('and whose account it was', export.get('account') == {'username': 'exporter', 'email': 'exporter@example.test'}, export.get('account'))
+
+    # Five hours behind UTC, 02:00 UTC on the 10th is still the 9th.
+    status, headers, body = request('GET', '/api/export.csv?offset=-300', token=source)
+    check('the CSV export is a file to save', status == 200 and headers.get('content-type', '').startswith('text/csv')
+          and 'workout-tracker-sets-' in headers.get('content-disposition', ''), f"{status} {headers.get('content-type')}")
+    text = body.decode('utf-8') if isinstance(body, bytes) else ''
+    check('it starts with a byte-order mark, so Excel reads it as UTF-8', text.startswith('﻿'))
+    rows = list(csv.reader(io.StringIO(text.lstrip('﻿'))))
+    check('with a header row', rows[:1] == [['Date', 'Workout', 'Exercise', 'Set', 'Weight', 'Unit', 'Reps', 'Seconds']], rows[:1])
+    check('one row per logged set, in the time zone asked for', ["2026-03-09", "'=SUM(A1) Push", 'Bench Press', '1', '80', 'kg', '5', ''] in rows
+          and ["2026-03-09", "'=SUM(A1) Push", 'Bench Press', '2', '82.5', 'kg', '5', ''] in rows, rows)
+    check('a timed set under Seconds', ["2026-03-09", "'=SUM(A1) Push", 'Plank', '1', '', 'kg', '', '45'] in rows, rows)
+    check('no rows for a skipped exercise', not any(row[2] == 'Dips' for row in rows[1:]), rows)
+    check('an exercise saved without sets as one row', ['2026-03-12', 'Form Workout', 'Squat', '', '100', 'lbs', '5', ''] in rows, rows)
+    check("a name that looks like a formula stays text", all(row[1] != '=SUM(A1) Push' for row in rows), rows)
+    status, _, _ = request('GET', '/api/export')
+    check('signed out, there is nothing to export', status == 401, status)
+
+    print('A24 importing adds what is missing and never duplicates or overwrites')
+    target = register('importer')
+    t.api('POST', '/api/workouts', {'name': 'Already Mine', 'notes': '', 'exercises': [{'name': 'Curl', 'weight': 20, 'reps': 10}]}, target)
+    status, _, result = import_file(export, target)
+    check('an export imports into another account', status == 200 and result == {'workouts': 2, 'alreadyHere': 0, 'templates': 1, 'settings': True,
+                                                                                  'program': True}, f'{status} {result}')
+    mine = {w['name']: w for w in workouts_of(target)}
+    check('its workouts arrive as they were, beside what was there',
+          set(mine) == {'Already Mine', 'Form Workout', '=SUM(A1) Push'} and mine['=SUM(A1) Push']['exercises'] == finished['exercises']
+          and mine['=SUM(A1) Push']['createdAt'] == finished['createdAt'], sorted(mine))
+    imported_state = t.api('GET', '/api/state', token=target)[0]
+    check('with the templates, program and settings', imported_state == {k: state[k] for k in ('settings', 'templates', 'program')}, imported_state)
+    status, _, result = import_file(export, target)
+    check('importing the same file again adds nothing', status == 200 and result == {'workouts': 0, 'alreadyHere': 2, 'templates': 0,
+                                                                                     'settings': False, 'program': False}, f'{status} {result}')
+    check('so nothing is there twice', len(workouts_of(target)) == 3, len(workouts_of(target)))
+    status, _, result = import_file(export, source)
+    check('nor into the account it came from, even the workout with no clientId', status == 200 and result['workouts'] == 0
+          and len(workouts_of(source)) == 2, f'{status} {result}')
+    other = {**export, 'settings': {'restDuration': 30}, 'program': {'definition': 'ppl', 'trainingMaxes': {}},
+             'templates': [{'id': 'custom-2', 'name': 'Theirs', 'exercises': [{'name': 'Lunge', 'reps': '10'}]}], 'workouts': []}
+    status, _, result = import_file(other, target)
+    after = t.api('GET', '/api/state', token=target)[0]
+    check("an account's own settings and program are kept; new templates are added",
+          status == 200 and result['templates'] == 1 and after['settings'] == state['settings'] and after['program'] == state['program']
+          and [template['name'] for template in after['templates']] == ['Mine', 'Theirs'], f'{status} {result} {after}')
+
+    print('A25 a file that is not an export, or has a bad workout, imports nothing')
+    before = len(workouts_of(target))
+    for label, data in [('some other JSON', {'format': 'something-else', 'workouts': []}),
+                        ('no workouts list', {'format': 'workout-tracker-export'}),
+                        ('not JSON at all', b'Date,Workout\n'),
+                        ('a bad workout among good ones', {'workouts': [{'name': 'Good', 'exercises': []}, {'name': 5, 'exercises': []}]})]:
+        status, _, reply = import_file(data, target)
+        check(f'{label} -> 400 with a message', status == 400 and isinstance(reply, dict) and reply.get('error'), f'{status} {reply!r}')
+    status, _, reply = import_file({'workouts': [{'name': 'Good', 'exercises': []}, {'name': 5, 'exercises': []}]}, target)
+    check('the message names the workout', 'Workout 2' in (reply or {}).get('error', ''), reply)
+    check('and not even the good workout was stored', len(workouts_of(target)) == before, len(workouts_of(target)))
+    status, _, _ = import_file(export, None)
+    check('signed out, nothing is imported', status == 401, status)
+    # Bigger than any other request may be: many workouts with long notes, about 2 MB.
+    big = {'workouts': [{'name': f'Big {n}', 'notes': 'x' * 5000, 'createdAt': utc_ms(2025, 1, 1) + n, 'clientId': f'big-{n}',
+                         'exercises': [{'name': 'Squat', 'weight': 100, 'reps': 5}]} for n in range(400)]}
+    status, _, result = import_file(big, target)
+    check('a whole account of several megabytes is accepted', status == 200 and result['workouts'] == 400, f'{status} {result}')
+    status, _, reply = request('POST', '/api/import', None, {'Content-Length': str(50 * 1024 * 1024)}, token=target)
+    check('but not an unlimited one -> 413', status == 413, f'{status} {reply!r}')
 
 
 def run_bursts(t, check):

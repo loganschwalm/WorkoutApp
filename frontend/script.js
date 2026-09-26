@@ -97,7 +97,7 @@ function persistActiveSession() {
 }
 
 function getActiveSession() {
-  return fetch('/api/active-session').then(response => response.ok ? response.json() : Promise.reject(new Error('Unable to load active workout.'))).then(result => result.session);
+  return syncFetch('/api/active-session').then(response => response.ok ? response.json() : Promise.reject(new Error('Unable to load active workout.'))).then(result => result.session);
 }
 
 // Kept per account by offline.js, which uploads a change as soon as the server can be reached.
@@ -485,10 +485,6 @@ function showPlates() {
     : `Each side of a ${barbell.name}: ${plates.join(' + ')}${makes !== weight ? ` (makes ${formatWeight(makes)} ${weightUnit()})` : ''}`;
 }
 
-function plural(count, word) {
-  return `${count} ${word}${count === 1 ? '' : 's'}`;
-}
-
 // "Exercise 2 of 6" opens a list of every exercise and how far each has got, to go straight to any of them: when a
 // machine is taken, do one that is free and come back.
 function renderActiveProgress() {
@@ -568,14 +564,19 @@ function goToExercise(index) {
   persistActiveSession();
 }
 
-function closeActiveWorkout() {
+// Takes the workout off the screen. closeActiveWorkout also records that it ended, for the server to be told.
+function hideActiveWorkout() {
   closeExercisePanels();
   activeSession = null;
-  persistActiveSession();
   stopRestTimer();
   $('restPanel').hidden = true;
   $('activeWorkout').hidden = true;
   syncWakeLock();
+}
+
+function closeActiveWorkout() {
+  hideActiveWorkout();
+  persistActiveSession();
 }
 
 // `template` is a template, a saved workout, or a day of a training program (program.js), whose exercises carry a
@@ -680,35 +681,48 @@ function takeRequestedWorkoutId() {
   return requestedId;
 }
 
-// `workouts` is null when the server could not be reached; the in-progress workout is still restored from this device.
+function showSavedSession(savedSession) {
+  activeSession = inUnit(savedSession);
+  if (activeSession !== savedSession) persistActiveSession();
+  stopRestTimer();
+  restRemaining = restDuration();
+  updateRestTimer();
+  $('restPanel').hidden = true;
+  renderActiveWorkout();
+  $('activeNotesToggle').open = Boolean(activeSession.notes);
+  $('activeWorkout').hidden = false;
+  syncWakeLock();
+}
+
+// The workout in progress as this device last saw it, on screen before the server is asked anything. On a connection that
+// stalls rather than fails, as in a basement gym, waiting for the server would keep it hidden until the requests gave up.
+function restoreLocalWorkout() {
+  const local = readLocalActive();
+  if (local && local.session) showSavedSession(local.session);
+}
+
+// `workouts` is null when the server could not be reached. The workout on this device is already on screen
+// (restoreLocalWorkout); the server's copy replaces it only when it changed on another device.
 async function resumeOrStartWorkout(workouts) {
   const requestedId = workouts ? takeRequestedWorkoutId() : null;
   const local = readLocalActive();
-  let savedSession = null;
   if (local && local.dirty) {
     // Changes made here that the server has not seen yet win over the server's copy.
-    savedSession = local.session;
     syncActiveSession();
   } else {
     try {
-      savedSession = await getActiveSession();
-      mirrorActiveSession(savedSession);
+      const savedSession = await getActiveSession();
+      // Anything done here while the server was being asked is newer than its answer, so its answer is dropped.
+      if (readLocalActive()?.stamp === local?.stamp) {
+        mirrorActiveSession(savedSession);
+        if (JSON.stringify(savedSession) !== JSON.stringify(local?.session ?? null)) {
+          if (savedSession) showSavedSession(savedSession);
+          else hideActiveWorkout();
+        }
+      }
     } catch (error) {
-      console.error('Unable to load active workout.', error);
-      savedSession = local ? local.session : null;
+      console.error('Unable to load active workout; showing the copy on this device.', error);
     }
-  }
-  if (savedSession) {
-    activeSession = inUnit(savedSession);
-    if (activeSession !== savedSession) persistActiveSession();
-    stopRestTimer();
-    restRemaining = restDuration();
-    updateRestTimer();
-    $('restPanel').hidden = true;
-    renderActiveWorkout();
-    $('activeNotesToggle').open = Boolean(activeSession.notes);
-    $('activeWorkout').hidden = false;
-    syncWakeLock();
   }
   const requestedWorkout = requestedId === null ? null : workouts.find(workout => workout.id === requestedId);
   if (requestedWorkout) startWorkout(requestedWorkout);
@@ -1162,4 +1176,5 @@ window.localReady.then(() => {
   personalBests = readLocal(localKey('bests')) || {};
   syncTemplateArea();
   renderExerciseSuggestions();
+  restoreLocalWorkout();
 }).then(flushPendingWorkouts).then(loadSavedWorkouts).then(resumeOrStartWorkout).finally(() => { initialLoadDone = true; syncTemplateArea(); });

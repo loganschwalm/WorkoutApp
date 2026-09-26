@@ -5,7 +5,7 @@
 // two must not both own that job, so every /api/ request is left alone.
 //
 // Every request goes to the network first, so a deploy reaches the next load without
-// bumping anything. Bump VERSION only to drop old caches, e.g. when PRECACHE changes.
+// bumping anything (unless that load's network is too slow; see NETWORK_WAIT). Bump VERSION only to drop old caches, e.g. when PRECACHE changes.
 const VERSION = 'v6';
 const CACHE = `workout-tracker-${VERSION}`;
 
@@ -96,16 +96,30 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(networkFirst(event, request, request, false));
 });
 
+// How long the network gets before a cached copy is used instead. A connection that stalls
+// rather than fails (a basement gym) would otherwise hold the page until the browser gives up,
+// which can take minutes.
+const NETWORK_WAIT = 3000;
+
 // Pages and assets alike go to the network first, and the cache is only there for when
-// the network is gone. Serving assets from the cache first would pair freshly deployed
-// HTML with the previous deploy's JavaScript for one load. The server answers an
-// unchanged file with a 304, so asking every time costs little on a home network.
+// the network is gone or too slow to wait for. Serving assets from the cache first would
+// pair freshly deployed HTML with the previous deploy's JavaScript for one load. The server
+// answers an unchanged file with a 304, so asking every time costs little on a home network.
 async function networkFirst(event, request, key, isPage) {
   const cache = await caches.open(CACHE);
-  try {
-    const response = await fetch(request);
+  const network = fetch(request).then((response) => {
     if (storable(response)) event.waitUntil(cache.put(key, response.clone()));
     return response;
+  });
+  // Keeps the worker alive until the network answers, so an answer that arrives after the
+  // cached copy was used still refreshes the cache for next time.
+  event.waitUntil(network.catch(() => {}));
+  // Only this request's own copy: when it has none, waiting on the network beats the shell.
+  const cachedAfterWait = new Promise((resolve) => setTimeout(resolve, NETWORK_WAIT))
+    .then(() => cache.match(key))
+    .then((cached) => cached || network);
+  try {
+    return await Promise.race([network, cachedAfterWait]);
   } catch (error) {
     const cached = await cache.match(key);
     if (cached) return cached;

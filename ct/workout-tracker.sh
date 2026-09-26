@@ -28,7 +28,8 @@ _ENV_SERVICE_USER="${SERVICE_USER-}"
 _ENV_APP_PORT="${APP_PORT-}"
 
 REPO_URL="${REPO_URL:-https://github.com/loganschwalm/WorkoutApp.git}"
-BRANCH="${BRANCH:-main}"
+# stable only takes a commit once every test has passed on it (.github/workflows/tests.yml); main takes every push.
+BRANCH="${BRANCH:-stable}"
 APP_DIR="${APP_DIR:-/opt/workout-tracker}"
 DATA_DIR="${DATA_DIR:-/var/lib/workout-tracker}"
 SERVICE_USER="${SERVICE_USER:-workout}"
@@ -116,10 +117,37 @@ if [[ "${PORT_DEFAULT_MOVED:-}" != 1 ]]; then
 fi
 # --- default port move (end) ---
 
+# --- default branch move (begin) ---
+# Installs from before October 2026 followed main, where every push lands at once. One still on main moves to
+# stable, which only takes a commit once its tests pass, once: BRANCH_DEFAULT_MOVED records that the question has
+# been settled, so a branch chosen afterwards (main included) is kept by every later update.
+if [[ "${BRANCH_DEFAULT_MOVED:-}" != 1 ]]; then
+  if [[ "$BRANCH" == main ]]; then
+    BRANCH=stable
+    step "following the stable branch from now on, which only takes commits whose tests pass"
+  fi
+  BRANCH_DEFAULT_MOVED=1
+  sed -i -e '/^BRANCH=/d' -e '/^BRANCH_DEFAULT_MOVED=/d' "$CONF_FILE"
+  printf "BRANCH='%s'\nBRANCH_DEFAULT_MOVED='1'\n" "$BRANCH" >>"$CONF_FILE"
+fi
+# --- default branch move (end) ---
+
 step "installing packages"
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends \
   ca-certificates curl git python3 sqlite3 tzdata >/dev/null
+
+# A repository with no stable branch (a fork, or this one before its tests first passed) is followed on main for
+# now, without changing the setting, so the next update picks stable up once it exists. Exit status 2 means the
+# branch is missing; anything else (no network) is left for the fetch below to report.
+if [[ "$BRANCH" == stable ]]; then
+  remote_status=0
+  git ls-remote --exit-code --heads "$REPO_URL" stable >/dev/null 2>&1 || remote_status=$?
+  if [[ "$remote_status" == 2 ]]; then
+    step "$REPO_URL has no stable branch yet; installing from main this time"
+    BRANCH=main
+  fi
+fi
 
 step "fetching source from $REPO_URL ($BRANCH)"
 if [[ -d "$APP_DIR/.git" ]]; then
@@ -267,6 +295,7 @@ DATA_DIR='$DATA_DIR'
 SERVICE_USER='$SERVICE_USER'
 APP_PORT='$APP_PORT'
 PORT_DEFAULT_MOVED='${PORT_DEFAULT_MOVED:-}'
+BRANCH_DEFAULT_MOVED='${BRANCH_DEFAULT_MOVED:-}'
 EOF
 }
 
@@ -279,7 +308,8 @@ run_in_container() {
   # shellcheck source=/dev/null
   . "$CONF_FILE"
   [[ -n "$_ENV_REPO_URL" ]] && REPO_URL="$_ENV_REPO_URL"
-  [[ -n "$_ENV_BRANCH" ]] && BRANCH="$_ENV_BRANCH"
+  # A branch named on the command line is a decision too, so the move to stable (see the payload) leaves it alone.
+  [[ -n "$_ENV_BRANCH" ]] && { BRANCH="$_ENV_BRANCH"; BRANCH_DEFAULT_MOVED=1; }
   [[ -n "$_ENV_APP_DIR" ]] && APP_DIR="$_ENV_APP_DIR"
   [[ -n "$_ENV_DATA_DIR" ]] && DATA_DIR="$_ENV_DATA_DIR"
   [[ -n "$_ENV_SERVICE_USER" ]] && SERVICE_USER="$_ENV_SERVICE_USER"
@@ -483,6 +513,8 @@ do_install() {
   local template net tmp ip
   # A new install starts on the current default (or the port asked for), so the old-default move never applies.
   PORT_DEFAULT_MOVED=1
+  # Likewise its branch: stable by default, or whichever was asked for, main included.
+  BRANCH_DEFAULT_MOVED=1
   template="$(resolve_template)"
 
   if [[ "$IP_CONFIG" == "dhcp" ]]; then

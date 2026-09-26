@@ -57,10 +57,6 @@ function weeklyStreaks(weeks, goal, thisWeek) {
   return { current, best };
 }
 
-function plural(count, word) {
-  return `${count} ${word}${count === 1 ? '' : 's'}`;
-}
-
 function renderCalendar() {
   // Nothing is drawn before the workouts load: an unreachable server must not look like an empty week.
   if (!historyWorkouts) return;

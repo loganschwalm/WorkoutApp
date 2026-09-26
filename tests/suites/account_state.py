@@ -1,6 +1,7 @@
 """Settings and custom templates: kept per account, and never undone by a change made offline."""
 
 import json
+import re
 
 INTERCEPT = True
 
@@ -131,3 +132,70 @@ def run(t):
     check("once the server answers, its copy replaces the old one (it was never changed here)",
           rest_duration() == 210 and 'Old Shared' not in template_names(), f'{rest_duration()} {template_names()}')
     check('and nothing from the old copy was uploaded', 'Old Shared' not in [x.get('name') for x in server_state()['templates']])
+
+    # ------------------------------------------------------------------ S6 export and import
+    print('S6  exporting and importing from Settings')
+    loaded()
+    # Downloads are caught instead of saved: each one's file name and contents are kept for the checks below.
+    cdp.ev("""window.__downloads = [];
+      const createURL = URL.createObjectURL;
+      URL.createObjectURL = blob => { window.__blob = blob; return createURL(blob); };
+      HTMLAnchorElement.prototype.click = function () { if (this.download) window.__downloads.push({ name: this.download, blob: window.__blob }); };""")
+    cdp.ev("document.getElementById('settingsButton').click()")
+    shown = cdp.ev("['exportButton', 'exportCsvButton', 'importButton'].map(id => document.getElementById(id).offsetParent !== null)")
+    check('Settings offers Export, Export sets as CSV and Import', shown == [True, True, True], shown)
+    # A finished workout still waiting on this device uploads first, so the file has it.
+    cdp.ev("queuePendingWorkout({ name: 'Waiting Workout', notes: '', createdAt: Date.now(), clientId: 'waiting-1', "
+           "exercises: [{ name: 'Squat', weight: 100, reps: 5, sets: [{ weight: 100, reps: 5 }] }] })")
+    cdp.ev("document.getElementById('exportButton').click()")
+    check('Export downloads a file', cdp.wait('window.__downloads.length === 1'), cdp.ev("document.getElementById('dataStatus').textContent"))
+    name = cdp.ev('window.__downloads[0] && window.__downloads[0].name') or ''
+    check("named with today's date", re.fullmatch(r'workout-tracker-\d{4}-\d{2}-\d{2}\.json', name), name)
+    exported = json.loads(cdp.ev('window.__downloads[0].blob.text()') or '{}')
+    names = [w.get('name') for w in exported.get('workouts', [])]
+    check('with every workout, the one that was waiting on this device too',
+          'Waiting Workout' in names and len(names) == len(api('GET', '/api/workouts', token=token)[0]['workouts']), names)
+    check('and the templates', 'Offline Template' in [x.get('name') for x in exported.get('templates', [])], exported.get('templates'))
+    check('the status says so', cdp.ev("document.getElementById('dataStatus').textContent") == f'Downloaded {name}.',
+          cdp.ev("document.getElementById('dataStatus').textContent"))
+    cdp.ev("document.getElementById('exportCsvButton').click()")
+    check('Export sets as CSV downloads a spreadsheet', cdp.wait("window.__downloads.length === 2 && window.__downloads[1].name.endsWith('.csv')"),
+          cdp.ev('window.__downloads.map(d => d.name)'))
+    sheet = cdp.ev('window.__downloads[1] ? window.__downloads[1].blob.text() : ""') or ''
+    check('of every set, with a header row', 'Date,Workout,Exercise,Set,Weight,Unit,Reps,Seconds' in sheet and 'Waiting Workout,Squat,1,100,lbs,5' in sheet, sheet[:200])
+    cdp.block_api = True
+    cdp.ev("document.getElementById('exportButton').click()")
+    check('offline, Export says it could not reach the server', cdp.wait("document.getElementById('dataStatus').textContent.startsWith('Could not reach')"),
+          cdp.ev("document.getElementById('dataStatus').textContent"))
+    check('and downloads nothing', cdp.ev('window.__downloads.length') == 2, cdp.ev('window.__downloads.length'))
+    cdp.block_api = False
+
+    def choose(text, filename):
+        cdp.ev(f"""(() => {{
+          const files = new DataTransfer();
+          files.items.add(new File([{json.dumps(text)}], {json.dumps(filename)}, {{ type: 'application/json' }}));
+          const input = document.getElementById('importFile');
+          input.files = files.files;
+          input.dispatchEvent(new Event('change'));
+        }})()""")
+
+    _, cookie = api('POST', '/api/auth/register', {'username': 'third', 'email': 'third@example.test', 'password': 'password123'})
+    third = cookie.split('session=')[1].split(';')[0]
+    api('POST', '/api/workouts', {'name': 'From Elsewhere', 'notes': '', 'clientId': 'elsewhere-1',
+                                  'exercises': [{'name': 'Row', 'weight': 60, 'reps': 8, 'sets': [{'weight': 60, 'reps': 8}]}]}, third)
+    elsewhere = api('GET', '/api/export', token=third)[0]
+    asked = len(cdp.dialogs)
+    choose(json.dumps(elsewhere), 'elsewhere.json')
+    check('Import asks first, saying how many workouts', wait_for(lambda: len(cdp.dialogs) > asked) and len(cdp.dialogs) == asked + 1
+          and cdp.dialogs[-1].startswith('Import 1 workout from elsewhere.json?'), cdp.dialogs[asked:])
+    check('then says what it added', cdp.wait("document.getElementById('dataStatus').textContent.startsWith('Imported 1 workout.')"),
+          cdp.ev("document.getElementById('dataStatus').textContent"))
+    check('and the account has it', 'From Elsewhere' in [w['name'] for w in api('GET', '/api/workouts', token=token)[0]['workouts']])
+    cdp.ev("document.getElementById('closeSettings').click()")
+    check('closing Settings shows it in the list', cdp.wait("[...document.querySelectorAll('#savedWorkoutList strong')].some(s => s.textContent === 'From Elsewhere')", 10))
+    cdp.ev("document.getElementById('settingsButton').click()")
+    asked = len(cdp.dialogs)
+    choose('Date,Workout\n', 'sets.csv')
+    check('a file that is not an export is turned away without asking',
+          cdp.wait("document.getElementById('dataStatus').textContent.startsWith('sets.csv is not a Workout Tracker export')") and len(cdp.dialogs) == asked,
+          cdp.ev("document.getElementById('dataStatus').textContent"))

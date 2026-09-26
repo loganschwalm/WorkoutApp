@@ -147,6 +147,9 @@ body.has-install-banner { padding-bottom:96px; }
 .email-editor { display:grid; gap:8px; margin-top:12px; padding:4px 14px 14px; border:1px solid var(--line); border-radius:12px; }
 .email-editor label { margin-top:8px; }
 .email-editor .auth-feedback { margin:4px 0 0; }
+.data-section { display:grid; gap:10px; margin-top:16px; padding-top:16px; border-top:1px solid var(--line); }
+.data-section .subtitle, .data-section .auth-feedback { margin:0; }
+.data-actions { display:flex; flex-wrap:wrap; gap:8px; }
 .email-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:6px; }
 .rest-panel { position:sticky; top:12px; z-index:4; display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:16px; padding:10px 10px 10px 16px; background:#eef0ff; border-radius:12px; box-shadow:0 8px 22px rgba(36,48,90,.12); }
 html[data-theme="dark"] .rest-panel { background:#303653; }

@@ -10,8 +10,10 @@ function escapeHTML(value) {
   return String(value).replace(/[&<>'"]/g, character => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[character]));
 }
 
+// Through offline.js's syncFetch, so a connection that stalls rather than fails gives up instead of holding the page.
+// Longer than its default, since years of workouts are a bigger download than anything else the pages ask for.
 function getSavedWorkouts() {
-  return fetch('/api/workouts').then(response => response.ok ? response.json() : Promise.reject(new Error('Unable to load workouts.'))).then(result => result.workouts);
+  return syncFetch('/api/workouts', {}, 15000).then(response => response.ok ? response.json() : Promise.reject(new Error('Unable to load workouts.'))).then(result => result.workouts);
 }
 
 // Exercise names are compared this way everywhere, so "Bench press" and "Bench Press " count as the same exercise.
@@ -103,6 +105,11 @@ function describeSavedExercise(exercise) {
   if (exercise.sets) return describeLoggedSets(exercise.sets, isTimed(exercise));
   const count = `${exercise.reps} ${isTimed(exercise) ? 's' : 'reps'}`;
   return isBodyweight(exercise.weight) ? count : `${formatWeight(exercise.weight)} ${weightUnit()} · ${count}`;
+}
+
+// "1 set", "3 sets".
+function plural(count, word) {
+  return `${count} ${word}${count === 1 ? '' : 's'}`;
 }
 
 // A length of time as a clock: 90 is "1:30".

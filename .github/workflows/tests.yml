@@ -1,0 +1,54 @@
+# Runs every test suite on each push and pull request. When they pass on main, the same commit moves the `stable`
+# branch, which installs and updates follow (ct/workout-tracker.sh), so a push only reaches servers once it is green.
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install the test requirements
+        run: pip install -r tests/requirements.txt
+
+      # Ubuntu 24.04 stops unprivileged programs from making user namespaces, which Chrome's sandbox needs.
+      - name: Let Chrome use its sandbox
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+
+      - name: Check the installer's shell syntax
+        run: bash -n ct/workout-tracker.sh
+
+      # Four suites at a time on the runner's four cores, so timing checks are not starved.
+      - name: Run the tests
+        run: python tests/run.py --jobs 4
+
+  promote:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    # One promotion at a time, so an older run finishing late cannot move stable back.
+    concurrency: promote-stable
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Move stable to this commit
+        run: |
+          if git fetch --quiet origin stable 2>/dev/null && git merge-base --is-ancestor "$GITHUB_SHA" FETCH_HEAD; then
+            echo "stable already has $GITHUB_SHA or something newer."
+          else
+            git push origin "$GITHUB_SHA:refs/heads/stable"
+          fi

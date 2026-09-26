@@ -1,6 +1,9 @@
 import argparse
 import contextlib
+import csv
+import datetime
 import getpass
+import io
 import hashlib
 import http.server
 import json
@@ -18,7 +21,7 @@ import traceback
 from email.message import EmailMessage
 from http import HTTPStatus
 from http.cookies import SimpleCookie
-from urllib.parse import quote, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 SERVER_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SERVER_DIR)
@@ -27,6 +30,10 @@ DB_PATH = os.environ.get('WORKOUT_DB', os.path.join(PROJECT_ROOT, 'data', 'worko
 SESSION_TTL = 60 * 60 * 24 * 30
 # Years of workouts are a few hundred kilobytes, so anything bigger than this is not the app talking.
 MAX_BODY = 1024 * 1024
+# An import carries a whole account at once: room for tens of thousands of workouts.
+MAX_IMPORT = 32 * 1024 * 1024
+# What an export file says it is, so an import can tell one from any other JSON.
+EXPORT_FORMAT = 'workout-tracker-export'
 
 
 def env_flag(name, default):
@@ -348,6 +355,85 @@ def workout_id(path):
     return int(tail) if tail.isdigit() and len(tail) < 19 else None
 
 
+# ---- Export and import --------------------------------------------------------------------------------------
+# An export is the whole account in one JSON file: every workout, plus the templates, program and settings. Importing
+# one only ever adds. Workouts already here (by clientId, or else by name, time and exercises) and templates already
+# here are skipped, and settings and a program are only taken by an account that has none of its own.
+
+def store_state(database, user_id, settings, templates, program):
+    database.execute('INSERT INTO user_state (user_id, settings_json, templates_json, program_json, updated_at) VALUES (?, ?, ?, ?, ?) '
+                     'ON CONFLICT(user_id) DO UPDATE SET settings_json=excluded.settings_json, templates_json=excluded.templates_json, '
+                     'program_json=excluded.program_json, updated_at=excluded.updated_at',
+                     (user_id, json.dumps(settings), json.dumps(templates), json.dumps(program), int(time.time() * 1000)))
+
+
+def exported_workouts(database, user_id):
+    """Every workout, oldest first, as the pages know them but without this server's ids."""
+    workouts = []
+    for row in database.execute('SELECT name, notes, created_at, payload FROM workouts WHERE user_id = ? ORDER BY created_at, id', (user_id,)):
+        item = json.loads(row['payload'])
+        item.pop('id', None)
+        item.update(name=row['name'], notes=row['notes'], createdAt=row['created_at'])
+        workouts.append(item)
+    return workouts
+
+
+def export_zone(query):
+    """The time zone an export's dates are written in: the browser's, which sends ?offset= in minutes east of UTC."""
+    try:
+        minutes = int(parse_qs(query).get('offset', ['0'])[0])
+    except ValueError:
+        minutes = 0
+    return datetime.timezone(datetime.timedelta(minutes=max(-840, min(840, minutes))))
+
+
+def local_date(milliseconds, zone):
+    # Added on rather than fromtimestamp(), which some platforms refuse for dates far in the future.
+    moment = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc) + datetime.timedelta(milliseconds=milliseconds)
+    return moment.astimezone(zone).strftime('%Y-%m-%d')
+
+
+def spreadsheet_text(value):
+    """Text a spreadsheet keeps as text. One starting like a formula (=, +, -, @) would otherwise be run as one."""
+    value = str(value)
+    return "'" + value if value[:1] in ('=', '+', '-', '@', '\t', '\r') else value
+
+
+def workouts_csv(workouts, zone):
+    """One row per logged set, oldest first, for a spreadsheet. A skipped exercise has no rows, and one saved without
+    sets (from the workout form) has one row of its weight and reps. A timed exercise's count goes under Seconds."""
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow(['Date', 'Workout', 'Exercise', 'Set', 'Weight', 'Unit', 'Reps', 'Seconds'])
+    for workout in workouts:
+        date = local_date(workout['createdAt'], zone)
+        unit = workout.get('unit') or 'lbs'
+        for exercise in workout.get('exercises') or []:
+            sets = exercise.get('sets')
+            rows = [(index + 1, logged) for index, logged in enumerate(sets)] if sets is not None else [('', exercise)]
+            timed = exercise.get('timed') is True
+            for number, logged in rows:
+                weight, count = logged.get('weight'), logged.get('reps')
+                count = '' if count is None else count
+                writer.writerow([date, spreadsheet_text(workout['name']), spreadsheet_text(exercise.get('name') or ''), number,
+                                 '' if weight is None else weight, unit, '' if timed else count, count if timed else ''])
+    # A byte-order mark, or Excel reads the file in its own code page and mangles anything beyond plain English.
+    return '﻿' + out.getvalue()
+
+
+def same_template(a, b):
+    if a.get('id') and b.get('id'):
+        return a['id'] == b['id']
+    return json.dumps(a, sort_keys=True) == json.dumps(b, sort_keys=True)
+
+
+def workout_stored(database, user_id, name, created_at, workout):
+    """Whether the account has a workout like this one, which has no clientId: the same name, time and exercises."""
+    exercises = json.dumps(workout.get('exercises'), sort_keys=True)
+    rows = database.execute('SELECT payload FROM workouts WHERE user_id = ? AND created_at = ? AND name = ?', (user_id, created_at, name))
+    return any(json.dumps(json.loads(row['payload']).get('exercises'), sort_keys=True) == exercises for row in rows)
+
+
 def derive(password, salt, iterations):
     # surrogatepass: JSON can carry a lone surrogate, which strict UTF-8 refuses; valid text encodes as before.
     return hashlib.pbkdf2_hmac('sha256', password.encode('utf-8', 'surrogatepass'), salt.encode(), iterations).hex()
@@ -563,14 +649,14 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def read_json(self):
+    def read_json(self, limit=MAX_BODY):
         try:
             length = int(self.headers.get('Content-Length', 0))
         except ValueError:
             raise BadRequest('Invalid Content-Length header.')
         if length < 0:
             raise BadRequest('Invalid Content-Length header.')
-        if length > MAX_BODY:
+        if length > limit:
             # The body is left unread, so this connection cannot carry another request.
             self.close_connection = True
             raise BadRequest('Request body is too large.', HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
@@ -676,6 +762,8 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
                 row = database.execute('SELECT settings_json, templates_json, program_json FROM user_state WHERE user_id = ?', (user['id'],)).fetchone()
                 self.send_json(HTTPStatus.OK, {'settings': json.loads(row['settings_json']) if row else {}, 'templates': json.loads(row['templates_json']) if row else [],
                                                'program': json.loads(row['program_json']) if row else None})
+            elif path in ('/api/export', '/api/export.csv'):
+                self.export_account(database, user, as_csv=path.endswith('.csv'))
             else:
                 self.send_json(HTTPStatus.NOT_FOUND, {'error': 'Endpoint not found.'})
 
@@ -824,6 +912,74 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             database.execute('DELETE FROM password_resets WHERE user_id = ?', (user['id'],))
         self.send_json(HTTPStatus.OK, {'user': {**user, 'email': email}})
 
+    def send_download(self, text, content_type, filename):
+        """A file for the browser to save rather than show."""
+        body = text.encode()
+        self.send_response(HTTPStatus.OK)
+        self.send_header('Content-Type', content_type)
+        self.send_header('Content-Length', str(len(body)))
+        self.send_header('Cache-Control', 'no-store')
+        self.send_header('Content-Disposition', f'attachment; filename="{filename}"')
+        self.end_headers()
+        self.wfile.write(body)
+
+    def export_account(self, database, user, as_csv):
+        zone = export_zone(urlparse(self.path).query)
+        today = datetime.datetime.now(zone).strftime('%Y-%m-%d')
+        workouts = exported_workouts(database, user['id'])
+        if as_csv:
+            self.send_download(workouts_csv(workouts, zone), 'text/csv; charset=utf-8', f'workout-tracker-sets-{today}.csv')
+            return
+        row = database.execute('SELECT settings_json, templates_json, program_json FROM user_state WHERE user_id = ?', (user['id'],)).fetchone()
+        export = {'format': EXPORT_FORMAT, 'version': 1, 'exportedAt': int(time.time() * 1000),
+                  'account': {'username': user['username'], 'email': user['email']}, 'workouts': workouts,
+                  'templates': json.loads(row['templates_json']) if row else [],
+                  'program': json.loads(row['program_json']) if row else None,
+                  'settings': json.loads(row['settings_json']) if row else {}}
+        self.send_download(json.dumps(export, indent=1), 'application/json; charset=utf-8', f'workout-tracker-{today}.json')
+
+    def import_account(self, user):
+        data = self.read_json(MAX_IMPORT)
+        if data.get('format', EXPORT_FORMAT) != EXPORT_FORMAT or not isinstance(data.get('workouts'), list):
+            raise BadRequest('That file is not a Workout Tracker export.')
+        # Everything is checked before anything is stored, so a file with one bad workout imports nothing.
+        prepared = []
+        for index, workout in enumerate(listed(data['workouts'], 'workouts', 100_000)):
+            # An id belongs to the server the workout came from; this one gives it its own.
+            workout = {key: value for key, value in workout.items() if key != 'id'}
+            try:
+                prepared.append((workout, *validate_workout(workout)))
+            except BadRequest as error:
+                raise BadRequest(f'Workout {index + 1} in the file cannot be imported: {error}')
+        state = {part: data[part] for part in ('settings', 'templates', 'program') if part in data}
+        validate_state(state)
+        added = 0
+        with connection() as database:
+            for workout, name, notes, created_at in prepared:
+                client_id = workout.get('clientId') or None
+                if client_id is None and workout_stored(database, user['id'], name, created_at, workout):
+                    continue
+                added += database.execute('INSERT INTO workouts (user_id, name, notes, created_at, payload, client_id) VALUES (?, ?, ?, ?, ?, ?) '
+                                          'ON CONFLICT(user_id, client_id) DO NOTHING',
+                                          (user['id'], name, notes, created_at, json.dumps(workout), client_id)).rowcount
+            row = database.execute('SELECT settings_json, templates_json, program_json FROM user_state WHERE user_id = ?', (user['id'],)).fetchone()
+            settings = json.loads(row['settings_json']) if row else {}
+            templates = json.loads(row['templates_json']) if row else []
+            program = json.loads(row['program_json']) if row else None
+            take_settings = not settings and bool(state.get('settings'))
+            take_program = program is None and state.get('program') is not None
+            new_templates = []
+            for template in state.get('templates') or []:
+                if not any(same_template(template, have) for have in templates + new_templates):
+                    new_templates.append(template)
+            if len(templates) + len(new_templates) > 1000:
+                raise BadRequest('Importing these templates would take the account past 1000.')
+            if take_settings or take_program or new_templates:
+                store_state(database, user['id'], state['settings'] if take_settings else settings, templates + new_templates,
+                            state['program'] if take_program else program)
+        self.send_json(HTTPStatus.OK, {'workouts': added, 'alreadyHere': len(prepared) - added, 'templates': len(new_templates),
+                                       'settings': take_settings, 'program': take_program})
+
     def api_post(self, path):
         if path == '/api/auth/register':
             self.register()
@@ -873,6 +1029,8 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             self.send_json(HTTPStatus.OK, {'ok': True})
         elif path == '/api/account/email':
             self.change_email(user)
+        elif path == '/api/import':
+            self.import_account(user)
         else:
             self.send_json(HTTPStatus.NOT_FOUND, {'error': 'Endpoint not found.'})
 
@@ -901,7 +1059,7 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
                 templates = data.get('templates', json.loads(existing['templates_json']) if existing else [])
                 # null is a real value here (the program was ended), so only a missing key keeps the stored one.
                 program = data['program'] if 'program' in data else (json.loads(existing['program_json']) if existing else None)
-                database.execute('INSERT INTO user_state (user_id, settings_json, templates_json, program_json, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET settings_json=excluded.settings_json, templates_json=excluded.templates_json, program_json=excluded.program_json, updated_at=excluded.updated_at', (user['id'], json.dumps(settings), json.dumps(templates), json.dumps(program), int(time.time() * 1000)))
+                store_state(database, user['id'], settings, templates, program)
             self.send_json(HTTPStatus.OK, {'settings': settings, 'templates': templates, 'program': program})
         else:
             self.send_json(HTTPStatus.NOT_FOUND, {'error': 'Endpoint not found.'})

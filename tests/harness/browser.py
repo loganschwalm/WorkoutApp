@@ -154,6 +154,8 @@ class CDP:
         self.block_paths = []           # fail only requests whose URL contains one of these
         self.drop_responses = 0         # discard this many successful POST responses
         self.dropped = 0
+        self.stall_paths = []           # hold GETs whose URL contains one of these, unanswered, like a stalled connection
+        self.stalled = []               # request ids held so far; release_stalled() lets them fail
         self._answer = True
         self._stub_id = None
         self._stubs_ready = False
@@ -219,11 +221,23 @@ class CDP:
                 command, extra = 'Fetch.failRequest', {'errorReason': 'ConnectionReset'}
             else:
                 command, extra = 'Fetch.continueResponse', {}
+        elif params['request']['method'] == 'GET' and any(path in params['request']['url'] for path in self.stall_paths):
+            # No answer at all: the page sees neither a response nor an error until release_stalled().
+            self.stalled.append(request_id)
+            return
         elif self.block_api or any(path in params['request']['url'] for path in self.block_paths):
             command, extra = 'Fetch.failRequest', {'errorReason': 'InternetDisconnected'}
         else:
             command, extra = 'Fetch.continueRequest', {}
         self.ws.send(json.dumps({'id': self.n, 'method': command, 'params': {'requestId': request_id, **extra}}))
+
+    def release_stalled(self):
+        """Fail every held request, as a stalled connection eventually does. One the page gave up on is already gone."""
+        held, self.stalled = self.stalled, []
+        for request_id in held:
+            self.n += 1
+            self.ws.send(json.dumps({'id': self.n, 'method': 'Fetch.failRequest',
+                                     'params': {'requestId': request_id, 'errorReason': 'TimedOut'}}))
 
     @staticmethod
     def _is_dialog_report(msg):

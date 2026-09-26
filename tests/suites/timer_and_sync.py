@@ -218,6 +218,64 @@ def run(t):
     status = cdp.ev("document.getElementById('storageStatus').textContent")
     check('and the status line says so', 'refused by the server' in status, status)
 
+    print('P9  reloading mid-workout on a connection that stalls instead of failing')
+    open_tracker()
+    start(0)
+    cdp.pause(0.6)
+    log_set(8)
+    check('the set reaches the server first', wait_for(lambda: server_sets() == 1), server_sets())
+    cdp.stall_paths = ['/api/workouts', '/api/active-session']
+    cdp.send('Page.reload')
+    time.sleep(0.4)
+    cdp.wait("document.readyState === 'complete'")
+    check('the workout is back on screen without waiting for the server', cdp.wait(ACTIVE, 6))
+    shown = safe_ev("document.querySelectorAll('#completedSets li').length", 0)
+    check('with its logged set', shown == 1, shown)
+    check('the server really was left hanging', len(cdp.stalled) >= 1, cdp.stalled)
+    cdp.stall_paths = []
+    cdp.release_stalled()
+
+    print('P10 the server copy still wins when the workout changed on another device')
+    elsewhere = t.active_session()
+    elsewhere['name'] = 'Changed Elsewhere'
+    api('POST', '/api/active-session', {'session': elsewhere}, token)
+    cdp.send('Page.reload')
+    time.sleep(0.4)
+    cdp.wait("document.readyState === 'complete'")
+    check("the other device's version replaces this device's", cdp.wait(f"{ACTIVE} && {TITLE} === 'Changed Elsewhere'"), safe_ev(TITLE))
+    api('DELETE', '/api/active-session', token=token)
+    cdp.send('Page.reload')
+    time.sleep(0.4)
+    cdp.wait("document.readyState === 'complete'")
+    check('a workout finished on another device goes away here', cdp.wait(HIDDEN), '')
+    cdp.pause(0.8)
+    check('and is not sent back to the server', server_sets() is None, server_sets())
+
+    print('P11 another tab uploading the same queue never drops the workout behind')
+    open_tracker()
+    n = len(workouts())
+    first = {'name': 'Tab Race One', 'notes': '', 'createdAt': int(time.time() * 1000), 'clientId': 'tab-race-1',
+             'exercises': [{'name': 'Squat', 'weight': 100, 'reps': 5, 'sets': [{'weight': 100, 'reps': 5}]}]}
+    second = {**first, 'name': 'Tab Race Two', 'clientId': 'tab-race-2'}
+    # Stands in for a second tab flushing the same queue: its upload of the first workout finishes first and takes it
+    # off the queue, before this tab's upload of the same workout comes back.
+    cdp.ev(f"""(() => {{
+      queuePendingWorkout({json.dumps(first)}); queuePendingWorkout({json.dumps(second)});
+      const upload = window.fetch;
+      window.fetch = (...args) => upload(...args).then(response => {{
+        if (!window.__otherTab && String(args[0]).endsWith('/api/workouts') && args[1] && args[1].method === 'POST') {{
+          window.__otherTab = true;
+          writeLocal(localKey('pending'), readPendingWorkouts().filter(workout => workout.clientId !== 'tab-race-1'));
+        }}
+        return response;
+      }});
+    }})()""")
+    flushed = cdp.ev('flushPendingWorkouts()')
+    names = [w['name'] for w in workouts()]
+    check('the flush finishes', flushed is True, flushed)
+    check('both workouts reach the server, once each', names.count('Tab Race One') == 1 and names.count('Tab Race Two') == 1 and len(names) == n + 2, names[:5])
+    check('nothing is left in the upload queue', safe_ev('readPendingWorkouts().length', -1) == 0, safe_ev('readPendingWorkouts()', []))
+
     print('R2  30 seconds more or less rest')
     open_tracker()
     cdp.ev("""window.__offset = 0; const realNow = Date.now.bind(Date); Date.now = () => realNow() + window.__offset;

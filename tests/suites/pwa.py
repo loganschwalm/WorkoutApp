@@ -2,6 +2,8 @@
 
 import json
 import socket
+import threading
+import time
 
 from ..harness import PLAIN_HTTP_HOST
 
@@ -262,3 +264,34 @@ def run(t):
           cdp.ev('document.title') == 'Workout Tracker', str(cdp.ev('document.title')))
     check('the templates are usable offline',
           cdp.ev("document.querySelectorAll('#templateList [data-template-action=start]').length") >= 3)
+
+    # ------------------------------------------------------------------ S10 a stalled connection
+    print('S10 a reload on a connection that stalls still opens the app')
+    # Something takes the app's port that accepts every connection and never answers, the way a connection that
+    # stalls rather than fails behaves. Refused connections (S9) fail at once; these would wait for minutes.
+    listener = socket.socket()
+    listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    listener.bind(('127.0.0.1', t.port))
+    listener.listen(128)
+    held = []
+
+    def hold():
+        while True:
+            try:
+                held.append(listener.accept()[0])
+            except OSError:
+                return
+
+    threading.Thread(target=hold, daemon=True).start()
+    try:
+        started = time.time()
+        cdp.goto('/index.html?stall-proof=1')
+        opened = cdp.wait("document.querySelectorAll('#templateList [data-template-action=start]').length >= 3", timeout=20)
+        took = round(time.time() - started, 1)
+        check('the cached app opens instead of waiting on the server', opened, f'{took}s')
+        check('within seconds', opened and took < 15, f'{took}s')
+        check('the server really was reached and left hanging', len(held) >= 1, len(held))
+    finally:
+        listener.close()
+        for connection in held:
+            connection.close()

@@ -100,9 +100,11 @@ own workouts, templates, and settings.
 Logged sets, notes, finished workouts, settings, custom templates, and your training program are saved on the device first and uploaded to the server in the background.
 
 - If the server cannot be reached, keep training. A notice explains that your sets are stored on this device, and they upload automatically when the connection returns (retries back off up to one minute).
-- Reloading the page while the server is unreachable restores the in-progress workout from the device.
+- Reloading the page restores the in-progress workout from the device straight away, without waiting for the
+  server, so it is back on screen even on a connection that stalls rather than fails, as in a basement gym. If the
+  workout changed or ended on another device meanwhile, the server's copy replaces it once it answers.
 - Finishing a workout while offline queues it locally and shows how many workouts are waiting to sync. The History and Progress pages upload anything queued before they load your workouts.
-- Uploads are safe to retry: each finished workout carries a unique `clientId`, and the server stores it once however many copies arrive, even at the same moment.
+- Uploads are safe to retry: each finished workout carries a unique `clientId`, and the server stores it once however many copies arrive, even at the same moment. Two open tabs (or the installed app and a browser tab) uploading the same queue never lose a workout between them.
 - If the server ever refuses a queued workout as invalid, it is set aside on the device and the status line says so, so it never holds up the workouts queued after it.
 - A setting, template or program change made while offline is kept when the page reloads and uploads once the server is back; it is never replaced by the server's older copy.
 - Local copies are kept per account, so another account signed in on the same browser never sees them.
@@ -110,7 +112,8 @@ Logged sets, notes, finished workouts, settings, custom templates, and your trai
 
 A service worker caches the app's own files, so reloading with no connection still opens the
 app rather than a browser error page. It always asks the server first and only falls back to
-the cache when the server cannot be reached, so an update reaches the very next page load.
+the cache when the server cannot be reached or has not answered within 3 seconds, so an update
+reaches the very next page load (unless that load's connection is too slow to wait for).
 Workout data is untouched by that cache; `offline.js` keeps owning it, so there is only ever
 one copy of the truth.
 
@@ -303,12 +306,33 @@ The gear button opens a settings modal available on every page. Settings include
 - End-workout confirmation toggle.
 - Rest-timer alert: play a sound on or off, choose the alert sound (double beep, chime, or long tone), set the volume, and turn vibration on or off. The vibration option only appears on devices that support it.
 - A Test alert button plays the alert with the current choices, before you save them.
+- Your data: Export, Export sets as CSV, and Import. See [Exporting and importing](#exporting-and-importing).
 - The signed-in account name and a Sign out button. Signing out warns first if a workout has not finished syncing; it stays on the device and uploads the next time you sign in to the same account.
 - The account's email, with a button to add or change it. Changing it asks for your password.
 
 Settings are saved to your account on the server and cached in the browser, so they persist
 between visits and follow you to another device. A change made offline applies straight away and
 uploads when the server is reachable again.
+
+### Exporting and importing
+
+Everything in your account can be saved to a file from Settings, and brought back in.
+
+- **Export** saves one JSON file with every workout, your custom templates, the training program you
+  follow, and your settings.
+- **Export sets as CSV** saves every logged set for a spreadsheet, one row each: its date, workout,
+  exercise, set number, weight, unit, and reps (or seconds, for a timed exercise). Skipped exercises are
+  left out. Dates are the days in your own time zone, and a name that starts like a formula (`=`, `+`,
+  `-`, `@`) is kept as text rather than run.
+- Workouts still waiting on the device upload first, so both files include them.
+- **Import** reads a JSON export back, into this account or into one on another server. It only ever
+  adds. Workouts already in the account are skipped, so importing the same file twice changes nothing,
+  and templates you already have stay as they are. Settings and a training program come in only if the
+  account has none of its own. If any workout in the file is not valid, nothing is imported, and the
+  message says which workout.
+
+An export covers one account. It is not a substitute for [backing up the database](#data-storage),
+which has every account.
 
 ### Accounts and security
 
@@ -347,6 +371,7 @@ Dockerfile              Container image definition
 docker-entrypoint.py    Container start: hands the data volume to the unprivileged user, then runs the server
 docker-compose.yml      Docker deployment with a persistent volume
 tests/                  End-to-end browser tests and API tests (see tests/README.md)
+.github/workflows/      Runs the tests on every push, and moves the stable branch when they pass on main
 ```
 
 ## Self-hosting
@@ -368,7 +393,7 @@ A menu offers default settings, advanced settings, or updating an existing insta
 1. Downloads a Debian LXC template, to whichever storage on your node accepts templates.
 2. Creates an unprivileged LXC with networking on `vmbr0` via DHCP.
 3. Installs `python3`, `git`, and `sqlite3` inside it.
-4. Clones this repository to `/opt/workout-tracker`.
+4. Clones this repository's `stable` branch to `/opt/workout-tracker` (see [Updating](#updating)).
 5. Creates a `workout` system user and a `workout-tracker` systemd service that starts on boot.
 6. Creates `/etc/workout-tracker/workout-tracker.env` for [server settings](#server-settings), with
    every option commented out. Updates never overwrite it.
@@ -434,7 +459,7 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/loganschwalm/WorkoutApp/
 | `UNPRIVILEGED` | `1` | `0` creates a privileged container |
 | `ONBOOT` | `1` | Start the container with the host |
 | `APP_PORT` | `6769` | Port the app listens on |
-| `REPO_URL` / `BRANCH` | this repo / `main` | Source to install from |
+| `REPO_URL` / `BRANCH` | this repo / `stable` | Source to install from; `stable` only has commits whose tests passed |
 | `APP_DIR` / `DATA_DIR` | `/opt/workout-tracker` / `/var/lib/workout-tracker` | Code and database paths |
 
 `STORAGE` and `TEMPLATE_STORAGE` are detected from the storages your node actually has: the script
@@ -444,7 +469,17 @@ type. A template cannot live on `local-lvm`, so it is normally `local` even when
 #### Updating
 
 Run the same command again on the Proxmox host and choose **Update an existing container**. That
-fetches the latest commit, rewrites the systemd unit, restarts the service, and prints the URL. A
+fetches the latest commit on the `stable` branch, rewrites the systemd unit, restarts the service, and
+prints the URL.
+
+Installs follow `stable` rather than `main`: every push lands on `main` at once, but `stable` only moves to
+a commit after every test has passed on it (see [Tests](#tests)), so a half-finished change never reaches
+your server. An install from before October 2026 that followed `main` moves to `stable` on its next
+update, once. To follow `main` anyway, set `BRANCH='main'` in `/etc/workout-tracker/install.conf` inside
+the container after that update; later updates keep it. While a repository has no `stable` branch (a fork,
+say), installs and updates use `main`.
+
+A
 container still on the old default port 8000 moves to 6769 on this update (see
 [Upgrading](#upgrading-an-install-from-before-september-2026)). Your data is kept:
 if a release changes the database layout, the server upgrades it in place when it starts, and the
@@ -659,6 +694,9 @@ docker compose logs -f                      # logs
 docker compose down && git pull && docker compose up -d --build   # update
 ```
 
+`git clone` gets `main`, which takes every push as it lands. To only update to commits whose tests have
+passed, switch the checkout to `stable` once with `git checkout stable`; `git pull` then follows it.
+
 To back up, take a consistent snapshot inside the running container and copy it out. A plain copy of
 `workouts.db` is not enough: recent changes can still be in the `workouts.db-wal` file beside it.
 
@@ -746,7 +784,9 @@ done by hand except closing registration, but it is worth knowing what happens:
 ### Migrating from the browser-only version
 
 Workouts saved in the older browser-only IndexedDB build are not uploaded automatically when you
-move to a self-hosted server. They have to be re-entered; there is no import tool yet.
+move to a self-hosted server, and Import cannot read them, since that build had no export. They have
+to be re-entered. Moving between self-hosted servers is covered by
+[exporting and importing](#exporting-and-importing).
 
 ## Running locally
 
@@ -773,8 +813,9 @@ PORT=9000 WORKOUT_DB=/tmp/scratch.db python backend/server.py
 
 The `tests/` directory holds end-to-end tests that drive a real headless browser against a real
 server, plus a suite that exercises the API directly: no mocking, so a passing check means the
-feature works. Thirteen suites cover the workout flow, the training programs, the rest timer, offline syncing, settings and
-templates, the alert settings, in-workout usability, swapping and timed exercises, rest per exercise, the workout
+feature works. Thirteen suites cover the workout flow, the training programs, the rest timer, offline syncing
+(connections that fail and connections that stall, and two tabs uploading at once), settings and templates, exporting
+and importing, the alert settings, in-workout usability, swapping and timed exercises, rest per exercise, the workout
 summary and personal records, kilograms, the training calendar, the service worker, the security headers and
 escaping in the pages, signing in and resetting a password in the browser, and the API itself
 (validation, malformed requests, racing uploads, sign-in throttling, password hashes, emails and
@@ -788,6 +829,10 @@ python tests/run.py
 They need `websocket-client` and a Chrome, Chromium or Edge install; the app itself
 still needs nothing beyond the Python standard library. See `tests/README.md` for the
 suite breakdown and for how to add a test.
+
+GitHub Actions runs every suite on each push and pull request (`.github/workflows/tests.yml`). When
+they all pass on `main`, it moves the `stable` branch to that commit, and that is the branch
+installs and updates follow.
 
 ## Data storage
 
