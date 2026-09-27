@@ -166,4 +166,12 @@ function workoutProgramLabel(workout) {
   return workout.program && typeof workout.program.label === 'string' ? workout.program.label : '';
 }
 
+// An open ⋯ menu (a saved workout's, an exercise's) closes when anything else is tapped, another menu included, or on Escape.
+document.addEventListener('click', event => {
+  document.querySelectorAll('.row-menu[open]').forEach(menu => { if (!menu.contains(event.target)) menu.open = false; });
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') document.querySelectorAll('.row-menu[open]').forEach(menu => { menu.open = false; });
+});
+
 $('today').textContent = new Date().toLocaleDateString(undefined, { weekday:'long', month:'short', day:'numeric' });

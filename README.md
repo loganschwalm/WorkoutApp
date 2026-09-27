@@ -287,12 +287,20 @@ cable stack with a single handle, and chest press, lat pulldown, leg extension a
 
 - See the last 12 weeks at a glance on the History page: a calendar with a square for each day you
   trained (tap one to see its workouts, or reach them from the keyboard: the calendar is one stop, at
-  today, and the arrow keys move a day up or down and a week left or right), this week's workouts against your weekly goal, your current
-  streak of weeks at the goal, and your best. A week still in progress never breaks the streak; it
+  today, and the arrow keys move a day up or down and a week left or right), this week's workouts
+  against your weekly goal, your current streak of weeks at the goal, and your best. A week still in progress never breaks the streak; it
   joins it once it reaches the goal. The goal is in Settings.
-- Review all saved workouts on the History page. The Tracker lists the 3 most recent, with Show more
-  for the next 7 and a link to the rest in History. Each shows its name and date (tap it for the sets), Start, and a ⋯ menu to copy it as
-  a new workout, edit it, or delete it.
+- Review all saved workouts on the History page, a line each under a heading for its month, with that
+  month's workouts and training time ("September 2026 · 14 workouts · 12 h 19 min"). Each shows its
+  name and date (tap it for the sets), Start, and a ⋯ menu to copy it as a new workout, edit it (both
+  in the Tracker's form), or delete it. The latest three months show at first, and Show older brings
+  the rest.
+- Search History by workout name, exercise or note; every word typed has to match, and the search
+  looks through every month.
+- Tapping a day you trained on the calendar (or Enter on it) goes to that day's workouts in the list,
+  opened and marked for a moment, even if a search or Show older was keeping them out of sight.
+- The Tracker lists the 3 most recent workouts, with Show more for the next 7 and a link to the rest
+  in History, with the same row and ⋯ menu.
 - See workout dates, how long each workout took, exercises, weights, reps, completed sets, and notes.
 - Sets are written compactly: "3 × 5 at 185 lbs", "115 lbs × 5, 5, 5, 5, 9", and bodyweight sets
   as reps ("10, 9, 8 reps") rather than "0 lbs". The last-time line during a workout uses the same

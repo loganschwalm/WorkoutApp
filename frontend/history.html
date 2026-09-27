@@ -24,13 +24,15 @@
 
     <section class="card" id="calendarCard">
       <div class="section-heading"><div><h2>Training calendar</h2><p class="subtitle" id="calendarSummary">The last 12 weeks.</p></div><span class="subtitle calendar-streak" id="streakSummary"></span></div>
-      <div class="training-calendar" id="trainingCalendar" role="group" aria-label="Training calendar: the arrow keys move between days" role="group" aria-label="Days trained in the last 12 weeks"></div>
+      <div class="training-calendar" id="trainingCalendar" role="group" aria-label="Days trained in the last 12 weeks. The arrow keys move between days, and Enter shows a day's workouts."></div>
       <p class="subtitle calendar-detail" id="calendarDetail" aria-live="polite"></p>
       <p class="subtitle calendar-note">Each square is a day, Monday at the top. A filled one is a day you trained; the weekly goal is in Settings.</p>
     </section>
 
     <section class="card">
-      <div class="section-heading"><div><h2>All saved workouts</h2><p class="subtitle">Start any saved workout again from its original exercise list.</p></div><span id="historySummary" class="subtitle"></span></div>
+      <div class="section-heading"><div><h2>All saved workouts</h2><p class="subtitle">Tap a workout to see its sets, or start it again.</p></div><span id="historySummary" class="subtitle"></span></div>
+      <div class="history-search"><label class="visually-hidden" for="historySearch">Search saved workouts</label><input id="historySearch" type="search" autocomplete="off" placeholder="Search by workout, exercise or note" /></div>
+      <p class="subtitle history-feedback" id="historyFeedback" role="status" hidden></p>
       <ul class="saved-workout-list" id="historyList"><li class="empty">No saved workouts yet.</li></ul>
     </section>
   </main>

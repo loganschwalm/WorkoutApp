@@ -592,3 +592,119 @@ def run(t):
     check('and the filters fit the phone', fits is True)
     cdp.send('Emulation.clearDeviceMetricsOverride')
     t.set_cookie(t.token)
+
+    # ------------------------------------------------------------------ P9 History, a month at a time
+    print('P9  History lists workouts a line each, by month, with a search, a menu to change them, and the calendar leading to them')
+    historian = account('historian')
+
+    def mid_month(back):
+        year, month = today.year, today.month - back
+        while month < 1:
+            year, month = year - 1, month + 12
+        return dt.date(year, month, 15)
+
+    def saved(name, day, hour, lift, duration=None, notes=''):
+        workout = {'name': name, 'notes': notes, 'createdAt': at(day, hour), 'exercises': [t.ex(lift, 100, 5, [(5, 100)])]}
+        if duration:
+            workout['duration'] = duration
+        return t.api('POST', '/api/workouts', workout, historian)[0]['id']
+
+    push = saved('Push Day', today, 1, 'Bench Press', 3600, 'Felt strong')
+    legs = saved('Leg Day', today, 2, 'Squat', 1800)
+    for back in range(1, 6):
+        saved('Old Pull', mid_month(back), 12, 'Deadlift')
+    total = 7
+    t.set_cookie(historian)
+    settle('/history.html', f"document.querySelectorAll('.history-workout').length === {total}")
+
+    def history():
+        return cdp.ev("""(() => ({
+          months: [...document.querySelectorAll('.history-month')].map(m => [m.querySelector('h3 span').textContent, m.querySelector('.history-month-total').textContent, m.hidden]),
+          rows: [...document.querySelectorAll('.history-workout')].filter(r => !r.closest('[hidden]')).map(r => r.querySelector('strong').textContent),
+          open: [...document.querySelectorAll('.history-workout')].filter(r => !r.querySelector('.workout-details').hidden).map(r => r.dataset.id),
+          older: document.querySelector('#historyList [data-action=older]')?.textContent ?? null,
+          summary: document.getElementById('historySummary').textContent }))()""")
+
+    def search(words):
+        cdp.ev(f"(i => {{ i.value = {json.dumps(words)}; i.dispatchEvent(new Event('input')); }})(document.getElementById('historySearch'))")
+
+    def row(workout_id):
+        return f"document.querySelector('.history-workout[data-id=\"{workout_id}\"]')"
+
+    state = history()
+    this_month = today.strftime('%B %Y')
+    check('each workout is one line, its sets folded away', state['open'] == [] and state['rows'][:2] == ['Leg Day', 'Push Day'], state)
+    check("under a heading for its month, with the month's workouts and time", state['months'][0] == [this_month, '2 workouts · 1 h 30 min', False], state['months'])
+    check('the latest three months show, and a button brings the rest', [m[2] for m in state['months']] == [False] * 3 + [True] * 3
+          and state['older'] == 'Show 3 older workouts' and len(state['rows']) == 4, state)
+    cdp.ev(f"{row(push)}.querySelector('[data-action=view]').click()")
+    check('tapping a workout shows its sets and notes', history()['open'] == [str(push)]
+          and 'Felt strong' in cdp.ev(f"{row(push)}.querySelector('.workout-details').textContent")
+          and cdp.ev(f"{row(push)}.querySelector('[data-action=view]').getAttribute('aria-expanded')") == 'true')
+
+    search('squat')
+    state = history()
+    check('a search finds workouts by exercise', state['rows'] == ['Leg Day'] and state['summary'] == f'1 of {total} saved workouts', state)
+    search('STRONG')
+    check('or by a note, whatever the case', history()['rows'] == ['Push Day'], history()['rows'])
+    search('deadlift')
+    state = history()
+    check('and looks through every month, the older ones too', state['rows'] == ['Old Pull'] * 5 and state['older'] is None, state)
+    search('old squat')
+    check('every word has to match', cdp.ev("document.getElementById('historyList').textContent") == 'No saved workouts match that search.')
+    search('')
+    state = history()
+    check('clearing it brings the list back as it was, the open workout still open', len(state['rows']) == 4 and state['open'] == [str(push)], state)
+    cdp.ev("document.querySelector('#historyList [data-action=older]').click()")
+    state = history()
+    check('Show older brings the older months', not any(m[2] for m in state['months']) and len(state['rows']) == total and state['older'] is None, state)
+    check('with the focus on the first of them', cdp.ev("document.activeElement === document.querySelectorAll('.history-month')[3].querySelector('.saved-workout-toggle')") is True)
+
+    # The calendar leads to a day's workouts, opened and marked for a moment, even when a search was hiding them.
+    settle('/history.html', f"document.querySelectorAll('.history-workout').length === {total}")
+    search('deadlift')
+    cdp.ev(f"document.querySelector('.calendar-day[data-date=\"{today.isoformat()}\"]').click()")
+    cdp.pause(0.3)
+    state = history()
+    check("tapping a day you trained goes to its workouts, clearing a search that hid them",
+          cdp.ev("document.getElementById('historySearch').value") == '' and sorted(state['open']) == sorted([str(push), str(legs)]), state)
+    check('marked for a moment, with the focus on the first', cdp.ev(f"{row(legs)}.classList.contains('picked') && {row(push)}.classList.contains('picked')") is True
+          and cdp.ev(f"document.activeElement === {row(legs)}.querySelector('.saved-workout-toggle')") is True)
+    old = mid_month(4).isoformat()
+    cdp.ev(f"goToDay('{old}')")
+    check('a day in a month still folded away brings the older months out first',
+          cdp.ev(f"!document.querySelector('.history-workout[data-date=\"{old}\"]').closest('[hidden]') && !document.querySelector('.history-workout[data-date=\"{old}\"] .workout-details').hidden") is True)
+
+    # The ⋯ menu: copying and editing open the Tracker's form; deleting happens here.
+    cdp.ev(f"{row(legs)}.querySelector('.row-menu summary').click()")
+    items = cdp.ev(f"[...{row(legs)}.querySelectorAll('.row-menu-items button')].filter(b => b.checkVisibility()).map(b => b.textContent)")
+    check("each workout's menu holds Copy as new, Edit and Delete", items == ['Copy as new', 'Edit', 'Delete'], items)
+    cdp.ev(f"{row(legs)}.querySelector('[data-action=edit]').click()")
+    cdp.pause(0.3)
+    opened = cdp.wait("location.pathname === '/index.html' && !document.getElementById('workoutBuilderCard').hidden", timeout=10)
+    check('Edit opens it in the Tracker, in the form, to change', opened and cdp.ev("document.getElementById('workoutBuilderTitle').textContent") == 'Edit workout'
+          and cdp.ev("document.getElementById('workoutName').value") == 'Leg Day' and cdp.ev("exercises.map(e => e.name)") == ['Squat'])
+    check('taking the request off the address, so a reload does not open it again', cdp.ev('location.search') == '', cdp.ev('location.search'))
+    settle('/history.html', f"document.querySelectorAll('.history-workout').length === {total}")
+    cdp.ev(f"{row(legs)}.querySelector('[data-action=copy]').click()")
+    cdp.pause(0.3)
+    opened = cdp.wait("location.pathname === '/index.html' && !document.getElementById('workoutBuilderCard').hidden", timeout=10)
+    check('Copy as new opens it there as a new workout', opened and cdp.ev("document.getElementById('workoutBuilderTitle').textContent") == 'Create a workout'
+          and cdp.ev("document.getElementById('workoutName').value") == 'Leg Day' and cdp.ev("document.getElementById('saveBtn').textContent") == 'Save workout')
+    cdp.ev("document.getElementById('clearBtn').click()")
+
+    settle('/history.html', f"document.querySelectorAll('.history-workout').length === {total}")
+    cdp.block_api = True
+    cdp.ev(f"{row(push)}.querySelector('[data-action=delete]').click()")
+    cdp.wait("!document.getElementById('historyFeedback').hidden")
+    check('a delete that cannot reach the server says so, and keeps the workout', 'could not be deleted' in cdp.ev("document.getElementById('historyFeedback').textContent")
+          and cdp.ev(f"!!{row(push)}") is True, cdp.ev("document.getElementById('historyFeedback').textContent"))
+    cdp.block_api = False
+    cdp.ev(f"{row(push)}.querySelector('[data-action=delete]').click()")
+    cdp.wait(f"!{row(push)}")
+    state = history()
+    check('Delete asks, then takes it out of the list and the month', cdp.ev("document.getElementById('historyFeedback').textContent") == 'Deleted “Push Day”.'
+          and state['months'][0][1] == '1 workout · 30 min' and state['summary'] == f'{total - 1} saved workouts', state)
+    check('and off the server', all(w['id'] != push for w in t.api('GET', '/api/workouts', token=historian)[0]['workouts']))
+    check('the calendar follows', cdp.ev(f"document.querySelector('.calendar-day[data-date=\"{today.isoformat()}\"]').title").endswith(': Leg Day'))
+    t.set_cookie(t.token)

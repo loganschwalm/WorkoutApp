@@ -77,8 +77,9 @@ html[data-theme="dark"] .secondary { background:#303653; }
 .saved-workout-row { align-items:center; }
 .saved-workout-toggle { flex:1; min-width:0; padding:4px 0; color:inherit; background:none; border-radius:6px; font-weight:400; text-align:left; }
 .saved-workout-toggle:hover { transform:none; }
-.saved-workout-toggle strong::after { content:"\203A"; display:inline-block; margin-left:7px; color:var(--muted); transition:transform .15s; }
-.saved-workout-toggle[aria-expanded="true"] strong::after { transform:rotate(90deg); }
+/* The triangle after the name joins its last word with a no-break space, so a long name never leaves it on a line alone. */
+.saved-workout-toggle strong::after { content:"\00a0\00a0\25B8"; color:var(--muted); font-size:.8em; }
+.saved-workout-toggle[aria-expanded="true"] strong::after { content:"\00a0\00a0\25BE"; }
 .row-actions { display:flex; align-items:center; gap:8px; flex-shrink:0; }
 .row-actions > button { padding:8px 16px; font-size:.85rem; }
 .row-menu { position:relative; }
@@ -399,3 +400,16 @@ body.has-install-banner .rest-panel { bottom:calc(84px + var(--tab-bar)); }
   .section-heading > div:first-child { min-width:0; }
   .section-heading-actions > button { padding:10px 13px; font-size:.85rem; white-space:nowrap; }
 }
+/* History: a search, then the workouts a month at a time under a heading with the month's count and time. */
+.history-search { margin-top:16px; }
+.history-feedback { margin:12px 0 0; }
+.history-month-heading { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:baseline; gap:4px 12px; margin:28px 0 8px; font-size:1rem; }
+.history-month:first-child .history-month-heading { margin-top:6px; }
+.history-month-total { color:var(--muted); font-size:.85rem; font-weight:600; }
+.history-month-list { margin:0; padding:0; list-style:none; }
+.row-actions > .button-link { padding:8px 16px; }
+/* A day picked on the calendar marks its workouts for a moment. */
+@keyframes picked { from { background:#e4e6ff; box-shadow:0 0 0 8px #e4e6ff; } to { background:transparent; box-shadow:0 0 0 8px transparent; } }
+@keyframes picked-dark { from { background:#353b63; box-shadow:0 0 0 8px #353b63; } to { background:transparent; box-shadow:0 0 0 8px transparent; } }
+.history-workout.picked { border-radius:6px; animation:picked 2.4s ease-out; }
+html[data-theme="dark"] .history-workout.picked { animation-name:picked-dark; }

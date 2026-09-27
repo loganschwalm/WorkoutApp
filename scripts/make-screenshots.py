@@ -170,9 +170,11 @@ def main():
         browser.open('/progress.html?exercise=all', "document.querySelectorAll('#legend .legend-item').length >= 3")
         browser.save('progress.png', bottom=browser.edge('main .card', margin=40))
 
-        # History in dark mode, down to the end of the second workout.
+        # History in dark mode, down to the end of the second workout, both opened.
         server.api('PUT', '/api/state', {'settings': {'theme': 'dark'}}, token)
         browser.open('/history.html', "document.documentElement.dataset.theme === 'dark' && document.querySelectorAll('.history-workout').length >= 5")
+        # Each workout is a line until tapped; the first two are opened to show their sets.
+        cdp.ev("[...document.querySelectorAll('.history-workout [data-action=view]')].slice(0, 2).forEach(button => button.click())")
         browser.save('history-dark.png', bottom=browser.edge('.history-workout', index=1, margin=1))
     finally:
         if browser:

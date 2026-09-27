@@ -423,14 +423,18 @@ async function loadSavedWorkouts() {
   }
 }
 
-function takeRequestedWorkoutId() {
+// A link from History says what to do with one of the saved workouts once they have loaded: ?start= starts it, ?edit=
+// opens it in the form to change, and ?copy= opens it there as a new workout. It is taken off the address, so a reload
+// does not do it again.
+function takeRequestedWorkout() {
   const params = new URLSearchParams(location.search);
-  if (!params.has('start')) return null;
-  const requestedId = Number(params.get('start'));
-  params.delete('start');
+  const action = ['start', 'edit', 'copy'].find(name => params.has(name));
+  if (!action) return null;
+  const id = Number(params.get(action));
+  params.delete(action);
   const query = params.toString();
   history.replaceState(null, '', `${location.pathname}${query ? `?${query}` : ''}${location.hash}`);
-  return requestedId;
+  return { action, id };
 }
 
 function showSavedSession(savedSession) {
@@ -456,7 +460,7 @@ function restoreLocalWorkout() {
 // `workouts` is null when the server could not be reached. The workout on this device is already on screen
 // (restoreLocalWorkout); the server's copy replaces it only when it changed on another device.
 async function resumeOrStartWorkout(workouts) {
-  const requestedId = workouts ? takeRequestedWorkoutId() : null;
+  const requested = workouts ? takeRequestedWorkout() : null;
   const local = readLocalActive();
   if (local && local.dirty) {
     // Changes made here that the server has not seen yet win over the server's copy.
@@ -476,8 +480,10 @@ async function resumeOrStartWorkout(workouts) {
       console.error('Unable to load active workout; showing the copy on this device.', error);
     }
   }
-  const requestedWorkout = requestedId === null ? null : workouts.find(workout => workout.id === requestedId);
-  if (requestedWorkout) startWorkout(requestedWorkout);
+  const workout = requested && workouts.find(item => item.id === requested.id);
+  if (!workout) return;
+  if (requested.action === 'start') startWorkout(workout);
+  else loadWorkoutIntoForm(workout, requested.action === 'edit');
 }
 
 $('addBtn').onclick = () => {
@@ -689,13 +695,6 @@ $('savedWorkoutList').onclick = async e => {
     }
   }
 };
-// An open ⋯ menu closes when anything else is tapped (including another row's menu) or on Escape.
-document.addEventListener('click', e => {
-  document.querySelectorAll('.row-menu[open]').forEach(menu => { if (!menu.contains(e.target)) menu.open = false; });
-});
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') document.querySelectorAll('.row-menu[open]').forEach(menu => { menu.open = false; });
-});
 $('recentList').onclick = e => {
   const button = e.target.closest('[data-recent-id]');
   const workout = button && savedWorkouts.find(item => item.id === Number(button.dataset.recentId));

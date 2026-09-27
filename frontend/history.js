@@ -1,7 +1,124 @@
-function renderHistory(workouts) {
-  $('historySummary').textContent = `${workouts.length} saved workout${workouts.length === 1 ? '' : 's'}`;
-  $('historyList').innerHTML = workouts.length ? workouts.map(workout => `<li class="saved-workout history-workout"><div class="saved-workout-summary"><div><strong>${escapeHTML(workout.name)}</strong><span>${escapeHTML(describeWorkoutDate(workout))}</span></div><a class="button-link primary" href="index.html?start=${encodeURIComponent(workout.id)}">Start workout</a></div><div class="workout-details">${workout.notes ? `<p class="workout-note">${escapeHTML(workout.notes)}</p>` : ''}<ul>${inUnit(workout).exercises.map(item => `<li><strong><a href="progress.html?exercise=${encodeURIComponent(exerciseKey(item.name))}">${escapeHTML(item.name)}</a></strong><span>${escapeHTML(describeSavedExercise(item))}</span></li>`).join('')}</ul></div></li>`).join('') : '<li class="empty">No saved workouts yet.</li>';
+// ---- Every saved workout ---------------------------------------------------
+// One line a workout (tap it for its sets), under a heading for its month with that month's workouts and time. A search
+// narrows the list to workouts whose name, exercises or notes have every word typed. The latest few months show at
+// first and Show older brings the rest; a search, or a day picked on the calendar, looks through all of them.
+const monthsShownAtFirst = 3;
+let showingAllMonths = false;
+// Workouts opened to show their sets, kept open when the list is drawn again (a search, a deletion).
+const openWorkouts = new Set();
+
+function monthKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
+
+function searchWords() {
+  return $('historySearch').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+}
+
+function matchesSearch(workout, words) {
+  const text = [workout.name, workout.notes || '', ...workout.exercises.map(item => item.name)].join(' ').toLowerCase();
+  return words.every(word => text.includes(word));
+}
+
+// "12 workouts · 11 h 40 min": the time only counts workouts that were timed.
+function describeMonth(workouts) {
+  const seconds = workouts.reduce((sum, workout) => sum + (Number(workout.duration) > 0 ? Number(workout.duration) : 0), 0);
+  return [plural(workouts.length, 'workout'), seconds ? formatDuration(seconds) : ''].filter(Boolean).join(' · ');
+}
+
+// The same row as the Tracker's: the name (tap for the sets), Start, and a ⋯ menu to copy, edit or delete it. Copying
+// and editing happen in the Tracker's workout form, which the menu opens.
+function historyRow(workout) {
+  const open = openWorkouts.has(workout.id);
+  return `<li class="saved-workout history-workout" data-id="${escapeHTML(workout.id)}" data-date="${calendarDayKey(new Date(workout.createdAt))}">`
+    + '<div class="saved-workout-summary saved-workout-row">'
+    + `<button class="saved-workout-toggle" type="button" data-action="view" aria-expanded="${open}">`
+    + `<strong>${escapeHTML(workout.name)}</strong><span>${escapeHTML(describeWorkoutDate(workout))}</span></button>`
+    + `<div class="row-actions"><a class="button-link primary" href="index.html?start=${encodeURIComponent(workout.id)}">Start</a>`
+    + `<details class="row-menu"><summary class="secondary" aria-label="More for ${escapeHTML(workout.name)}">&middot;&middot;&middot;</summary>`
+    + '<div class="row-menu-items"><button type="button" data-action="copy">Copy as new</button><button type="button" data-action="edit">Edit</button>'
+    + '<button class="danger" type="button" data-action="delete">Delete</button></div></details></div></div>'
+    + `<div class="workout-details"${open ? '' : ' hidden'}>${workout.notes ? `<p class="workout-note">${escapeHTML(workout.notes)}</p>` : ''}`
+    + `<ul>${inUnit(workout).exercises.map(item => `<li><strong><a href="progress.html?exercise=${encodeURIComponent(exerciseKey(item.name))}">`
+      + `${escapeHTML(item.name)}</a></strong><span>${escapeHTML(describeSavedExercise(item))}</span></li>`).join('')}</ul></div></li>`;
+}
+
+function renderHistory(workouts) {
+  const words = searchWords();
+  const shown = words.length ? workouts.filter(workout => matchesSearch(workout, words)) : workouts;
+  $('historySummary').textContent = words.length ? `${shown.length} of ${plural(workouts.length, 'saved workout')}` : plural(workouts.length, 'saved workout');
+  // Newest first, as the server sends them, so each month's workouts arrive together.
+  const months = new Map();
+  shown.forEach(workout => {
+    const key = monthKey(new Date(workout.createdAt));
+    months.set(key, [...(months.get(key) || []), workout]);
+  });
+  const everyMonth = showingAllMonths || words.length > 0;
+  const folded = everyMonth ? [] : [...months.values()].slice(monthsShownAtFirst).flat();
+  const list = [...months].map(([key, monthWorkouts], index) => {
+    const [year, month] = key.split('-').map(Number);
+    const name = new Date(year, month - 1, 1).toLocaleDateString(undefined, { month:'long', year:'numeric' });
+    return `<li class="history-month" data-month="${key}"${!everyMonth && index >= monthsShownAtFirst ? ' hidden' : ''}>`
+      + `<h3 class="history-month-heading"><span>${escapeHTML(name)}</span><span class="history-month-total">${escapeHTML(describeMonth(monthWorkouts))}</span></h3>`
+      + `<ul class="history-month-list">${monthWorkouts.map(historyRow).join('')}</ul></li>`;
+  }).join('');
+  const older = folded.length ? `<li class="more-workouts"><button class="secondary" type="button" data-action="older">Show ${plural(folded.length, 'older workout')}</button></li>` : '';
+  $('historyList').innerHTML = shown.length ? list + older
+    : `<li class="empty">${workouts.length ? 'No saved workouts match that search.' : 'No saved workouts yet.'}</li>`;
+}
+
+function showHistoryFeedback(message, failed = false) {
+  const feedback = $('historyFeedback');
+  feedback.textContent = message;
+  feedback.className = `${failed ? 'auth-feedback' : 'subtitle'} history-feedback`;
+  feedback.hidden = false;
+}
+
+async function deleteHistoryWorkout(workout) {
+  if (!confirm(`Delete “${workout.name}”?`)) return;
+  try {
+    const response = await syncFetch(`/api/workouts/${encodeURIComponent(workout.id)}`, { method:'DELETE' });
+    if (!response.ok) throw new Error(`Delete failed (${response.status}).`);
+  } catch (error) {
+    console.error('Unable to delete workout.', error);
+    showHistoryFeedback('This workout could not be deleted. Check your connection and try again.', true);
+    return;
+  }
+  openWorkouts.delete(workout.id);
+  showHistory(historyWorkouts.filter(item => item.id !== workout.id));
+  showHistoryFeedback(`Deleted “${workout.name}”.`);
+}
+
+function showWorkoutDetails(row, open) {
+  row.querySelector('.workout-details').hidden = !open;
+  row.querySelector('[data-action=view]').setAttribute('aria-expanded', String(open));
+  const id = Number(row.dataset.id);
+  if (open) openWorkouts.add(id);
+  else openWorkouts.delete(id);
+}
+
+$('historyList').onclick = event => {
+  const button = event.target.closest('[data-action]');
+  if (!button || !historyWorkouts) return;
+  const action = button.dataset.action;
+  if (action === 'older') {
+    const first = $('historyList').querySelector('.history-month[hidden]');
+    showingAllMonths = true;
+    renderHistory(historyWorkouts);
+    // Focus goes to the first workout that was folded away, where reading carries on.
+    if (first) $('historyList').querySelector(`.history-month[data-month="${first.dataset.month}"] .saved-workout-toggle`)?.focus();
+    return;
+  }
+  const row = button.closest('.history-workout');
+  const workout = historyWorkouts.find(item => String(item.id) === row.dataset.id);
+  if (!workout) return;
+  const menu = button.closest('.row-menu');
+  if (menu) menu.open = false;
+  if (action === 'view') showWorkoutDetails(row, row.querySelector('.workout-details').hidden);
+  if (action === 'copy' || action === 'edit') location.href = `index.html?${action}=${encodeURIComponent(workout.id)}`;
+  if (action === 'delete') deleteHistoryWorkout(workout);
+};
+$('historySearch').oninput = () => { if (historyWorkouts) renderHistory(historyWorkouts); };
 
 // ---- Training calendar ----------------------------------------------------
 // The last 12 weeks as a grid of days, weeks running left to right from Monday, and how many weeks in a row reached the
@@ -126,7 +243,34 @@ function showCalendarDay(event) {
   if (day) $('calendarDetail').textContent = day.title;
 }
 
-$('trainingCalendar').onclick = showCalendarDay;
+// Tapping a day you trained (or Enter on it) goes to its workouts in the list, opened and marked for a moment. One that
+// a search or Show older is keeping out of sight is brought back into it first.
+function goToDay(key) {
+  const rows = () => [...$('historyList').querySelectorAll(`.history-workout[data-date="${key}"]`)];
+  let found = rows();
+  if (!found.length || found.some(row => row.closest('.history-month[hidden]'))) {
+    $('historySearch').value = '';
+    showingAllMonths = true;
+    renderHistory(historyWorkouts);
+    found = rows();
+  }
+  if (!found.length) return;
+  found.forEach(row => {
+    showWorkoutDetails(row, true);
+    row.classList.remove('picked');
+    // Read once so the mark starts again on a second tap of the same day.
+    void row.offsetWidth;
+    row.classList.add('picked');
+  });
+  found[0].querySelector('.saved-workout-toggle').focus({ preventScroll:true });
+  found[0].scrollIntoView({ behavior:'smooth', block:'center' });
+}
+
+$('trainingCalendar').onclick = event => {
+  showCalendarDay(event);
+  const day = event.target.closest('.calendar-day.trained');
+  if (day) goToDay(day.dataset.date);
+};
 $('trainingCalendar').addEventListener('focusin', showCalendarDay);
 $('trainingCalendar').onkeydown = moveCalendarFocus;
 
