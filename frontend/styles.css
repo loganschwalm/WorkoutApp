@@ -473,10 +473,12 @@ h2 { margin-bottom:14px; }
   .rest-actions { gap:6px; }
   .rest-actions button { padding:9px 10px; font-size:.85rem; white-space:nowrap; }
   /* A logged set on one line: its number, weight, reps and ×. */
-  .set-list li { grid-template-columns:auto minmax(0,1fr) minmax(0,1fr) auto; gap:8px; }
+  .set-list li { grid-template-columns:auto minmax(0,1fr) minmax(0,1fr) auto; gap:6px; padding:6px 6px 6px 9px; }
   .set-number, .set-list .remove { grid-row:auto; grid-column:auto; }
-  .set-number { font-size:.8rem; }
-  .set-field { gap:4px; font-size:.8rem; }
+  .set-number { font-size:.78rem; }
+  .set-field { gap:3px; font-size:.75rem; }
+  .set-edit { padding:8px 7px; }
+  .set-list .remove { width:28px; height:28px; font-size:1.05rem; }
   .footer-actions { flex-direction:row; }
   .footer-buttons { flex:1; }
 }
