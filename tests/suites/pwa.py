@@ -186,7 +186,7 @@ def run(t):
         const box = banner.getBoundingClientRect();
         return !banner.contains(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2));
     })()""") is True)
-    cdp.ev("document.getElementById('cancelSettings').click()")
+    cdp.ev("document.getElementById('closeSettings').click()")
 
     stub = cdp.send('Page.addScriptToEvaluateOnNewDocument',
                     source="Object.defineProperty(navigator, 'standalone', { get: () => true })")['result']['identifier']

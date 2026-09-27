@@ -131,8 +131,18 @@ def run(t):
     settle('/index.html', "document.querySelectorAll('#savedWorkoutList .saved-workout').length >= 10")
     names = cdp.ev("[...document.querySelectorAll('#savedWorkoutList .saved-workout-summary strong')].map(s => s.textContent)")
     check('the Tracker lists the ten most recent workouts', len(names) == 10 and names[0] == 'Format Check' and names.count('Older Session') == 4, names)
+    # A workout left going from before would keep the list out of the way (and out of reach of the focus).
+    if cdp.ev("!document.getElementById('activeWorkout').hidden"):
+        t.end_workout()
+    rows_shown = lambda: cdp.ev("[...document.querySelectorAll('#savedWorkoutList .saved-workout')].filter(li => !li.hidden).length")
+    check('showing the first three', rows_shown() == 3, rows_shown())
     more = cdp.ev("(() => { const a = document.querySelector('#savedWorkoutList .more-workouts a'); return a && [a.textContent, a.getAttribute('href')]; })()")
     check('with a link to all of them in History', more == [f'See all {total} workouts in History', 'history.html'], more)
+    check('and Show more for the other seven', cdp.ev("document.querySelector('#savedWorkoutList [data-action=more]').textContent") == 'Show 7 more')
+    cdp.ev("document.querySelector('#savedWorkoutList [data-action=more]').click()")
+    check('which shows them, and goes to the first of them', rows_shown() == 10 and cdp.ev("!document.querySelector('#savedWorkoutList [data-action=more]')")
+          and cdp.ev("document.activeElement === document.querySelectorAll('#savedWorkoutList .saved-workout-toggle')[3]"),
+          rows_shown())
     cdp.ev("document.querySelector('#savedWorkoutList [data-action=view]').click()")
     spans = cdp.ev("[...document.querySelectorAll('#savedWorkoutList .saved-workout')[0].querySelectorAll('.workout-details li span')].map(s => s.textContent)")
     check('its details write sets the same way', spans == expected, spans)
@@ -234,7 +244,7 @@ def run(t):
     cdp.ev("document.getElementById('settingsButton').click()")
     check('Settings shows Match system as the choice',
           cdp.ev("(s => s.value + ' ' + s.selectedOptions[0].textContent)(document.getElementById('themeSetting'))") == 'system Match system')
-    cdp.ev("document.getElementById('cancelSettings').click()")
+    cdp.ev("document.getElementById('closeSettings').click()")
     device('light')
     check('the device switching to light mode takes the open page with it', cdp.wait(f"{theme} === 'light'"), cdp.ev(theme))
     device('dark')
@@ -302,7 +312,7 @@ def run(t):
     t.end_workout()
 
     menu_hidden = "[...document.querySelectorAll('#savedWorkoutList .row-menu-items button')].every(b => !b.checkVisibility())"
-    counts = cdp.ev("""[...document.querySelectorAll('#savedWorkoutList .saved-workout')].map(row =>
+    counts = cdp.ev("""[...document.querySelectorAll('#savedWorkoutList .saved-workout')].filter(row => !row.hidden).map(row =>
         [...row.querySelectorAll('button')].filter(b => b.checkVisibility() && !b.closest('.row-menu-items')).map(b => b.dataset.action).join(' '))""")
     check('each saved workout shows only its name and Start, with the rest in its menu',
           counts and all(c == 'view start' for c in counts) and cdp.ev(menu_hidden) is True, counts)
@@ -324,6 +334,12 @@ def run(t):
     check('Create workout, beside the saved workouts, opens an empty one',
           cdp.ev("!document.getElementById('workoutBuilderCard').hidden && document.getElementById('workoutBuilderTitle').textContent === 'Create a workout' && exercises.length === 0") is True)
     cdp.ev("document.getElementById('clearBtn').click()")
+    cdp.ev("if (document.getElementById('templateArea').hidden) document.getElementById('templatesToggle').click();"
+           "document.getElementById('createTemplateBtn').focus(); document.getElementById('createTemplateBtn').click()")
+    opened = cdp.ev("!document.getElementById('templateModal').hidden && document.activeElement.id")
+    cdp.ev("document.getElementById('cancelTemplate').click()")
+    check('the template editor, once closed, gives the focus back to the button that opened it',
+          opened == 'templateName' and cdp.ev('document.activeElement.id') == 'createTemplateBtn', [opened, cdp.ev('document.activeElement.id')])
 
     cdp.send('Emulation.setDeviceMetricsOverride', width=375, height=800, deviceScaleFactor=1, mobile=True)
     cdp.pause(0.3)
@@ -397,6 +413,35 @@ def run(t):
     check('tapping a day writes its workouts under the calendar, for phones', 'Today A' in detail and 'Today B' in detail, detail)
     rest = cdp.ev("document.querySelector('.calendar-day:not(.trained):not(.future)').title")
     check('a day without a workout says rest', rest.endswith(': rest'), rest)
+
+    # From the keyboard: one day in the tab order, today, and the arrow keys from there. A headless page is not focused,
+    # which holds back focus events, so it is made to act as one that is.
+    cdp.send('Emulation.setFocusEmulationEnabled', enabled=True)
+    tabbable = cdp.ev("[...document.querySelectorAll('#trainingCalendar [tabindex=\"0\"]')].map(d => d.dataset.date)")
+    check('the calendar is one stop for the keyboard, at today', tabbable == [today.isoformat()], tabbable)
+
+    def press(key):
+        cdp.ev(f"document.activeElement.dispatchEvent(new KeyboardEvent('keydown', {{ key: '{key}', bubbles: true, cancelable: true }}))")
+
+    cdp.ev(f"document.querySelector('.calendar-day[data-date=\"{today.isoformat()}\"]').focus()")
+    press('ArrowLeft')
+    week_ago = (today - dt.timedelta(days=7)).isoformat()
+    focused = cdp.ev("document.activeElement.dataset.date")
+    check('left goes back a week', focused == week_ago, focused)
+    check('writing that day under the calendar', cdp.ev("document.getElementById('calendarDetail').textContent") == cdp.ev("document.activeElement.title"))
+    press('ArrowUp')
+    focused = cdp.ev("document.activeElement.dataset.date")
+    check('up goes back a day', focused == (today - dt.timedelta(days=8)).isoformat(), focused)
+    press('ArrowRight')
+    press('ArrowDown')
+    focused = cdp.ev("document.activeElement.dataset.date")
+    check('right and down come forward again', focused == today.isoformat(), focused)
+    tabbable = cdp.ev("[...document.querySelectorAll('#trainingCalendar [tabindex=\"0\"]')].map(d => d.dataset.date)")
+    check('and the tab order follows it', tabbable == [today.isoformat()], tabbable)
+    if today.weekday() < 6:
+        press('ArrowDown')
+        check('a day still to come cannot be reached', cdp.ev("document.activeElement.dataset.date") == today.isoformat())
+    cdp.send('Emulation.setFocusEmulationEnabled', enabled=False)
 
     cdp.ev("document.getElementById('settingsButton').click()")
     check('the weekly goal is in Settings, at 3', cdp.ev("document.getElementById('weeklyGoalSetting').value") == '3')

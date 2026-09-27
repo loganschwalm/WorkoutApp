@@ -88,9 +88,29 @@ function renderCalendar() {
     const when = date.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric' });
     const description = names.length ? `${when}: ${names.join(', ')}` : `${when}: rest`;
     const classes = ['calendar-day', names.length ? 'trained' : '', names.length > 1 ? 'many' : '', date > today ? 'future' : '', date.getTime() === today.getTime() ? 'today' : ''].filter(Boolean).join(' ');
-    return `<span class="${classes}" data-date="${calendarDayKey(date)}"${date > today ? ' aria-hidden="true"' : ` title="${escapeHTML(description)}" aria-label="${escapeHTML(description)}"`}></span>`;
+    if (date > today) return `<span class="${classes}" data-date="${calendarDayKey(date)}" aria-hidden="true"></span>`;
+    // Today is where the keyboard comes in; the arrow keys go from there (see moveCalendarFocus).
+    return `<button class="${classes}" type="button" data-date="${calendarDayKey(date)}" tabindex="${date.getTime() === today.getTime() ? 0 : -1}"`
+      + ` title="${escapeHTML(description)}" aria-label="${escapeHTML(description)}"></button>`;
   }).join('')}`).join('');
   $('trainingCalendar').innerHTML = `<span class="calendar-corner"></span>${months}${rows}`;
+}
+
+// One day of the calendar is in the tab order at a time; the arrow keys move between them, a day up or down and a week
+// left or right, as the grid is drawn.
+const calendarMoves = { ArrowUp:-1, ArrowDown:1, ArrowLeft:-7, ArrowRight:7 };
+
+function moveCalendarFocus(event) {
+  const day = event.target.closest('button.calendar-day');
+  if (!day || !(event.key in calendarMoves)) return;
+  event.preventDefault();
+  const [year, month, date] = day.dataset.date.split('-').map(Number);
+  const target = calendarDayKey(addDays(new Date(year, month - 1, date), calendarMoves[event.key]));
+  const next = $('trainingCalendar').querySelector(`button.calendar-day[data-date="${target}"]`);
+  if (!next) return;
+  day.tabIndex = -1;
+  next.tabIndex = 0;
+  next.focus();
 }
 
 function showHistory(workouts) {
@@ -99,11 +119,16 @@ function showHistory(workouts) {
   renderCalendar();
 }
 
-// A day's label is its tooltip, which only a mouse shows, so tapping a day writes it under the calendar too.
-$('trainingCalendar').onclick = event => {
+// A day's label is its tooltip, which only a mouse shows, so tapping a day, or reaching it from the keyboard, writes it
+// under the calendar too.
+function showCalendarDay(event) {
   const day = event.target.closest('.calendar-day[title]');
   if (day) $('calendarDetail').textContent = day.title;
-};
+}
+
+$('trainingCalendar').onclick = showCalendarDay;
+$('trainingCalendar').addEventListener('focusin', showCalendarDay);
+$('trainingCalendar').onkeydown = moveCalendarFocus;
 
 // A new weekly goal from Settings counts at once, and a new unit shows every weight in it.
 window.addEventListener('settingschange', () => {

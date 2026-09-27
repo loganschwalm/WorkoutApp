@@ -36,7 +36,7 @@ def run(t):
     cdp.ev("document.querySelector('#templateList [data-template-action=start]').click()")
     cdp.pause(0.3)
     cdp.ev("document.getElementById('completedReps').value = '8'; document.getElementById('completeSetBtn').click()")
-    cdp.ev("document.getElementById('settingsButton').click(); document.getElementById('cancelSettings').click()")
+    cdp.ev("document.getElementById('settingsButton').click(); document.getElementById('closeSettings').click()")
     cdp.ev("document.getElementById('createTemplateBtn').click(); document.getElementById('cancelTemplate').click()")
     cdp.ev("document.querySelector('#savedWorkoutList [data-action=view]').click()")
     cdp.pause(0.5)

@@ -100,17 +100,27 @@ function render() {
   $('count').textContent = `${exercises.length} exercise${exercises.length === 1 ? '' : 's'}`;
 }
 
-// The Tracker lists the most recent workouts; the History page has every one.
+// The Tracker lists the most recent workouts, the first three showing and the rest of them a tap away (Show more), since
+// this list is where a workout is edited or deleted. The History page has every one.
 const recentWorkoutLimit = 10;
+const savedWorkoutsShown = 3;
+let showingAllSaved = false;
 
 function renderSavedWorkouts(workouts) {
   const list = $('savedWorkoutList');
   const recent = workouts.slice(0, recentWorkoutLimit);
-  const more = workouts.length > recent.length
-    ? `<li class="more-workouts"><a class="button-link secondary" href="history.html">See all ${workouts.length} workouts in History</a></li>` : '';
+  const folded = showingAllSaved ? 0 : Math.max(0, recent.length - savedWorkoutsShown);
+  const moreButton = folded ? `<button class="secondary" type="button" data-action="more">Show ${folded} more</button>` : '';
+  const historyLink = workouts.length > savedWorkoutsShown
+    ? `<a class="button-link secondary" href="history.html">See all ${workouts.length} workouts in History</a>` : '';
+  const more = moreButton || historyLink ? `<li class="more-workouts">${moreButton}${historyLink}</li>` : '';
+  const focused = list.contains(document.activeElement) ? document.activeElement : null;
+  const focusedId = focused?.closest('.saved-workout')?.dataset.id;
+  const focusedAction = focused?.dataset.action;
   // One row a workout: tapping its name shows what was done, Start is the one button, and everything else (copying,
   // editing, deleting) waits in its ⋯ menu, away from a thumb reaching for Start.
-  list.innerHTML = recent.length ? recent.map(workout => `<li class="saved-workout" data-id="${escapeHTML(workout.id)}">`
+  list.innerHTML = recent.length ? recent.map((workout, index) => `<li class="saved-workout" data-id="${escapeHTML(workout.id)}"`
+    + `${index >= recent.length - folded ? ' hidden' : ''}>`
     + '<div class="saved-workout-summary saved-workout-row">'
     + '<button class="saved-workout-toggle" type="button" data-action="view" aria-expanded="false">'
     + `<strong>${escapeHTML(workout.name)}</strong><span>${escapeHTML(describeWorkoutDate(workout))}</span></button>`
@@ -123,6 +133,8 @@ function renderSavedWorkouts(workouts) {
       + `<span>${escapeHTML(describeSavedExercise(item))}</span></li>`).join('')}</ul>`
     + '</div></li>').join('') + more
     : '<li class="empty">No saved workouts yet.</li>';
+  // Drawn again (after a sync, say) while a button in the list has the focus, the same button gets it back.
+  if (focusedId) list.querySelector(`.saved-workout[data-id="${focusedId}"] [data-action="${focusedAction}"]`)?.focus({ preventScroll:true });
   renderRecentWorkouts();
 }
 
@@ -641,6 +653,13 @@ $('savedWorkoutList').onclick = async e => {
   const button = e.target.closest('[data-action]');
   if (!button) return;
   const action = button.dataset.action;
+  if (action === 'more') {
+    showingAllSaved = true;
+    renderSavedWorkouts(savedWorkouts);
+    // Focus goes to the first of the workouts that were folded away, where reading carries on.
+    $('savedWorkoutList').querySelectorAll('.saved-workout-toggle')[savedWorkoutsShown]?.focus({ preventScroll:true });
+    return;
+  }
   const workoutElement = button.closest('.saved-workout');
   const workoutId = Number(workoutElement.dataset.id);
   // The list on screen was drawn from savedWorkouts, so the workout a button belongs to is already here: no request,

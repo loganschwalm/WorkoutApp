@@ -286,11 +286,12 @@ cable stack with a single handle, and chest press, lat pulldown, leg extension a
 ### Workout history
 
 - See the last 12 weeks at a glance on the History page: a calendar with a square for each day you
-  trained (tap one to see its workouts), this week's workouts against your weekly goal, your current
+  trained (tap one to see its workouts, or reach them from the keyboard: the calendar is one stop, at
+  today, and the arrow keys move a day up or down and a week left or right), this week's workouts against your weekly goal, your current
   streak of weeks at the goal, and your best. A week still in progress never breaks the streak; it
   joins it once it reaches the goal. The goal is in Settings.
-- Review all saved workouts on the History page. The Tracker lists the 10 most recent, with a link
-  to the rest. Each shows its name and date (tap it for the sets), Start, and a ⋯ menu to copy it as
+- Review all saved workouts on the History page. The Tracker lists the 3 most recent, with Show more
+  for the next 7 and a link to the rest in History. Each shows its name and date (tap it for the sets), Start, and a ⋯ menu to copy it as
   a new workout, edit it, or delete it.
 - See workout dates, how long each workout took, exercises, weights, reps, completed sets, and notes.
 - Sets are written compactly: "3 × 5 at 185 lbs", "115 lbs × 5, 5, 5, 5, 9", and bodyweight sets
@@ -327,7 +328,11 @@ cable stack with a single handle, and chest press, lat pulldown, leg extension a
 
 ### Settings
 
-The gear button opens a settings modal available on every page. Settings include:
+The gear button opens a settings modal available on every page, in sections: General, During a
+workout, Rest timer, Your data and Account. Each change is saved as you make it, so there is no Save
+button, just Done; closing it any other way (the ×, Escape, or a tap outside) keeps your changes too.
+Closing it puts the keyboard focus back on the gear button, as the template and program editors do on
+the button that opened them. Settings include:
 
 - Appearance: match the device's own light or dark mode (the default, which also follows it when it changes
   while the app is open), or always light, or always dark. Pages open in the right theme straight away, with no
@@ -348,7 +353,7 @@ The gear button opens a settings modal available on every page. Settings include
   volume buttons set, like a music app. The phone pauses other audio, such as music, while the alert sounds, and the
   app lets go straight after so the music app can carry on. Turn it off to have the alert follow the Ring/Silent
   switch instead, leaving your music alone. iPhones do not let web pages vibrate, so there the alert is sound only.
-- A Test alert button plays the alert with the current choices, before you save them.
+- A Test alert button plays the alert with the current choices.
 - Your data: Export, Export sets as CSV, and Import. See [Exporting and importing](#exporting-and-importing).
 - The signed-in account name and a Sign out button. Signing out warns first if a workout has not finished syncing; it stays on the device and uploads the next time you sign in to the same account.
 - The account's email, with a button to add or change it. Changing it asks for your password.

@@ -159,9 +159,33 @@ function applySettings(settings) {
 // Set by an import, whose workouts, templates and program the page then loads again to show.
 let reloadAfterImport = false;
 
+// Settings are kept as they change, so every way out of the dialog keeps them: Done, the ×, Escape and a tap outside it.
+// Closing also keeps a rest duration still being typed, which is only taken once its field is left.
 function closeSettings() {
+  saveSettings();
   getSettingElement('settingsModal').hidden = true;
+  returnFocus('settings');
   if (reloadAfterImport) location.reload();
+}
+
+// Keeps what the form says, when that differs from what is kept already, and tells the page. True when anything changed.
+function saveSettings() {
+  const settings = readSettingsForm();
+  const current = getWorkoutSettings();
+  if (Object.keys(settings).every(key => settings[key] === current[key])) return false;
+  saveLocalState('settings', settings);
+  applySettings(settings);
+  window.dispatchEvent(new Event('settingschange'));
+  return true;
+}
+
+let settingsSavedTimer = null;
+
+function showSettingsSaved() {
+  const status = getSettingElement('settingsSaved');
+  status.textContent = 'Saved.';
+  clearTimeout(settingsSavedTimer);
+  settingsSavedTimer = setTimeout(() => { status.textContent = 'Changes are saved as you make them.'; }, 2000);
 }
 
 // The account's name and email. While the server has not said who is signed in (offline), there is nothing to change.
@@ -258,6 +282,7 @@ async function importAccount(file) {
 }
 
 function openSettings() {
+  rememberOpener('settings');
   applySettings(getWorkoutSettings());
   showAccount();
   getSettingElement('dataStatus').hidden = true;
@@ -269,10 +294,15 @@ window.getWorkoutSettings = getWorkoutSettings;
 applySettings(getWorkoutSettings());
 getSettingElement('settingsButton').onclick = openSettings;
 getSettingElement('closeSettings').onclick = closeSettings;
-getSettingElement('cancelSettings').onclick = closeSettings;
 getSettingElement('settingsModal').onclick = event => { if (event.target === getSettingElement('settingsModal')) closeSettings(); };
 document.addEventListener('keydown', event => { if (event.key === 'Escape' && !getSettingElement('settingsModal').hidden) closeSettings(); });
 ['input', 'change'].forEach(type => getSettingElement('settingsForm').addEventListener(type, syncSoundControls));
+// A setting is kept as soon as it changes: a box ticked, a choice picked, the volume let go, the rest duration's field left.
+// The account's fields and the import's file belong to forms of their own, and are left out.
+getSettingElement('settingsForm').addEventListener('change', event => {
+  if (event.target.form !== getSettingElement('settingsForm') || event.target.type === 'file') return;
+  if (saveSettings()) showSettingsSaved();
+});
 // Plays the alert with the values currently in the form, so changes can be heard before they are saved.
 getSettingElement('testAlertButton').onclick = () => { unlockAudio(); playRestAlert(readSettingsForm()); };
 getSettingElement('signOutButton').onclick = async () => {
@@ -376,11 +406,8 @@ Object.entries(accountPanels).forEach(([name, panel]) => {
   getSettingElement(panel.cancel).onclick = () => { getSettingElement(panel.editor).hidden = true; };
   getSettingElement(panel.form).onsubmit = event => { event.preventDefault(); sendAccountPanel(panel); };
 });
+// Done, or Enter in a field.
 getSettingElement('settingsForm').onsubmit = event => {
   event.preventDefault();
-  const settings = readSettingsForm();
-  saveLocalState('settings', settings);
-  applySettings(settings);
-  window.dispatchEvent(new Event('settingschange'));
   closeSettings();
 };

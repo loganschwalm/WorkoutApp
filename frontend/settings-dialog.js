@@ -18,6 +18,7 @@ document.body.insertAdjacentHTML('beforeend', `
       <button class="modal-close" id="closeSettings" type="button" aria-label="Close settings">&times;</button>
     </div>
     <form id="settingsForm">
+      <h3 class="settings-section">General</h3>
       <label for="themeSetting">Appearance</label>
       <select id="themeSetting">
         <option value="system">Match system</option><option value="light">Light mode</option><option value="dark">Dark mode</option>
@@ -26,12 +27,14 @@ document.body.insertAdjacentHTML('beforeend', `
       <select id="unitSetting"><option value="lbs">Pounds (lbs)</option><option value="kg">Kilograms (kg)</option></select>
       <label for="weeklyGoalSetting">Weekly goal</label>
       <select id="weeklyGoalSetting">${weeklyGoals}</select>
-      <label for="restDurationSetting">Default rest duration (seconds)</label>
-      <input id="restDurationSetting" type="number" inputmode="numeric" min="15" max="600" step="15" />
-      <label class="setting-check"><input id="autoRestSetting" type="checkbox" /> Start the rest timer automatically after each set</label>
+      <h3 class="settings-section">During a workout</h3>
       <label class="setting-check"><input id="confirmEndSetting" type="checkbox" /> Confirm before ending an active workout</label>
       <label class="setting-check"><input id="effortSetting" type="checkbox" /> Ask how many reps each set had left (effort)</label>
       <label class="setting-check"><input id="warmupSetting" type="checkbox" /> Suggest warm-up sets for barbell lifts</label>
+      <h3 class="settings-section">Rest timer</h3>
+      <label for="restDurationSetting">Default rest duration (seconds)</label>
+      <input id="restDurationSetting" type="number" inputmode="numeric" min="15" max="600" step="15" />
+      <label class="setting-check"><input id="autoRestSetting" type="checkbox" /> Start the rest timer automatically after each set</label>
       <label class="setting-check"><input id="soundEnabledSetting" type="checkbox" /> Play a sound when rest ends</label>
       <label for="alertSoundSetting">Alert sound</label>
       <select id="alertSoundSetting">
@@ -42,9 +45,9 @@ document.body.insertAdjacentHTML('beforeend', `
       <label class="setting-check" id="vibrateSettingRow"><input id="vibrateSetting" type="checkbox" /> Vibrate when rest ends</label>
       <label class="setting-check" id="silentSettingRow"><input id="silentSetting" type="checkbox" /> Play the alert when the ringer is silent, at your media volume (pauses your music while it plays)</label>
       <button class="secondary test-alert" id="testAlertButton" type="button">Test alert</button>
+      <h3 class="settings-section">Your data</h3>
       <div class="data-section">
         <div class="account-details">
-          <strong>Your data</strong>
           <span class="subtitle">Save every workout to a file, with your templates, program and settings, or bring in one saved from any Workout Tracker.</span>
         </div>
         <div class="data-actions">
@@ -55,6 +58,7 @@ document.body.insertAdjacentHTML('beforeend', `
         <input id="importFile" type="file" accept=".json,application/json" hidden />
         <p class="subtitle data-status" id="dataStatus" role="status" hidden></p>
       </div>
+      <h3 class="settings-section">Account</h3>
       <div class="account-row">
         <div class="account-details">
           <span class="subtitle" id="accountName"></span>
@@ -88,8 +92,8 @@ document.body.insertAdjacentHTML('beforeend', `
         '<p class="subtitle delete-warning">This deletes your account from this server for good: every workout, template and setting in it, and your '
         + 'training program. Export first to keep a copy.</p>')}
       <div class="settings-actions">
-        <button class="secondary" id="cancelSettings" type="button">Cancel</button>
-        <button class="primary" type="submit">Save settings</button>
+        <p class="subtitle settings-saved" id="settingsSaved" role="status">Changes are saved as you make them.</p>
+        <button class="primary" id="doneSettings" type="submit">Done</button>
       </div>
     </form>
     <form id="emailForm" hidden></form>

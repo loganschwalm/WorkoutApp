@@ -146,7 +146,7 @@ def run(t):
     check('changing it starts from the current email', cdp.ev("document.getElementById('emailSetting').value") == 'tester@example.test')
     cdp.ev("document.getElementById('cancelEmail').click()")
     check('Cancel closes the fields', not shown('emailEditor'))
-    cdp.ev("document.getElementById('cancelSettings').click()")
+    cdp.ev("document.getElementById('closeSettings').click()")
 
     # ------------------------------------------------------------------ C6 no mail server
     print('C6  without a mail server, Forgot password? says who can reset it')
@@ -195,7 +195,7 @@ def run(t):
     check('the other device does not', api('GET', '/api/auth/me', token=elsewhere)[0]['user'] is None)
     cdp.ev("document.getElementById('changeEmailButton').click()")
     check('opening the email fields closes the notice', not shown('accountNotice') and shown('emailEditor'))
-    cdp.ev("document.getElementById('cancelSettings').click()")
+    cdp.ev("document.getElementById('closeSettings').click()")
 
     # ------------------------------------------------------------------ C8 deleting the account
     print('C8  an account is deleted in Settings')

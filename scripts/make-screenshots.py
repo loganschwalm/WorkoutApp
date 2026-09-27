@@ -161,7 +161,7 @@ def main():
         cdp.ev("window.scrollTo(0, 0); document.getElementById('settingsButton').click()")
         cdp.pause(0.5)
         browser.save('settings.png')
-        cdp.ev("document.getElementById('cancelSettings').click()")
+        cdp.ev("document.getElementById('closeSettings').click()")
         cdp.ev("confirm = () => true; document.getElementById('endWorkoutBtn').click()")
         cdp.pause(0.5)
 

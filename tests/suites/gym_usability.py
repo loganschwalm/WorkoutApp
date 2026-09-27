@@ -263,7 +263,7 @@ def run(t):
     check('and comes back if the mistake is repeated', cdp.ev("!document.getElementById('formFeedback').hidden") is True)
     cdp.ev("document.getElementById('settingsButton').click()")
     check('opening settings clears a stale message', cdp.ev("document.getElementById('formFeedback').hidden") is True)
-    cdp.ev("document.getElementById('cancelSettings').click()")
+    cdp.ev("document.getElementById('closeSettings').click()")
     no_confirm()
     end_workout()
 

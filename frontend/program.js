@@ -451,6 +451,7 @@ function openProgramForm(definition) {
   const replacing = Boolean(currentProgram) && !editing;
   const options = editing ? currentProgram.options : normalizeOptions(definition, {}, weightUnit());
   programForm = { definition, editing };
+  rememberOpener('program');
   $('programModalTitle').textContent = `${editing ? 'Edit' : 'Start'} ${definition.name}`;
   $('programMaxKind').value = editing ? 'tm' : '1rm';
   $('programOptions').innerHTML = definition.options.map(option => optionField(option, options[option.id])).join('');
@@ -472,6 +473,7 @@ function openProgramForm(definition) {
 
 function closeProgramForm() {
   $('programModal').hidden = true;
+  returnFocus('program');
 }
 
 $('programForm').onsubmit = event => {

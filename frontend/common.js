@@ -6,6 +6,20 @@
 // shadow it for that one load. The function declarations below can be redeclared the same way.
 window.$ = id => document.getElementById(id);
 
+// A dialog hands focus back to whatever opened it when it closes, so the keyboard carries on from there rather than from
+// the top of the page. If the opener has gone (its list was drawn again), focus is left where it is.
+const dialogOpeners = new Map();
+
+function rememberOpener(dialog) {
+  dialogOpeners.set(dialog, document.activeElement);
+}
+
+function returnFocus(dialog) {
+  const opener = dialogOpeners.get(dialog);
+  dialogOpeners.delete(dialog);
+  if (opener && opener !== document.body && opener.isConnected) opener.focus({ preventScroll:true });
+}
+
 function escapeHTML(value) {
   return String(value).replace(/[&<>'"]/g, character => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[character]));
 }

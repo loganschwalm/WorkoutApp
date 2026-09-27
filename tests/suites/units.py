@@ -58,7 +58,7 @@ def run(t):
     cdp.ev("document.getElementById('settingsButton').click()")
     check('Settings offers pounds and kilograms, pounds to start', cdp.ev("[...document.getElementById('unitSetting').options].map(o => o.value)") == ['lbs', 'kg']
           and field('unitSetting') == 'lbs')
-    cdp.ev("document.getElementById('cancelSettings').click()")
+    cdp.ev("document.getElementById('closeSettings').click()")
     choose_unit('kg')
     check('choosing kilograms is saved to the account', wait_for(lambda: server_settings().get('unit') == 'kg'), server_settings())
 

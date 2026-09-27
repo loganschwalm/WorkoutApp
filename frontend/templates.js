@@ -105,6 +105,7 @@ function withSupersetGroups(drafts) {
 }
 
 function openTemplateEditor(template = null) {
+  rememberOpener('template');
   editingTemplateId = template?.id || null;
   $('templateModalTitle').textContent = template ? 'Edit template' : 'Create template';
   $('templateName').value = template?.name || '';
@@ -119,6 +120,7 @@ function openTemplateEditor(template = null) {
 function closeTemplateEditor() {
   $('templateModal').hidden = true;
   editingTemplateId = null;
+  returnFocus('template');
 }
 
 $('templateList').onclick = e => {
