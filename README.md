@@ -71,7 +71,7 @@ own workouts, templates, and settings.
   buttons step 2.5 kg.
 - See how you did last time on each exercise; its weight and reps are prefilled, and after each set the next one defaults to the set you just logged.
 - View completed sets during the workout, correct a set's weight or reps in place, or remove a set that was logged by mistake.
-  Remove takes it away at once, and the banner says which set went ("Removed set 2 of Bench Press
+  Each logged set is one line on a phone, and its × takes it away at once; the banner says which set went ("Removed set 2 of Bench Press
   (105 lbs × 6)") with an Undo button for 10 seconds that puts it back in its place, even after
   moving on to another exercise.
 - Go back to a previous exercise, or add an exercise in the middle of a workout.
@@ -194,8 +194,9 @@ The templates also offer three [training programs](#training-programs): Wendler 
 A training program is a whole plan rather than a single workout. You follow one at a time; setting
 up another replaces it, and the workouts you finished stay in your history. They all work the same way:
 
-- The plan is on the Tracker: the next workout, ready to start or skip, the numbers the program
-  works from, and every day of the current cycle or week with its weights.
+- The plan is on the Tracker: the next workout, ready to start or skip, and folded under it the
+  numbers the program works from and every day of the current cycle or week with its weights. Edit
+  program and End program are in the card's ⋯ menu.
 - Every set is planned. Each planned set's weight and reps are filled in as you go. In 5/3/1 and PPL
   the main lift ends with a "+" set of as many reps as you can, and the app turns it into an estimated
   one-rep max.

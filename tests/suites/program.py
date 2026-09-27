@@ -273,6 +273,10 @@ def run(t):
     cdp.send('Emulation.setDeviceMetricsOverride', width=375, height=800, deviceScaleFactor=1, mobile=True)
     cdp.pause(0.3)
     check('no sideways scrolling with the program card', cdp.ev('document.documentElement.scrollWidth - innerWidth') <= 0)
+    check('the card keeps Edit and End in its menu, and folds the numbers and the cycle away under the next workout',
+          cdp.ev("!!document.querySelector('.program-menu #editProgramBtn') && !!document.querySelector('.program-menu #endProgramBtn')"
+                 " && !document.getElementById('endProgramBtn').checkVisibility() && !document.getElementById('programMaxes').checkVisibility()"
+                 " && !document.getElementById('programWeeks').checkVisibility() && document.getElementById('programNext').checkVisibility()") is True)
     click('#programNext [data-program-action=start]')
     check('nor with a planned workout', cdp.ev('document.documentElement.scrollWidth - innerWidth') <= 0 and len(chips()) == 6)
     cdp.send('Emulation.clearDeviceMetricsOverride')

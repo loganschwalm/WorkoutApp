@@ -282,7 +282,7 @@ input[type="range"] { padding:0; border:0; background:transparent; accent-color:
 .more-workouts { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
 @media (max-width:620px) { .shell{padding-top:25px}.date{display:none}.grid{grid-template-columns:1fr 1fr}.grid .exercise-input{grid-column:1/-1}.grid button{width:100%}.exercise{grid-template-columns:1fr auto auto}.exercise .remove{grid-column:1/-1; width:100%}.workout-name{align-items:stretch; flex-direction:column}.saved-workout-summary{align-items:flex-start; flex-direction:column}.saved-workout-summary.saved-workout-row{align-items:center; flex-direction:row; gap:10px}.workout-details li{align-items:flex-start; flex-direction:column; gap:3px}.header-actions{align-items:flex-end; flex-direction:column; gap:8px}.site-nav{order:3; width:100%; justify-content:center} header{align-items:flex-start; flex-wrap:wrap}.template-grid{grid-template-columns:1fr}.set-entry{grid-template-columns:1fr 1fr}.set-entry .weight-entry{grid-column:1/-1}.set-entry > button{width:100%}.section-heading-actions{align-items:flex-end; flex-direction:column; gap:8px}.progress-filters{grid-template-columns:repeat(2, minmax(0, 1fr))}.progress-filters > div:nth-child(1), .progress-filters > div:nth-child(2), .progress-filters button{grid-column:1/-1}.progress-filters button{width:100%} }
 @media (max-width:620px) { .set-list li{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.set-number{grid-column:1; grid-row:1}.set-list .remove{grid-column:2; grid-row:1; justify-self:end}.footer-actions{flex-direction:column}.footer-buttons button{flex:1}.add-exercise-fields{grid-template-columns:1fr 1fr}.add-exercise-fields button{grid-column:1/-1} }
-@media (max-width:620px) { .program-heading{align-items:stretch; flex-direction:column; gap:0}.program-heading .section-heading-actions{align-items:stretch; flex-direction:row; margin:12px 0 16px}.program-heading .section-heading-actions button{flex:1}.program-next{align-items:stretch; flex-direction:column}.program-next-actions button{flex:1}.program-maxes{grid-template-columns:1fr 1fr}.program-day{flex-wrap:wrap}.program-day-actions{width:100%; justify-content:space-between}.program-day-actions button{margin-left:auto}.program-max-inputs{grid-template-columns:1fr} }
+@media (max-width:620px) { .program-next{align-items:stretch; flex-direction:column}.program-next-actions button{flex:1}.program-maxes{grid-template-columns:1fr 1fr}.program-max-inputs{grid-template-columns:1fr} }
 /* The training calendar on the History page: a column per week, a row per weekday, squares that shrink on a phone. */
 .training-calendar { display:grid; grid-template-columns:auto repeat(12, minmax(0, 26px)); gap:4px; justify-content:start; margin-top:4px; }
 .calendar-month { font-size:.72rem; color:var(--muted); white-space:nowrap; }
@@ -413,3 +413,76 @@ body.has-install-banner .rest-panel { bottom:calc(84px + var(--tab-bar)); }
 @keyframes picked-dark { from { background:#353b63; box-shadow:0 0 0 8px #353b63; } to { background:transparent; box-shadow:0 0 0 8px transparent; } }
 .history-workout.picked { border-radius:6px; animation:picked 2.4s ease-out; }
 html[data-theme="dark"] .history-workout.picked { animation-name:picked-dark; }
+
+/* ---- Condensed: less padding, fewer words, and what is used less folded away ---------------------------------- */
+.card { padding:22px; }
+.card:not([hidden]) ~ .card { margin-top:16px; }
+h2 { margin-bottom:14px; }
+.section-heading > div > h2:only-child { margin-bottom:12px; }
+#storageStatus:empty { display:none; }
+.recent-workout { padding:10px 0; }
+/* The program: its menu in the heading, the next workout, then the weights and the week folded away. */
+.program-menu { flex:none; }
+.program-heading { align-items:flex-start; }
+.program-heading h2 { margin-bottom:4px; }
+.program-heading .subtitle { margin:0 0 14px; }
+.program-next { padding:14px; }
+.program-next ul { line-height:1.45; }
+.program-section { border-top:1px solid var(--line); }
+.program-next + .program-section, .program-notice + .program-section { margin-top:14px; }
+.program-section > summary { padding:12px 0; color:var(--ink); font-size:.95rem; font-weight:700; cursor:pointer; }
+.program-section[open] > summary { padding-bottom:10px; }
+.program-section > .program-maxes, .program-section > #programWeeks { margin-bottom:12px; }
+.program-days { padding-top:0; border-top:0; }
+.program-day { padding:8px 10px; }
+.program-day-actions { flex-direction:row; }
+/* During a workout. */
+.active-workout .section-heading h2 { margin-bottom:0; }
+#endWorkoutBtn { flex:none; padding:8px 13px; font-size:.85rem; white-space:nowrap; }
+.progress-toggle { margin-top:4px; }
+.active-exercise { padding:12px 0 4px; }
+.active-exercise h3 { font-size:1.25rem; }
+.plan-sets { margin-top:8px; }
+.plan-sets li { padding:4px 9px; font-size:.78rem; }
+.set-entry label { margin-bottom:5px; }
+.effort-choices { flex-wrap:nowrap; margin-top:10px; }
+.effort-choices span { flex:none; flex-basis:auto; margin-right:4px; }
+.effort-choices button { min-width:36px; padding:7px 0; }
+.plate-hint { margin-top:8px; }
+.rest-panel { margin-top:12px; padding:8px 8px 8px 14px; }
+#restResetBtn { min-width:40px; padding:9px 10px; font-size:1.05rem; line-height:1; }
+.set-list { gap:6px; margin-top:12px; }
+.set-list li { padding:6px 8px 6px 11px; }
+.set-list .remove { width:32px; height:32px; padding:0; font-size:1.15rem; line-height:1; }
+.workout-extras { display:flex; flex-wrap:wrap; gap:10px 22px; margin-top:14px; }
+.workout-extras .add-exercise { margin-top:0; }
+.workout-extras .add-exercise[open] { flex-basis:100%; }
+.footer-actions { margin-top:16px; padding-top:14px; justify-content:flex-end; }
+@media (max-width:620px) {
+  .card { padding:16px; border-radius:16px; }
+  .card:not([hidden]) ~ .card { margin-top:12px; }
+  h2 { font-size:1.12rem; }
+  .active-workout .section-heading { align-items:center; }
+  .program-next { gap:12px; }
+  /* The rest timer on one line: the time, −30s and +30s, then pause and reset. */
+  .rest-panel { flex-wrap:nowrap; gap:8px; }
+  .rest-time { gap:8px; }
+  .rest-time strong { display:none; }
+  .rest-time span { font-size:1.35rem; }
+  .rest-adjust button { padding:6px 7px; font-size:.78rem; }
+  .rest-actions { gap:6px; }
+  .rest-actions button { padding:9px 10px; font-size:.85rem; white-space:nowrap; }
+  /* A logged set on one line: its number, weight, reps and ×. */
+  .set-list li { grid-template-columns:auto minmax(0,1fr) minmax(0,1fr) auto; gap:8px; }
+  .set-number, .set-list .remove { grid-row:auto; grid-column:auto; }
+  .set-number { font-size:.8rem; }
+  .set-field { gap:4px; font-size:.8rem; }
+  .footer-actions { flex-direction:row; }
+  .footer-buttons { flex:1; }
+}
+/* Headings never leave one word alone on their last line ("Apartment Gym / Upper A", not "Apartment Gym Upper / A"). */
+h1, h2, h3 { text-wrap:pretty; }
+h1 { font-size:clamp(1.75rem,4vw,2.6rem); }
+header { margin-bottom:22px; }
+.program-section > summary::marker { color:var(--accent); }
+.more-workouts > .button-link, .more-workouts > button { padding:10px 16px; font-size:.88rem; }

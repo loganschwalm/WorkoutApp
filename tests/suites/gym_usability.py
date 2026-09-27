@@ -238,6 +238,8 @@ def run(t):
 
     # ---- F: feedback stays in view
     print('F   messages stay in view')
+    # A short screen, so the workout (which has the page to itself) runs past the bottom of it.
+    cdp.send('Emulation.setDeviceMetricsOverride', width=1024, height=420, deviceScaleFactor=1, mobile=False)
     open_tracker()
     start(0)
     cdp.pause(0.4)
@@ -247,6 +249,7 @@ def run(t):
     cdp.pause(0.3)
     box = cdp.ev("(() => { const f = document.getElementById('formFeedback'); const r = f.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, vh: innerHeight, scrolled: scrollY, position: getComputedStyle(f).position, hidden: f.hidden }; })()")
     check('a validation message is visible even when scrolled to the bottom', box['scrolled'] > 100 and not box['hidden'] and box['top'] >= 0 and box['bottom'] <= box['vh'], str(box))
+    cdp.send('Emulation.clearDeviceMetricsOverride')
     cdp.pause(7)
     check('errors stay until dealt with', cdp.ev("!document.getElementById('formFeedback').hidden") is True)
     cdp.ev("document.getElementById('addActiveExercise').open = true; document.getElementById('activeAddName').value = 'Row'; document.getElementById('activeAddReps').value = '8'; document.getElementById('activeAddBtn').click()")
@@ -294,7 +297,8 @@ def run(t):
     cdp.pause(0.4)
     m = cdp.ev("""(() => { const inputs = [...document.querySelectorAll('#completedSets .set-edit')].map(i => i.getBoundingClientRect().width); const foot = document.querySelector('.footer-buttons').getBoundingClientRect(); return { overflow: document.documentElement.scrollWidth - innerWidth, minInput: Math.min(...inputs), footRight: foot.right, vw: innerWidth }; })()""")
     check('no sideways scrolling with editable sets', m['overflow'] <= 0, str(m))
-    check('set inputs are wide enough to use', m['minInput'] >= 80, str(m))
+    # A logged set is one line on a phone; each field still has room for "227.5" at full size beside its unit.
+    check('set inputs are wide enough to use', m['minInput'] >= 70, str(m))
     cdp.ev("document.getElementById('nextExerciseBtn').click()")
     cdp.pause(0.3)
     m = cdp.ev("(() => { const p = document.getElementById('prevExerciseBtn').getBoundingClientRect(); const n = document.getElementById('nextExerciseBtn').getBoundingClientRect(); return { prev: p.width, next: n.width, right: n.right, vw: innerWidth }; })()")
@@ -495,12 +499,14 @@ def run(t):
     cdp.pause(0.3)
     pinned = cdp.ev("(r => ({ top: r.top, bottom: r.bottom, vh: innerHeight }))(document.getElementById('restPanel').getBoundingClientRect())")
     check('and stays on screen while the page scrolls past it', pinned['top'] >= 0 and pinned['bottom'] <= pinned['vh'], pinned)
-    # The list of exercises open above it pushes it off the bottom of the screen, where it waits above the tab bar.
+    # The list of exercises open above it pushes it off the bottom of a short screen, where it waits above the tab bar.
+    cdp.send('Emulation.setDeviceMetricsOverride', width=375, height=600, deviceScaleFactor=1, mobile=True)
     cdp.ev("document.getElementById('activeWorkoutProgress').click(); document.getElementById('addActiveExercise').open = true; scrollTo(0, 0)")
     cdp.pause(0.3)
     pinned = cdp.ev("(r => ({ top: r.top, bottom: r.bottom, bar: document.querySelector('.site-nav').getBoundingClientRect().top,"
                     " below: document.getElementById('completedSets').getBoundingClientRect().top }))(document.getElementById('restPanel').getBoundingClientRect())")
     check('or scrolled above it, at the bottom of the screen over the tab bar', pinned['below'] > pinned['bar'] and 0 <= pinned['top'] and pinned['bottom'] <= pinned['bar'], pinned)
+    cdp.send('Emulation.setDeviceMetricsOverride', width=375, height=740, deviceScaleFactor=1, mobile=True)
     end_workout()
     check('once the workout ends the rest of the Tracker is back', shown('.between-workouts')[2:] == [True, True] and not cdp.ev("getComputedStyle(document.getElementById('otherCardsToggle')).display !== 'none'"),
           shown('.between-workouts'))

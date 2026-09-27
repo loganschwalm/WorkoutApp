@@ -266,7 +266,7 @@ function renderActiveWorkout() {
     + ` data-set="${index}" data-field="weight" aria-label="Set ${index + 1} weight in ${weightUnit()}"><span>${weightUnit()}</span></div>`
     + `<div class="set-field"><input class="set-edit" type="number" inputmode="numeric" min="1" step="1" value="${escapeHTML(set.reps)}" data-set="${index}"`
     + ` data-field="reps" aria-label="Set ${index + 1} ${count.label}"><span>${count.unit}</span></div>`
-    + `<button class="remove" type="button" data-remove-set="${index}" aria-label="Remove set ${index + 1}">Remove</button></li>`).join('');
+    + `<button class="remove" type="button" data-remove-set="${index}" aria-label="Remove set ${index + 1}" title="Remove">&times;</button></li>`).join('');
   syncHoldDisplay();
   $('activeSyncNotice').hidden = !activeSyncFailed;
 }
@@ -394,7 +394,8 @@ async function finishWorkout() {
 
 function renderStorageStatus() {
   const waiting = readPendingWorkouts().length;
-  const parts = [workoutsReachable ? 'Saved to your account' : 'Server unreachable'];
+  // Nothing to say while everything is saved to the account; the line only speaks up when something is not.
+  const parts = workoutsReachable ? [] : ['Server unreachable'];
   if (waiting) parts.push(`${waiting} workout${waiting === 1 ? '' : 's'} waiting to sync`);
   const refused = readRejectedWorkouts().length;
   if (refused) parts.push(`${refused} workout${refused === 1 ? '' : 's'} refused by the server (kept on this device)`);

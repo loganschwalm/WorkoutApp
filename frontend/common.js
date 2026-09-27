@@ -166,9 +166,12 @@ function workoutProgramLabel(workout) {
   return workout.program && typeof workout.program.label === 'string' ? workout.program.label : '';
 }
 
-// An open ⋯ menu (a saved workout's, an exercise's) closes when anything else is tapped, another menu included, or on Escape.
+// An open ⋯ menu (a saved workout's, an exercise's, the program's) closes when anything else is tapped, another menu
+// included, or on Escape.
 document.addEventListener('click', event => {
-  document.querySelectorAll('.row-menu[open]').forEach(menu => { if (!menu.contains(event.target)) menu.open = false; });
+  // Picking one of its items closes it too.
+  const picked = event.target.closest('.row-menu-items button');
+  document.querySelectorAll('.row-menu[open]').forEach(menu => { if (!menu.contains(event.target) || picked) menu.open = false; });
 });
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape') document.querySelectorAll('.row-menu[open]').forEach(menu => { menu.open = false; });
