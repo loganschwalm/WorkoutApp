@@ -300,6 +300,27 @@ def run(t):
     check('no sideways scrolling with editable sets', m['overflow'] <= 0, str(m))
     # A logged set is one line on a phone; each field still has room for "227.5" at full size beside its unit.
     check('set inputs are wide enough to use', m['minInput'] >= 70, str(m))
+    # iOS Safari zooms the page in when a box with text under 16px is tapped.
+    sizes = cdp.ev("[...document.querySelectorAll('#activeWorkout input:not([type=checkbox]), #activeWorkout textarea')].map(i => parseFloat(getComputedStyle(i).fontSize))")
+    check('every box in a workout has 16px text, so tapping one does not zoom the page', min(sizes) >= 16, sizes)
+    check('the Completed sets label says what was logged last', text('completedSetsSummary') == 'Completed sets (2) · last 100 lbs × 8', text('completedSetsSummary'))
+    cdp.ev("document.getElementById('activeNotesToggle').open = true; document.getElementById('addActiveExercise').open = true")
+    cdp.pause(0.2)
+    small = cdp.ev("""[...document.querySelectorAll('#activeWorkout button, #activeWorkout summary, #activeWorkout a')]
+        .filter(e => e.closest('details:not([open])') === null || e.parentElement.tagName === 'DETAILS' && e.tagName === 'SUMMARY')
+        .map(e => ({ e, r: e.getBoundingClientRect() })).filter(({ r }) => r.width > 0 && r.height > 0)
+        .filter(({ r }) => r.width < 44 || r.height < 44)
+        .map(({ e, r }) => `${e.id || e.getAttribute('aria-label') || e.textContent.trim()} ${Math.round(r.width)}x${Math.round(r.height)}`)""")
+    check('everything to tap in a workout is at least 44px, the size of a fingertip', small == [], small)
+    cdp.ev("document.getElementById('activeNotesToggle').open = false; document.getElementById('addActiveExercise').open = false")
+    # Typing into a prefilled weight or reps replaces it: a tap selects what is there. A headless page only gets focus
+    # events with focus emulated.
+    cdp.send('Emulation.setFocusEmulationEnabled', enabled=True)
+    picked = cdp.ev("""new Promise(done => { const input = document.getElementById('activeWeight'); let selected = false;
+        input.select = () => { selected = true; HTMLInputElement.prototype.select.call(input); };
+        input.blur(); input.focus(); setTimeout(() => { delete input.select; input.blur(); done(selected); }, 50); })""")
+    check('tapping the weight selects it, so typing replaces it', picked is True)
+    cdp.send('Emulation.setFocusEmulationEnabled', enabled=False)
     cdp.ev("document.getElementById('nextExerciseBtn').click()")
     cdp.pause(0.3)
     m = cdp.ev("(() => { const p = document.getElementById('prevExerciseBtn').getBoundingClientRect(); const n = document.getElementById('nextExerciseBtn').getBoundingClientRect(); return { prev: p.width, next: n.width, right: n.right, vw: innerWidth }; })()")
@@ -498,7 +519,7 @@ def run(t):
     check('the rest timer comes up right under the set entry', visible('restPanel') and top('completeSetBtn') < top('restPanel') < top('completedSetsToggle'))
     check('and the set logged folds away under Completed sets, with its count',
           visible('completedSetsToggle') and cdp.ev("document.getElementById('completedSetsToggle').open") is False
-          and text('completedSetsSummary') == 'Completed sets (1)', text('completedSetsSummary'))
+          and text('completedSetsSummary').startswith('Completed sets (1) · last '), text('completedSetsSummary'))
     cdp.ev("document.getElementById('completedSetsToggle').open = true")
     cdp.ev("document.getElementById('completedSets').scrollIntoView({ block: 'start' })")
     cdp.pause(0.3)

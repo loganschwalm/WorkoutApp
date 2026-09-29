@@ -268,7 +268,9 @@ function renderActiveWorkout() {
     + ` data-field="reps" aria-label="Set ${index + 1} ${count.label}"><span>${count.unit}</span></div>`
     + `<button class="remove" type="button" data-remove-set="${index}" aria-label="Remove set ${index + 1}" title="Remove">&times;</button></li>`).join('');
   $('completedSetsToggle').hidden = !exercise.sets.length;
-  $('completedSetsSummary').textContent = `Completed sets (${exercise.sets.length})`;
+  // The list is folded away, so its label says what was just logged: "Completed sets (3) · last 145 lbs × 6".
+  $('completedSetsSummary').textContent = `Completed sets (${exercise.sets.length})`
+    + (lastSet ? ` · last ${describeLoggedSets([lastSet], timed)}` : '');
   syncHoldDisplay();
   $('activeSyncNotice').hidden = !activeSyncFailed;
 }
@@ -595,6 +597,12 @@ $('nextExerciseBtn').onclick = () => {
 };
 $('prevExerciseBtn').onclick = () => { if (activeSession.currentIndex > 0) goToExercise(activeSession.currentIndex - 1); };
 $('endWorkoutBtn').onclick = () => { if (!getWorkoutSettings().confirmEnd || confirm('End this workout without saving it?')) closeActiveWorkout(); };
+// Tapping a number in the workout selects it, so typing replaces the prefilled weight or reps instead of adding to it.
+// Selecting a moment later keeps iOS Safari from undoing it as the tap that focused the box ends.
+$('activeWorkout').addEventListener('focusin', e => {
+  const input = e.target;
+  if (input.matches('input[type=number]')) setTimeout(() => { if (document.activeElement === input) input.select(); });
+});
 // Logged sets can be corrected in place; a value that is not valid snaps back to what was logged.
 $('completedSets').onchange = e => {
   const index = Number(e.target.dataset.set);
