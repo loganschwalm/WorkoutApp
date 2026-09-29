@@ -42,7 +42,7 @@ def run(t):
 
     def ui_login(query=''):
         cdp.goto('/login.html' + query)
-        cdp.ev("document.getElementById('username').value = 'tester'; document.getElementById('password').value = 'password123'; document.getElementById('authForm').requestSubmit()")
+        cdp.ev("document.getElementById('username').value = 'tester'; document.getElementById('password').value = 'chalk-and-plates-42'; document.getElementById('authForm').requestSubmit()")
         cdp.wait("location.pathname !== '/login.html'")
         cdp.pause(0.6)
 
@@ -331,7 +331,7 @@ def run(t):
 
     # ---- E: session expiry
     print('E   session expiry')
-    _, cookie_b = api('POST', '/api/auth/login', {'username': 'tester', 'password': 'password123'})
+    _, cookie_b = api('POST', '/api/auth/login', {'username': 'tester', 'password': 'chalk-and-plates-42'})
     token_b = cookie_b.split('session=')[1].split(';')[0]
     set_cookie(token_b)
     open_tracker()
@@ -364,7 +364,7 @@ def run(t):
 
     # ---- O: signing out
     print('O   signing out')
-    _, cookie_c = api('POST', '/api/auth/login', {'username': 'tester', 'password': 'password123'})
+    _, cookie_c = api('POST', '/api/auth/login', {'username': 'tester', 'password': 'chalk-and-plates-42'})
     token_c = cookie_c.split('session=')[1].split(';')[0]
     set_cookie(token_c)
     open_tracker()

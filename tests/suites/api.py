@@ -111,7 +111,7 @@ def run(t):
           all({i for _, i in results[k]} == set(copies[k]) for k in results), '')
     stored = [w for w in listed if w.get('clientId') == 'race-0']
     other_body = workout('race-0')
-    _, cookie = api('POST', '/api/auth/register', {'username': 'racer', 'email': 'racer@example.test', 'password': 'password123'})
+    _, cookie = api('POST', '/api/auth/register', {'username': 'racer', 'email': 'racer@example.test', 'password': 'chalk-and-plates-42'})
     other = cookie.split('session=')[1].split(';')[0]
     created, _ = api('POST', '/api/workouts', other_body, other)
     check('another account can still use the same clientId', created['id'] != stored[0]['id'] if stored else False, str(created))
@@ -201,16 +201,16 @@ def run_security(t, check, request):
     print('A5  ALLOW_REGISTRATION=0 closes sign-up but not sign-in')
     check('registration is open by default', main.api('GET', '/api/auth/me')[0].get('registrationOpen') is True)
     opener = t.start_server('closed.db')
-    opener.api('POST', '/api/auth/register', {'username': 'owner', 'email': 'owner@example.test', 'password': 'password123'})
+    opener.api('POST', '/api/auth/register', {'username': 'owner', 'email': 'owner@example.test', 'password': 'chalk-and-plates-42'})
     opener.stop()
     opener.process.wait(timeout=10)
     closed = t.start_server('closed.db', {'ALLOW_REGISTRATION': '0'})
     check('the server says registration is closed', closed.api('GET', '/api/auth/me')[0].get('registrationOpen') is False)
-    status, _, reply = closed.request('POST', '/api/auth/register', json.dumps({'username': 'intruder', 'email': 'intruder@example.test', 'password': 'password123'}).encode(),
+    status, _, reply = closed.request('POST', '/api/auth/register', json.dumps({'username': 'intruder', 'email': 'intruder@example.test', 'password': 'chalk-and-plates-42'}).encode(),
                                       {'Content-Type': 'application/json'})
     check('registering is refused with 403', status == 403 and 'turned off' in reply.get('error', ''), f'{status} {reply}')
     check('and no account was created', stored_hash('intruder', t.db_path('closed.db')) is None)
-    status, headers, _ = login(closed, 'owner', 'password123')
+    status, headers, _ = login(closed, 'owner', 'chalk-and-plates-42')
     check('an existing account still signs in', status == 200 and 'session=' in headers.get('set-cookie', ''), status)
 
     # ------------------------------------------------------------------ A6 sign-in throttling
@@ -223,7 +223,7 @@ def run_security(t, check, request):
           f"{status} {headers.get('retry-after')} {reply}")
     status, _, _ = login(main, 'target', 'right-password')
     check('even the right password waits, so guessing cannot continue', status == 429, status)
-    check('another username from the same address is unaffected', login(main, 'tester', 'password123')[0] == 200)
+    check('another username from the same address is unaffected', login(main, 'tester', 'chalk-and-plates-42')[0] == 200)
     check('a different case of the same username shares the limit', login(main, 'TARGET', 'wrong-guess-7')[0] == 429)
 
     # Each failed sign-in costs a full-strength hash (0.15 s here, more under load), so the window must
@@ -250,13 +250,13 @@ def run_security(t, check, request):
     # ------------------------------------------------------------------ A33 password hashing cannot take every core
     print('A33 a flood of sign-ins can only take a set number of cores, and signed-in pages stay quick')
     capped = t.start_server('capped.db', {'PASSWORD_HASHERS': '1', 'PASSWORD_HASH_WAIT': '0.3'})
-    capped.api('POST', '/api/auth/register', {'username': 'regular', 'email': 'regular@example.test', 'password': 'password123'})
-    _, cookie = capped.api('POST', '/api/auth/login', {'login': 'regular', 'password': 'password123'})
+    capped.api('POST', '/api/auth/register', {'username': 'regular', 'email': 'regular@example.test', 'password': 'chalk-and-plates-42'})
+    _, cookie = capped.api('POST', '/api/auth/login', {'login': 'regular', 'password': 'chalk-and-plates-42'})
     token = cookie.split('session=')[1].split(';')[0]
     answers, quick = [], []
 
     def flood(n):
-        answers.append(login(capped, f'nobody-{n}', 'password123'))
+        answers.append(login(capped, f'nobody-{n}', 'chalk-and-plates-42'))
 
     threads = [threading.Thread(target=flood, args=(n,)) for n in range(12)]
     for thread in threads:
@@ -274,7 +274,7 @@ def run_security(t, check, request):
     check('with a Retry-After and a reason', busy and busy[0][1].get('retry-after') == '1' and 'busy' in busy[0][2].get('error', ''),
           busy and (busy[0][1].get('retry-after'), busy[0][2]))
     check('a signed-in page answers meanwhile, without waiting on the hashing', quick[0][0] == 200 and quick[0][1] < 0.5, quick)
-    check('and once the flood is over, signing in works', login(capped, 'regular', 'password123')[0] == 200)
+    check('and once the flood is over, signing in works', login(capped, 'regular', 'chalk-and-plates-42')[0] == 200)
     capped.stop()
 
     # ------------------------------------------------------------------ A7 password hashes
@@ -305,15 +305,15 @@ def run_security(t, check, request):
 
     # ------------------------------------------------------------------ A8 cookies
     print('A8  the session cookie is marked Secure behind HTTPS')
-    _, headers, _ = login(main, 'tester', 'password123')
+    _, headers, _ = login(main, 'tester', 'chalk-and-plates-42')
     cookie = headers['set-cookie']
     check('plain HTTP: HttpOnly and SameSite, no Secure',
           'HttpOnly' in cookie and 'SameSite=Lax' in cookie and 'Secure' not in cookie, cookie)
-    _, headers, _ = login(main, 'tester', 'password123', {'X-Forwarded-Proto': 'https'})
+    _, headers, _ = login(main, 'tester', 'chalk-and-plates-42', {'X-Forwarded-Proto': 'https'})
     check('a proxy reporting HTTPS gets a Secure cookie', headers['set-cookie'].endswith('; Secure'), headers['set-cookie'])
     secure = t.start_server('secure.db', {'SECURE_COOKIES': '1'})
-    secure.api('POST', '/api/auth/register', {'username': 'someone', 'email': 'someone@example.test', 'password': 'password123'})
-    _, headers, _ = login(secure, 'someone', 'password123')
+    secure.api('POST', '/api/auth/register', {'username': 'someone', 'email': 'someone@example.test', 'password': 'chalk-and-plates-42'})
+    _, headers, _ = login(secure, 'someone', 'chalk-and-plates-42')
     check('SECURE_COOKIES=1 marks it Secure without a proxy', headers['set-cookie'].endswith('; Secure'), headers['set-cookie'])
 
     # ------------------------------------------------------------------ A9 expired sessions
@@ -323,7 +323,7 @@ def run_security(t, check, request):
     db.executemany('INSERT INTO sessions VALUES (?, ?, ?)', [(f'stale-{n}', tester_id, 1000 + n) for n in range(5)])
     db.commit()
     db.close()
-    login(main, 'tester', 'password123')
+    login(main, 'tester', 'chalk-and-plates-42')
     db = sqlite3.connect(db_path)
     stale = db.execute("SELECT COUNT(*) FROM sessions WHERE token LIKE 'stale-%'").fetchone()[0]
     live = db.execute('SELECT COUNT(*) FROM sessions WHERE token = ?', (hashlib.sha256(t.token.encode()).hexdigest(),)).fetchone()[0]
@@ -523,7 +523,7 @@ def run_structure(t, check, request):
     # ------------------------------------------------------------------ A15 editing and deleting
     print('A15 editing a workout that is missing, or not yours, is a 404')
     mine = t.W1
-    _, cookie = t.api('POST', '/api/auth/register', {'username': 'neighbour', 'email': 'neighbour@example.test', 'password': 'password123'})
+    _, cookie = t.api('POST', '/api/auth/register', {'username': 'neighbour', 'email': 'neighbour@example.test', 'password': 'chalk-and-plates-42'})
     neighbour = cookie.split('session=')[1].split(';')[0]
     theirs, _ = t.api('POST', '/api/workouts', good(name='Theirs'), neighbour)
     for label, path in [('an id that does not exist', '/api/workouts/999999'),
@@ -645,27 +645,27 @@ def run_accounts(t, check, request):
     # ------------------------------------------------------------------ A17 emails
     print('A17 accounts have an email, and sign in with it or with the username')
     for label, body in [
-        ('no email', {'username': 'nomail', 'password': 'password123'}),
-        ('an email with no @', {'username': 'bad1', 'email': 'bad.example.test', 'password': 'password123'}),
-        ('an email with two @', {'username': 'bad2', 'email': 'a@b@example.test', 'password': 'password123'}),
-        ('an email with a space in it', {'username': 'bad3', 'email': 'a b@example.test', 'password': 'password123'}),
-        ('an email with no dot after the @', {'username': 'bad4', 'email': 'a@localhost', 'password': 'password123'}),
-        ('an email that is a number', {'username': 'bad5', 'email': 5, 'password': 'password123'}),
-        ('a username with an @ in it', {'username': 'me@home', 'email': 'me@example.test', 'password': 'password123'}),
+        ('no email', {'username': 'nomail', 'password': 'chalk-and-plates-42'}),
+        ('an email with no @', {'username': 'bad1', 'email': 'bad.example.test', 'password': 'chalk-and-plates-42'}),
+        ('an email with two @', {'username': 'bad2', 'email': 'a@b@example.test', 'password': 'chalk-and-plates-42'}),
+        ('an email with a space in it', {'username': 'bad3', 'email': 'a b@example.test', 'password': 'chalk-and-plates-42'}),
+        ('an email with no dot after the @', {'username': 'bad4', 'email': 'a@localhost', 'password': 'chalk-and-plates-42'}),
+        ('an email that is a number', {'username': 'bad5', 'email': 5, 'password': 'chalk-and-plates-42'}),
+        ('a username with an @ in it', {'username': 'me@home', 'email': 'me@example.test', 'password': 'chalk-and-plates-42'}),
     ]:
         status, _, reply = post('/api/auth/register', body)
         check(f'registering with {label} -> 400', status == 400 and isinstance(reply, dict) and reply.get('error'), f'{status} {reply}')
-    status, headers, reply = post('/api/auth/register', {'username': 'mailer', 'email': ' Mailer@Example.TEST ', 'password': 'password123'})
+    status, headers, reply = post('/api/auth/register', {'username': 'mailer', 'email': ' Mailer@Example.TEST ', 'password': 'chalk-and-plates-42'})
     check('an account is created with its email, trimmed and in lowercase',
           status == 200 and reply['user']['email'] == 'mailer@example.test', f'{status} {reply}')
     mailer = session_of(headers)
     check('/api/auth/me includes the email', me(mailer)['user'] == reply['user'], me(mailer))
-    status, _, reply = post('/api/auth/register', {'username': 'copycat', 'email': 'MAILER@example.test', 'password': 'password123'})
+    status, _, reply = post('/api/auth/register', {'username': 'copycat', 'email': 'MAILER@example.test', 'password': 'chalk-and-plates-42'})
     check('the same email in another case is refused -> 409', status == 409 and 'email' in reply.get('error', ''), f'{status} {reply}')
     for label, typed in [('the email', 'mailer@example.test'), ('the email in capitals', 'MAILER@EXAMPLE.TEST'), ('the username', 'mailer')]:
-        status, _, reply = post('/api/auth/login', {'login': typed, 'password': 'password123'})
+        status, _, reply = post('/api/auth/login', {'login': typed, 'password': 'chalk-and-plates-42'})
         check(f'signs in with {label}', status == 200 and reply['user']['username'] == 'mailer', f'{status} {reply}')
-    status, _, _ = login(main, 'mailer@example.test', 'password123')
+    status, _, _ = login(main, 'mailer@example.test', 'chalk-and-plates-42')
     check('a page from before emails, sending it as username, signs in too', status == 200, status)
     check('the email with a wrong password -> 401', sign_in('mailer@example.test', 'wrong-password') == 401)
     post('/api/auth/register', {'username': 'limited', 'email': 'limited@example.test', 'password': 'right-password'})
@@ -730,7 +730,7 @@ def run_accounts(t, check, request):
     fresh = session_of(headers)
     check('the new session works', (me(fresh)['user'] or {}).get('username') == 'mailer', me(fresh))
     check('every older session is signed out', me(mailer)['user'] is None)
-    check('the old password no longer signs in', sign_in('mailer', 'password123') == 401)
+    check('the old password no longer signs in', sign_in('mailer', 'chalk-and-plates-42') == 401)
     check('the new one does', sign_in('mailer@example.test', 'new-password-1') == 200)
     check('the code works only once', reset('mailer@example.test', code, 'new-password-2')[0] == 400)
 
@@ -787,7 +787,7 @@ def run_accounts(t, check, request):
 
     # ------------------------------------------------------------------ A32 guessing across codes
     print('A32 wrong codes are counted per address across every code, ten a day')
-    post('/api/auth/register', {'username': 'guessed', 'email': 'guessed@example.test', 'password': 'password123'})
+    post('/api/auth/register', {'username': 'guessed', 'email': 'guessed@example.test', 'password': 'chalk-and-plates-42'})
     post('/api/auth/forgot-password', {'email': 'guessed@example.test'})
     first = code_for('guessed@example.test', 1)
     wrong = [reset('guessed@example.test', other_code(first, n), 'new-password-1')[0] for n in range(1, 6)]
@@ -799,11 +799,103 @@ def run_accounts(t, check, request):
     check('after ten wrong codes in a day, even the right one waits', wrong == [400] * 10 and status == 429
           and int(headers.get('retry-after', 0)) > 80000 and 'Too many wrong codes' in reply.get('error', ''), f'{wrong} {status} {reply}')
     check('saying how long, in hours', reply.get('error', '').endswith('Try again in 24 hours.'), reply)
-    check('and the password is unchanged', sign_in('guessed', 'password123') == 200)
+    check('and the password is unchanged', sign_in('guessed', 'chalk-and-plates-42') == 200)
     ghost_wrong = [reset('nobody-here@example.test', f'{n:06d}', 'new-password-1')[0] for n in range(10)]
     status, _, ghost_reply = reset('nobody-here@example.test', '000000', 'new-password-1')
     check('an address with no account is limited the same way, so the limit says nothing about which have one',
           ghost_wrong == [400] * 10 and status == 429 and ghost_reply.get('error') == reply.get('error'), f'{ghost_wrong} {status} {ghost_reply}')
+
+    # ------------------------------------------------------------------ A34 what a new account's details must be
+    print('A34 a new username, email and password follow the rules, and existing accounts keep what they have')
+
+    def register(username, email, password='chalk-and-plates-42'):
+        return post('/api/auth/register', {'username': username, 'email': email, 'password': password})
+
+    for label, username, words in [
+        ('33 characters', 'u' * 33, '32 characters or fewer'),
+        ('a tab in it', 'tab\tbed', 'invisible or control'),
+        ('a zero-width space in it', 'zero​width', 'invisible or control'),
+        ('a no-break space in it', 'no break', 'invisible or control'),
+    ]:
+        status, _, reply = register(username, f'user{len(label)}@example.test')
+        check(f'a username with {label} is refused, saying why', status == 400 and words in reply.get('error', ''), f'{status} {reply}')
+    status, _, reply = register('x' * 32, 'longest@example.test')
+    check('32 characters is fine', status == 200, f'{status} {reply}')
+    status, _, reply = register('Jo Lifter', 'jo@example.test')
+    check('and so is a space between words', status == 200, f'{status} {reply}')
+
+    for label, email in [
+        ('a one-letter top-level domain', 'short@example.c'),
+        ('a top-level domain of digits', 'digits@example.123'),
+        ('two dots in a row', 'two..dots@example.test'),
+        ('a dot to start', '.dot@example.test'),
+        ('a dot before the @', 'dot.@example.test'),
+        ('a domain label starting with a hyphen', 'hyphen@-example.test'),
+        ('a domain label ending with a hyphen', 'hyphen@example-.test'),
+        ('two dots in the domain', 'dots@example..test'),
+        ('an underscore in the domain', 'under@exa_mple.test'),
+        ('a comma', 'com,ma@example.test'),
+        ('an accented letter', 'josé@example.test'),
+        ('a local part of 65 characters', 'l' * 65 + '@example.test'),
+        ('255 characters in all', 'x@' + 'a' * 63 + '.' + 'b' * 63 + '.' + 'c' * 63 + '.' + 'd' * 56 + '.test'),
+    ]:
+        status, _, reply = register(f'mail{len(email)}', email)
+        check(f'an email with {label} is refused', status == 400 and 'valid email' in reply.get('error', ''), f'{status} {reply}')
+    check('(that last one is 255 characters)', len('x@' + 'a' * 63 + '.' + 'b' * 63 + '.' + 'c' * 63 + '.' + 'd' * 56 + '.test') == 255)
+    for n, email in enumerate(['first.last+gym@mail.example.co.uk', "o'brien@example.test", 'user@xn--bcher-kva.example',
+                               'x@' + 'a' * 63 + '.' + 'b' * 63 + '.' + 'c' * 63 + '.' + 'd' * 55 + '.test',
+                               'l' * 64 + '@example.test', 'Digits1@Sub-Domain2.Example.test']):
+        status, _, reply = register(f'goodmail{n}', email)
+        check(f'a real address is taken: {email[:40]}', status == 200 and reply['user']['email'] == email.lower(), f'{status} {reply}')
+
+    for label, username, email, password, words in [
+        ('7 characters', 'short1', 'short1@example.test', 'abc-de7', '8+'),
+        ('129 characters', 'long1', 'long1@example.test', 'abcdefgh-' * 14 + 'abc', '128 characters or fewer'),
+        ('only 4 different characters', 'variety1', 'variety1@example.test', 'abababcdcdcd', '5 different characters'),
+        ('a common one', 'common1', 'common1@example.test', 'password1', 'too common'),
+        ('a common one in capitals', 'common2', 'common2@example.test', 'PassWord123', 'too common'),
+        ('a run of keys', 'run1', 'run1@example.test', '12345678', 'too common'),
+        ('a run of keys backwards', 'run2', 'run2@example.test', 'hgfedcba', 'too common'),
+        ('the username in it', 'deadlifter', 'dl@example.test', 'I-am-DeadLifter-99', 'username or email'),
+        ('the name of the email in it', 'squatter', 'benchqueen@example.test', 'benchqueen-2026', 'username or email'),
+    ]:
+        status, _, reply = register(username, email, password)
+        check(f'a password with {label} is refused, saying why', status == 400 and words in reply.get('error', ''), f'{status} {reply}')
+    status, headers, reply = register('passphrase', 'phrase@example.test', 'correct horse battery staple')
+    check('a few words together are fine', status == 200, f'{status} {reply}')
+    phrase = session_of(headers)
+    status, _, reply = register('maxlength', 'maxlength@example.test', 'abcdefgh-' * 14 + 'ab')
+    check('and so are 128 characters', status == 200, f'{status} {reply}')
+
+    status, _, reply = post('/api/account/password', {'currentPassword': 'correct horse battery staple', 'newPassword': 'letmein123'}, phrase)
+    check('changing to a common password is refused', status == 400 and 'too common' in reply.get('error', ''), f'{status} {reply}')
+    status, _, reply = post('/api/account/password', {'currentPassword': 'correct horse battery staple', 'newPassword': 'passphrase-again'}, phrase)
+    check('and to one with the username in it', status == 400 and 'username or email' in reply.get('error', ''), f'{status} {reply}')
+    check('neither changed it', sign_in('passphrase', 'correct horse battery staple') == 200)
+    status, _, reply = post('/api/account/email', {'email': 'phrase@example.c', 'password': 'correct horse battery staple'}, phrase)
+    check('changing to an address that is not a real one is refused', status == 400 and 'valid email' in reply.get('error', ''), f'{status} {reply}')
+
+    # Accounts from before the rules: a long username, a weak password and an email the rules now refuse.
+    db = sqlite3.connect(db_path)
+    salt = 'oldaccountsalt'
+    weak = hashlib.pbkdf2_hmac('sha256', b'password1', salt.encode(), 1000).hex()
+    db.execute('INSERT INTO users (username, email, password_hash, created_at) VALUES (?, ?, ?, 0)',
+               ('a-username-from-before-the-limit-of-32', 'veteran@mail.x', f'pbkdf2_sha256$1000${salt}${weak}'))
+    db.commit()
+    db.close()
+    check('an older account with a long username and a weak password still signs in',
+          sign_in('a-username-from-before-the-limit-of-32', 'password1') == 200)
+    check('and with its older email too', sign_in('veteran@mail.x', 'password1') == 200)
+    status, _, _ = post('/api/auth/forgot-password', {'email': 'veteran@mail.x'})
+    code = code_for('veteran@mail.x', 1) if status == 200 else None
+    check('a reset code still reaches that email', status == 200 and code is not None, status)
+    status, _, reply = reset('veteran@mail.x', code, 'qwerty123')
+    check('but the new password has to follow the rules', status == 400 and 'too common' in reply.get('error', ''), f'{status} {reply}')
+    status, _, reply = reset('veteran@mail.x', code, 'a-username-from-before-the-limit-of-32!')
+    check('the username in it too, which is checked once the code is right', status == 400 and 'username or email' in reply.get('error', ''),
+          f'{status} {reply}')
+    status, _, reply = reset('veteran@mail.x', code, 'stronger than before')
+    check('and the code still works for one that does', status == 200, f'{status} {reply}')
 
 
 def run_admin(t, check, request):
@@ -836,13 +928,13 @@ def run_admin(t, check, request):
           any(line.split(maxsplit=1) == ['tester', 'tester@example.test'] for line in lines)
           and any(line.split(maxsplit=1) == ['racer', '(no email)'] for line in lines), out)
 
-    _, headers, _ = sign_in('tester', 'password123')
+    _, headers, _ = sign_in('tester', 'chalk-and-plates-42')
     other_session = session_of(headers)
     post('/api/auth/forgot-password', {'email': 'tester@example.test'})
     code = mail.code(mail.wait('tester@example.test', 1))
     status, out, err = main.admin('reset-password', 'tester', stdin='admin-chosen-1\n')
     check('reset-password sets the password typed in', status == 0 and 'tester' in out, f'{status} {out!r} {err!r}')
-    check('the old password no longer signs in', sign_in('tester', 'password123')[0] == 401)
+    check('the old password no longer signs in', sign_in('tester', 'chalk-and-plates-42')[0] == 401)
     check('the new one does', sign_in('tester', 'admin-chosen-1')[0] == 200)
     check('every session of the account was signed out', me(other_session) is None and me(t.token) is None)
     status, _, _ = post('/api/auth/reset-password', {'email': 'tester@example.test', 'code': code, 'password': 'emailed-code-1'})
@@ -854,6 +946,9 @@ def run_admin(t, check, request):
         ('an account that does not exist', ('reset-password', 'nobody'), 'admin-chosen-3\n', 'No account'),
         ('a password under 8 characters', ('reset-password', 'tester'), 'short\n', '8+'),
         ('no password at all', ('reset-password', 'tester'), '', '8+'),
+        ('one of the most common passwords', ('reset-password', 'tester'), 'Password1\n', 'too common'),
+        ('a run of keys', ('reset-password', 'tester'), '123456789\n', 'too common'),
+        ('the username in it', ('reset-password', 'tester'), 'tester-lifts-daily\n', 'username or email'),
     ]:
         status, out, err = main.admin(*args, stdin=stdin)
         check(f'refused, saying why: {label}', status == 1 and words in err, f'{status} {out!r} {err!r}')
@@ -904,7 +999,7 @@ def run_export(t, check, request):
     json_headers = {'Content-Type': 'application/json'}
 
     def register(name):
-        _, cookie = t.api('POST', '/api/auth/register', {'username': name, 'email': f'{name}@example.test', 'password': 'password123'})
+        _, cookie = t.api('POST', '/api/auth/register', {'username': name, 'email': f'{name}@example.test', 'password': 'chalk-and-plates-42'})
         return cookie.split('session=')[1].split(';')[0]
 
     def utc_ms(*when):
@@ -1140,7 +1235,7 @@ def run_compression(t, check, request):
     frontend = os.path.join(REPO_ROOT, 'frontend')
 
     def register(name):
-        cookie = t.api('POST', '/api/auth/register', {'username': name, 'email': f'{name}@example.test', 'password': 'password123'})[1]
+        cookie = t.api('POST', '/api/auth/register', {'username': name, 'email': f'{name}@example.test', 'password': 'chalk-and-plates-42'})[1]
         return cookie.split('session=')[1].split(';')[0]
 
     print('A29 text is sent gzipped to browsers that take it')
@@ -1194,7 +1289,7 @@ def run_deletion(t, check, request):
         return cookie.split('session=')[1].split(';')[0] if 'session=' in cookie else None
 
     def register(name):
-        return session_of(post('/api/auth/register', {'username': name, 'email': f'{name}@example.test', 'password': 'password123'})[1])
+        return session_of(post('/api/auth/register', {'username': name, 'email': f'{name}@example.test', 'password': 'chalk-and-plates-42'})[1])
 
     def me(token):
         return main.api('GET', '/api/auth/me', token=token)[0]['user']
@@ -1210,25 +1305,25 @@ def run_deletion(t, check, request):
     print('A30 an account is deleted, with everything in it, with its password')
     leaver = register('leaver')
     leaver_id = me(leaver)['id']
-    other_device = session_of(post('/api/auth/login', {'login': 'leaver', 'password': 'password123'})[1])
+    other_device = session_of(post('/api/auth/login', {'login': 'leaver', 'password': 'chalk-and-plates-42'})[1])
     main.api('POST', '/api/workouts', {'name': 'Mine', 'exercises': [t.ex('Squat', 100, 5, [(5, 100)])]}, leaver)
     main.api('PUT', '/api/state', {'settings': {'restDuration': 120}, 'templates': [], 'program': None}, leaver)
     main.api('POST', '/api/active-session', {'session': {'name': 'Going', 'exercises': [], 'currentIndex': 0}}, leaver)
     status, _, reply = post('/api/account/delete', {'password': 'wrong-password'}, leaver)
     check('a wrong password -> 403, and nothing is deleted', status == 403 and reply.get('error') and me(leaver) is not None
           and rows_of(leaver_id)['workouts'] == 1, f'{status} {reply}')
-    check('signed out -> 401', post('/api/account/delete', {'password': 'password123'})[0] == 401)
-    status, headers, reply = post('/api/account/delete', {'password': 'password123'}, leaver)
+    check('signed out -> 401', post('/api/account/delete', {'password': 'chalk-and-plates-42'})[0] == 401)
+    status, headers, reply = post('/api/account/delete', {'password': 'chalk-and-plates-42'}, leaver)
     check('the right password deletes it', status == 200, f'{status} {reply}')
     check('and clears the cookie', 'session=;' in headers.get('set-cookie', '') and 'Max-Age=0' in headers.get('set-cookie', ''), headers.get('set-cookie'))
     check('with every workout, setting, session and workout in progress', rows_of(leaver_id) == {'sessions': 0, 'workouts': 0, 'active_sessions': 0,
                                                                                                   'user_state': 0, 'users': 0}, rows_of(leaver_id))
     check('so no device is signed in to it any more', me(leaver) is None and me(other_device) is None)
-    check('and it no longer signs in', post('/api/auth/login', {'login': 'leaver', 'password': 'password123'})[0] == 401)
+    check('and it no longer signs in', post('/api/auth/login', {'login': 'leaver', 'password': 'chalk-and-plates-42'})[0] == 401)
     check('its username and email are free again', register('leaver') is not None)
     guesser = register('careful')
     guesses = [post('/api/account/delete', {'password': f'guess-{n}'}, guesser)[0] for n in range(5)]
-    status = post('/api/account/delete', {'password': 'password123'}, guesser)[0]
+    status = post('/api/account/delete', {'password': 'chalk-and-plates-42'}, guesser)[0]
     check('guessing the password here is limited like signing in', guesses == [403] * 5 and status == 429 and me(guesser) is not None, f'{guesses} {status}')
 
     print('A31 an admin deletes an account from the command line')

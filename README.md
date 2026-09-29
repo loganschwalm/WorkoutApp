@@ -425,6 +425,16 @@ which has every account.
 - Any number of accounts, each with its own workouts, templates, and settings.
 - Each account has an email as well as a username, and signs in with either. An email belongs to one
   account only, whatever its capitals.
+- A new account's details are checked as they are typed in, and again by the server:
+  - a username of 3 to 32 characters, with no @ and nothing invisible (a tab, a zero-width space);
+  - a real email address: letters, digits and the usual symbols before the @, a domain of proper labels,
+    and a top-level domain of two or more letters, so `me@example.c` or `two..dots@example.com` are
+    turned back;
+  - a password of 8 to 128 characters, with at least 5 different characters, that is not a run of keys
+    (`12345678`), not one of the most common passwords, and does not contain the username or the name
+    of the email. There are no rules about capitals or symbols; a few words together make a strong one.
+  The same password rules apply to changing a password, resetting one, and the admin command. Accounts
+  from before these rules keep their username, email and password, and sign in as before.
 - Forgot your password? Whoever runs the server can set a new one from its command line; see
   [Resetting a password](#resetting-a-password). With a mail server set up, the sign-in page instead
   emails you a 6-digit code, and entering it with a new password signs you in. Either way the account
@@ -664,8 +674,11 @@ What is already in place:
   out who has an account. A successful reset signs the account out everywhere else.
 - Sessions are stored as a SHA-256 hash of their token, so a copy of the database (a backup, say)
   cannot be used to sign in. Upgrading rehashed the existing sessions, so nobody was signed out.
-- Emails are not verified: the app takes the address you type. A mistyped address only means reset
-  codes go astray, and you can correct it in Settings.
+- Emails are checked for their form, not verified: the app takes any real-looking address you type,
+  without emailing it first. A mistyped address only means reset codes go astray, and you can correct it
+  in Settings.
+- New passwords are held to the rules under [Accounts and security](#accounts-and-security), in the
+  spirit of NIST's guidance: long enough, and not guessable, rather than a mix of symbols.
 - Every response carries a strict Content-Security-Policy (only this site's own scripts and styles,
   nothing inline), plus `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` and
   `Referrer-Policy: same-origin`. Directory listings are off.

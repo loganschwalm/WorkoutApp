@@ -435,12 +435,95 @@ def validate_state(data):
                 raise BadRequest(f'goals[{key!r}].by must be a date as YYYY-MM-DD, or empty.')
 
 
-def email_address(value):
-    """The address lowercased, if it looks like one. Only its shape is checked; nothing is sent to confirm it."""
-    email = text(value, 'email', 254).strip().lower()
-    if not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email) or not email.isprintable():
-        raise BadRequest('Enter a valid email address.')
+# ---- Account details ----------------------------------------------------------------------------------------
+# What a new username, email and password must be. account-rules.js checks the same in the browser first, so a
+# mistake shows at once; these are the rules that count. Existing accounts keep what they have: an older, longer
+# username still signs in, and so does a password set before these rules.
+
+USERNAME_MAX = 32
+PASSWORD_MAX = 128
+# An address as mail servers take one: a local part of letters, digits and the usual symbols, in dot-separated runs,
+# and a domain of dot-separated labels (letters, digits and inner hyphens) ending in a top-level domain of 2+ letters,
+# or an internationalised one as it is sent (xn--). The local part is at most 64 characters, and the whole at most 254.
+EMAIL_SHAPE = re.compile(r"([a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*)"
+                         r'@((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59}))')
+# The most used passwords long enough to pass the other rules, from published lists of leaked ones, in lowercase (the
+# check is too). Whoever guesses passwords tries these first. Runs of keys (12345678, abcdefgh) are caught by rule.
+COMMON_PASSWORDS = frozenset('''
+    password password1 password12 password123 password1234 password12345 password! password1! passw0rd p@ssw0rd p@ssword
+    passwort motdepasse contraseña 123456789 1234567890 12341234 12344321 11223344 1122334455 123123123 123321123
+    987654321 123654789 147258369 741852963 159753456 147852369 12qwaszx 1q2w3e4r 1q2w3e4r5t 1q2w3e4r5t6y 1qaz2wsx
+    1qazxsw2 zaq12wsx zaq1xsw2 q1w2e3r4 q1w2e3r4t5 qwerty123 qwerty12 qwerty1234 qwertyui qwertyuiop qwerty123456
+    123456qwerty 123qweasd qweasdzxc qweasd123 1234qwer qwer1234 asdfghjkl asdf1234 1234asdf zxcvbnm1 zxcvbnm123
+    abc12345 abcd1234 abcde12345 1234abcd aa123456 a1234567 a12345678 iloveyou iloveyou1 iloveyou2 iloveu123
+    sunshine sunshine1 princess princess1 football football1 baseball baseball1 basketball soccer123 hockey123
+    superman superman1 batman123 starwars starwars1 whatever whatever1 trustno1 letmein1 letmein123 welcome1
+    welcome123 welcome2 admin123 admin1234 administrator changeme changeme1 changeme123 computer computer1 internet
+    michael1 jennifer jessica1 michelle charlie1 jordan23 jordan123 liverpool chelsea1 arsenal1 manchester pokemon1
+    pokemon123 naruto123 minecraft fortnite1 monkey123 dragon123 master123 shadow123 freedom1 lovely123 daniel123
+    andrew123 matthew1 hunter123 harley123 ranger123 thomas123 robert123 secret123 summer123 summer2024 summer2025
+    winter123 spring123 autumn123 samsung1 samsung123 google123 facebook1 linkedin mustang1 corvette ferrari1
+    blink182 metallica gladiator elephant chocolate butterfly cookie123 cheese123 banana123 pepper123 ginger123
+    buster123 tigger123 flower123 angel123 friends1 family123 blessed1 jesus123 hello123 hello1234 helloworld
+    workout1 workout123 workouts fitness1 fitness123 gym12345 bodybuilding strength1 powerlifting deadlift squat123
+    '''.split())
+
+
+def new_username(value):
+    """A username to register, checked: 3 to USERNAME_MAX characters, no @, and nothing invisible."""
+    username = str(value or '').strip()
+    if len(username) < 3:
+        raise BadRequest('Username must be 3+ characters.')
+    if len(username) > USERNAME_MAX:
+        raise BadRequest(f'Username must be {USERNAME_MAX} characters or fewer.')
+    if '@' in username:
+        # Signing in takes an email or a username in one field, and an @ is how the two are told apart.
+        raise BadRequest('Username cannot contain @. Your email goes in its own field.')
+    if not username.isprintable():
+        raise BadRequest('Username cannot contain invisible or control characters.')
+    return username
+
+
+def email_address(value, strict=True):
+    """The address lowercased, if it is one. Only its form is checked; nothing is sent to confirm it. `strict=False`
+    takes any address shaped like one, for finding an account whose email predates the rules (a reset code)."""
+    email = text(value, 'email', 1000).strip().lower()
+    if strict:
+        shape = EMAIL_SHAPE.fullmatch(email) if len(email) <= 254 else None
+        valid = bool(shape) and len(shape.group(1)) <= 64
+    else:
+        valid = len(email) <= 254 and bool(re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email)) and email.isprintable()
+    if not valid:
+        raise BadRequest('Enter a valid email address, like name@example.com.')
     return email
+
+
+def password_problem(password, username='', email=''):
+    """Why a new password will not do, or None. Long enough, not too long, and not easy to guess: varied, not a run of
+    keys or a common password, and not the account's own name. No rules about capitals or symbols, which lead to
+    Password1! more often than to strong passwords."""
+    if len(password) < 8:
+        return 'Password must be 8+ characters.'
+    if len(password) > PASSWORD_MAX:
+        return f'Password must be {PASSWORD_MAX} characters or fewer.'
+    lowered = password.lower()
+    if len(set(lowered)) < 5:
+        return 'Use at least 5 different characters in your password.'
+    steps = {ord(after) - ord(before) for before, after in zip(lowered, lowered[1:])}
+    if lowered in COMMON_PASSWORDS or steps in ({1}, {-1}):
+        return 'That password is too common and easy to guess. Choose another.'
+    for name in (username.lower(), email.lower().split('@')[0]):
+        if len(name) >= 3 and name in lowered:
+            return 'Your password cannot contain your username or email.'
+    return None
+
+
+def new_password(password, username='', email=''):
+    """The password, if it passes password_problem; a 400 saying why otherwise."""
+    problem = password_problem(password, username, email)
+    if problem:
+        raise BadRequest(problem)
+    return password
 
 
 def workout_id(path):
@@ -1003,15 +1086,8 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             return
         data = self.read_json()
         email = email_address(data.get('email'))
-        username = str(data.get('username', '')).strip()
-        password = str(data.get('password', ''))
-        if len(username) < 3:
-            raise BadRequest('Username must be 3+ characters.')
-        if '@' in username:
-            # Signing in takes an email or a username in one field, and an @ is how the two are told apart.
-            raise BadRequest('Username cannot contain @. Your email goes in its own field.')
-        if len(password) < 8:
-            raise BadRequest('Password must be 8+ characters.')
+        username = new_username(data.get('username'))
+        password = new_password(str(data.get('password', '')), username, email)
         with connection() as database:
             if database.execute('SELECT 1 FROM users WHERE username = ?', (username,)).fetchone():
                 raise BadRequest('That username is already registered.', HTTPStatus.CONFLICT)
@@ -1055,7 +1131,8 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
     def send_reset_code(self):
         if not SMTP_HOST:
             raise BadRequest('Password reset by email is not set up on this server.', HTTPStatus.NOT_FOUND)
-        email = email_address(self.read_json().get('email'))
+        # Loosely: an account's email from before the rules were strict must still get its code.
+        email = email_address(self.read_json().get('email'), strict=False)
         wait = reset_throttle.retry_after(email)
         if wait:
             self.send_wait(wait, 'Too many codes asked for.')
@@ -1079,13 +1156,14 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
 
     def reset_password(self):
         data = self.read_json()
-        email = email_address(data.get('email'))
+        email = email_address(data.get('email'), strict=False)
         code = ''.join(text(data.get('code'), 'code', 100).split())
         password = str(data.get('password', ''))
         if not re.fullmatch('[0-9]{6}', code):
             raise BadRequest('Enter the 6-digit code from the email.')
-        if len(password) < 8:
-            raise BadRequest('Password must be 8+ characters.')
+        # Checked before the code is, so a password that will not do costs none of its tries. The username is only
+        # known once the code is right, and is checked then.
+        new_password(password, email=email)
         wait = reset_guess_throttle.retry_after(email)
         if wait:
             self.send_wait(wait, 'Too many wrong codes for this address.')
@@ -1104,6 +1182,7 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
         if not accepted:
             reset_guess_throttle.record(email)
             raise BadRequest(wrong)
+        new_password(password, user['username'], email)
         # Hashed only once the code is right, so a wrong guess costs no hash; and between the two writes, so nothing else
         # waits on the database meanwhile. Too busy to hash it, and the code still works for another go.
         stored_hash = password_hash(password)
@@ -1147,9 +1226,7 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
     def change_password(self, user):
         data = self.read_json()
         current = str(data.get('currentPassword', ''))
-        new = str(data.get('newPassword', ''))
-        if len(new) < 8:
-            raise BadRequest('The new password must be 8+ characters.')
+        new = new_password(str(data.get('newPassword', '')), user['username'], user['email'] or '')
         stored_hash = password_hash(new)
         with connection() as database:
             self.confirm_password(database, user, current, 'Your current password is not right.')
@@ -1392,16 +1469,18 @@ def admin_account(database, login):
     return row
 
 
-def read_new_password():
-    """Asked twice, unseen, at a terminal; read from the first line of input otherwise, so it can be piped in."""
+def read_new_password(username, email):
+    """Asked twice, unseen, at a terminal; read from the first line of input otherwise, so it can be piped in. It has to
+    pass the same rules as one set on the sign-in page."""
     if sys.stdin.isatty():
         password = getpass.getpass('New password: ')
         if getpass.getpass('Same again: ') != password:
             raise AdminError('The passwords did not match. Nothing was changed.')
     else:
         password = sys.stdin.readline().rstrip('\r\n')
-    if len(password) < 8:
-        raise AdminError('Password must be 8+ characters. Nothing was changed.')
+    problem = password_problem(password, username, email or '')
+    if problem:
+        raise AdminError(f'{problem} Nothing was changed.')
     return password
 
 
@@ -1417,8 +1496,9 @@ def admin_users(args):
 
 def admin_reset_password(args):
     with connection() as database:
-        username = admin_account(database, args.account)['username']
-    stored_hash = password_hash(read_new_password())
+        account = admin_account(database, args.account)
+    username = account['username']
+    stored_hash = password_hash(read_new_password(username, account['email']))
     with connection() as database:
         user_id = admin_account(database, username)['id']
         database.execute('UPDATE users SET password_hash = ? WHERE id = ?', (stored_hash, user_id))

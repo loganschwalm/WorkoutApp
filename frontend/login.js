@@ -65,6 +65,11 @@ function setMode(nextMode) {
   document.getElementById('emailLabel').hidden = emailInput.hidden = emailInput.disabled = !registering;
   document.getElementById('usernameLabel').textContent = registering ? 'Username' : 'Email or username';
   passwordInput.autocomplete = registering ? 'new-password' : 'current-password';
+  // A new account's details have limits; signing in takes whatever an older account has, so it sets none.
+  if (registering) { loginInput.maxLength = USERNAME_MAX; passwordInput.maxLength = PASSWORD_MAX; }
+  else { loginInput.removeAttribute('maxlength'); passwordInput.removeAttribute('maxlength'); }
+  document.getElementById('passwordAdvice').hidden = !registering;
+  [emailInput, loginInput, passwordInput].forEach(input => input.removeAttribute('aria-invalid'));
   submit.textContent = registering ? 'Create account' : 'Sign in';
   forgotButton.hidden = !signingIn || resetAvailable === null;
   feedback.hidden = notice.hidden = true;
@@ -114,8 +119,25 @@ loginTab.onclick = () => setMode('login');
 registerTab.onclick = () => setMode('register');
 document.querySelectorAll('[data-back]').forEach(button => { button.onclick = () => setMode('login'); });
 
+// The first of these fields that will not do, pointed out and focused, before anything is sent. False if none.
+function refuseField(checks) {
+  const found = checks.find(([, problem]) => problem);
+  if (!found) return false;
+  const [input, problem] = found;
+  input.setAttribute('aria-invalid', 'true');
+  input.focus();
+  showError(problem);
+  return true;
+}
+
+document.getElementById('passwordAdvice').textContent = document.getElementById('newPasswordAdvice').textContent = PASSWORD_ADVICE;
+// Typing in a field that was pointed out takes the mark away.
+document.addEventListener('input', event => event.target.removeAttribute?.('aria-invalid'));
+
 form.onsubmit = event => {
   event.preventDefault();
+  if (mode === 'register' && refuseField([[emailInput, emailProblem(emailInput.value)], [loginInput, usernameProblem(loginInput.value)],
+    [passwordInput, passwordProblem(passwordInput.value, loginInput.value.trim(), emailInput.value.trim())]])) return;
   const body = mode === 'register'
     ? { email:emailInput.value, username:loginInput.value, password:passwordInput.value }
     : { login:loginInput.value, password:passwordInput.value };
@@ -156,6 +178,8 @@ document.getElementById('resendCode').onclick = event => {
 
 resetForm.onsubmit = event => {
   event.preventDefault();
+  const newPassword = document.getElementById('newPassword');
+  if (refuseField([[newPassword, passwordProblem(newPassword.value, '', resetEmail)]])) return;
   submitWith(document.getElementById('resetSubmit'), async () => signedIn(await post('/api/auth/reset-password', {
     email:resetEmail,
     code:document.getElementById('resetCode').value.replace(/\s/g, ''),

@@ -12,7 +12,7 @@ from .server import AppServer
 DAY_MS = 86400000
 # Emulation.setEmulatedMedia features for a device in light mode, whatever the machine running the tests uses.
 LIGHT_DEVICE = [{'name': 'prefers-color-scheme', 'value': 'light'}]
-ACCOUNT = {'username': 'tester', 'email': 'tester@example.test', 'password': 'password123'}
+ACCOUNT = {'username': 'tester', 'email': 'tester@example.test', 'password': 'chalk-and-plates-42'}
 
 # Element lookups the suites share.
 ACTIVE = "!document.getElementById('activeWorkout').hidden"

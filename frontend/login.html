@@ -24,7 +24,8 @@
       <form id="authForm">
         <label for="email" id="emailLabel" hidden>Email</label><input id="email" type="email" autocomplete="email" maxlength="254" required hidden disabled />
         <label for="username" id="usernameLabel">Email or username</label><input id="username" autocomplete="username" autocapitalize="none" spellcheck="false" required minlength="3" />
-        <label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required minlength="8" />
+        <label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required minlength="8" aria-describedby="passwordAdvice" />
+        <p class="field-advice" id="passwordAdvice" hidden></p>
         <button class="primary" id="authSubmit" type="submit">Sign in</button>
         <button class="link-button" id="forgotButton" type="button" hidden>Forgot password?</button>
       </form>
@@ -39,7 +40,8 @@
         <h2>Enter your code</h2>
         <p class="subtitle" id="resetIntro"></p>
         <label for="resetCode">6-digit code</label><input id="resetCode" inputmode="numeric" autocomplete="one-time-code" required />
-        <label for="newPassword">New password</label><input id="newPassword" type="password" autocomplete="new-password" required minlength="8" />
+        <label for="newPassword">New password</label><input id="newPassword" type="password" autocomplete="new-password" required minlength="8" maxlength="128" aria-describedby="newPasswordAdvice" />
+        <p class="field-advice" id="newPasswordAdvice"></p>
         <button class="primary" id="resetSubmit" type="submit">Reset password and sign in</button>
         <button class="link-button" id="resendCode" type="button">Send a new code</button>
         <button class="link-button" type="button" data-back>Back to sign in</button>
@@ -48,6 +50,7 @@
       <p class="auth-notice" id="authNotice" role="status" hidden></p>
     </section>
   </main>
+  <script src="account-rules.js"></script>
   <script src="login.js"></script>
   <script src="pwa.js"></script>
 </body>

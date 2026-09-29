@@ -406,6 +406,7 @@ const accountPanels = {
     editor:'emailEditor', open:'changeEmailButton', cancel:'cancelEmail', form:'emailForm', submit:'saveEmail', feedback:'emailFeedback', focus:'emailSetting',
     path:'/api/account/email', offline:offlineMessage, failed:'Could not save the email. Try again.',
     start:() => { getSettingElement('emailSetting').value = window.localEmail || ''; getSettingElement('emailPassword').value = ''; },
+    check:() => [['emailSetting', ruleProblem('emailProblem', getSettingElement('emailSetting').value)]],
     send:() => ({ email:getSettingElement('emailSetting').value, password:getSettingElement('emailPassword').value }),
     done:result => { window.localEmail = result.user.email; showAccount(); }
   },
@@ -413,6 +414,7 @@ const accountPanels = {
     editor:'passwordEditor', open:'changePasswordButton', cancel:'cancelPassword', form:'passwordForm', submit:'savePassword', feedback:'passwordFeedback',
     focus:'currentPassword', path:'/api/account/password', offline:offlineMessage, failed:'Could not change the password. Try again.',
     start:() => { getSettingElement('currentPassword').value = getSettingElement('newPassword').value = ''; },
+    check:() => [['newPassword', ruleProblem('passwordProblem', getSettingElement('newPassword').value, window.localUsername || '', window.localEmail || '')]],
     send:() => ({ currentPassword:getSettingElement('currentPassword').value, newPassword:getSettingElement('newPassword').value }),
     done:result => {
       getSettingElement('passwordEditor').hidden = true;
@@ -435,6 +437,7 @@ const accountPanels = {
 // Opens one panel and closes the others; null closes them all.
 function showAccountPanel(name) {
   Object.entries(accountPanels).forEach(([key, panel]) => { getSettingElement(panel.editor).hidden = key !== name; });
+  getSettingElement('settingsModal').querySelectorAll('[aria-invalid]').forEach(field => field.removeAttribute('aria-invalid'));
   getSettingElement('accountNotice').hidden = true;
   if (!name) return;
   const panel = accountPanels[name];
@@ -443,10 +446,24 @@ function showAccountPanel(name) {
   getSettingElement(panel.focus).focus();
 }
 
+// What account-rules.js says is wrong with a value, or ''. A page from before that file existed (served from the cache
+// for one load after an update) does not have it, and leaves the checking to the server.
+function ruleProblem(rule, ...values) {
+  return typeof window[rule] === 'function' ? window[rule](...values) : '';
+}
+
 async function sendAccountPanel(panel) {
   const feedback = getSettingElement(panel.feedback);
   const fail = message => { feedback.textContent = message; feedback.hidden = false; };
   feedback.hidden = true;
+  // A field that will not do is pointed out before anything is sent.
+  const [field, problem] = (panel.check ? panel.check() : []).find(([, found]) => found) || [];
+  if (problem) {
+    getSettingElement(field).setAttribute('aria-invalid', 'true');
+    getSettingElement(field).focus();
+    fail(problem);
+    return;
+  }
   const body = panel.send();
   if (!body) return;
   const button = getSettingElement(panel.submit);
@@ -470,6 +487,8 @@ async function sendAccountPanel(panel) {
   }
 }
 
+// Typing in a field that was pointed out takes the mark away.
+getSettingElement('settingsModal').addEventListener('input', event => event.target.removeAttribute('aria-invalid'));
 Object.entries(accountPanels).forEach(([name, panel]) => {
   getSettingElement(panel.open).onclick = () => showAccountPanel(name);
   getSettingElement(panel.cancel).onclick = () => { getSettingElement(panel.editor).hidden = true; };

@@ -286,7 +286,7 @@ def run(t):
     DAY = 86400000
 
     def account(name):
-        cookie = t.api('POST', '/api/auth/register', {'username': name, 'email': f'{name}@example.test', 'password': 'password123'})[1]
+        cookie = t.api('POST', '/api/auth/register', {'username': name, 'email': f'{name}@example.test', 'password': 'chalk-and-plates-42'})[1]
         return cookie.split('session=')[1].split(';')[0]
 
     def top(selector):

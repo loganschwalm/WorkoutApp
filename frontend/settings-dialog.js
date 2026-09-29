@@ -88,7 +88,8 @@ document.body.insertAdjacentHTML('beforeend', `
         '<label for="currentPassword">Current password</label>'
         + '<input id="currentPassword" type="password" form="passwordForm" autocomplete="current-password" required />'
         + '<label for="newPassword">New password</label>'
-        + '<input id="newPassword" type="password" form="passwordForm" autocomplete="new-password" minlength="8" required />'
+        + '<input id="newPassword" type="password" form="passwordForm" autocomplete="new-password" minlength="8" maxlength="128" required aria-describedby="newPasswordAdvice" />'
+        + `<p class="field-advice" id="newPasswordAdvice">${typeof PASSWORD_ADVICE === 'string' ? PASSWORD_ADVICE : ''}</p>`
         + '<p class="auth-feedback" id="passwordFeedback" role="alert" hidden></p>',
         '<button class="secondary" id="cancelPassword" type="button">Cancel</button>'
         + '<button class="primary" id="savePassword" type="submit" form="passwordForm">Save password</button>')}

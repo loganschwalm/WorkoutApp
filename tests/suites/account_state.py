@@ -42,7 +42,7 @@ def run(t):
 
     def ui_login(username, query=''):
         cdp.goto('/login.html' + query)
-        cdp.ev(f"document.getElementById('username').value = {json.dumps(username)}; document.getElementById('password').value = 'password123';"
+        cdp.ev(f"document.getElementById('username').value = {json.dumps(username)}; document.getElementById('password').value = 'chalk-and-plates-42';"
                "document.getElementById('authForm').requestSubmit()")
         cdp.wait("location.pathname !== '/login.html'")
         cdp.pause(0.3)
@@ -86,7 +86,7 @@ def run(t):
 
     # ------------------------------------------------------------------ S4 another account on this browser
     print('S4  another account on the same browser never sees or inherits these')
-    _, cookie = api('POST', '/api/auth/register', {'username': 'second', 'email': 'second@example.test', 'password': 'password123'})
+    _, cookie = api('POST', '/api/auth/register', {'username': 'second', 'email': 'second@example.test', 'password': 'chalk-and-plates-42'})
     second = cookie.split('session=')[1].split(';')[0]
     cdp.block_paths = ['/api/state']  # the new account's own copy cannot load
     ui_login('second')
@@ -179,7 +179,7 @@ def run(t):
           input.dispatchEvent(new Event('change'));
         }})()""")
 
-    _, cookie = api('POST', '/api/auth/register', {'username': 'third', 'email': 'third@example.test', 'password': 'password123'})
+    _, cookie = api('POST', '/api/auth/register', {'username': 'third', 'email': 'third@example.test', 'password': 'chalk-and-plates-42'})
     third = cookie.split('session=')[1].split(';')[0]
     api('POST', '/api/workouts', {'name': 'From Elsewhere', 'notes': '', 'clientId': 'elsewhere-1',
                                   'exercises': [{'name': 'Row', 'weight': 60, 'reps': 8, 'sets': [{'weight': 60, 'reps': 8}]}]}, third)
