@@ -528,11 +528,15 @@ html[data-theme="dark"] .goal.reached .goal-foot span { color:#a5e5c2; }
 .goal-feedback.error { color:#c14b5a; }
 @media (max-width:620px) { .goal-form { grid-template-columns:1fr; } }
 
-/* Everything tapped mid-workout is at least 44px, the size of a fingertip. A logged set's boxes use 16px text, as iOS
-   Safari zooms the page in on any box with smaller text when it is tapped. */
+/* Everything tapped mid-workout is at least 44px, the size of a fingertip, set outright rather than left to the text's
+   line height, which is shorter in some fonts. A logged set's boxes use 16px text, as iOS Safari zooms the page in on
+   any box with smaller text when it is tapped. */
 .set-edit { min-height:44px; font-size:16px; }
 .set-list .remove { width:44px; height:44px; }
-#endWorkoutBtn, .active-workout .effort-choices button, .active-workout .rest-adjust button, .active-workout .rest-actions button { min-height:44px; }
+#endWorkoutBtn, #activeWorkoutProgress, #completeSetBtn, #activeAddBtn, #nextExerciseBtn, .active-workout .effort-choices button, .active-workout .rest-adjust button, .active-workout .rest-actions button { min-height:44px; }
+.active-workout .effort-choices button { min-width:44px; }
+/* The × brings its own space, so a logged set's row gives its boxes the room back. */
+@media (max-width:620px) { .set-list li { gap:4px; padding-right:0; } }
 .active-workout .rest-adjust button { min-width:52px; }
 #restResetBtn { min-width:44px; }
 .exercise-menu > summary { width:44px; height:44px; }
