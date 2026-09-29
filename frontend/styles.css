@@ -510,3 +510,20 @@ header { margin-bottom:22px; }
   .rest-actions button { flex:1; }
   .rest-actions #restResetBtn { flex:none; }
 }
+
+/* Goals on Progress: a bar filling towards a weight, green once it is reached. */
+.goal-list { display:grid; gap:10px; margin:18px 0 0; padding:0; list-style:none; }
+.goal { display:grid; gap:8px; padding:14px 16px; border:1px solid var(--line); border-radius:12px; }
+.goal-head, .goal-foot { display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap; }
+.goal-head span, .goal-foot span { color:var(--muted); font-size:.85rem; }
+.goal-bar { height:8px; overflow:hidden; background:var(--line); border-radius:999px; }
+.goal-bar span { display:block; height:100%; background:var(--accent); border-radius:999px; }
+.goal.reached { border-color:#2fbf71; }
+.goal.reached .goal-bar span { background:#2fbf71; }
+.goal.reached .goal-foot span { color:#22634c; font-weight:700; }
+html[data-theme="dark"] .goal.reached .goal-foot span { color:#a5e5c2; }
+.goal-foot .link-button { padding:2px 4px; }
+.goal-form { display:grid; grid-template-columns:2fr 1fr 1fr auto; gap:12px; align-items:end; margin-top:18px; }
+.goal-feedback { min-height:1.2em; margin:10px 0 0; color:var(--muted); font-size:.9rem; }
+.goal-feedback.error { color:#c14b5a; }
+@media (max-width:620px) { .goal-form { grid-template-columns:1fr; } }

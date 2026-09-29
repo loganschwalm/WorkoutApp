@@ -36,6 +36,18 @@
       <ul class="session-list" id="sessionList"></ul>
     </section>
 
+    <section class="card" aria-labelledby="goalsTitle">
+      <div class="section-heading"><div><h2 id="goalsTitle">Goals</h2><p class="subtitle">A weight to reach in an exercise. Your heaviest set so far is measured against it.</p></div></div>
+      <ul class="goal-list" id="goalList"><li class="empty">No goals yet. Set one below.</li></ul>
+      <form class="goal-form" id="goalForm" novalidate>
+        <div><label for="goalExercise">Exercise</label><input id="goalExercise" list="goalExercises" autocomplete="off" placeholder="Bench Press" /><datalist id="goalExercises"></datalist></div>
+        <div><label for="goalTarget">Target weight (<span class="unit-label">lbs</span>)</label><input id="goalTarget" type="number" inputmode="decimal" min="0" step="any" placeholder="225" /></div>
+        <div><label for="goalBy">By (optional)</label><input id="goalBy" type="date" /></div>
+        <button class="primary" type="submit">Set goal</button>
+      </form>
+      <p class="goal-feedback" id="goalFeedback" role="status"></p>
+    </section>
+
     <section class="card" aria-labelledby="recordsTitle">
       <div class="section-heading"><div><h2 id="recordsTitle">Personal records</h2><p class="subtitle">Your best in each exercise, the most recent record first. Tap one to chart it.</p></div></div>
       <ul class="records-list" id="recordsList"><li class="empty">Your records appear once your workouts load.</li></ul>

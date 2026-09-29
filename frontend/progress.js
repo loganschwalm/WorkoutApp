@@ -337,6 +337,93 @@ function renderRecords() {
   }).join('') : '<li class="empty">Your records appear once you have saved a workout.</li>';
 }
 
+// ---- Goals ------------------------------------------------------------------
+// One goal per exercise (by exerciseKey): a weight to reach, and optionally a day to reach it by. It is kept with the account
+// like a note, in the unit it was set in, and measured against the heaviest weight in any saved workout.
+let goals = {};
+
+function loadGoals() {
+  const stored = readLocalState('goals');
+  goals = stored && stored.value && typeof stored.value === 'object' && !Array.isArray(stored.value) ? stored.value : {};
+}
+
+function saveGoals() {
+  saveLocalState('goals', goals);
+}
+
+// Whole days from today to a YYYY-MM-DD date: 0 is today, negative is past.
+function daysUntil(by) {
+  const [year, month, day] = by.split('-').map(Number);
+  const now = new Date();
+  return Math.round((new Date(year, month - 1, day) - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
+}
+
+function goalDeadline(by) {
+  const days = daysUntil(by);
+  const [year, month, day] = by.split('-').map(Number);
+  const date = new Date(year, month - 1, day).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' });
+  const left = days === 0 ? 'today' : days > 0 ? `${plural(days, 'day')} left` : `${plural(-days, 'day')} overdue`;
+  return `by ${date}, ${left}`;
+}
+
+function renderGoals() {
+  applyUnitLabels();
+  const unit = weightUnit();
+  const records = recordsOf(allWorkouts);
+  const heaviest = new Map(records.map(record => [record.key, record.heaviest ? record.heaviest.value : 0]));
+  $('goalExercises').innerHTML = records.filter(record => record.heaviest).map(record => `<option value="${escapeHTML(record.name)}"></option>`).join('');
+  const items = Object.entries(goals).map(([key, goal]) => {
+    const target = convertWeight(goal.target, goal.unit || 'lbs', unit);
+    const best = heaviest.get(key) || 0;
+    return { key, goal, target, best, reached:best >= target };
+  // Goals still to reach first, the nearest deadline first, then the ones reached.
+  }).sort((a, b) => a.reached - b.reached || (a.goal.by || '9999').localeCompare(b.goal.by || '9999') || a.goal.name.localeCompare(b.goal.name));
+  $('goalList').innerHTML = items.length ? items.map(({ key, goal, target, best, reached }) => {
+    const percent = Math.min(100, Math.round(best / target * 100));
+    const status = reached ? 'Reached' : `${formatWeight(Math.round((target - best) * 100) / 100)} ${unit} to go`;
+    const deadline = goal.by && !reached ? ` · ${goalDeadline(goal.by)}` : '';
+    return `<li class="goal${reached ? ' reached' : ''}"><div class="goal-head"><strong>${escapeHTML(goal.name)}</strong>`
+      + `<span>${formatWeight(best)} of ${formatWeight(target)} ${unit}</span></div>`
+      + `<div class="goal-bar" role="progressbar" aria-label="${escapeHTML(goal.name)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}"><span style="width:${percent}%"></span></div>`
+      + `<div class="goal-foot"><span>${escapeHTML(status + deadline)}</span>`
+      + `<button class="link-button" type="button" data-goal-remove="${escapeHTML(key)}" aria-label="Remove the goal for ${escapeHTML(goal.name)}">Remove</button></div></li>`;
+  }).join('') : '<li class="empty">No goals yet. Set one below.</li>';
+}
+
+function showGoalFeedback(message, isError = false) {
+  $('goalFeedback').textContent = message;
+  $('goalFeedback').classList.toggle('error', isError);
+}
+
+$('goalForm').onsubmit = event => {
+  event.preventDefault();
+  const typed = $('goalExercise').value.trim();
+  const target = Number($('goalTarget').value);
+  const key = exerciseKey(typed);
+  if (!key) { showGoalFeedback('Enter the exercise for the goal.', true); $('goalExercise').focus(); return; }
+  if (!($('goalTarget').value !== '' && target > 0 && target <= 100000)) { showGoalFeedback('Enter a target weight above zero.', true); $('goalTarget').focus(); return; }
+  // The exercise's own spelling when it has been done, so "bench press" and "Bench Press" are one goal.
+  const known = recordsOf(allWorkouts).find(record => record.key === key);
+  const name = known ? known.name : typed;
+  const replaced = key in goals;
+  goals = { ...goals, [key]:{ name, target, unit:weightUnit(), by:$('goalBy').value } };
+  saveGoals();
+  $('goalForm').reset();
+  renderGoals();
+  showGoalFeedback(`${replaced ? 'Goal updated' : 'Goal set'} for ${name}.`);
+};
+
+$('goalList').onclick = event => {
+  const button = event.target.closest('[data-goal-remove]');
+  if (!button || !(button.dataset.goalRemove in goals)) return;
+  const { name } = goals[button.dataset.goalRemove];
+  goals = { ...goals };
+  delete goals[button.dataset.goalRemove];
+  saveGoals();
+  renderGoals();
+  showGoalFeedback(`Goal removed for ${name}.`);
+};
+
 async function loadProgress() {
   try {
     await window.localReady;
@@ -352,6 +439,8 @@ async function loadProgress() {
     selectedExercise = $('exerciseFilter').value;
     renderProgress(allWorkouts);
     renderRecords();
+    loadGoals();
+    renderGoals();
   } catch (error) {
     $('chartEmpty').hidden = false;
     $('chartEmpty').textContent = 'Progress data could not be loaded.';
@@ -385,7 +474,10 @@ $('recordsList').onclick = event => {
 };
 window.addEventListener('resize', drawChart);
 // The note kept with an exercise may only arrive from the server once the page has drawn.
-window.serverStateReady.then(() => { if (allWorkouts.length) renderSessions(allWorkouts); });
+window.serverStateReady.then(() => {
+  loadGoals();
+  if (allWorkouts.length) { renderSessions(allWorkouts); renderGoals(); }
+});
 // The theme changes the chart's colours; the unit changes its numbers.
 window.addEventListener('settingschange', () => {
   const converted = loadedWorkouts.map(workout => inUnit(workout));
@@ -393,6 +485,7 @@ window.addEventListener('settingschange', () => {
     allWorkouts = converted;
     applyFilters();
     renderRecords();
+    renderGoals();
   } else drawChart();
 });
 loadProgress();

@@ -229,8 +229,13 @@ def migration_6_hashed_sessions(database):
         database.execute('UPDATE sessions SET token = ? WHERE token = ?', (session_hash(token), token))
 
 
+def migration_7_goals(database):
+    # A weight to reach in an exercise, by exerciseKey, kept beside the settings, templates, program and notes.
+    database.execute("ALTER TABLE user_state ADD COLUMN goals_json TEXT NOT NULL DEFAULT '{}'")
+
+
 MIGRATIONS = [migration_1_tables, migration_2_client_ids, migration_3_programs, migration_4_emails, migration_5_exercise_notes,
-              migration_6_hashed_sessions]
+              migration_6_hashed_sessions, migration_7_goals]
 
 
 def init_database():
@@ -403,6 +408,22 @@ def validate_state(data):
         for key, note in notes.items():
             text(key, 'exerciseNotes key', 1000)
             text(note, f'exerciseNotes[{key!r}]', 2000)
+    if 'goals' in data:
+        goals = data['goals']
+        if not isinstance(goals, dict) or len(goals) > 500:
+            raise BadRequest('goals must be an object of up to 500 goals.')
+        for key, goal in goals.items():
+            text(key, 'goals key', 1000)
+            if not isinstance(goal, dict):
+                raise BadRequest(f'goals[{key!r}] must be an object.')
+            if not text(goal.get('name'), f'goals[{key!r}].name', 1000).strip():
+                raise BadRequest(f'goals[{key!r}].name must name the exercise.')
+            if not is_number(goal.get('target')) or not 0 < goal['target'] <= 100_000:
+                raise BadRequest(f'goals[{key!r}].target must be a weight above zero.')
+            weight_unit(goal.get('unit'), f'goals[{key!r}].unit')
+            by = goal.get('by')
+            if by not in (None, '') and not (isinstance(by, str) and re.fullmatch(r'\d{4}-\d{2}-\d{2}', by)):
+                raise BadRequest(f'goals[{key!r}].by must be a date as YYYY-MM-DD, or empty.')
 
 
 def email_address(value):
@@ -424,9 +445,10 @@ def workout_id(path):
 # one only ever adds. Workouts already here (by clientId, or else by name, time and exercises) and templates already
 # here are skipped, and settings and a program are only taken by an account that has none of its own.
 
-# An account's state, as the pages have it: {settings, templates, program, exerciseNotes}.
-STATE_COLUMNS = {'settings': 'settings_json', 'templates': 'templates_json', 'program': 'program_json', 'exerciseNotes': 'notes_json'}
-STATE_EMPTY = {'settings': {}, 'templates': [], 'program': None, 'exerciseNotes': {}}
+# An account's state, as the pages have it: {settings, templates, program, exerciseNotes, goals}.
+STATE_COLUMNS = {'settings': 'settings_json', 'templates': 'templates_json', 'program': 'program_json', 'exerciseNotes': 'notes_json',
+                 'goals': 'goals_json'}
+STATE_EMPTY = {'settings': {}, 'templates': [], 'program': None, 'exerciseNotes': {}, 'goals': {}}
 
 
 def load_state(database, user_id):
@@ -1182,13 +1204,18 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             new_notes = {key: note for key, note in (state.get('exerciseNotes') or {}).items() if key not in have['exerciseNotes'] and note}
             if len(have['exerciseNotes']) + len(new_notes) > 5000:
                 raise BadRequest('Importing these notes would take the account past 5000.')
-            if take_settings or take_program or new_templates or new_notes:
+            # Likewise a goal for an exercise that has none here.
+            new_goals = {key: goal for key, goal in (state.get('goals') or {}).items() if key not in have['goals']}
+            if len(have['goals']) + len(new_goals) > 500:
+                raise BadRequest('Importing these goals would take the account past 500.')
+            if take_settings or take_program or new_templates or new_notes or new_goals:
                 store_state(database, user['id'], {'settings': state['settings'] if take_settings else have['settings'],
                                                    'templates': have['templates'] + new_templates,
                                                    'program': state['program'] if take_program else have['program'],
-                                                   'exerciseNotes': {**have['exerciseNotes'], **new_notes}})
+                                                   'exerciseNotes': {**have['exerciseNotes'], **new_notes},
+                                                   'goals': {**have['goals'], **new_goals}})
         self.send_json(HTTPStatus.OK, {'workouts': added, 'alreadyHere': len(prepared) - added, 'templates': len(new_templates),
-                                       'settings': take_settings, 'program': take_program, 'notes': len(new_notes)})
+                                       'settings': take_settings, 'program': take_program, 'notes': len(new_notes), 'goals': len(new_goals)})
 
     def api_post(self, path):
         if path == '/api/auth/register':

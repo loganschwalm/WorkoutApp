@@ -268,6 +268,20 @@ def run(t):
     check('repeating the same record sets off nothing new', cdp.ev(fireworks) == 0, cdp.ev(fireworks))
     log(110, 5)
     check('beating it again does', cdp.ev(fireworks) == 1, cdp.ev(fireworks))
+    cdp.pause(1.4)
+    cdp.ev("saveLocalState('goals', { 'bench press': { name: 'Bench Press', target: 120, unit: 'lbs', by: '' }, 'squat': { name: 'Squat', target: 100, unit: 'kg', by: '' } })")
+    log(115, 5)
+    check('a set short of a goal is only a record', cdp.ev(fireworks) == 1 and cdp.ev("document.querySelectorAll('.firework i').length") == 28
+          and 'Goal reached' not in text('formFeedback'), text('formFeedback'))
+    cdp.pause(1.4)
+    log(120, 5)
+    check('a set that reaches a goal sets off a bigger firework, once', cdp.ev(fireworks) == 1 and cdp.ev("document.querySelectorAll('.firework i').length") == 64,
+          cdp.ev("document.querySelectorAll('.firework i').length"))
+    check('and says which goal', text('formFeedback') == 'Goal reached: Bench Press, 120 lbs!', text('formFeedback'))
+    cdp.pause(1.4)
+    log(125, 5)
+    check('going past it is a record again, not the goal', cdp.ev(fireworks) == 1 and cdp.ev("document.querySelectorAll('.firework i').length") == 28
+          and 'Goal reached' not in text('formFeedback'), text('formFeedback'))
     end()
 
     check('no page errors along the way', not [line for line in cdp.console if line.startswith('exceptionThrown')],

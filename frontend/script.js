@@ -544,11 +544,16 @@ function logSet() {
   const effort = effortAsked(exercise) && effortChoice !== null ? { rir:effortChoice } : {};
   effortChoice = null;
   const recordBefore = exerciseRecord(exercise.name);
+  const goalReached = goalReachedBy(exercise, weight);
   exercise.sets.push({ reps, weight, ...effort });
   persistActiveSession();
   renderActiveWorkout();
   const recordNow = exerciseRecord(exercise.name);
-  if (recordNow && recordNow !== recordBefore) celebrate($('completeSetBtn'));
+  // A goal reached gets a bigger firework than a record, and the record's would only sit on top of it.
+  if (goalReached) {
+    celebrate($('completeSetBtn'), 64, 1.6);
+    showFeedback(`Goal reached: ${goalReached.name}, ${formatWeight(goalReached.target)} ${goalReached.unit || 'lbs'}!`, 'success');
+  } else if (recordNow && recordNow !== recordBefore) celebrate($('completeSetBtn'));
   unlockAudio();
   // A superset goes straight on to its next exercise, with no rest until the round is done.
   const index = activeSession.currentIndex;

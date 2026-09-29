@@ -541,6 +541,53 @@ def run(t):
     cdp.pause(0.3)
     check('tapping a record charts that exercise', cdp.ev("document.getElementById('exerciseFilter').value") == 'squat' and cdp.ev('chartData.points.length') == 2)
 
+    # Goals: a weight to reach, measured against the heaviest set so far.
+    print('P8b Progress keeps a goal a weight, with a bar towards it, a deadline and a way to remove it')
+    goal_items = "[...document.querySelectorAll('#goalList .goal')].map(g => g.querySelector('strong').textContent + ' | ' + g.querySelector('.goal-head span').textContent + ' | ' + g.querySelector('.goal-foot span').textContent + ' | ' + g.querySelector('[role=progressbar]').getAttribute('aria-valuenow') + ' | ' + g.classList.contains('reached'))"
+
+    def set_goal(exercise, target, by=''):
+        cdp.ev(f"document.getElementById('goalExercise').value = {json.dumps(exercise)}; document.getElementById('goalTarget').value = {json.dumps(str(target))}; "
+               f"document.getElementById('goalBy').value = {json.dumps(by)}; document.querySelector('#goalForm button[type=submit]').click();")
+        cdp.pause(0.3)
+
+    settle('/progress.html', "document.querySelectorAll('#recordsList .record').length > 0")
+    check('with no goals the card says so', cdp.ev("document.querySelectorAll('#goalList .goal').length") == 0
+          and 'No goals yet' in cdp.ev("document.getElementById('goalList').textContent"))
+    check('the exercises done are offered', 'Bench Press' in cdp.ev("[...document.querySelectorAll('#goalExercises option')].map(o => o.value)"))
+    check('the target is asked for in the unit in use', cdp.ev("document.querySelector('#goalForm .unit-label').textContent") == 'lbs')
+    set_goal('bench press', '')
+    check('a goal with no target is refused', cdp.ev("document.querySelectorAll('#goalList .goal').length") == 0
+          and 'target weight' in cdp.ev("document.getElementById('goalFeedback').textContent"), cdp.ev("document.getElementById('goalFeedback').textContent"))
+    set_goal('', 200)
+    check('and one with no exercise', cdp.ev("document.querySelectorAll('#goalList .goal').length") == 0
+          and 'exercise' in cdp.ev("document.getElementById('goalFeedback').textContent"))
+    set_goal('bench press', 200)
+    check('a goal shows the heaviest weight so far against the target, under the exercise as it was written',
+          cdp.ev(goal_items) == ['Bench Press | 150 of 200 lbs | 50 lbs to go | 75 | false'], cdp.ev(goal_items))
+    check('and says so', cdp.ev("document.getElementById('goalFeedback').textContent") == 'Goal set for Bench Press.')
+    check('the form is cleared for the next', cdp.ev("document.getElementById('goalTarget').value") == '')
+    tomorrow = "(d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'))(new Date(Date.now() + 86400000))"
+    set_goal('Squat', 250, cdp.ev(tomorrow))
+    squat = [g for g in cdp.ev(goal_items) if g.startswith('Squat')]
+    check('a goal with a day says how long is left', squat and '60 lbs to go' in squat[0] and '1 day left' in squat[0], squat)
+    set_goal('Squat', 190)
+    reached = cdp.ev(goal_items)
+    check('setting a goal again replaces it, and one already met is marked Reached',
+          len(reached) == 2 and 'Squat | 190 of 190 lbs | Reached | 100 | true' in reached, reached)
+    check('goals still to reach come before those reached', reached[0].startswith('Bench Press') and reached[1].startswith('Squat'), reached)
+    goals = t.wait_for(lambda: 'squat' in t.api('GET', '/api/state', token=lifter)[0].get('goals', {})) and t.api('GET', '/api/state', token=lifter)[0]['goals']
+    check('the goals are kept with the account, in the unit they were set in',
+          goals == {'bench press': {'name': 'Bench Press', 'target': 200, 'unit': 'lbs', 'by': ''},
+                    'squat': {'name': 'Squat', 'target': 190, 'unit': 'lbs', 'by': ''}}, goals)
+    settle('/progress.html', "document.querySelectorAll('#goalList .goal').length == 2")
+    check('and are there when the page opens again', len(cdp.ev(goal_items)) == 2, cdp.ev(goal_items))
+    cdp.ev("document.querySelector('#goalList [data-goal-remove=\"squat\"]').click()")
+    cdp.pause(0.3)
+    check('Remove takes a goal away', [g.split(' | ')[0] for g in cdp.ev(goal_items)] == ['Bench Press']
+          and cdp.ev("document.getElementById('goalFeedback').textContent") == 'Goal removed for Squat.', cdp.ev(goal_items))
+    cdp.pause(0.6)
+    check('for good', list(t.api('GET', '/api/state', token=lifter)[0]['goals']) == ['bench press'])
+
     # A month of daily sessions: far more points than there is room to write a value over.
     for n in range(40, 70):
         lift(n, ex('Bench Press', 150 + n % 3 * 5, 5, [(5, 150 + n % 3 * 5)]))

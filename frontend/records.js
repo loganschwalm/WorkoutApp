@@ -167,10 +167,26 @@ function exerciseRecord(name) {
   return newRecords({ exercises, unit:recordUnit(activeSession) }, personalBests)[0] || '';
 }
 
+// The goal (see Progress) that a set of this weight reaches for the first time, or null: one for this exercise, met by this set
+// and by nothing before it, in this workout or any saved one. Call it before the set is added.
+function goalReachedBy(exercise, weight) {
+  const key = exerciseKey(exercise.name);
+  const stored = readLocalState('goals');
+  const goal = stored && stored.value && typeof stored.value === 'object' ? stored.value[key] : null;
+  if (!goal || !(goal.target > 0)) return null;
+  const unit = goal.unit || 'lbs', from = recordUnit(activeSession);
+  if (!(convertWeight(Number(weight) || 0, from, unit) >= goal.target)) return null;
+  const earlier = [convertWeight(personalBests[key]?.weight || 0, 'lbs', unit)];
+  activeSession.exercises.filter(item => exerciseKey(item.name) === key).forEach(item => (item.sets || []).forEach(set => {
+    earlier.push(convertWeight(Number(set.weight) || 0, from, unit));
+  }));
+  return Math.max(...earlier) < goal.target ? goal : null;
+}
+
 // A small firework: sparks flying out of an element, gone after a second. Skipped for anyone who asks for less motion.
 const FIREWORK_COLORS = ['#f5b83d', '#ff6b6b', '#5bd6a4', '#8183f4', '#4cc3ff'];
 
-function celebrate(origin) {
+function celebrate(origin, sparks = 28, reach = 1) {
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const box = origin.getBoundingClientRect();
   const burst = document.createElement('div');
@@ -178,10 +194,9 @@ function celebrate(origin) {
   burst.setAttribute('aria-hidden', 'true');
   burst.style.left = `${box.left + box.width / 2}px`;
   burst.style.top = `${box.top + box.height / 2}px`;
-  const sparks = 28;
   for (let i = 0; i < sparks; i++) {
     const angle = (i / sparks) * 2 * Math.PI + Math.random() * 0.3;
-    const distance = 60 + Math.random() * 70;
+    const distance = (60 + Math.random() * 70) * reach;
     const spark = document.createElement('i');
     spark.style.setProperty('--dx', `${Math.cos(angle) * distance}px`);
     spark.style.setProperty('--dy', `${Math.sin(angle) * distance}px`);

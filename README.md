@@ -99,7 +99,8 @@ own workouts, templates, and settings.
   sets of up to 12), else more reps in a set of a bodyweight exercise, or a longer hold. An exercise
   done for the first time has nothing to beat, so it sets no record. Records are worked out on the
   device, so they show even when the workout was finished offline.
-  A set that beats your best also sets off a small firework from Complete set as you log it (not with reduced motion on).
+  A set that beats your best also sets off a small firework from Complete set as you log it, and a set that reaches a goal
+  from Progress a bigger one, once (not with reduced motion on).
 - Add notes while training; they fold away until you open them, unless the workout already has some.
 - Keep a note with an exercise ("seat on 4", "grip on the rings"): Add note, in the exercise's ⋯ menu,
   saves it to your account, and it shows under that exercise whenever it comes up, in any workout.
@@ -337,6 +338,9 @@ cable stack with a single handle, and chest press, lat pulldown, leg extension a
   it), the best estimated one-rep max and the set it came from, the most reps without weight, and the
   longest hold, each with the day it was set. The most recent record comes first, and tapping one
   charts that exercise.
+- Goals: a weight to reach in an exercise, optionally by a day. Each shows your heaviest set so far against it, in a bar
+  that turns green once it is reached, with how far there is to go and how many days are left. Setting a goal for an
+  exercise again replaces it, and Remove takes it away. Goals are kept with your account, in the unit they were set in.
 - Review repeated workouts as separate progress points.
 
 ### Settings
@@ -384,7 +388,7 @@ uploads when the server is reachable again.
 Everything in your account can be saved to a file from Settings, and brought back in.
 
 - **Export** saves one JSON file with every workout, your custom templates, the training program you
-  follow, and your settings.
+  follow, your settings, your exercise notes and your goals.
 - **Export sets as CSV** saves every logged set for a spreadsheet, one row each: its date, workout,
   exercise, set number, weight, unit, and reps (or seconds, for a timed exercise). Skipped exercises are
   left out. Dates are the days in your own time zone, and a name that starts like a formula (`=`, `+`,
