@@ -647,6 +647,11 @@ What is already in place:
 
 - Passwords are hashed with PBKDF2-SHA256 at 600,000 iterations. Accounts created by an older version
   are upgraded to that strength the next time they sign in.
+- Hashing a password costs a good part of a second of a core, and signing in, signing up and resetting a
+  password all do it before anyone is signed in. At most two run at once (`PASSWORD_HASHERS`), so a flood
+  of them cannot take every core, and pages for signed-in accounts stay quick; a request kept waiting 5
+  seconds is told the server is busy. A reset code is checked before the new password is hashed, and a
+  username or email already taken is refused before it, so neither costs a hash.
 - After 5 failed sign-ins for one account from one address, that pair has to wait until the oldest
   failure is 15 minutes old, even with the right password. Signing in by email and by username count
   toward the same limit, and so do wrong passwords given in Settings to change the email or password,
@@ -692,6 +697,8 @@ The server reads these environment variables:
 | `LOGIN_ATTEMPTS` | `5` | Failed sign-ins per username and address before a wait |
 | `LOGIN_WINDOW` | `900` | Seconds a failed sign-in is remembered |
 | `REQUEST_TIMEOUT` | `30` | Seconds a connection may send nothing before it is closed |
+| `PASSWORD_HASHERS` | `2` | Passwords hashed at once (signing in, signing up, resets), so a flood of them takes this many cores at most |
+| `PASSWORD_HASH_WAIT` | `5` | Seconds a request waits for its turn to hash before it is told the server is busy (503) |
 | `RESET_GUESSES` | `10` | Wrong reset codes per email address in a day before its codes stop being tried |
 | `SMTP_HOST` | *(none)* | Mail server for password reset emails. Unset, "Forgot password?" says to ask whoever runs the server |
 | `SMTP_PORT` | `587` | `465` with `SMTP_SECURITY=ssl`, `25` with `none` |

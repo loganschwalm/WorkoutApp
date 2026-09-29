@@ -80,6 +80,11 @@ RESET_GUESSES = int(os.environ.get('RESET_GUESSES', '10'))
 PBKDF2_ITERATIONS = 600_000
 # Hashes written before the count was recorded ("salt$digest") used this many.
 LEGACY_ITERATIONS = 120_000
+# Hashing a password is the one thing a request can make costly without signing in: a good part of a second of a core
+# each time. At most PASSWORD_HASHERS run at once, so a flood of sign-ins, sign-ups or resets can take those cores and no
+# more, and signed-in pages stay quick. A request that gets no turn within PASSWORD_HASH_WAIT seconds is told to try again.
+PASSWORD_HASHERS = max(1, int(os.environ.get('PASSWORD_HASHERS', '2')))
+PASSWORD_HASH_WAIT = float(os.environ.get('PASSWORD_HASH_WAIT', '5'))
 
 SECURITY_HEADERS = {
     # Every script and stylesheet is a file served from here; nothing inline, nothing from elsewhere.
@@ -542,9 +547,18 @@ def workout_stored(database, user_id, name, created_at, workout):
     return any(json.dumps(json.loads(row['payload']).get('exercises'), sort_keys=True) == exercises for row in rows)
 
 
+hashing_turns = threading.BoundedSemaphore(PASSWORD_HASHERS)
+
+
 def derive(password, salt, iterations):
-    # surrogatepass: JSON can carry a lone surrogate, which strict UTF-8 refuses; valid text encodes as before.
-    return hashlib.pbkdf2_hmac('sha256', password.encode('utf-8', 'surrogatepass'), salt.encode(), iterations).hex()
+    if not hashing_turns.acquire(timeout=PASSWORD_HASH_WAIT):
+        raise BadRequest('The server is busy. Try again in a moment.', HTTPStatus.SERVICE_UNAVAILABLE,
+                         {'Retry-After': str(max(1, math.ceil(PASSWORD_HASH_WAIT)))})
+    try:
+        # surrogatepass: JSON can carry a lone surrogate, which strict UTF-8 refuses; valid text encodes as before.
+        return hashlib.pbkdf2_hmac('sha256', password.encode('utf-8', 'surrogatepass'), salt.encode(), iterations).hex()
+    finally:
+        hashing_turns.release()
 
 
 def password_hash(password, salt=None, iterations=PBKDF2_ITERATIONS):
@@ -998,12 +1012,13 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             raise BadRequest('Username cannot contain @. Your email goes in its own field.')
         if len(password) < 8:
             raise BadRequest('Password must be 8+ characters.')
-        stored_hash = password_hash(password)
         with connection() as database:
             if database.execute('SELECT 1 FROM users WHERE username = ?', (username,)).fetchone():
                 raise BadRequest('That username is already registered.', HTTPStatus.CONFLICT)
             if database.execute('SELECT 1 FROM users WHERE email = ?', (email,)).fetchone():
                 raise BadRequest('That email is already registered.', HTTPStatus.CONFLICT)
+            # Only now, so a name or email already taken costs no hash. Reading takes no lock, so none is held meanwhile.
+            stored_hash = password_hash(password)
             user_id = database.execute('INSERT INTO users (username, email, password_hash, created_at) VALUES (?, ?, ?, ?)',
                                        (username, email, stored_hash, int(time.time() * 1000))).lastrowid
             cookie = self.start_session(database, user_id)
@@ -1075,7 +1090,6 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
         if wait:
             self.send_wait(wait, 'Too many wrong codes for this address.')
             return
-        stored_hash = password_hash(password)
         with connection() as database:
             user = database.execute('SELECT id, username, email FROM users WHERE email = ?', (email,)).fetchone()
             reset = None
@@ -1085,16 +1099,22 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
                                          (user['id'], RESET_CODE_ATTEMPTS, int(time.time()))).rowcount:
                 reset = database.execute('SELECT code_hash FROM password_resets WHERE user_id = ?', (user['id'],)).fetchone()
             accepted = reset is not None and secrets.compare_digest(reset_code_hash(code), reset['code_hash'])
-            if accepted:
-                database.execute('UPDATE users SET password_hash = ? WHERE id = ?', (stored_hash, user['id']))
-                database.execute('DELETE FROM password_resets WHERE user_id = ?', (user['id'],))
-                # Whoever knew the old password is signed out everywhere.
-                database.execute('DELETE FROM sessions WHERE user_id = ?', (user['id'],))
-                cookie = self.start_session(database, user['id'])
         # Raised only now, so the counted try is committed rather than rolled back with the refusal.
+        wrong = 'That code is wrong or has expired. Check the newest email, or send a new code.'
         if not accepted:
             reset_guess_throttle.record(email)
-            raise BadRequest('That code is wrong or has expired. Check the newest email, or send a new code.')
+            raise BadRequest(wrong)
+        # Hashed only once the code is right, so a wrong guess costs no hash; and between the two writes, so nothing else
+        # waits on the database meanwhile. Too busy to hash it, and the code still works for another go.
+        stored_hash = password_hash(password)
+        with connection() as database:
+            # The code works once: of two requests that both had it right, the first to get here takes it.
+            if not database.execute('DELETE FROM password_resets WHERE user_id = ? AND code_hash = ?', (user['id'], reset['code_hash'])).rowcount:
+                raise BadRequest(wrong)
+            database.execute('UPDATE users SET password_hash = ? WHERE id = ?', (stored_hash, user['id']))
+            # Whoever knew the old password is signed out everywhere.
+            database.execute('DELETE FROM sessions WHERE user_id = ?', (user['id'],))
+            cookie = self.start_session(database, user['id'])
         reset_guess_throttle.clear(email)
         login_throttle.clear((self.client_address[0], user['username'].lower()))
         self.send_json(HTTPStatus.OK, {'user': public_user(user)}, [cookie])

@@ -193,6 +193,10 @@ if [[ ! -f /etc/workout-tracker/workout-tracker.env ]]; then
 #LOGIN_ATTEMPTS=5
 #LOGIN_WINDOW=900
 #
+# Passwords hashed at once, so a flood of sign-ins cannot take every core, and how long (seconds) one waits its turn:
+#PASSWORD_HASHERS=2
+#PASSWORD_HASH_WAIT=5
+#
 # Mail server for "Forgot password?" emails. Without SMTP_HOST, reset a password with: workout-tracker-admin reset-password <username>
 # SMTP_SECURITY is starttls (the default, port 587), ssl (port 465) or none (port 25).
 #SMTP_HOST=smtp.gmail.com

@@ -247,6 +247,36 @@ def run_security(t, check, request):
     after = [login(quick, 'target', f'after-password-{n}')[0] for n in range(5)]
     check('that success forgot the four, so five more tries are each just refused', after == [401] * 5, after)
 
+    # ------------------------------------------------------------------ A33 password hashing cannot take every core
+    print('A33 a flood of sign-ins can only take a set number of cores, and signed-in pages stay quick')
+    capped = t.start_server('capped.db', {'PASSWORD_HASHERS': '1', 'PASSWORD_HASH_WAIT': '0.3'})
+    capped.api('POST', '/api/auth/register', {'username': 'regular', 'email': 'regular@example.test', 'password': 'password123'})
+    _, cookie = capped.api('POST', '/api/auth/login', {'login': 'regular', 'password': 'password123'})
+    token = cookie.split('session=')[1].split(';')[0]
+    answers, quick = [], []
+
+    def flood(n):
+        answers.append(login(capped, f'nobody-{n}', 'password123'))
+
+    threads = [threading.Thread(target=flood, args=(n,)) for n in range(12)]
+    for thread in threads:
+        thread.start()
+    time.sleep(0.1)
+    started = time.monotonic()
+    status, _, _ = capped.request('GET', '/api/workouts', token=token)
+    quick.append((status, time.monotonic() - started))
+    for thread in threads:
+        thread.join()
+    statuses = sorted(answer[0] for answer in answers)
+    busy = [answer for answer in answers if answer[0] == 503]
+    check('with one hasher and twelve at once, the ones kept waiting are told the server is busy', busy and 401 in statuses
+          and set(statuses) <= {401, 503}, statuses)
+    check('with a Retry-After and a reason', busy and busy[0][1].get('retry-after') == '1' and 'busy' in busy[0][2].get('error', ''),
+          busy and (busy[0][1].get('retry-after'), busy[0][2]))
+    check('a signed-in page answers meanwhile, without waiting on the hashing', quick[0][0] == 200 and quick[0][1] < 0.5, quick)
+    check('and once the flood is over, signing in works', login(capped, 'regular', 'password123')[0] == 200)
+    capped.stop()
+
     # ------------------------------------------------------------------ A7 password hashes
     print('A7  password hashes use 600k iterations, and older hashes are upgraded on sign-in')
     stored = stored_hash('tester')
@@ -741,6 +771,19 @@ def run_accounts(t, check, request):
     check('another address is unaffected', status == 200 and code is not None, status)
     check('a reset lifts the sign-in wait (A17) from this address', reset('limited@example.test', code, 'reset-password')[0] == 200
           and sign_in('limited', 'reset-password') == 200)
+    # The new password is hashed between checking the code and using it up, so two requests can both find it right.
+    post('/api/auth/forgot-password', {'email': 'limited@example.test'})
+    code = code_for('limited@example.test', 2)
+    raced = {}
+    racers = [threading.Thread(target=lambda word=word: raced.__setitem__(word, reset('limited@example.test', code, word)[0]))
+              for word in ('first-racer', 'second-racer')]
+    for racer in racers:
+        racer.start()
+    for racer in racers:
+        racer.join()
+    winner = next((word for word, status in raced.items() if status == 200), None)
+    check('the right code sent twice at once still works only once', sorted(raced.values()) == [200, 400]
+          and sign_in('limited', winner) == 200, raced)
 
     # ------------------------------------------------------------------ A32 guessing across codes
     print('A32 wrong codes are counted per address across every code, ten a day')
