@@ -11,13 +11,11 @@ function loadExerciseNotes() {
   return stored && stored.value && typeof stored.value === 'object' && !Array.isArray(stored.value) ? stored.value : {};
 }
 
-// What to load on each side of the bar: a 45 lb bar and pound plates down to the 1.25s that a weight in 2.5 lb steps (as
-// 5/3/1 can round to) needs, or a 20 kg bar and kilogram plates. Only for a lift done with a barbell, which the
-// exercise's name has to tell (it is all a custom exercise has): Bench Press yes, Dumbbell Bench Press or Leg Press no.
-const BARBELLS = {
-  lbs:{ bar:45, plates:[45, 35, 25, 10, 5, 2.5, 1.25], name:'45 lb bar' },
-  kg:{ bar:20, plates:[25, 20, 15, 10, 5, 2.5, 1.25], name:'20 kg bar' }
-};
+// What to load on each side of the bar, with the bar and plates from Settings (gymEquipment in settings.js): by default a
+// 45 lb bar and pound plates down to the 1.25s that a weight in 2.5 lb steps (as 5/3/1 can round to) needs, or a 20 kg
+// bar and kilogram plates. Only for a lift done with a barbell, which the exercise's name has to tell (it is all a
+// custom exercise has): Bench Press yes, Dumbbell Bench Press or Leg Press no.
+const barName = equipment => `${formatWeight(equipment.bar)} ${equipment.unit === 'kg' ? 'kg' : 'lb'} bar`;
 // A name matches when it has any of these as a whole word (or words), in any case.
 const anyOfWords = words => new RegExp(`\\b(${words.join('|')})\\b`, 'i');
 const barbellNames = anyOfWords(['barbell', 'bench', 'squat', 'deadlift', 'rdl', 'overhead press', 'military press', 'push press', 'ohp', 'pendlay',
@@ -25,12 +23,27 @@ const barbellNames = anyOfWords(['barbell', 'bench', 'squat', 'deadlift', 'rdl',
 const notBarbellNames = anyOfWords(['dumbbells?', 'db', 'kettlebells?', 'machine', 'cable', 'smith', 'leg press', 'hack', 'goblet', 'split', 'bulgarian',
   'trap bar', 'hex bar', 'landmine', 'band', 'dips?', 'pistol']);
 
-function platesPerSide(weight, barbell = BARBELLS[weightUnit()]) {
-  let left = (weight - barbell.bar) / 2;
+// The fewest plates that make each side, heaviest first. Taking the heaviest plate that fits each time does not always
+// manage that: with 2.5s and 2s but no 1.25s, 4 a side is two 2s, and the heaviest first would stop at 2.5. So it
+// counts, in quarters (the finest plate there is), the fewest plates for every load up to the side's, and then takes
+// the heaviest plate that still leads to that fewest. A weight the plates cannot make exactly (187 lbs) gets the
+// nearest lighter load, and says what that comes to.
+function platesPerSide(weight, equipment = gymEquipment()) {
+  const side = Math.max(0, Math.floor(((weight - equipment.bar) / 2) * 4 + 1e-6));
+  const sizes = equipment.plates.map(plate => Math.round(plate * 4));
+  const fewest = [0];
+  for (let load = 1; load <= side; load++) {
+    fewest[load] = Math.min(Infinity, ...sizes.filter(size => size <= load).map(size => fewest[load - size] + 1));
+  }
+  let load = side;
+  while (fewest[load] === Infinity) load--;
   const plates = [];
-  barbell.plates.forEach(plate => { while (left >= plate - 1e-9) { plates.push(plate); left -= plate; } });
-  // A weight the plates cannot make exactly (187 lbs) gets the nearest lighter load, and says what that comes to.
-  return { plates, makes: weight - Math.round(left * 2 * 100) / 100 };
+  for (let left = load; left > 0;) {
+    const index = sizes.findIndex(size => size <= left && fewest[left - size] === fewest[left] - 1);
+    plates.push(equipment.plates[index]);
+    left -= sizes[index];
+  }
+  return { plates, makes:equipment.bar + load / 2 };
 }
 
 function isBarbellExercise(exercise) {
@@ -38,11 +51,12 @@ function isBarbellExercise(exercise) {
 }
 
 // Warm-up sets to work up to a barbell lift's working weight: the empty bar for 10, then about 40%, 60% and 80% of the
-// weight for 5, 3 and 2, to the nearest 5 lbs (2.5 kg), each heavier than the one before and lighter than the work.
-function warmupSets(weight, barbell = BARBELLS[weightUnit()]) {
-  if (!(weight > barbell.bar)) return [];
-  const step = weightUnit() === 'kg' ? 2.5 : 5;
-  const sets = [{ weight:barbell.bar, reps:10 }];
+// weight for 5, 3 and 2, to the nearest weight step (5 lbs, or 2.5 kg, unless Settings says otherwise), each heavier
+// than the one before and lighter than the work.
+function warmupSets(weight, equipment = gymEquipment()) {
+  if (!(weight > equipment.bar)) return [];
+  const step = equipment.step;
+  const sets = [{ weight:equipment.bar, reps:10 }];
   [[0.4, 5], [0.6, 3], [0.8, 2]].forEach(([share, reps]) => {
     const load = Math.round(weight * share / step) * step;
     if (load > sets[sets.length - 1].weight && load < weight) sets.push({ weight:load, reps });
@@ -65,16 +79,16 @@ function showPlates() {
   showWarmups();
   const exercise = activeSession ? activeSession.exercises[activeSession.currentIndex] : null;
   const weight = Number($('activeWeight').value);
-  const barbell = BARBELLS[weightUnit()];
-  const applies = isBarbellExercise(exercise) && weight >= barbell.bar;
+  const equipment = gymEquipment();
+  const applies = isBarbellExercise(exercise) && weight >= equipment.bar;
   $('plateHint').hidden = !applies;
   if (!applies) return;
-  const { plates, makes } = platesPerSide(weight, barbell);
-  if (!plates.length) { $('plateHint').textContent = `Just the ${barbell.name}`; return; }
+  const { plates, makes } = platesPerSide(weight, equipment);
+  if (!plates.length) { $('plateHint').textContent = `Just the ${barName(equipment)}`; return; }
   // Each plate drawn to its size, the heaviest tallest, in the order they go on. The " + " between them is only for
   // screen readers, which read the whole line as "Each side of a 45 lb bar: 45 + 25 + 2.5".
-  $('plateHint').innerHTML = `<span>Each side of a ${escapeHTML(barbell.name)}: </span><span class="plates">`
-    + plates.map(plate => `<span class="plate plate-size-${barbell.plates.indexOf(plate)}">${plate}</span>`).join('<span class="visually-hidden"> + </span>')
+  $('plateHint').innerHTML = `<span>Each side of a ${escapeHTML(barName(equipment))}: </span><span class="plates">`
+    + plates.map(plate => `<span class="plate plate-size-${equipment.plates.indexOf(plate)}">${formatWeight(plate)}</span>`).join('<span class="visually-hidden"> + </span>')
     + '</span>' + (makes !== weight ? `<span> (makes ${escapeHTML(formatWeight(makes))} ${weightUnit()})</span>` : '');
 }
 
@@ -272,7 +286,8 @@ function toggleSuperset() {
 
 // ---- Go heavier ---------------------------------------------------------------
 // For an exercise with no plan (a template or a workout done before), once every set at last time's weight reached its
-// target, it says to go up a step: 5 lbs or 2.5 kg, as the weight buttons do. The target is the exercise's reps, or the
+// target, it says to go up a step: the weight step from Settings (5 lbs or 2.5 kg unless changed), as the weight buttons
+// do. The target is the exercise's reps, or the
 // first set's if that was more, so a set that fell away (8, 8, 6) does not count as reaching it. A set logged with no
 // reps left means the weight is still enough. A program says this in its own way.
 function progressionFor(exercise, previous) {
@@ -283,8 +298,8 @@ function progressionFor(exercise, previous) {
   const atTop = previous.sets.filter(set => (Number(set.weight) || 0) === top);
   const needed = Math.max(target, Number(atTop[0].reps) || 0);
   if (!atTop.every(set => Number(set.reps) >= needed) || atTop.some(set => set.rir === 0)) return null;
-  const step = weightUnit() === 'kg' ? 2.5 : 5;
-  return { from:top, to:Math.round(top / step) * step + step, reps:needed };
+  const step = gymEquipment().step;
+  return { from:top, to:Math.round((Math.round(top / step) * step + step) * 100) / 100, reps:needed };
 }
 
 function renderProgression(exercise, previous) {
@@ -363,9 +378,9 @@ $('swapName').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); sw
 $('swapName').oninput = () => markInvalid($('swapName'), false);
 
 // −5 and +5 beside the weight: a change of 2.5 lbs a side, the smallest most plate sets make. In kilograms, −2.5 and
-// +2.5: 1.25 kg a side.
+// +2.5: 1.25 kg a side. Settings can choose another weight step.
 function applyWeightStepper() {
-  const step = weightUnit() === 'kg' ? 2.5 : 5;
+  const step = gymEquipment().step;
   $('weightStepper').querySelectorAll('[data-weight-step]').forEach(button => {
     const heavier = Number(button.dataset.weightStep) > 0;
     button.dataset.weightStep = String(heavier ? step : -step);

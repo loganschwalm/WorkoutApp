@@ -2,7 +2,8 @@ let legacyTheme = null;
 try { legacyTheme = localStorage.getItem('workout-tracker-theme'); } catch (error) { /* no storage: follow the device */ }
 // Appearance: 'system' follows the device's light or dark mode; 'light' and 'dark' fix it.
 const themeChoices = ['system', 'light', 'dark'];
-const defaultSettings = { theme:themeChoices.includes(legacyTheme) ? legacyTheme : 'system', restDuration:90, weeklyGoal:3, unit:'lbs', autoRest:true, confirmEnd:true, soundEnabled:true, soundVolume:40, alertSound:'beep', vibrate:true, playThroughSilent:true, trackEffort:true, warmupSets:true };
+const defaultSettings = { theme:themeChoices.includes(legacyTheme) ? legacyTheme : 'system', restDuration:90, weeklyGoal:3, unit:'lbs', autoRest:true, confirmEnd:true, soundEnabled:true, soundVolume:40, alertSound:'beep', vibrate:true, playThroughSilent:true, trackEffort:true, warmupSets:true,
+  barLbs:45, barKg:20, platesLbs:[45, 35, 25, 10, 5, 2.5, 1.25], platesKg:[25, 20, 15, 10, 5, 2.5, 1.25], stepLbs:5, stepKg:2.5 };
 const getSettingElement = id => document.getElementById(id);
 const canVibrate = typeof navigator.vibrate === 'function';
 // Safari (iOS 16.4 and later) lets a page choose how the phone treats its sound; see playRestAlert.
@@ -115,12 +116,76 @@ function weeklyGoalFrom(value) {
   return goal >= 1 && goal <= 7 ? goal : defaultSettings.weeklyGoal;
 }
 
+// ---- Bar and plates -------------------------------------------------------
+// The bar, the plates there are to load on it, and the step the weight buttons and Go heavier go up by. Each unit keeps
+// its own, since a gym's pound plates are not its kilogram ones, and switching units never turns one into the other.
+// Plates come in quarters of a pound or kilogram at the finest, which the plate calculator (training-tools.js) relies on.
+const plateChoices = { lbs:[55, 45, 35, 25, 15, 10, 5, 2.5, 1.25, 0.5], kg:[25, 20, 15, 10, 5, 2.5, 2, 1.25, 1, 0.5] };
+const stepChoices = { lbs:[1, 2.5, 5, 10], kg:[0.5, 1, 1.25, 2.5, 5] };
+const barLimits = { lbs:[5, 100], kg:[2.5, 50] };
+const equipmentKeys = { lbs:{ bar:'barLbs', plates:'platesLbs', step:'stepLbs' }, kg:{ bar:'barKg', plates:'platesKg', step:'stepKg' } };
+
+// The bar, plates (heaviest first) and step for a unit, with anything missing or not one of the choices (a setting from
+// an older version, or a hand-edited import) taken from the defaults.
+function gymEquipment(settings = getWorkoutSettings(), unit = settings.unit === 'kg' ? 'kg' : 'lbs') {
+  const keys = equipmentKeys[unit];
+  const bar = Number(settings[keys.bar]);
+  const [lightest, heaviest] = barLimits[unit];
+  const plates = Array.isArray(settings[keys.plates]) ? plateChoices[unit].filter(plate => settings[keys.plates].includes(plate)) : [];
+  const step = Number(settings[keys.step]);
+  return {
+    unit,
+    bar:bar >= lightest && bar <= heaviest ? bar : defaultSettings[keys.bar],
+    plates:plates.length ? plates : defaultSettings[keys.plates],
+    step:stepChoices[unit].includes(step) ? step : defaultSettings[keys.step]
+  };
+}
+
+// The fields show one unit's equipment, the unit that was chosen when they were filled: see readSettingsForm.
+function renderEquipmentFields(settings) {
+  const unit = settings.unit === 'kg' ? 'kg' : 'lbs';
+  const equipment = gymEquipment(settings, unit);
+  getSettingElement('equipmentFields').dataset.unit = unit;
+  document.querySelectorAll('[data-equipment-unit]').forEach(label => { label.textContent = unit; });
+  getSettingElement('barSetting').value = formatWeight(equipment.bar);
+  [getSettingElement('barSetting').min, getSettingElement('barSetting').max] = barLimits[unit];
+  getSettingElement('plateSetting').innerHTML = plateChoices[unit].map(plate => '<label class="setting-check">'
+    + `<input type="checkbox" value="${plate}"${equipment.plates.includes(plate) ? ' checked' : ''} /> ${formatWeight(plate)}</label>`).join('');
+  getSettingElement('stepSetting').innerHTML = stepChoices[unit]
+    .map(step => `<option value="${step}"${step === equipment.step ? ' selected' : ''}>${formatWeight(step)} ${unit}</option>`).join('');
+}
+
+// What the equipment fields say, for the unit they show; the other unit's is kept as it is. A bar outside its limits (or
+// a field left empty) keeps the bar there was.
+function readEquipmentFields(current) {
+  const unit = getSettingElement('equipmentFields').dataset.unit === 'kg' ? 'kg' : 'lbs';
+  const keys = equipmentKeys[unit];
+  const had = gymEquipment(current, unit);
+  const bar = Number(getSettingElement('barSetting').value);
+  const [lightest, heaviest] = barLimits[unit];
+  const plates = [...getSettingElement('plateSetting').querySelectorAll('input:checked')].map(input => Number(input.value));
+  const other = equipmentKeys[unit === 'kg' ? 'lbs' : 'kg'];
+  return {
+    [keys.bar]:getSettingElement('barSetting').value !== '' && bar >= lightest && bar <= heaviest ? bar : had.bar,
+    [keys.plates]:plates.length ? plates : had.plates,
+    [keys.step]:Number(getSettingElement('stepSetting').value) || had.step,
+    [other.bar]:current[other.bar], [other.plates]:current[other.plates], [other.step]:current[other.step]
+  };
+}
+
 function readSettingsForm() {
   const restDuration = Math.min(600, Math.max(15, Number(getSettingElement('restDurationSetting').value) || defaultSettings.restDuration));
   const soundVolume = Math.min(100, Math.max(0, Number(getSettingElement('soundVolumeSetting').value) || 0));
   const weeklyGoal = weeklyGoalFrom(getSettingElement('weeklyGoalSetting').value);
   const unit = getSettingElement('unitSetting').value === 'kg' ? 'kg' : 'lbs';
-  return { theme:getSettingElement('themeSetting').value, unit, restDuration, weeklyGoal, autoRest:getSettingElement('autoRestSetting').checked, confirmEnd:getSettingElement('confirmEndSetting').checked, trackEffort:getSettingElement('effortSetting').checked, warmupSets:getSettingElement('warmupSetting').checked, soundEnabled:getSettingElement('soundEnabledSetting').checked, soundVolume, alertSound:getSettingElement('alertSoundSetting').value, vibrate:getSettingElement('vibrateSetting').checked, playThroughSilent:getSettingElement('silentSetting').checked };
+  return { theme:getSettingElement('themeSetting').value, unit, restDuration, weeklyGoal, autoRest:getSettingElement('autoRestSetting').checked, confirmEnd:getSettingElement('confirmEndSetting').checked, trackEffort:getSettingElement('effortSetting').checked, warmupSets:getSettingElement('warmupSetting').checked, soundEnabled:getSettingElement('soundEnabledSetting').checked, soundVolume, alertSound:getSettingElement('alertSoundSetting').value, vibrate:getSettingElement('vibrateSetting').checked, playThroughSilent:getSettingElement('silentSetting').checked,
+    ...readEquipmentFields(getWorkoutSettings()) };
+}
+
+// The last plate ticked cannot be unticked: with no plates there is nothing to load.
+function syncPlateControls() {
+  const ticked = [...getSettingElement('plateSetting').querySelectorAll('input')].filter(input => input.checked);
+  getSettingElement('plateSetting').querySelectorAll('input').forEach(input => { input.disabled = ticked.length === 1 && input.checked; });
 }
 
 // Tone and volume mean nothing with sound off, and Test alert needs at least one way to alert.
@@ -153,7 +218,9 @@ function applySettings(settings) {
   getSettingElement('silentSetting').checked = settings.playThroughSilent !== false;
   // Only Safari on an iPhone or iPad can choose; everywhere else the alert already follows the media volume.
   getSettingElement('silentSettingRow').hidden = !canPlayThroughSilent;
+  renderEquipmentFields(settings);
   syncSoundControls();
+  syncPlateControls();
 }
 
 // Set by an import, whose workouts, templates and program the page then loads again to show.
@@ -172,7 +239,7 @@ function closeSettings() {
 function saveSettings() {
   const settings = readSettingsForm();
   const current = getWorkoutSettings();
-  if (Object.keys(settings).every(key => settings[key] === current[key])) return false;
+  if (Object.keys(settings).every(key => JSON.stringify(settings[key]) === JSON.stringify(current[key]))) return false;
   saveLocalState('settings', settings);
   applySettings(settings);
   window.dispatchEvent(new Event('settingschange'));
@@ -296,12 +363,14 @@ getSettingElement('settingsButton').onclick = openSettings;
 getSettingElement('closeSettings').onclick = closeSettings;
 getSettingElement('settingsModal').onclick = event => { if (event.target === getSettingElement('settingsModal')) closeSettings(); };
 document.addEventListener('keydown', event => { if (event.key === 'Escape' && !getSettingElement('settingsModal').hidden) closeSettings(); });
-['input', 'change'].forEach(type => getSettingElement('settingsForm').addEventListener(type, syncSoundControls));
+['input', 'change'].forEach(type => getSettingElement('settingsForm').addEventListener(type, () => { syncSoundControls(); syncPlateControls(); }));
 // A setting is kept as soon as it changes: a box ticked, a choice picked, the volume let go, the rest duration's field left.
 // The account's fields and the import's file belong to forms of their own, and are left out.
 getSettingElement('settingsForm').addEventListener('change', event => {
   if (event.target.form !== getSettingElement('settingsForm') || event.target.type === 'file') return;
   if (saveSettings()) showSettingsSaved();
+  // A bar weight that was not kept (empty, or too light or heavy) goes back to the one that was.
+  else if (event.target.id === 'barSetting') event.target.value = formatWeight(gymEquipment().bar);
 });
 // Plays the alert with the values currently in the form, so changes can be heard before they are saved.
 getSettingElement('testAlertButton').onclick = () => { unlockAudio(); playRestAlert(readSettingsForm()); };

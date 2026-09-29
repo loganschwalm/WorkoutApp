@@ -69,6 +69,10 @@ own workouts, templates, and settings.
   what they do.
   In kilograms it is a 20 kg bar with 25, 20, 15, 10, 5, 2.5 and 1.25 kg plates, and the weight
   buttons step 2.5 kg.
+  Settings' Bar and plates changes all of that for your gym: the bar's weight (a 35 lb or 15 kg bar),
+  the plates you have (55s or 15s, no 1.25s, 0.5 microplates), and the weight step the buttons, Go
+  heavier and warm-ups use. It loads the fewest plates that make the weight, so with 2 kg plates and no
+  1.25s, 4 kg a side is two 2s. Pounds and kilograms each keep their own.
 - See how you did last time on each exercise; its weight and reps are prefilled, and after each set the next one defaults to the set you just logged.
 - View completed sets during the workout, correct a set's weight or reps in place, or remove a set that was logged by mistake.
   They fold away under Completed sets, beside Workout notes and Add an exercise, with a count of how many are done
@@ -112,7 +116,7 @@ own workouts, templates, and settings.
 - Past sessions, under last time's numbers, lists the last five times you did the exercise, with a link
   to every session of it on the Progress page.
 - Go heavier: when every set at last time's weight reached its target, the app says so and offers the
-  next step up (5 lbs, or 2.5 kg) in one tap. The target is the exercise's reps, or the first set's if
+  next step up (5 lbs, or 2.5 kg, or the weight step from Settings) in one tap. The target is the exercise's reps, or the first set's if
   that was more, so a set that fell away (8, 8, 6) does not count; nor does a set logged with no reps
   left. Training programs say this in their own way.
 - Warm-up sets for barbell lifts, before the first working set: the empty bar for 10, then about 40%,
@@ -350,7 +354,7 @@ cable stack with a single handle, and chest press, lat pulldown, leg extension a
 ### Settings
 
 The gear button opens a settings modal available on every page, in sections: General, During a
-workout, Rest timer, Your data and Account. Each change is saved as you make it, so there is no Save
+workout, Bar and plates, Rest timer, Your data and Account. Each change is saved as you make it, so there is no Save
 button, just Done; closing it any other way (the ×, Escape, or a tap outside) keeps your changes too.
 Closing it puts the keyboard focus back on the gear button, as the template and program editors do on
 the button that opened them. Settings include:
@@ -369,6 +373,8 @@ the button that opened them. Settings include:
 - End-workout confirmation toggle.
 - Effort toggle: whether to ask how many reps each set had left.
 - Warm-up toggle: whether to suggest warm-up sets for barbell lifts.
+- Bar and plates: the bar's weight, the plates you have, and the weight step, for pounds and kilograms
+  separately. The training programs keep their own rounding.
 - Rest-timer alert: play a sound on or off, choose the alert sound (double beep, chime, or long tone), set the volume, and turn vibration on or off. The vibration option only appears on devices that support it.
 - On an iPhone or iPad (Safari 16.4 or later), the alert plays even with the ringer silent, at the media volume the
   volume buttons set, like a music app. The phone pauses other audio, such as music, while the alert sounds, and the

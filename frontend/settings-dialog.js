@@ -31,6 +31,15 @@ document.body.insertAdjacentHTML('beforeend', `
       <label class="setting-check"><input id="confirmEndSetting" type="checkbox" /> Confirm before ending an active workout</label>
       <label class="setting-check"><input id="effortSetting" type="checkbox" /> Ask how many reps each set had left (effort)</label>
       <label class="setting-check"><input id="warmupSetting" type="checkbox" /> Suggest warm-up sets for barbell lifts</label>
+      <h3 class="settings-section">Bar and plates</h3>
+      <div class="equipment-fields" id="equipmentFields">
+        <span class="subtitle">What your gym has, for the plates to load on a barbell lift, its warm-ups, the weight buttons and Go heavier. Each unit keeps its own.</span>
+        <label for="barSetting">Bar weight (<span data-equipment-unit>lbs</span>)</label>
+        <input id="barSetting" type="number" inputmode="decimal" step="0.5" />
+        <fieldset class="plate-choices"><legend>Plates you have (<span data-equipment-unit>lbs</span>)</legend><div id="plateSetting"></div></fieldset>
+        <label for="stepSetting">Weight step</label>
+        <select id="stepSetting"></select>
+      </div>
       <h3 class="settings-section">Rest timer</h3>
       <label for="restDurationSetting">Default rest duration (seconds)</label>
       <input id="restDurationSetting" type="number" inputmode="numeric" min="15" max="600" step="15" />

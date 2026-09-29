@@ -125,6 +125,7 @@ html[data-theme="dark"] .danger, html[data-theme="dark"] .remove { color:#ff9eaa
 .plate { display:inline-grid; place-items:center; min-width:22px; padding:0 4px; color:#fff; background:var(--accent); border-radius:4px; font-size:.7rem; font-weight:800; line-height:1; }
 .plate-size-0 { height:36px; } .plate-size-1 { height:32px; } .plate-size-2 { height:28px; } .plate-size-3 { height:24px; }
 .plate-size-4 { height:20px; opacity:.85; } .plate-size-5 { height:18px; opacity:.75; } .plate-size-6 { height:16px; min-width:18px; opacity:.65; }
+.plate-size-7 { height:15px; min-width:17px; opacity:.6; } .plate-size-8 { height:14px; min-width:16px; opacity:.55; } .plate-size-9 { height:13px; min-width:15px; opacity:.5; }
 .visually-hidden { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
 .notes-input { margin-top:12px; }
 .set-list { display:grid; gap:8px; margin:18px 0 0; padding:0; list-style:none; }
@@ -284,6 +285,14 @@ input[type="range"] { padding:0; border:0; background:transparent; accent-color:
 .settings-modal form > .settings-section:first-child { margin-top:0; padding-top:0; border-top:0; }
 .settings-section + .data-section, .settings-section + .account-row { margin-top:0; padding-top:0; border-top:0; }
 .settings-saved { margin:0 auto 0 0; font-size:.85rem; }
+/* Bar and plates: the bar weight, a row of plate ticks that wraps, and the weight step. */
+.equipment-fields { display:grid; gap:8px; }
+.equipment-fields > label { margin:8px 0 0; }
+.plate-choices { min-width:0; margin:8px 0 0; padding:0; border:0; }
+.plate-choices legend { padding:0; margin-bottom:6px; color:var(--muted); font-size:.78rem; font-weight:700; }
+#plateSetting { display:flex; flex-wrap:wrap; gap:4px 16px; }
+#plateSetting .setting-check { margin:0; min-height:32px; align-items:center; font-variant-numeric:tabular-nums; }
+#plateSetting .setting-check input { margin:0; }
 /* The Tracker's saved workouts: Show more and the link to History, side by side. */
 .more-workouts { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
 @media (max-width:620px) { .shell{padding-top:25px}.date{display:none}.grid{grid-template-columns:1fr 1fr}.grid .exercise-input{grid-column:1/-1}.grid button{width:100%}.exercise{grid-template-columns:1fr auto auto}.exercise .remove{grid-column:1/-1; width:100%}.workout-name{align-items:stretch; flex-direction:column}.saved-workout-summary{align-items:flex-start; flex-direction:column}.saved-workout-summary.saved-workout-row{align-items:center; flex-direction:row; gap:10px}.workout-details li{align-items:flex-start; flex-direction:column; gap:3px}.header-actions{align-items:flex-end; flex-direction:column; gap:8px}.site-nav{order:3; width:100%; justify-content:center} header{align-items:flex-start; flex-wrap:wrap}.template-grid{grid-template-columns:1fr}.set-entry{grid-template-columns:1fr 1fr}.set-entry .weight-entry{grid-column:1/-1}.set-entry > button{width:100%}.section-heading-actions{align-items:flex-end; flex-direction:column; gap:8px}.progress-filters{grid-template-columns:repeat(2, minmax(0, 1fr))}.progress-filters > div:nth-child(1), .progress-filters > div:nth-child(2), .progress-filters button{grid-column:1/-1}.progress-filters button{width:100%} }

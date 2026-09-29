@@ -217,7 +217,7 @@ def run(t):
     cdp.pause(0.3)
     seen.update({f['name']: f for f in cdp.ev(fields)})
     t.end_workout()
-    expected = {'weight', 'reps', 'activeWeight', 'completedReps', 'activeAddReps', 'restDurationSetting',
+    expected = {'weight', 'reps', 'activeWeight', 'completedReps', 'activeAddReps', 'restDurationSetting', 'barSetting',
                 'templateReps0', 'exercise-edit', 'set-edit'}
     check('every kind of number field was on screen', expected <= set(seen), sorted(set(seen)))
     wrong = {name: field['pad'] for name, field in seen.items() if field['pad'] != ('decimal' if field['weight'] else 'numeric')}

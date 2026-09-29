@@ -504,6 +504,53 @@ def run(t):
     check('just the bar', plates() == 'Just the 45 lb bar', plates())
     set_weight(40)
     check('nothing under the weight of the bar', plates() is None, plates())
+
+    # Settings' Bar and plates: a gym with a 35 lb bar, 15s and no 1.25s, and a weight step of 2.5 lbs.
+    def change(selector, value=None):
+        set_value = f"e.value = {json.dumps(value)};" if value is not None else 'e.checked = !e.checked;'
+        cdp.ev(f"(e => {{ {set_value} e.dispatchEvent(new Event('change', {{ bubbles: true }})); }})(document.querySelector({json.dumps(selector)}))")
+
+    cdp.ev("document.getElementById('settingsButton').click()")
+    check('Settings shows the bar and plates there are, 45 lbs and 45s down to 1.25s by default',
+          field('barSetting') == '45' and cdp.ev("[...document.querySelectorAll('#plateSetting input:checked')].map(i => i.value)")
+          == ['45', '35', '25', '10', '5', '2.5', '1.25'] and field('stepSetting') == '5')
+    change('#barSetting', '35')
+    change('#plateSetting input[value="1.25"]')
+    change('#plateSetting input[value="15"]')
+    change('#stepSetting', '2.5')
+    cdp.ev("document.getElementById('doneSettings').click()")
+    cdp.pause(0.2)
+    kept = cdp.ev("(s => [s.barLbs, s.platesLbs, s.stepLbs, s.barKg])(getWorkoutSettings())")
+    check('they are kept in Settings, the kilogram bar untouched', kept == [35, [45, 35, 25, 15, 10, 5, 2.5], 2.5, 20], kept)
+    set_weight(135)
+    check('the plates are for that bar', plates() == 'Each side of a 35 lb bar: 45 + 5', plates())
+    step(2.5)
+    check('the weight buttons go up by the step chosen', field('activeWeight') == '137.5'
+          and cdp.ev("document.querySelector('#weightStepper [data-weight-step]').textContent") == '−2.5', field('activeWeight'))
+    check('and with no 1.25s, the plates say what they do make', plates() == 'Each side of a 35 lb bar: 45 + 5 (makes 135 lbs)', plates())
+    set_weight(35)
+    check('just the bar is the 35 lb one', plates() == 'Just the 35 lb bar', plates())
+    fewest = cdp.ev("platesPerSide(28, { unit: 'kg', bar: 20, plates: [25, 20, 15, 10, 5, 2.5, 2], step: 2.5 })")
+    check('the fewest plates that make a weight, not just the heaviest first: two 2s for 4 kg a side',
+          fewest == {'plates': [2, 2], 'makes': 28}, fewest)
+
+    cdp.ev("document.getElementById('settingsButton').click()")
+    change('#unitSetting', 'kg')
+    in_kg = cdp.ev("""({ bar: document.getElementById('barSetting').value, unit: document.querySelector('[data-equipment-unit]').textContent,
+        plates: [...document.querySelectorAll('#plateSetting input')].map(i => i.value), step: document.getElementById('stepSetting').value })""")
+    check('in kilograms, the kilogram bar and plates', in_kg == {'bar': '20', 'unit': 'kg', 'step': '2.5',
+          'plates': ['25', '20', '15', '10', '5', '2.5', '2', '1.25', '1', '0.5']}, in_kg)
+    change('#unitSetting', 'lbs')
+    check('and back in pounds, the pound ones as they were', field('barSetting') == '35' and field('stepSetting') == '2.5', field('barSetting'))
+    change('#barSetting', '500')
+    check('a bar that heavy is not kept', field('barSetting') == '35' and cdp.ev('getWorkoutSettings().barLbs') == 35, field('barSetting'))
+    for plate in ('45', '35', '25', '15', '10', '5'):
+        change(f'#plateSetting input[value="{plate}"]')
+    last = cdp.ev("[...document.querySelectorAll('#plateSetting input:checked')].map(i => [i.value, i.disabled])")
+    check('the last plate cannot be taken away', last == [['2.5', True]], last)
+    cdp.ev("document.getElementById('doneSettings').click()")
+    cdp.ev("saveLocalState('settings', { ...getWorkoutSettings(), barLbs: 45, platesLbs: [45, 35, 25, 10, 5, 2.5, 1.25], stepLbs: 5 });"
+           "window.dispatchEvent(new Event('settingschange'))")
     judged = cdp.ev("""['Bench Press', 'Back Squat', 'Deadlift', 'Overhead Press', 'Barbell Row', 'Romanian Deadlift',
         'Dumbbell Bench Press', 'Leg Press', 'Goblet Squat', 'Lat Pulldown', 'Tricep Pushdown', 'Bench Dips']
         .filter(name => barbellNames.test(name) && !notBarbellNames.test(name))""")
