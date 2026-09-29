@@ -6,6 +6,8 @@ let restEndsAt = null;
 let wakeLock = null;
 let wakeLockRequesting = false;
 let restRemaining = getWorkoutSettings().restDuration;
+// The length this rest started at (or was stretched to), for the bar that drains along the panel.
+let restTotal = restRemaining;
 // The countdown for a set of a timed exercise, from an end time like the rest timer's.
 let holdInterval = null;
 let holdEndsAt = null;
@@ -13,6 +15,8 @@ let holdLength = 0;
 
 function updateRestTimer() {
   $('timerDisplay').textContent = clockTime(restRemaining);
+  restTotal = Math.max(restTotal, restRemaining);
+  $('restPanel').style.setProperty('--rest-left', restTotal ? restRemaining / restTotal : 0);
 }
 
 // The rest after a set: the current exercise's own (a program gives main lifts longer than accessories, and a template
@@ -68,7 +72,7 @@ function adjustRest(seconds) {
 }
 
 function startRestTimer() {
-  restRemaining = restDuration();
+  restRemaining = restTotal = restDuration();
   $('restPanel').hidden = false;
   updateRestTimer();
   runRestTimer();
@@ -149,12 +153,12 @@ $('restToggleBtn').onclick = () => {
   unlockAudio();
   if (restInterval) { syncRestRemaining(); updateRestTimer(); stopRestTimer(); }
   else {
-    if (restRemaining <= 0) restRemaining = restDuration();
+    if (restRemaining <= 0) restRemaining = restTotal = restDuration();
     updateRestTimer();
     runRestTimer();
   }
 };
-$('restResetBtn').onclick = () => { stopRestTimer(); restRemaining = restDuration(); updateRestTimer(); };
+$('restResetBtn').onclick = () => { stopRestTimer(); restRemaining = restTotal = restDuration(); updateRestTimer(); };
 $('restAdjust').onclick = e => {
   const button = e.target.closest('[data-rest-adjust]');
   if (!button) return;

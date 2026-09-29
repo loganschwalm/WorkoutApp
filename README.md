@@ -82,6 +82,7 @@ own workouts, templates, and settings.
   Everything else uses the default from Settings.
 - Pause and reset the rest timer, or give yourself 30 seconds more or less with −30s and +30s,
   running or paused. Taking it down to nothing ends the rest quietly.
+  A thin bar along the bottom of the timer drains as the rest runs out.
 - Keep accurate rest time even when the screen locks or the tab is in the background; the timer alerts you with a sound and vibration when rest is over (configurable in Settings).
 - Keep the screen awake during a workout (on browsers that support it).
 - Move to the next exercise with the rest timer reset to that exercise's rest.
@@ -96,6 +97,7 @@ own workouts, templates, and settings.
   sets of up to 12), else more reps in a set of a bodyweight exercise, or a longer hold. An exercise
   done for the first time has nothing to beat, so it sets no record. Records are worked out on the
   device, so they show even when the workout was finished offline.
+  A set that beats your best also sets off a small firework from Complete set as you log it (not with reduced motion on).
 - Add notes while training; they fold away until you open them, unless the workout already has some.
 - Keep a note with an exercise ("seat on 4", "grip on the rings"): Add note, in the exercise's ⋯ menu,
   saves it to your account, and it shows under that exercise whenever it comes up, in any workout.

@@ -157,3 +157,37 @@ function prefillWeight(weight, converted) {
 }
 
 $('summaryDone').onclick = () => { $('workoutSummary').hidden = true; };
+
+// ---- Celebrating a record -----------------------------------------------------
+// The record an exercise has set so far in the workout in progress, as newRecords words it, or ''. It changes when a set
+// beats it again (a heavier weight), so logSet compares it before and after a set.
+function exerciseRecord(name) {
+  const key = exerciseKey(name);
+  const exercises = activeSession.exercises.filter(item => exerciseKey(item.name) === key);
+  return newRecords({ exercises, unit:recordUnit(activeSession) }, personalBests)[0] || '';
+}
+
+// A small firework: sparks flying out of an element, gone after a second. Skipped for anyone who asks for less motion.
+const FIREWORK_COLORS = ['#f5b83d', '#ff6b6b', '#5bd6a4', '#8183f4', '#4cc3ff'];
+
+function celebrate(origin) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const box = origin.getBoundingClientRect();
+  const burst = document.createElement('div');
+  burst.className = 'firework';
+  burst.setAttribute('aria-hidden', 'true');
+  burst.style.left = `${box.left + box.width / 2}px`;
+  burst.style.top = `${box.top + box.height / 2}px`;
+  const sparks = 28;
+  for (let i = 0; i < sparks; i++) {
+    const angle = (i / sparks) * 2 * Math.PI + Math.random() * 0.3;
+    const distance = 60 + Math.random() * 70;
+    const spark = document.createElement('i');
+    spark.style.setProperty('--dx', `${Math.cos(angle) * distance}px`);
+    spark.style.setProperty('--dy', `${Math.sin(angle) * distance}px`);
+    spark.style.background = FIREWORK_COLORS[i % FIREWORK_COLORS.length];
+    burst.appendChild(spark);
+  }
+  document.body.appendChild(burst);
+  setTimeout(() => burst.remove(), 1200);
+}

@@ -248,5 +248,27 @@ def run(t):
     check('and starting it does them as a superset', current() == 'Curl' and text('supersetLine') == 'Superset with Tricep Pushdown: a set of each in turn, then rest.',
           text('supersetLine'))
     end()
+    # ------------------------------------------------------------------ a new personal record sets off a firework
+    print('F   a set that beats your best sets off a firework, once per new record')
+    open_tracker()
+    cdp.ev("personalBests = { [exerciseKey('Bench Press')]: { weight: 100, oneRepMax: 115, reps: 0, seconds: 0 } }")
+    t.start(0)
+    cdp.pause(0.4)
+    fireworks = "document.querySelectorAll('.firework').length"
+    log(95, 5)
+    check('a set short of the best sets off nothing', cdp.ev(fireworks) == 0, cdp.ev(fireworks))
+    log(105, 5)
+    check('a heavier weight than ever does', cdp.ev(fireworks) == 1, cdp.ev(fireworks))
+    check('with sparks that carry their own direction', cdp.ev("document.querySelectorAll('.firework i').length") == 28
+          and cdp.ev("!!document.querySelector('.firework i').style.getPropertyValue('--dx')"), cdp.ev("document.querySelectorAll('.firework i').length"))
+    check('never in the way of a tap', cdp.ev("getComputedStyle(document.querySelector('.firework')).pointerEvents") == 'none')
+    cdp.pause(1.4)
+    check('and clears itself away', cdp.ev(fireworks) == 0, cdp.ev(fireworks))
+    log(105, 5)
+    check('repeating the same record sets off nothing new', cdp.ev(fireworks) == 0, cdp.ev(fireworks))
+    log(110, 5)
+    check('beating it again does', cdp.ev(fireworks) == 1, cdp.ev(fireworks))
+    end()
+
     check('no page errors along the way', not [line for line in cdp.console if line.startswith('exceptionThrown')],
           [line for line in cdp.console if line.startswith('exceptionThrown')][:3])

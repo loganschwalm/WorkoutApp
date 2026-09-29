@@ -543,9 +543,12 @@ function logSet() {
   const weight = Number(weightValue) || 0;
   const effort = effortAsked(exercise) && effortChoice !== null ? { rir:effortChoice } : {};
   effortChoice = null;
+  const recordBefore = exerciseRecord(exercise.name);
   exercise.sets.push({ reps, weight, ...effort });
   persistActiveSession();
   renderActiveWorkout();
+  const recordNow = exerciseRecord(exercise.name);
+  if (recordNow && recordNow !== recordBefore) celebrate($('completeSetBtn'));
   unlockAudio();
   // A superset goes straight on to its next exercise, with no rest until the round is done.
   const index = activeSession.currentIndex;
@@ -558,7 +561,7 @@ function logSet() {
     return;
   }
   if (getWorkoutSettings().autoRest) startRestTimer();
-  else { stopRestTimer(); restRemaining = restDuration(); updateRestTimer(); $('restPanel').hidden = false; }
+  else { stopRestTimer(); restRemaining = restTotal = restDuration(); updateRestTimer(); $('restPanel').hidden = false; }
   // The round is done: rest, then the superset starts again from its first exercise with sets left.
   const first = supersetMembers(activeSession, index).length > 1 ? firstWithSetsLeft(activeSession, index) : null;
   if (first !== null && first !== index) moveWithinSuperset(first);

@@ -488,3 +488,13 @@ h1 { font-size:clamp(1.75rem,4vw,2.6rem); }
 header { margin-bottom:22px; }
 .program-section > summary::marker { color:var(--accent); }
 .more-workouts > .button-link, .more-workouts > button { padding:10px 16px; font-size:.88rem; }
+
+/* The rest bar drains along the bottom of the panel as the rest runs out. */
+.rest-panel { overflow:hidden; }
+.rest-panel::after { content:""; position:absolute; left:0; bottom:0; height:3px; width:calc(var(--rest-left, 1) * 100%); background:var(--accent); border-radius:0 3px 3px 0; transition:width .3s linear; }
+
+/* The firework for a new personal record: sparks from the middle of a button, over everything, never in the way of a tap. */
+.firework { position:fixed; z-index:100; width:0; height:0; pointer-events:none; }
+.firework i { position:absolute; left:-3px; top:-3px; width:6px; height:6px; border-radius:50%; animation:spark 1s cubic-bezier(.15,.7,.3,1) forwards; }
+@keyframes spark { from { transform:translate(0,0) scale(1); opacity:1; } to { transform:translate(var(--dx),var(--dy)) scale(.3); opacity:0; } }
+@media (prefers-reduced-motion:reduce) { .rest-panel::after { transition:none; } }
