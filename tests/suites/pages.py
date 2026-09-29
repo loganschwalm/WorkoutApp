@@ -195,6 +195,11 @@ def run(t):
                         link: {look}(document.querySelector('a.button-link')) }})""")
     check('buttons use the page font, in bold', fonts['button'] == {'family': fonts['body'], 'weight': '700'}, fonts)
     check('and so do links drawn as buttons', fonts['link'] == {'family': fonts['body'], 'weight': '700'}, fonts)
+    # Inter comes with the app, so the page looks and measures the same on every device, whatever it has installed.
+    inter = cdp.ev("document.fonts.ready.then(() => [...document.fonts].filter(f => f.family.replace(/\"/g, '') === 'Inter').map(f => f.status))")
+    check('the page draws in Inter, served with the app', 'loaded' in (inter or []), inter)
+    served = cdp.ev("fetch('/fonts/inter-latin.woff2').then(r => [r.status, r.headers.get('content-type')])")
+    check('and the font is served as one', served == [200, 'font/woff2'], served)
 
     # Every number field the Tracker can show: the page's own, a built workout's rows, the template editor's, and a
     # logged set's. Each has to ask a phone for its number pad: decimal for weights (they take .5), numeric otherwise.

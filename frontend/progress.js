@@ -164,7 +164,7 @@ function drawChart() {
   const y = value => top + chartHeight - value / maximum * chartHeight;
   const [metricLabel, pointUnit] = metricLabels();
 
-  context.font = '12px system-ui, sans-serif';
+  context.font = '12px Inter, system-ui, sans-serif';
   context.lineWidth = 1;
   context.strokeStyle = line;
   context.fillStyle = ink;
@@ -190,7 +190,7 @@ function drawChart() {
   });
   labelsThatFit(dates, 12).forEach(label => context.fillText(label.text, label.x, height - 20));
 
-  context.font = '11px system-ui, sans-serif';
+  context.font = '11px Inter, system-ui, sans-serif';
   const latest = [], others = [];
   chartData.types.forEach((type, typeIndex) => {
     const colour = colors[typeIndex % colors.length];
@@ -473,6 +473,8 @@ $('recordsList').onclick = event => {
   document.querySelector('.progress-card').scrollIntoView({ behavior:'smooth', block:'start' });
 };
 window.addEventListener('resize', drawChart);
+// A canvas only draws in Inter once it has loaded, and the labels' spacing is measured in it.
+document.fonts.ready.then(drawChart);
 // The note kept with an exercise may only arrive from the server once the page has drawn.
 window.serverStateReady.then(() => {
   loadGoals();

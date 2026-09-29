@@ -978,6 +978,8 @@ copying the file while the server runs: a Proxmox install does this every day on
 - Vanilla JavaScript, with no build step
 - `localStorage` for the per-account offline copy
 - HTML Canvas for progress charts
+- The Inter typeface, served with the app (`frontend/fonts/`, SIL Open Font License), so it looks the same on every
+  device
 - Service worker and web app manifest
 - Python standard library HTTP server
 - SQLite

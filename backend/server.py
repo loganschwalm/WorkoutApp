@@ -696,6 +696,7 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
         '.png': 'image/png',
         '.svg': 'image/svg+xml',
         '.ico': 'image/x-icon',
+        '.woff2': 'font/woff2',
     }
 
     # Applied to every read and write on the connection (see REQUEST_TIMEOUT).
