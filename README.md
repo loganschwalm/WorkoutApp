@@ -143,6 +143,10 @@ Logged sets, notes, finished workouts, settings, custom templates, and your trai
 - Finishing a workout while offline queues it locally and shows how many workouts are waiting to sync. The History and Progress pages upload anything queued before they load your workouts.
 - Uploads are safe to retry: each finished workout carries a unique `clientId`, and the server stores it once however many copies arrive, even at the same moment. Two open tabs (or the installed app and a browser tab) uploading the same queue never lose a workout between them.
 - If the server ever refuses a queued workout as invalid, it is set aside on the device and the status line says so, so it never holds up the workouts queued after it.
+  One the server fails to store (an error on its side, which may pass) stays in the queue and is tried again later,
+  while the workouts after it upload.
+- If the browser will not let the app save on the device (its storage is full, or blocked), a banner says so: anything
+  not uploaded yet is then only kept while the page stays open. It goes once the browser saves again.
 - A setting, template or program change made while offline is kept when the page reloads and uploads once the server is back; it is never replaced by the server's older copy.
 - Local copies are kept per account, so another account signed in on the same browser never sees them.
 - If your sign-in expires while a page is open, a banner offers to sign in again and returns you to the same page; nothing on screen is discarded, and a workout in progress stays on the device.

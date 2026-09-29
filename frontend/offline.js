@@ -30,6 +30,22 @@ function writeLocal(key, value) {
   } catch (error) {
     memoryStore.set(key, value);
   }
+  syncStorageWarning();
+}
+
+// Anything held in memory because the browser would not store it (its storage full, or blocked) goes with a reload,
+// a workout finished offline included. A banner says so while anything is held that way, and goes once it is stored.
+function syncStorageWarning() {
+  let banner = document.getElementById('storageWarning');
+  if (!memoryStore.size) { banner?.remove(); return; }
+  if (banner || !document.body) return;
+  banner = document.createElement('div');
+  banner.id = 'storageWarning';
+  banner.className = 'session-banner';
+  banner.setAttribute('role', 'alert');
+  banner.textContent = 'This browser is not letting the app save on this device: its storage may be full, or blocked. '
+    + 'Anything not uploaded yet is only kept while this page stays open, so keep it open until you are back online.';
+  document.body.prepend(banner);
 }
 
 function localKey(name) {
@@ -134,39 +150,60 @@ function withoutQueuedWorkout(queue, workout) {
   return index === -1 ? queue : [...queue.slice(0, index), ...queue.slice(index + 1)];
 }
 
-// Resolves true once nothing is left to upload, false if the server could not be reached (a retry is scheduled).
+function schedulePendingRetry() {
+  pendingRetryCount += 1;
+  pendingRetryTimer = setTimeout(flushPendingWorkouts, Math.min(60000, 2000 * 2 ** (pendingRetryCount - 1)));
+}
+
+// Resolves true once nothing is left to upload, false if something is still waiting (a retry is scheduled).
 function flushPendingWorkouts() {
   if (pendingFlush) return pendingFlush;
   clearTimeout(pendingRetryTimer);
   pendingFlush = (async () => {
     await window.localReady;
     let uploaded = 0;
-    let queue = readPendingWorkouts();
+    // Workouts the server answered with an error this time round. They stay queued for the retry, but the ones after
+    // them go up now: one the server keeps failing on must not hold back every workout finished since.
+    const failed = [];
+    const untried = () => readPendingWorkouts().filter(workout => !failed.some(other => sameQueuedWorkout(other, workout)));
+    let queue = untried();
     while (queue.length) {
+      const workout = queue[0];
       let rejected = false;
       try {
-        const response = await syncFetch('/api/workouts', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(queue[0]) });
+        const response = await syncFetch('/api/workouts', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(workout) });
         // 400 and 413 say this workout can never be accepted as it is; anything else may succeed on a retry.
         rejected = response.status === 400 || response.status === 413;
         if (rejected) console.error(`The server refused a finished workout (${response.status}); it is kept on this device.`, await response.text());
-        else if (!response.ok) throw new Error(`Workout sync failed (${response.status}).`);
+        // A signed-out answer would be the same for every workout, so the rest wait for signing in again.
+        else if (response.status === 401) throw new Error('Workout sync failed: signed out.');
+        else if (!response.ok) {
+          console.error(`The server could not store a finished workout (${response.status}); it stays queued, and the rest go on.`);
+          failed.push(workout);
+          queue = untried();
+          continue;
+        }
       } catch (error) {
+        // The server could not be reached, so the rest would fail too: all of them wait for the retry.
         console.error('Unable to sync finished workout; it is saved on this device and will be retried.', error);
-        pendingRetryCount += 1;
-        pendingRetryTimer = setTimeout(flushPendingWorkouts, Math.min(60000, 2000 * 2 ** (pendingRetryCount - 1)));
+        schedulePendingRetry();
         reportSyncStatus(uploaded);
         return false;
       }
       // By clientId, never by position: another tab uploading the same queue may have removed this one already, and
       // dropping whatever is first would then drop a workout that has not been uploaded.
-      const done = queue[0];
-      if (rejected && !readRejectedWorkouts().some(workout => sameQueuedWorkout(workout, done))) writeLocal(localKey('rejected'), [...readRejectedWorkouts(), done]);
-      writeLocal(localKey('pending'), withoutQueuedWorkout(readPendingWorkouts(), done));
-      pendingRetryCount = 0;
+      if (rejected && !readRejectedWorkouts().some(other => sameQueuedWorkout(other, workout))) writeLocal(localKey('rejected'), [...readRejectedWorkouts(), workout]);
+      writeLocal(localKey('pending'), withoutQueuedWorkout(readPendingWorkouts(), workout));
       if (!rejected) uploaded += 1;
       if (rejected) reportSyncStatus();
-      queue = readPendingWorkouts();
+      queue = untried();
     }
+    if (failed.length) {
+      schedulePendingRetry();
+      reportSyncStatus(uploaded);
+      return false;
+    }
+    pendingRetryCount = 0;
     if (uploaded) reportSyncStatus(uploaded);
     return true;
   })().finally(() => { pendingFlush = null; });

@@ -276,6 +276,53 @@ def run(t):
     check('both workouts reach the server, once each', names.count('Tab Race One') == 1 and names.count('Tab Race Two') == 1 and len(names) == n + 2, names[:5])
     check('nothing is left in the upload queue', safe_ev('readPendingWorkouts().length', -1) == 0, safe_ev('readPendingWorkouts()', []))
 
+    print('P12 a workout the server keeps failing on does not hold up the ones behind it')
+    open_tracker()
+    n = len(workouts())
+    stuck = {'name': 'Server Chokes', 'notes': '', 'createdAt': int(time.time() * 1000), 'clientId': 'chokes-1',
+             'exercises': [{'name': 'Squat', 'weight': 100, 'reps': 5, 'sets': [{'weight': 100, 'reps': 5}]}]}
+    behind = {**stuck, 'name': 'Behind The Choke', 'clientId': 'behind-choke-1'}
+    # Stands in for a server bug that answers one workout with a 500, however often it is sent.
+    cdp.ev(f"""(() => {{
+      queuePendingWorkout({json.dumps(stuck)}); queuePendingWorkout({json.dumps(behind)});
+      const upload = window.fetch;
+      window.__chokes = 0;
+      window.fetch = (...args) => args[1] && args[1].method === 'POST' && String(args[1].body).includes('chokes-1') && !window.__serverFixed
+        ? (window.__chokes += 1, Promise.resolve(new Response('{{"error": "Internal server error."}}', {{ status: 500 }})))
+        : upload(...args);
+    }})()""")
+    flushed = cdp.ev('flushPendingWorkouts()')
+    names = [w['name'] for w in workouts()]
+    check('the workout behind it is uploaded all the same', 'Behind The Choke' in names and 'Server Chokes' not in names and len(names) == n + 1, names[:5])
+    check('while the failing one stays queued, not set aside', safe_ev('readPendingWorkouts().map(w => w.name)', []) == ['Server Chokes']
+          and 'Server Chokes' not in safe_ev('readRejectedWorkouts().map(w => w.name)', []), safe_ev('readPendingWorkouts().map(w => w.name)', []))
+    check('and the flush says something is still waiting', flushed is False and cdp.ev('window.__chokes') == 1, flushed)
+    status = cdp.ev("document.getElementById('storageStatus').textContent")
+    check('as the status line does', '1 workout waiting to sync' in status, status)
+    cdp.ev('window.__serverFixed = true')
+    # Retries back off, up to a minute apart, and every failed try before the fix doubles the wait; under a loaded machine
+    # a few can happen. Waiting the longest backoff costs nothing when the retry comes sooner.
+    check('once the server takes it, the retry uploads it', wait_for(lambda: 'Server Chokes' in [w['name'] for w in workouts()], 65)
+          and safe_ev('readPendingWorkouts().length', -1) == 0, safe_ev('[readPendingWorkouts().map(w => w.name), pendingRetryCount]', []))
+
+    print('P13 a browser that will not save says so, rather than losing a workout on reload')
+    open_tracker()
+    storage = "!!document.getElementById('storageWarning')"
+    check('no warning while the browser saves as it should', cdp.ev(storage) is False)
+    cdp.ev("""(() => { window.__setItem = Storage.prototype.setItem;
+      Storage.prototype.setItem = function () { throw new DOMException('The quota has been exceeded.', 'QuotaExceededError'); }; })()""")
+    start(0)
+    cdp.pause(0.4)
+    log_set(8)
+    check('a set that could not be stored brings up a warning', cdp.ev(storage) is True
+          and 'keep it open' in cdp.ev("document.getElementById('storageWarning').textContent"), safe_ev("document.body.firstElementChild.outerHTML", ''))
+    check('the set is still held, and still reaches the server', safe_ev("document.querySelectorAll('#completedSets li').length", 0) == 1
+          and wait_for(lambda: server_sets() == 1))
+    cdp.ev('Storage.prototype.setItem = window.__setItem')
+    log_set(8)
+    check('once the browser saves again, the warning goes', cdp.wait(f'!{storage}') and safe_ev("readLocalActive().session.exercises[0].sets.length", 0) == 2)
+    end_workout()
+
     print('R2  30 seconds more or less rest')
     open_tracker()
     cdp.ev("""window.__offset = 0; const realNow = Date.now.bind(Date); Date.now = () => realNow() + window.__offset;
