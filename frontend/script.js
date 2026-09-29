@@ -329,6 +329,10 @@ function closeActiveWorkout() {
 // set-by-set plan and whose programDay says which day of the program it is. A template exercise with a set count is
 // planned here, at the weight its progression gives (templateSession in training-tools.js).
 function startWorkout(stored) {
+  if (!Array.isArray(stored.exercises) || !stored.exercises.length) {
+    showFeedback(`“${stored.name}” has no exercises to start.`);
+    return;
+  }
   const replacing = `Replace your in-progress “${activeSession?.name}” workout? Sets you have logged so far will be lost.`;
   if (activeSession && getWorkoutSettings().confirmEnd && !confirm(replacing)) return;
   closeExercisePanels();
@@ -446,8 +450,26 @@ function takeRequestedWorkout() {
   return { action, id };
 }
 
+// A workout in progress the page can show: one with exercises, on one of them. A saved workout with none (an import or
+// the API can hold one) would otherwise throw on every load, on every device, since the server keeps it for them all.
+// One pointing past its last exercise goes to the last.
+function usableSession(session) {
+  const exercises = session && Array.isArray(session.exercises) ? session.exercises : [];
+  if (!exercises.length || !exercises.every(item => item && typeof item === 'object' && typeof item.name === 'string')) return null;
+  const index = Math.floor(Number(session.currentIndex));
+  const currentIndex = Number.isFinite(index) ? Math.min(Math.max(index, 0), exercises.length - 1) : 0;
+  return currentIndex === session.currentIndex ? session : { ...session, currentIndex };
+}
+
 function showSavedSession(savedSession) {
-  activeSession = inUnit(savedSession);
+  const usable = usableSession(savedSession);
+  if (!usable) {
+    // Closed here and on the server, so the next load, here or anywhere, starts clean.
+    closeActiveWorkout();
+    showFeedback('The workout in progress had no exercises to show, so it was closed.');
+    return;
+  }
+  activeSession = inUnit(usable);
   if (activeSession !== savedSession) persistActiveSession();
   stopRestTimer();
   restRemaining = restDuration();
@@ -786,5 +808,11 @@ window.localReady.then(() => {
   personalBests = readLocal(localKey('bests')) || {};
   syncTemplateArea();
   renderExerciseSuggestions();
-  restoreLocalWorkout();
+  // Whatever goes wrong showing the workout in progress, the rest still loads: waiting workouts upload, and the saved
+  // ones are listed.
+  try {
+    restoreLocalWorkout();
+  } catch (error) {
+    console.error('Unable to show the workout in progress.', error);
+  }
 }).then(flushPendingWorkouts).then(loadSavedWorkouts).then(resumeOrStartWorkout).finally(() => { initialLoadDone = true; syncTemplateArea(); });

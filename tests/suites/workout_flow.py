@@ -114,3 +114,34 @@ def run(t):
     check('chart has multiple workout types', info['types'] >= 2, str(info))
     check('each series plots only its own workouts', info['arcs'] == info['expected'], str(info))
     check('no phantom zero-value points', info['atZero'] == 0, str(info))
+
+    # A saved workout with no exercises (the API and an import can hold one) once threw on starting, and the empty
+    # workout it left in progress threw on every load after, on every device, hiding the saved workouts with it.
+    print('T6  a workout with no exercises cannot break the Tracker')
+    empty = t.seed('Empty Day', 30, [])
+    rows = "document.querySelectorAll('.saved-workout').length"
+    feedback = "document.getElementById('formFeedback').textContent"
+    cdp.console.clear()
+    cdp.goto(f'/index.html?start={empty}')
+    cdp.wait(f'{rows} > 0')
+    cdp.pause(0.5)
+    check('starting it says there is nothing to start', cdp.ev(feedback) == '“Empty Day” has no exercises to start.'
+          and cdp.ev("document.getElementById('activeWorkout').hidden") is True, cdp.ev(feedback))
+    api('POST', '/api/active-session', {'session': {'name': 'Empty Day', 'exercises': [], 'currentIndex': 0, 'unit': 'lbs'}}, token)
+    cdp.goto('/index.html')
+    cdp.wait(f'{rows} > 0')
+    cdp.pause(1)
+    check('one left in progress by an older version is closed, and the saved workouts still show',
+          cdp.ev(feedback) == 'The workout in progress had no exercises to show, so it was closed.' and cdp.ev(rows) > 0, cdp.ev(feedback))
+    check('on the server too, so no other device meets it', t.wait_for(lambda: api('GET', '/api/active-session', token=token)[0]['session'] is None))
+    api('POST', '/api/active-session', {'session': {'name': 'Past The End', 'exercises': [{'name': 'Curl', 'weight': '', 'reps': '10', 'sets': []}],
+                                                    'currentIndex': 7, 'unit': 'lbs'}}, token)
+    cdp.goto('/index.html')
+    cdp.wait(ACTIVE)
+    cdp.pause(0.5)
+    check('one pointing past its last exercise opens on the last', cdp.ev("document.getElementById('activeExerciseName').textContent") == 'Curl'
+          and cdp.ev('activeSession.currentIndex') == 0)
+    cdp.ev("confirm = () => true; document.getElementById('endWorkoutBtn').click()")
+    cdp.pause(0.5)
+    thrown = [line for line in cdp.console if line.startswith('exceptionThrown')]
+    check('and nothing threw along the way', not thrown, thrown[:2])
