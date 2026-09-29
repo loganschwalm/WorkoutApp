@@ -71,6 +71,7 @@ own workouts, templates, and settings.
   buttons step 2.5 kg.
 - See how you did last time on each exercise; its weight and reps are prefilled, and after each set the next one defaults to the set you just logged.
 - View completed sets during the workout, correct a set's weight or reps in place, or remove a set that was logged by mistake.
+  They fold away under Completed sets, beside Workout notes and Add an exercise, with a count of how many are done.
   Each logged set is one line on a phone, and its × takes it away at once; the banner says which set went ("Removed set 2 of Bench Press
   (105 lbs × 6)") with an Undo button for 10 seconds that puts it back in its place, even after
   moving on to another exercise.

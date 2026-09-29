@@ -267,6 +267,8 @@ function renderActiveWorkout() {
     + `<div class="set-field"><input class="set-edit" type="number" inputmode="numeric" min="1" step="1" value="${escapeHTML(set.reps)}" data-set="${index}"`
     + ` data-field="reps" aria-label="Set ${index + 1} ${count.label}"><span>${count.unit}</span></div>`
     + `<button class="remove" type="button" data-remove-set="${index}" aria-label="Remove set ${index + 1}" title="Remove">&times;</button></li>`).join('');
+  $('completedSetsToggle').hidden = !exercise.sets.length;
+  $('completedSetsSummary').textContent = `Completed sets (${exercise.sets.length})`;
   syncHoldDisplay();
   $('activeSyncNotice').hidden = !activeSyncFailed;
 }
@@ -345,8 +347,9 @@ function startWorkout(stored) {
   updateRestTimer();
   persistActiveSession();
   renderActiveWorkout();
-  // Notes fold away under the set entry, unless the workout brings some with it.
+  // Notes fold away under the set entry, unless the workout brings some with it. So do the sets logged so far.
   $('activeNotesToggle').open = Boolean(activeSession.notes);
+  $('completedSetsToggle').open = false;
   showActiveCard(true);
   syncWakeLock();
   $('activeWorkout').scrollIntoView({ behavior:'smooth', block:'start' });

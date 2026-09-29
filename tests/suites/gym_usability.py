@@ -295,6 +295,7 @@ def run(t):
     cdp.pause(0.4)
     log(100, 8); log(100, 8)
     cdp.pause(0.4)
+    cdp.ev("document.getElementById('completedSetsToggle').open = true")
     m = cdp.ev("""(() => { const inputs = [...document.querySelectorAll('#completedSets .set-edit')].map(i => i.getBoundingClientRect().width); const foot = document.querySelector('.footer-buttons').getBoundingClientRect(); return { overflow: document.documentElement.scrollWidth - innerWidth, minInput: Math.min(...inputs), footRight: foot.right, vw: innerWidth }; })()""")
     check('no sideways scrolling with editable sets', m['overflow'] <= 0, str(m))
     # A logged set is one line on a phone; each field still has room for "227.5" at full size beside its unit.
@@ -411,8 +412,8 @@ def run(t):
         return cdp.ev(f"document.getElementById('{idn}').getBoundingClientRect().top")
 
     check('weight, reps and Complete set come straight after the exercise',
-          top('completeSetBtn') < top('completedSets') and top('completeSetBtn') < top('activeNotesToggle'),
-          f"set {top('completeSetBtn')} sets {top('completedSets')} notes {top('activeNotesToggle')}")
+          top('completeSetBtn') < top('activeNotesToggle'), f"set {top('completeSetBtn')} notes {top('activeNotesToggle')}")
+    check('with no Completed sets until a set is logged', not visible('completedSetsToggle'))
     check('Complete set is on the first screen of a phone, above the tab bar',
           cdp.ev("document.getElementById('completeSetBtn').getBoundingClientRect().bottom <= document.querySelector('.site-nav').getBoundingClientRect().top") is True,
           cdp.ev("document.getElementById('completeSetBtn').getBoundingClientRect().bottom"))
@@ -494,7 +495,11 @@ def run(t):
 
     log(100, 8)
     cdp.pause(0.4)
-    check('the rest timer comes up right under the set entry', visible('restPanel') and top('completeSetBtn') < top('restPanel') < top('completedSets'))
+    check('the rest timer comes up right under the set entry', visible('restPanel') and top('completeSetBtn') < top('restPanel') < top('completedSetsToggle'))
+    check('and the set logged folds away under Completed sets, with its count',
+          visible('completedSetsToggle') and cdp.ev("document.getElementById('completedSetsToggle').open") is False
+          and text('completedSetsSummary') == 'Completed sets (1)', text('completedSetsSummary'))
+    cdp.ev("document.getElementById('completedSetsToggle').open = true")
     cdp.ev("document.getElementById('completedSets').scrollIntoView({ block: 'start' })")
     cdp.pause(0.3)
     pinned = cdp.ev("(r => ({ top: r.top, bottom: r.bottom, vh: innerHeight }))(document.getElementById('restPanel').getBoundingClientRect())")
@@ -504,7 +509,7 @@ def run(t):
     cdp.ev("document.getElementById('activeWorkoutProgress').click(); document.getElementById('addActiveExercise').open = true; scrollTo(0, 0)")
     cdp.pause(0.3)
     pinned = cdp.ev("(r => ({ top: r.top, bottom: r.bottom, bar: document.querySelector('.site-nav').getBoundingClientRect().top,"
-                    " below: document.getElementById('completedSets').getBoundingClientRect().top }))(document.getElementById('restPanel').getBoundingClientRect())")
+                    " below: document.getElementById('completedSetsToggle').getBoundingClientRect().top }))(document.getElementById('restPanel').getBoundingClientRect())")
     check('or scrolled above it, at the bottom of the screen over the tab bar', pinned['below'] > pinned['bar'] and 0 <= pinned['top'] and pinned['bottom'] <= pinned['bar'], pinned)
     cdp.send('Emulation.setDeviceMetricsOverride', width=375, height=740, deviceScaleFactor=1, mobile=True)
     end_workout()
