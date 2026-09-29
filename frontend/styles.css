@@ -498,3 +498,15 @@ header { margin-bottom:22px; }
 .firework i { position:absolute; left:-3px; top:-3px; width:6px; height:6px; border-radius:50%; animation:spark 1s cubic-bezier(.15,.7,.3,1) forwards; }
 @keyframes spark { from { transform:translate(0,0) scale(1); opacity:1; } to { transform:translate(var(--dx),var(--dy)) scale(.3); opacity:0; } }
 @media (prefers-reduced-motion:reduce) { .rest-panel::after { transition:none; } }
+
+/* The green flash when a rest is over: over everything, one soft pulse, never in the way of a tap. */
+.rest-flash { position:fixed; inset:0; z-index:100; pointer-events:none; background:#2fbf71; opacity:0; animation:rest-flash .9s ease-out; }
+@keyframes rest-flash { 0% { opacity:0; } 15% { opacity:.4; } 100% { opacity:0; } }
+.rest-actions button:disabled { opacity:.45; cursor:default; transform:none; }
+/* Three rest buttons do not fit beside the countdown on a phone, so they take a row of their own under it. */
+@media (max-width:620px) {
+  .rest-panel { flex-wrap:wrap; }
+  .rest-actions { flex:1 1 100%; margin-left:0; }
+  .rest-actions button { flex:1; }
+  .rest-actions #restResetBtn { flex:none; }
+}

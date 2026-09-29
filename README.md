@@ -83,6 +83,8 @@ own workouts, templates, and settings.
 - Pause and reset the rest timer, or give yourself 30 seconds more or less with −30s and +30s,
   running or paused. Taking it down to nothing ends the rest quietly.
   A thin bar along the bottom of the timer drains as the rest runs out.
+  End rest skips what is left of it, and the screen flashes green, softly and once, when a rest is over,
+  whether it ran out or you ended it (not with reduced motion on).
 - Keep accurate rest time even when the screen locks or the tab is in the background; the timer alerts you with a sound and vibration when rest is over (configurable in Settings).
 - Keep the screen awake during a workout (on browsers that support it).
 - Move to the next exercise with the rest timer reset to that exercise's rest.

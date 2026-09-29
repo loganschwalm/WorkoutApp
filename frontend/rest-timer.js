@@ -16,6 +16,7 @@ let holdLength = 0;
 function updateRestTimer() {
   $('timerDisplay').textContent = clockTime(restRemaining);
   restTotal = Math.max(restTotal, restRemaining);
+  $('restEndBtn').disabled = restRemaining <= 0;
   $('restPanel').style.setProperty('--rest-left', restTotal ? restRemaining / restTotal : 0);
 }
 
@@ -39,7 +40,29 @@ function tickRest() {
   if (restRemaining <= 0) {
     stopRestTimer();
     playRestAlert(getWorkoutSettings());
+    flashRestOver();
   }
+}
+
+// A soft green wash over the whole screen, once, so the end of the rest shows even with the sound off. Skipped for anyone
+// who asks for less motion.
+function flashRestOver() {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const flash = document.createElement('div');
+  flash.className = 'rest-flash';
+  flash.setAttribute('aria-hidden', 'true');
+  document.body.appendChild(flash);
+  flash.addEventListener('animationend', () => flash.remove());
+  setTimeout(() => flash.remove(), 1500);
+}
+
+// End rest: skips what is left. You asked for it, so no alert sounds, but the flash confirms the rest is over.
+function endRest() {
+  if (restRemaining <= 0) return;
+  stopRestTimer();
+  restRemaining = 0;
+  updateRestTimer();
+  flashRestOver();
 }
 
 function runRestTimer() {
@@ -158,6 +181,7 @@ $('restToggleBtn').onclick = () => {
     runRestTimer();
   }
 };
+$('restEndBtn').onclick = endRest;
 $('restResetBtn').onclick = () => { stopRestTimer(); restRemaining = restTotal = restDuration(); updateRestTimer(); };
 $('restAdjust').onclick = e => {
   const button = e.target.closest('[data-rest-adjust]');
