@@ -191,6 +191,13 @@ Users can also:
 - Add, remove, and reorder template exercises.
 - Give a template exercise its own rest, from 15 seconds to 10 minutes (left blank, it uses the
   default from Settings), or mark it Timed so its count is seconds.
+- Give a template exercise a number of sets and, if you like, a rep range ("3 sets of 8 up to 12"), and it
+  progresses on its own, as the training programs do. A workout started from it plans each set, at a
+  weight from last time: once every set reached the top of the range (or the reps, without a range), it
+  goes up the weight step from Settings, and the line under the exercise says so ("Up from 100 lbs:
+  last time every set reached 12 reps"); until then it stays at last time's weight. Starting that
+  workout again from History or Start again progresses the same way. Sets left blank mean as many as
+  you like, as before.
 - Delete custom templates.
 - Start a workout directly from any template.
 - On the Tracker, templates fold away once you have saved workouts or a program; someone new sees

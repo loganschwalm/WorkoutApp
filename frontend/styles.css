@@ -186,10 +186,15 @@ html[data-theme="dark"] .rest-panel { background:#303653; }
 .template-card .template-actions { display:flex; flex-wrap:wrap; gap:8px; }
 .template-card .template-actions button { align-self:auto; }
 .template-exercise-heading { display:flex; justify-content:space-between; align-items:center; margin-top:14px; }
-.template-exercise-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto; gap:8px; align-items:end; margin-top:10px; }
+/* The name across the row; sets, reps, the top of the range and rest under it; then Timed with the row's buttons, and
+   the superset tick last. */
+.template-exercise-row { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:8px; align-items:end; margin-top:10px; }
 .template-exercise-row + .template-exercise-row { padding-top:10px; border-top:1px solid var(--line); }
-.template-exercise-name { grid-column:1 / span 2; }
-.template-exercise-row .template-timed { align-self:end; margin:0 0 12px; }
+.template-exercise-name { grid-row:1; grid-column:1 / -1; }
+.template-exercise-row .template-timed { grid-row:3; grid-column:1 / span 2; align-self:center; margin:0; }
+.template-exercise-row .template-row-actions { grid-row:3; grid-column:3 / -1; justify-self:end; }
+.template-exercise-row input[type="number"] { padding-left:10px; padding-right:6px; }
+.template-exercise-row label { white-space:nowrap; }
 .template-exercise-row .template-row-actions { display:flex; gap:4px; }
 .template-exercise-row button { width:32px; height:42px; padding:0; }
 .template-modal { max-height:min(720px,90vh); overflow:auto; }

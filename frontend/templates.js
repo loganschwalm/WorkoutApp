@@ -50,7 +50,7 @@ function renderTemplates() {
     `<button class="${style}" type="button" data-template-action="${kind}" data-template-id="${escapeHTML(template.id)}">${label}</button>`;
   $('templateList').innerHTML = programTemplateCards() + getAllTemplates().map(template => '<article class="template-card">'
     + `<div><h3>${escapeHTML(template.name)}</h3>`
-    + `<p>${template.exercises.map(item => `${escapeHTML(item.name)} (${escapeHTML(item.reps)} ${isTimed(item) ? 's' : 'reps'})`).join(' &middot; ')}</p></div>`
+    + `<p>${template.exercises.map(item => `${escapeHTML(item.name)} (${escapeHTML(describeTemplateTarget(item))})`).join(' &middot; ')}</p></div>`
     + `<div class="template-actions">${action(template, 'start', 'primary', 'Start workout')}${action(template, 'duplicate', 'secondary', 'Duplicate')}`
     + `${template.builtIn ? '' : action(template, 'edit', 'secondary', 'Edit') + action(template, 'delete', 'danger', 'Delete')}</div></article>`).join('');
   renderRecentWorkouts();
@@ -58,36 +58,48 @@ function renderTemplates() {
   renderExerciseSuggestions();
 }
 
-// Each exercise of a template: its name and whether it is timed, then its reps (or seconds), an optional rest after each
-// set (blank for the default in Settings), and the buttons to move or remove it.
+// Each exercise of a template: its name, whether it is timed and the buttons to move or remove it, then how many sets
+// (blank for as many as you like), its reps (or seconds) and the top of a rep range (blank for none), and an optional
+// rest after each set (blank for the default in Settings).
 function renderTemplateExerciseEditor() {
   const rowAction = (index, kind, style, label, symbol) =>
     `<button class="${style}" type="button" data-template-row-action="${kind}" data-index="${index}" aria-label="${label}">${symbol}</button>`;
+  const number = (index, id, label, field, value, attributes, wrapper = '') => `<div${wrapper}><label for="${id}${index}" id="${id}${index}Label">${label}</label>`
+    + `<input id="${id}${index}" type="number" inputmode="numeric" ${attributes} value="${escapeHTML(value ?? '')}" data-template-field="${field}" data-index="${index}" /></div>`;
   $('templateExerciseEditor').innerHTML = templateDraftExercises.map((exercise, index) => '<div class="template-exercise-row">'
     + `<div class="template-exercise-name"><label for="templateExercise${index}">Exercise</label>`
     + `<input id="templateExercise${index}" type="text" list="exerciseNames" autocomplete="off" value="${escapeHTML(exercise.name)}"`
     + ` data-template-field="name" data-index="${index}" required /></div>`
     + '<label class="setting-check template-timed">'
     + `<input type="checkbox" data-template-field="timed" data-index="${index}"${exercise.timed ? ' checked' : ''} /> Timed</label>`
-    + `<div><label for="templateReps${index}" id="templateReps${index}Label">${exercise.timed ? 'Seconds' : 'Reps'}</label>`
-    + `<input id="templateReps${index}" type="number" inputmode="numeric" min="1" value="${escapeHTML(exercise.reps)}"`
-    + ` data-template-field="reps" data-index="${index}" required /></div>`
-    + `<div><label for="templateRest${index}">Rest (s)</label><input id="templateRest${index}" type="number" inputmode="numeric" min="15" max="600" step="1"`
-    + ` placeholder="${getWorkoutSettings().restDuration}" value="${escapeHTML(exercise.rest || '')}" data-template-field="rest" data-index="${index}" /></div>`
+    + `<div class="template-row-actions">${rowAction(index, 'up', 'secondary', 'Move exercise up', '&#8593;')}`
+    + rowAction(index, 'down', 'secondary', 'Move exercise down', '&#8595;')
+    + rowAction(index, 'remove', 'danger', 'Remove exercise', '&times;') + '</div>'
+    + number(index, 'templateSets', 'Sets', 'setCount', exercise.setCount, 'min="1" max="20" step="1" placeholder="Any"')
+    + number(index, 'templateReps', exercise.timed ? 'Seconds' : 'Reps', 'reps', exercise.reps, 'min="1" required')
+    + number(index, 'templateRepsMax', 'Up to', 'repsMax', exercise.repsMax, 'min="2" max="100" step="1" placeholder="—"',
+      ` class="template-reps-max"${exercise.timed ? ' hidden' : ''}`)
+    + number(index, 'templateRest', 'Rest (s)', 'rest', exercise.rest || '', `min="15" max="600" step="1" placeholder="${getWorkoutSettings().restDuration}"`)
     + (index < templateDraftExercises.length - 1 ? '<label class="setting-check template-superset">'
       + `<input type="checkbox" data-template-field="superset" data-index="${index}"${exercise.superset ? ' checked' : ''} />`
       + ' Superset with the next exercise</label>' : '')
-    + `<div class="template-row-actions">${rowAction(index, 'up', 'secondary', 'Move exercise up', '&#8593;')}`
-    + rowAction(index, 'down', 'secondary', 'Move exercise down', '&#8595;')
-    + rowAction(index, 'remove', 'danger', 'Remove exercise', '&times;') + '</div></div>').join('');
+    + '</div>').join('');
 }
 
-// What a template keeps of an exercise: its name and reps, and its rest, timing and superset when it has them.
+// What a template keeps of an exercise: its name and reps, and its sets, rep range, rest, timing and superset when it
+// has them. A template exercise with sets is planned set by set when a workout starts (see templateSession).
 function templateExercise(item) {
   return {
     name:item.name, reps:item.reps,
+    ...(item.setCount ? { setCount:item.setCount } : {}), ...(item.repsMax && !isTimed(item) ? { repsMax:item.repsMax } : {}),
     ...(item.rest ? { rest:item.rest } : {}), ...(isTimed(item) ? { timed:true } : {}), ...(item.group ? { group:item.group } : {})
   };
+}
+
+// "3 × 8–12 reps", "3 × 5 reps", "30 s", "8 reps": how a template card and the editor's summary write an exercise.
+function describeTemplateTarget(item) {
+  const count = isTimed(item) ? `${item.reps} s` : `${item.reps}${item.repsMax ? `–${item.repsMax}` : ''} reps`;
+  return item.setCount ? `${item.setCount} × ${count}` : count;
 }
 
 // A template's exercises with the editor's "Superset with the next" ticks turned into groups: each run of exercises
@@ -149,9 +161,10 @@ $('templateExerciseEditor').oninput = e => {
   if (!field || !templateDraftExercises[index]) return;
   if (field === 'superset') { templateDraftExercises[index].superset = e.target.checked; return; }
   if (field !== 'timed') { templateDraftExercises[index][field] = e.target.value; return; }
-  // A timed exercise's count is in seconds, which its label says.
+  // A timed exercise's count is in seconds, which its label says, and it is held for them rather than done in a range.
   templateDraftExercises[index].timed = e.target.checked;
   $(`templateReps${index}Label`).textContent = e.target.checked ? 'Seconds' : 'Reps';
+  $(`templateRepsMax${index}`).closest('.template-reps-max').hidden = e.target.checked;
 };
 $('templateExerciseEditor').onclick = e => {
   const action = e.target.dataset.templateRowAction;
@@ -173,11 +186,20 @@ $('templateForm').onsubmit = event => {
   const name = $('templateName').value.trim();
   // A rest left blank uses the default in Settings; one given is kept within the range Settings allows.
   const restOf = value => value === '' || value === undefined || !(Number(value) > 0) ? null : Math.min(600, Math.max(15, Math.round(Number(value))));
-  const validExercises = withSupersetGroups(templateDraftExercises.filter(item => item.name.trim() && Number(item.reps) >= 1)
-    .map(item => ({
-      ...templateExercise({ name:item.name.trim(), reps:String(Math.floor(Number(item.reps))), rest:restOf(item.rest), timed:item.timed === true }),
+  // Sets left blank mean as many as you like; given, 1 to 20. The top of a rep range, when given, is above its bottom.
+  const setsOf = value => Number(value) >= 1 ? Math.min(20, Math.floor(Number(value))) : null;
+  const topOf = (value, reps) => Number(value) > reps ? Math.min(100, Math.floor(Number(value))) : null;
+  const kept = templateDraftExercises.filter(item => item.name.trim() && Number(item.reps) >= 1);
+  const upsideDown = kept.find(item => !item.timed && String(item.repsMax ?? '') !== '' && !topOf(item.repsMax, Math.floor(Number(item.reps))));
+  if (upsideDown) return showFeedback(`A rep range goes up: ${upsideDown.name.trim()} is ${Math.floor(Number(upsideDown.reps))} up to ${upsideDown.repsMax}.`);
+  const validExercises = withSupersetGroups(kept.map(item => {
+    const reps = Math.floor(Number(item.reps));
+    return {
+      ...templateExercise({ name:item.name.trim(), reps:String(reps), setCount:setsOf(item.setCount), repsMax:item.timed ? null : topOf(item.repsMax, reps),
+        rest:restOf(item.rest), timed:item.timed === true }),
       superset:item.superset
-    })));
+    };
+  }));
   if (!name || !validExercises.length) return showFeedback('Add a template name and at least one valid exercise.');
   if (editingTemplateId) {
     const existing = customTemplates.find(item => item.id === editingTemplateId);

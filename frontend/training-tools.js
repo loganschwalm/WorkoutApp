@@ -302,6 +302,48 @@ function progressionFor(exercise, previous) {
   return { from:top, to:Math.round((Math.round(top / step) * step + step) * 100) / 100, reps:needed };
 }
 
+// ---- Progression in your own templates ----------------------------------------
+// A template exercise with a number of sets (setCount) is planned set by set, as a program's are: 3 × 8–12, or 3 × 5
+// without a range. Its weight comes from last time: once every planned set reached the top of the range (or the reps,
+// without one) at last time's heaviest weight, it goes up a weight step from Settings; otherwise it stays there until
+// they do. That is double progression, as Apartment Gym's main lifts go. With nothing logged, or only bodyweight, the
+// weight is the lifter's call. A saved workout started again carries the same setCount, so it progresses too.
+function templateProgression(name, count, top) {
+  const previous = lastTime(name);
+  if (!previous || !previous.sets.length) return null;
+  const heaviest = Math.max(0, ...previous.sets.map(set => Number(set.weight) || 0));
+  if (!(heaviest > 0)) return null;
+  const from = prefillWeight(heaviest, previous.converted);
+  const atHeaviest = previous.sets.filter(set => (Number(set.weight) || 0) === heaviest);
+  const up = atHeaviest.length >= count && atHeaviest.every(set => Number(set.reps) >= top);
+  const step = gymEquipment().step;
+  return { from, up, top, weight:up ? Math.round((Math.round(from / step) * step + step) * 100) / 100 : from };
+}
+
+// A template's (or a saved workout's) exercise as the workout in progress takes it: with its sets planned when it has a
+// set count, at the weight its progression gives. Anything else is left as it is, a program's plan included.
+function templateSession(item) {
+  const count = Math.floor(Number(item.setCount));
+  if (!(count >= 1)) return item;
+  const reps = Number(item.reps) || 0;
+  const repsMax = !isTimed(item) && Number(item.repsMax) > reps ? Number(item.repsMax) : null;
+  const progression = isTimed(item) ? null : templateProgression(item.name, count, repsMax || reps);
+  const weight = progression ? progression.weight : '';
+  return { ...item, weight, plan:repeatSets(count, { weight, reps, ...(repsMax ? { repsMax } : {}) }) };
+}
+
+// The line under a planned template exercise before its first set says why its weight is what it is.
+function templateAdvice(exercise) {
+  if (!exercise.setCount || exercise.sets.length || isTimed(exercise)) return '';
+  const plan = exercise.plan[0];
+  const progression = templateProgression(exercise.name, Math.floor(Number(exercise.setCount)), plan.repsMax || plan.reps);
+  if (!progression) return '';
+  const unit = weightUnit();
+  const reps = `${progression.top} ${progression.top === 1 ? 'rep' : 'reps'}`;
+  return progression.up ? ` Up from ${formatWeight(progression.from)} ${unit}: last time every set reached ${reps}.`
+    : ` The same as last time until every set reaches ${reps}.`;
+}
+
 function renderProgression(exercise, previous) {
   const hint = progressionFor(exercise, previous);
   $('progressionHint').hidden = !hint;

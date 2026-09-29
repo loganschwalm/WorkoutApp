@@ -335,6 +335,10 @@ def validate_exercises(exercises, field='exercises'):
             raise BadRequest(f'{where}.timed must be true or false.')
         # Exercises next to each other with the same group are a superset.
         text(exercise.get('group'), f'{where}.group', 100)
+        # A template exercise can plan its sets, 1 to 20, and a rep range up to repsMax; a workout started from it keeps them.
+        if exercise.get('setCount') is not None and not (is_number(exercise['setCount']) and 1 <= exercise['setCount'] <= 20):
+            raise BadRequest(f'{where}.setCount must be a number of sets from 1 to 20.')
+        amount(exercise.get('repsMax'), f'{where}.repsMax')
         if exercise.get('sets') is not None:
             for number, logged in enumerate(listed(exercise['sets'], f'{where}.sets', 1000)):
                 amount(logged.get('weight'), f'{where}.sets[{number}].weight')

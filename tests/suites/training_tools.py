@@ -284,5 +284,80 @@ def run(t):
           and 'Goal reached' not in text('formFeedback'), text('formFeedback'))
     end()
 
+    # ------------------------------------------------------------------ progression in your own templates
+    print('P   a template exercise with sets and a rep range progresses on its own')
+    seed('Rows Before', 9, [ex('Cable Row', 100, 8, [(12, 100), (12, 100), (12, 100)]), ex('Leg Curl', 60, 8, [(12, 60), (10, 60), (9, 60)])])
+    open_tracker()
+    click('templatesToggle')
+    click('createTemplateBtn')
+
+    def fill_template(name, rows):
+        cdp.ev(f"""(() => {{
+          document.getElementById('templateName').value = {json.dumps(name)};
+          const rows = {json.dumps(rows)};
+          rows.slice(1).forEach(() => document.getElementById('addTemplateExercise').click());
+          const put = (id, value) => {{ const e = document.getElementById(id); e.value = String(value); e.dispatchEvent(new Event('input', {{ bubbles: true }})); }};
+          rows.forEach(([name, sets, reps, top], index) => {{
+            put(`templateExercise${{index}}`, name); put(`templateSets${{index}}`, sets); put(`templateReps${{index}}`, reps); put(`templateRepsMax${{index}}`, top);
+          }});
+        }})()""")
+
+    labels = cdp.ev("['templateSets0', 'templateReps0', 'templateRepsMax0'].map(id => document.querySelector(`label[for=${id}]`).textContent)")
+    check('the template editor asks for sets and the top of a rep range', labels == ['Sets', 'Reps', 'Up to'], labels)
+    fill_template('Pull Accessories', [['Cable Row', 3, 8, 12], ['Leg Curl', 3, 8, 6]])
+    cdp.ev("document.getElementById('templateForm').requestSubmit()")
+    cdp.pause(0.3)
+    check('a range that goes down is turned back', visible('templateModal') and text('formFeedback') == 'A rep range goes up: Leg Curl is 8 up to 6.',
+          text('formFeedback'))
+    click('cancelTemplate')
+    click('createTemplateBtn')
+    fill_template('Pull Accessories', [['Cable Row', 3, 8, 12], ['Leg Curl', 3, 8, 12], ['Hammer Curl', 2, 10, '']])
+    cdp.ev("document.getElementById('templateForm').requestSubmit()")
+    cdp.pause(0.4)
+    card = cdp.ev("[...document.querySelectorAll('#templateList .template-card')].find(c => c.textContent.includes('Pull Accessories')).querySelector('p').textContent")
+    check('its card says the sets and ranges', card == 'Cable Row (3 × 8–12 reps) · Leg Curl (3 × 8–12 reps) · Hammer Curl (2 × 10 reps)', card)
+    kept = [x for x in api('GET', '/api/state', token=token)[0]['templates'] if x['name'] == 'Pull Accessories'] if wait_for(
+        lambda: any(x['name'] == 'Pull Accessories' for x in api('GET', '/api/state', token=token)[0]['templates'])) else []
+    shapes = [(e.get('setCount'), e.get('reps'), e.get('repsMax')) for e in kept[0]['exercises']] if kept else []
+    check('and the account keeps them', shapes == [(3, '8', 12), (3, '8', 12), (2, '10', None)], shapes)
+
+    cdp.ev("[...document.querySelectorAll('#templateList [data-template-action=start]')].find(b => b.closest('.template-card').textContent.includes('Pull Accessories')).click()")
+    cdp.pause(0.4)
+    target = text('activeExerciseTarget')
+    check('every set reached 12 last time, so it goes up a weight step',
+          target == 'Set 1 of 3: 105 lbs × 8–12. Up from 100 lbs: last time every set reached 12 reps.'
+          and cdp.ev("document.getElementById('activeWeight').value") == '105', target)
+    check('planned set by set', cdp.ev("[...document.querySelectorAll('#activePlan li')].map(li => li.textContent)") == ['105 lbs × 8–12'] * 3)
+    log(105, 12)
+    log(105, 12)
+    log(105, 11)
+    click('nextExerciseBtn')
+    target = text('activeExerciseTarget')
+    check('one that fell short stays at its weight until every set reaches the top',
+          target == 'Set 1 of 3: 60 lbs × 8–12. The same as last time until every set reaches 12 reps.'
+          and cdp.ev("document.getElementById('activeWeight').value") == '60', target)
+    log(60, 12)
+    click('nextExerciseBtn')
+    target = text('activeExerciseTarget')
+    check('never done before, the weight is yours to choose', target == 'Set 1 of 2: 10 reps.' and cdp.ev("document.getElementById('activeWeight').value") == '', target)
+    log(25, 10)
+    log(25, 10)
+    finish()
+    again = [w for w in t.workouts() if w['name'] == 'Pull Accessories']
+    check('the workout is saved with its set counts', again and [e.get('setCount') for e in again[0]['exercises']] == [3, 3, 2],
+          again and [e.get('setCount') for e in again[0]['exercises']])
+    start_saved(again[0]['id'])
+    target = text('activeExerciseTarget')
+    check('starting it again, a set short of 12 keeps the weight', target == 'Set 1 of 3: 105 lbs × 8–12. The same as last time until every set reaches 12 reps.', target)
+    cdp.ev(jump)
+    cdp.pause(0.2)
+    target = text('activeExerciseTarget')
+    check('and without a range, reaching the reps goes up', current() == 'Hammer Curl'
+          and target == 'Set 1 of 2: 30 lbs × 10. Up from 25 lbs: last time every set reached 10 reps.', target)
+    end()
+    status, _, reply = t.request('PUT', '/api/state', json.dumps({'templates': [{'name': 'Too Many', 'exercises': [
+        {'name': 'Curl', 'reps': '10', 'setCount': 50}]}]}).encode(), {'Content-Type': 'application/json'}, token=token)
+    check('the server turns away a set count it could not plan', status == 400 and 'setCount' in str(reply), (status, reply))
+
     check('no page errors along the way', not [line for line in cdp.console if line.startswith('exceptionThrown')],
           [line for line in cdp.console if line.startswith('exceptionThrown')][:3])

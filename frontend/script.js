@@ -326,7 +326,8 @@ function closeActiveWorkout() {
 }
 
 // `template` is a template, a saved workout, or a day of a training program (program.js), whose exercises carry a
-// set-by-set plan and whose programDay says which day of the program it is.
+// set-by-set plan and whose programDay says which day of the program it is. A template exercise with a set count is
+// planned here, at the weight its progression gives (templateSession in training-tools.js).
 function startWorkout(stored) {
   const replacing = `Replace your in-progress “${activeSession?.name}” workout? Sets you have logged so far will be lost.`;
   if (activeSession && getWorkoutSettings().confirmEnd && !confirm(replacing)) return;
@@ -341,7 +342,7 @@ function startWorkout(stored) {
   // startedAt times the workout, for its summary and History.
   activeSession = {
     name:template.name, notes:template.notes || '',
-    exercises:template.exercises.map(item => ({ ...item, weight:prefillWeight(item.weight, converted), sets:[] })),
+    exercises:template.exercises.map(item => templateSession({ ...item, weight:prefillWeight(item.weight, converted), sets:[] })),
     currentIndex:0, clientId:newClientId(), unit:weightUnit(), startedAt:Date.now()
   };
   if (template.programDay) activeSession.programDay = template.programDay;
@@ -370,10 +371,12 @@ async function finishWorkout() {
   }
   const skipped = activeSession.exercises.length - performed.length;
   activeSession.clientId = activeSession.clientId || newClientId();
-  // Each exercise keeps whether it is timed and its own rest, so starting the workout again brings them back.
+  // Each exercise keeps whether it is timed and its own rest, so starting the workout again brings them back. One planned
+  // from a template keeps its sets and range too, and the bottom of the range as its reps, so it progresses again.
   const exercises = performed.map(item => ({
-    name:item.name, weight:Math.max(...item.sets.map(set => Number(set.weight) || 0)), reps:item.sets[item.sets.length - 1].reps, sets:item.sets,
-    ...(isTimed(item) ? { timed:true } : {}), ...(Number(item.rest) > 0 ? { rest:Number(item.rest) } : {}), ...(item.group ? { group:item.group } : {}) }));
+    name:item.name, weight:Math.max(...item.sets.map(set => Number(set.weight) || 0)), reps:item.setCount ? item.reps : item.sets[item.sets.length - 1].reps, sets:item.sets,
+    ...(isTimed(item) ? { timed:true } : {}), ...(Number(item.rest) > 0 ? { rest:Number(item.rest) } : {}), ...(item.group ? { group:item.group } : {}),
+    ...(item.setCount ? { setCount:item.setCount } : {}), ...(item.repsMax ? { repsMax:item.repsMax } : {}) }));
   const finishedAt = Date.now();
   const workout = {
     name:activeSession.name, notes:activeSession.notes || '', exercises, createdAt:finishedAt, clientId:activeSession.clientId, unit:recordUnit(activeSession)

@@ -286,7 +286,9 @@ function formatPlannedSet(set) {
 }
 
 // Accessories with a rep range go up in weight once every set reaches the top of it; says so before the first set.
+// A template's planned exercise has gone up already, when it was due to (templateAdvice in training-tools.js).
 function rangeAdvice(exercise, previous) {
+  if (exercise.setCount) return templateAdvice(exercise);
   const top = exercise.plan[0].repsMax;
   if (!top || exercise.sets.length || !previous || previous.sets.length < exercise.plan.length) return '';
   return previous.sets.every(set => set.reps >= top) ? ` Last time every set reached ${top}, so go heavier.` : '';
