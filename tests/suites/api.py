@@ -298,8 +298,13 @@ def run_security(t, check, request):
         login(main, username, 'some-wrong-password')
         return time.perf_counter() - started
 
-    known = sorted(timed('veteran') for _ in range(3))[1]
-    unknown = sorted(timed(f'nobody-{n}') for n in range(3))[1]
+    # Taken in turn, so a burst of load from the suites running beside this one slows both kinds alike, rather than all
+    # of one kind: three of each in a row once measured 0.21 s against 0.48 s on a busy CI machine, for the same work.
+    # An account of its own, since five wrong tries reach the sign-in limit, and later checks sign in as veteran.
+    main.api('POST', '/api/auth/register', {'username': 'clockwatch', 'email': 'clockwatch@example.test', 'password': 'chalk-and-plates-42'})
+    pairs = [(timed('clockwatch'), timed(f'nobody-{n}')) for n in range(5)]
+    known = sorted(pair[0] for pair in pairs)[2]
+    unknown = sorted(pair[1] for pair in pairs)[2]
     check('an unknown username takes about as long as a wrong password', unknown > known * 0.5,
           f'unknown {unknown:.3f}s, known {known:.3f}s')
 
