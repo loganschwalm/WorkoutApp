@@ -310,9 +310,10 @@ async function exportAccount(asCsv) {
 // "Imported 12 workouts (3 were already here), 2 templates and the training program."
 function describeImport(result) {
   const workouts = plural(result.workouts, 'workout') + (result.alreadyHere ? ` (${result.alreadyHere} ${result.alreadyHere === 1 ? 'was' : 'were'} already here)` : '');
-  const parts = [workouts, result.templates ? plural(result.templates, 'template') : '', result.program ? 'the training program' : '', result.settings ? 'the settings' : ''].filter(Boolean);
+  const parts = [workouts, result.templates ? plural(result.templates, 'template') : '', result.program ? 'the training program' : '', result.settings ? 'the settings' : '',
+    result.bodyweights ? plural(result.bodyweights, 'bodyweight') : ''].filter(Boolean);
   const list = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0];
-  const changed = result.workouts || result.templates || result.program || result.settings;
+  const changed = result.workouts || result.templates || result.program || result.settings || result.bodyweights;
   return `Imported ${list}.${changed ? ' Close Settings to see them.' : ''}`;
 }
 
@@ -342,7 +343,7 @@ async function importAccount(file) {
     showDataStatus(describeImport(result));
     // Settings the import brought are taken here now, so saving this form does not put the old ones back.
     if (result.settings) await loadAccountState().then(() => applySettings(getWorkoutSettings()));
-    reloadAfterImport = reloadAfterImport || Boolean(result.workouts || result.templates || result.program || result.settings);
+    reloadAfterImport = reloadAfterImport || Boolean(result.workouts || result.templates || result.program || result.settings || result.bodyweights);
   } finally {
     setDataButtonsDisabled(false);
   }

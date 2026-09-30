@@ -643,6 +643,63 @@ def run(t):
     fits = cdp.ev("document.querySelector('.progress-filters').scrollWidth <= document.querySelector('.progress-filters').clientWidth")
     check('and the filters fit the phone', fits is True)
     cdp.send('Emulation.clearDeviceMetricsOverride')
+
+    print('P8c Progress logs bodyweight a day at a time, charts it, and says how it has moved')
+    settle('/progress.html', "document.getElementById('bodyweightForm') !== null")
+    field = lambda idn: cdp.ev(f"document.getElementById('{idn}').textContent")
+    rows = "[...document.querySelectorAll('#bodyweightList li')].map(li => li.querySelector('strong').textContent)"
+
+    def weigh(weight, day=None):
+        cdp.ev(f"document.getElementById('bodyweightValue').value = {json.dumps(str(weight))};"
+               + (f"document.getElementById('bodyweightDate').value = {day};" if day else '')
+               + "document.querySelector('#bodyweightForm button[type=submit]').click()")
+        cdp.pause(0.3)
+
+    today_key = cdp.ev('dayKey(new Date())')
+    check('with nothing logged it says what it is for, and draws no chart', 'Log your weight' in field('bodyweightSummary')
+          and cdp.ev("document.getElementById('bodyweightChart').hidden") is True and cdp.ev(rows) == [], field('bodyweightSummary'))
+    check('the day starts at today, and cannot go past it', cdp.ev("document.getElementById('bodyweightDate').value") == today_key
+          and cdp.ev("document.getElementById('bodyweightDate').max") == today_key)
+    check('the weight is asked for in the unit in use', cdp.ev("document.querySelector('#bodyweightForm .unit-label').textContent") == 'lbs')
+    weigh('')
+    check('no weight is refused', 'Enter your weight' in field('bodyweightFeedback') and cdp.ev(rows) == [], field('bodyweightFeedback'))
+    weigh(180, "dayKey(new Date(Date.now() + 2 * 86400000))")
+    check('and a day still to come', 'today or before' in field('bodyweightFeedback') and cdp.ev(rows) == [], field('bodyweightFeedback'))
+    cdp.ev("document.getElementById('bodyweightDate').value = dayKey(new Date())")
+    weigh(182.4)
+    check('a weight is logged for today, and said so', field('bodyweightFeedback') == 'Logged 182.4 lbs for today.' and cdp.ev(rows) == ['182.4 lbs'],
+          field('bodyweightFeedback'))
+    check('the summary gives it, and asks for another to show a trend', field('bodyweightSummary').startswith('182.4 lbs on ')
+          and field('bodyweightSummary').endswith('Log it again to see how it moves'), field('bodyweightSummary'))
+    check('and the chart is drawn', cdp.ev("document.getElementById('bodyweightChart').hidden") is False
+          and 'Bodyweight: 1 weigh-in' in cdp.ev("document.getElementById('bodyweightChart').getAttribute('aria-label')"))
+    weigh(185, "dayKey(new Date(Date.now() - 31 * 86400000))")
+    check('an earlier day goes in its place, newest first', cdp.ev(rows) == ['182.4 lbs', '185 lbs'], cdp.ev(rows))
+    check('and the summary says how it has moved over the last month', field('bodyweightSummary').endswith('Down 2.6 lbs in 31 days'), field('bodyweightSummary'))
+    weigh(186.6)
+    check('weighing in again the same day replaces it', field('bodyweightFeedback') == 'Updated 186.6 lbs for today.'
+          and cdp.ev(rows) == ['186.6 lbs', '185 lbs'] and field('bodyweightSummary').endswith('Up 1.6 lbs in 31 days'), field('bodyweightSummary'))
+    kept = t.wait_for(lambda: len(t.api('GET', '/api/state', token=lifter)[0].get('bodyweight', {})) == 2) and t.api('GET', '/api/state', token=lifter)[0]['bodyweight']
+    check('the weights are kept with the account, by day, in the unit logged', kept and kept.get(today_key) == {'weight': 186.6, 'unit': 'lbs'}
+          and all(entry['unit'] == 'lbs' for entry in kept.values()), kept)
+    cdp.ev("saveLocalState('settings', { ...getWorkoutSettings(), unit: 'kg' }); window.dispatchEvent(new Event('settingschange'))")
+    cdp.pause(0.3)
+    check('in kilograms they show converted', cdp.ev(rows) == ['84.6 kg', '83.9 kg'] and field('bodyweightSummary').endswith('Up 0.7 kg in 31 days'),
+          [cdp.ev(rows), field('bodyweightSummary')])
+    check('without changing what was logged', t.api('GET', '/api/state', token=lifter)[0]['bodyweight'].get(today_key) == {'weight': 186.6, 'unit': 'lbs'})
+    cdp.ev("saveLocalState('settings', { ...getWorkoutSettings(), unit: 'lbs' }); window.dispatchEvent(new Event('settingschange'))")
+    cdp.pause(0.3)
+    settle('/progress.html', "document.querySelectorAll('#bodyweightList li').length === 2")
+    check('they are there when the page opens again', cdp.ev(rows) == ['186.6 lbs', '185 lbs'], cdp.ev(rows))
+    cdp.ev("document.querySelectorAll('#bodyweightList [data-bodyweight-remove]')[1].click()")
+    cdp.pause(0.3)
+    check('Remove takes a day away', cdp.ev(rows) == ['186.6 lbs'] and field('bodyweightFeedback').startswith('Removed the weight for '), field('bodyweightFeedback'))
+    check('for good', t.wait_for(lambda: list(t.api('GET', '/api/state', token=lifter)[0]['bodyweight']) == [today_key]))
+    cdp.send('Emulation.setDeviceMetricsOverride', width=375, height=800, deviceScaleFactor=1, mobile=True)
+    cdp.pause(0.3)
+    fits = cdp.ev("(f => f.scrollWidth <= f.clientWidth && document.documentElement.scrollWidth <= innerWidth)(document.getElementById('bodyweightForm'))")
+    check('and on a phone the form fits, with no sideways scrolling', fits is True)
+    cdp.send('Emulation.clearDeviceMetricsOverride')
     t.set_cookie(t.token)
 
     # ------------------------------------------------------------------ P9 History, a month at a time

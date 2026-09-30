@@ -37,6 +37,19 @@
       <ul class="session-list" id="sessionList"></ul>
     </section>
 
+    <section class="card" aria-labelledby="bodyweightTitle">
+      <div class="section-heading"><div><h2 id="bodyweightTitle">Bodyweight</h2><p class="subtitle" id="bodyweightSummary">Log your weight to see how it changes alongside your lifts.</p></div></div>
+      <div class="bodyweight-chart"><canvas id="bodyweightChart" role="img" aria-label="No bodyweight logged yet." hidden></canvas></div>
+      <p class="subtitle chart-detail" id="bodyweightDetail" role="status"></p>
+      <form class="goal-form bodyweight-form" id="bodyweightForm" novalidate>
+        <div><label for="bodyweightValue">Weight (<span class="unit-label">lbs</span>)</label><input id="bodyweightValue" type="number" inputmode="decimal" min="0" step="any" placeholder="180.5" /></div>
+        <div><label for="bodyweightDate">Day</label><input id="bodyweightDate" type="date" /></div>
+        <button class="primary" type="submit">Log weight</button>
+      </form>
+      <p class="goal-feedback" id="bodyweightFeedback" role="status"></p>
+      <ul class="bodyweight-list" id="bodyweightList"></ul>
+    </section>
+
     <section class="card" aria-labelledby="goalsTitle">
       <div class="section-heading"><div><h2 id="goalsTitle">Goals</h2><p class="subtitle">A weight to reach in an exercise. Your heaviest set so far is measured against it.</p></div></div>
       <ul class="goal-list" id="goalList"><li class="empty">No goals yet. Set one below.</li></ul>
@@ -61,6 +74,7 @@
   <script src="settings-dialog.js"></script>
   <script src="settings.js"></script>
   <script src="progress.js"></script>
+  <script src="bodyweight.js"></script>
   <script src="pwa.js"></script>
 </body>
 </html>

@@ -360,6 +360,10 @@ cable stack with a single handle, and chest press, lat pulldown, leg extension a
 - Goals: a weight to reach in an exercise, optionally by a day. Each shows your heaviest set so far against it, in a bar
   that turns green once it is reached, with how far there is to go and how many days are left. Setting a goal for an
   exercise again replaces it, and Remove takes it away. Goals are kept with your account, in the unit they were set in.
+- Bodyweight: log your weight for a day (today unless you choose an earlier one; weighing in again that day replaces
+  it), and it is charted over time, with the latest weight and how it has moved over the last 30 days ("182.4 lbs on
+  Sep 29 · Down 3 lbs in 30 days"). The newest five are listed under the chart to remove one. Weights are kept with
+  your account, in the unit they were logged in, and shown in the unit you use.
 - Review repeated workouts as separate progress points.
 
 ### Settings
@@ -409,7 +413,7 @@ uploads when the server is reachable again.
 Everything in your account can be saved to a file from Settings, and brought back in.
 
 - **Export** saves one JSON file with every workout, your custom templates, the training program you
-  follow, your settings, your exercise notes and your goals.
+  follow, your settings, your exercise notes, your goals and your bodyweight.
 - **Export sets as CSV** saves every logged set for a spreadsheet, one row each: its date, workout,
   exercise, set number, weight, unit, and reps (or seconds, for a timed exercise). Skipped exercises are
   left out. Dates are the days in your own time zone, and a name that starts like a formula (`=`, `+`,
@@ -418,7 +422,7 @@ Everything in your account can be saved to a file from Settings, and brought bac
 - **Import** reads a JSON export back, into this account or into one on another server. It only ever
   adds. Workouts already in the account are skipped, so importing the same file twice changes nothing,
   and templates you already have stay as they are. Settings and a training program come in only if the
-  account has none of its own. If any workout in the file is not valid, nothing is imported, and the
+  account has none of its own, and a bodyweight only for a day that has none. If any workout in the file is not valid, nothing is imported, and the
   message says which workout.
 
 An export covers one account. It is not a substitute for [backing up the database](#data-storage),
