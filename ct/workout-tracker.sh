@@ -132,6 +132,39 @@ if [[ "${BRANCH_DEFAULT_MOVED:-}" != 1 ]]; then
 fi
 # --- default branch move (end) ---
 
+# --- console sign-in (begin) ---
+# Proxmox gives root no password unless one is chosen when the container is created (CT_PASSWORD), and the console
+# in its web UI then asks for a login that nothing can pass. While root has never had a password ('*', as Proxmox
+# leaves it, perhaps locked with a '!'), the console signs in as root by itself instead, as 'pct enter' on the host
+# does. A password locked on purpose ('!' before a hash) stays locked. Once root has a password, updates leave the
+# console alone: remove the drop-in to have it ask for that password. This comes before the packages and the
+# source, so a failed install can still be looked into from the console.
+autologin=/etc/systemd/system/container-getty@.service.d/autologin.conf
+case "$(getent shadow root | cut -d: -f2)" in
+  '*' | '!' | '!*')
+    if [[ ! -f "$autologin" ]]; then
+      step "signing the Proxmox console in as root, which has no password"
+      mkdir -p "$(dirname "$autologin")"
+      cat >"$autologin" <<'GETTY'
+# Written by the Workout Tracker installer while root had no password, which left the console with a login nothing
+# could pass. Once root has a password (passwd), delete this file and run systemctl daemon-reload to be asked for it.
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin root --noclear --keep-baud pts/%I 115200,38400,9600 $TERM
+GETTY
+      systemctl daemon-reload
+      # Restart only the consoles still at their login prompt: one in use, perhaps running this update, carries on.
+      for getty in $(systemctl list-units --plain --no-legend 'container-getty@*' | awk '{print $1}'); do
+        pid="$(systemctl show --property MainPID --value "$getty")"
+        if [[ "$(cat "/proc/$pid/comm" 2>/dev/null)" == agetty ]]; then
+          systemctl restart "$getty"
+        fi
+      done
+    fi
+    ;;
+esac
+# --- console sign-in (end) ---
+
 step "installing packages"
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends \
@@ -526,8 +559,8 @@ advanced_settings() {
   REPO_URL="$(ask "Git repository URL" "$REPO_URL")"
   BRANCH="$(ask "Git branch" "$BRANCH")"
   CT_PASSWORD="$(whiptail --title "$APP" --passwordbox \
-    "Root password for the container.\n\nLeave blank for no password: you can always get a shell with 'pct enter' from the Proxmox host." \
-    12 66 3>&1 1>&2 2>&3)" || die "cancelled."
+    "Root password for the container.\n\nLeave blank for none: its console in the Proxmox web UI then signs in as root by itself, and 'pct enter' on the host always gives a shell." \
+    13 66 3>&1 1>&2 2>&3)" || die "cancelled."
   if whiptail --title "$APP" --yesno "Create an unprivileged container?\n\nYes is recommended." 10 66; then
     UNPRIVILEGED=1
   else
@@ -614,7 +647,7 @@ ${GN}  $APP is ready.${CL}
 
   URL          http://${ip:-<container-ip>}:$APP_PORT
   Container    $CTID ($CT_HOSTNAME)
-  Shell        pct enter $CTID
+  Shell        pct enter $CTID, or the Console in the Proxmox web UI
   Logs         pct exec $CTID -- journalctl -u $SERVICE -f
   Restart      pct exec $CTID -- systemctl restart $SERVICE
   App files    $APP_DIR

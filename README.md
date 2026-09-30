@@ -500,7 +500,8 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/loganschwalm/WorkoutApp/
 A menu offers default settings, advanced settings, or updating an existing install. The script then:
 
 1. Downloads a Debian LXC template, to whichever storage on your node accepts templates.
-2. Creates an unprivileged LXC with networking on `vmbr0` via DHCP.
+2. Creates an unprivileged LXC with networking on `vmbr0` via DHCP. Its console signs in as root by
+   itself unless you give root a password (see [Managing the container](#managing-the-container)).
 3. Installs `python3`, `git`, and `sqlite3` inside it.
 4. Clones this repository's `stable` branch to `/opt/workout-tracker` (see [Updating](#updating)).
 5. Creates a `workout` system user and a `workout-tracker` systemd service that starts on boot.
@@ -555,7 +556,7 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/loganschwalm/WorkoutApp/
 |---|---|---|
 | `CTID` | next free ID | LXC container ID |
 | `CT_HOSTNAME` | `workout-tracker` | Container hostname |
-| `CT_PASSWORD` | *(none)* | Root password; blank means console login is disabled and you use `pct enter` |
+| `CT_PASSWORD` | *(none)* | Root password, which the container's console then asks for; blank means the console signs in as root by itself |
 | `DEBIAN_VERSION` | `12` | Debian template major version, `12` or `13` |
 | `STORAGE` | auto | Storage for the root disk, e.g. `local-lvm` |
 | `TEMPLATE_STORAGE` | auto | Storage for the LXC template, e.g. `local` |
@@ -609,6 +610,22 @@ pct exec <CTID> -- systemctl status workout-tracker  # service state
 pct exec <CTID> -- journalctl -u workout-tracker -f  # follow logs
 pct exec <CTID> -- systemctl restart workout-tracker # restart
 ```
+
+The container's **Console** in the Proxmox web UI is a root shell too. Unless you set `CT_PASSWORD`,
+root has no password, so no login there could succeed: the console signs you in as root by itself
+instead, as it does for anyone else you let open it (the `VM.Console` permission). An existing container
+without a root password gets this on its next update. To have the console ask for a password, give root
+one and remove the automatic sign-in:
+
+```bash
+pct enter <CTID>
+passwd                                                           # root's new password
+rm /etc/systemd/system/container-getty@.service.d/autologin.conf
+systemctl daemon-reload
+systemctl restart 'container-getty@*'                            # the console now asks for it
+```
+
+Once root has a password, updates leave the console alone.
 
 #### Backups
 
