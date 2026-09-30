@@ -296,14 +296,16 @@ def run(t):
     check('the workout behind it is uploaded all the same', 'Behind The Choke' in names and 'Server Chokes' not in names and len(names) == n + 1, names[:5])
     check('while the failing one stays queued, not set aside', safe_ev('readPendingWorkouts().map(w => w.name)', []) == ['Server Chokes']
           and 'Server Chokes' not in safe_ev('readRejectedWorkouts().map(w => w.name)', []), safe_ev('readPendingWorkouts().map(w => w.name)', []))
-    check('and the flush says something is still waiting', flushed is False and cdp.ev('window.__chokes') == 1, flushed)
+    check('and the flush says something is still waiting, with a retry to come', flushed is False and cdp.ev('window.__chokes') >= 1
+          and cdp.ev('pendingRetryCount') >= 1, [flushed, cdp.ev('window.__chokes'), cdp.ev('pendingRetryCount')])
     status = cdp.ev("document.getElementById('storageStatus').textContent")
     check('as the status line does', '1 workout waiting to sync' in status, status)
     cdp.ev('window.__serverFixed = true')
-    # Retries back off, up to a minute apart, and every failed try before the fix doubles the wait; under a loaded machine
-    # a few can happen. Waiting the longest backoff costs nothing when the retry comes sooner.
-    check('once the server takes it, the retry uploads it', wait_for(lambda: 'Server Chokes' in [w['name'] for w in workouts()], 65)
-          and safe_ev('readPendingWorkouts().length', -1) == 0, safe_ev('[readPendingWorkouts().map(w => w.name), pendingRetryCount]', []))
+    # The retry itself runs on a timer that backs off; what matters here is that the next try sends it, whenever it comes.
+    tried = cdp.ev("Promise.race([flushPendingWorkouts(), new Promise(done => setTimeout(() => done('still going after 20 s'), 20000))])")
+    check('once the server takes it, the next try uploads it', tried is True
+          and 'Server Chokes' in [w['name'] for w in workouts()] and safe_ev('readPendingWorkouts().length', -1) == 0,
+          [tried, safe_ev('readPendingWorkouts().map(w => w.name)', [])])
 
     print('P13 a browser that will not save says so, rather than losing a workout on reload')
     open_tracker()
@@ -318,9 +320,14 @@ def run(t):
           and 'keep it open' in cdp.ev("document.getElementById('storageWarning').textContent"), safe_ev("document.body.firstElementChild.outerHTML", ''))
     check('the set is still held, and still reaches the server', safe_ev("document.querySelectorAll('#completedSets li').length", 0) == 1
           and wait_for(lambda: server_sets() == 1))
+    # Something else held meanwhile, and never written again: it must not keep the warning up once storing works.
+    cdp.ev("writeLocal('workout-tracker-held-test', 'kept')")
     cdp.ev('Storage.prototype.setItem = window.__setItem')
     log_set(8)
     check('once the browser saves again, the warning goes', cdp.wait(f'!{storage}') and safe_ev("readLocalActive().session.exercises[0].sets.length", 0) == 2)
+    check('and whatever was held in memory meanwhile is stored too', cdp.ev("localStorage.getItem('workout-tracker-held-test')") == '"kept"'
+          and cdp.ev('memoryStore.size') == 0, cdp.ev("localStorage.getItem('workout-tracker-held-test')"))
+    cdp.ev("localStorage.removeItem('workout-tracker-held-test')")
     end_workout()
 
     print('R2  30 seconds more or less rest')

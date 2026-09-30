@@ -27,6 +27,10 @@ function writeLocal(key, value) {
   try {
     localStorage.setItem(key, JSON.stringify(value));
     memoryStore.delete(key);
+    // Storing works again, so whatever had to be held in memory meanwhile is stored too, not only this.
+    memoryStore.forEach((held, heldKey) => {
+      try { localStorage.setItem(heldKey, JSON.stringify(held)); memoryStore.delete(heldKey); } catch (error) { /* still held */ }
+    });
   } catch (error) {
     memoryStore.set(key, value);
   }

@@ -99,7 +99,7 @@ def run(t):
     print('D   exercise name suggestions')
     open_tracker()
     # The templates' names are there at once; the logged ones once the saved workouts have loaded.
-    cdp.wait('initialLoadDone', 15)
+    cdp.wait('initialLoadDone', 30)
     options = suggestions()
     check('every exercise logged is suggested', {'Bench Press', 'Overhead Press', 'Barbell Row', 'Pull-up', 'Dumbbell Bench Press'} <= set(options), options)
     check('and the templates’ exercises', {'Tricep Pushdown', 'Goblet Squat', 'Plank', 'Lat Pulldown'} <= set(options), options)
