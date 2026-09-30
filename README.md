@@ -985,6 +985,20 @@ it is gitignored. Any of the [server settings](#server-settings) can be overridd
 PORT=9000 WORKOUT_DB=/tmp/scratch.db python backend/server.py
 ```
 
+To try the app on realistic data, run it with three weeks of Wendler 5/3/1 already logged (the cycle's
+deload week still to do), and sign in as `wendler-test` / `Wendler-531-Test`:
+
+```bash
+python scripts/demo-server.py             # this checkout, until Ctrl+C
+python scripts/demo-server.py --follow    # whatever CI last passed, rebuilt each time it passes again
+```
+
+`--follow` keeps its own clone in `data/preview` and checks every minute whether `stable` has moved,
+which it does once the [tests](#tests) pass on a push to `main`. When it has, the server restarts on the
+new commit. `--branch main` rebuilds on every push instead, whether its tests passed or not. Either way
+each start is a fresh database, so anything logged in it is gone at the next one, and `data/workouts.db`
+is never touched.
+
 ## Tests
 
 The `tests/` directory holds end-to-end tests that drive a real headless browser against a real
