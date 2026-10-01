@@ -37,6 +37,7 @@ document.body.insertAdjacentHTML('beforeend', `
       <label class="setting-check"><input id="confirmEndSetting" type="checkbox" /> Confirm before ending an active workout</label>
       <label class="setting-check"><input id="effortSetting" type="checkbox" /> Ask how many reps each set had left (effort)</label>
       <label class="setting-check"><input id="warmupSetting" type="checkbox" /> Suggest warm-up sets for barbell lifts</label>
+      <label class="setting-check" id="keepAwakeSettingRow"><input id="keepAwakeSetting" type="checkbox" /> Keep the screen on with a silent video, as this browser will not do it itself</label>
       <h3 class="settings-section">Bar and plates</h3>
       <div class="equipment-fields" id="equipmentFields">
         <span class="subtitle">What your gym has, for the plates to load on a barbell lift, its warm-ups, the weight buttons and Go heavier. Each unit keeps its own.</span>

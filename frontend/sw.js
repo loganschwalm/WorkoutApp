@@ -97,6 +97,8 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith('/api/')) return; // offline.js owns the data layer
+  // The keep-awake video is fetched in byte ranges, which the cache cannot store; it is only used online anyway.
+  if (url.pathname.startsWith('/media/')) return;
 
   if (request.mode === 'navigate') {
     event.respondWith(networkFirst(event, request, pageKey(url), true));

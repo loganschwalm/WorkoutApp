@@ -585,6 +585,8 @@ function logSet() {
     showFeedback(`Goal reached: ${goalReached.name}, ${formatWeight(goalReached.target)} ${goalReached.unit || 'lbs'}!`, 'success');
   } else if (recordNow && recordNow !== recordBefore) celebrate($('completeSetBtn'));
   unlockAudio();
+  // A tap: the moment a phone that refused the keep-awake video (see syncWakeLock) is asked again.
+  syncWakeLock();
   // A superset goes straight on to its next exercise, with no rest until the round is done.
   const index = activeSession.currentIndex;
   const next = nextInRound(activeSession, index);

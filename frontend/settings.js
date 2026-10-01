@@ -3,7 +3,7 @@ try { legacyTheme = localStorage.getItem('workout-tracker-theme'); } catch (erro
 // Appearance: 'system' follows the device's light or dark mode; 'light' and 'dark' fix it.
 // Match system, or one of the themes theme.js knows. A page without theme.js (an old one, from the cache) has light and dark.
 const themeChoices = ['system', ...Object.keys(window.colorThemes || { light:'light', dark:'dark' })];
-const defaultSettings = { theme:themeChoices.includes(legacyTheme) ? legacyTheme : 'system', restDuration:90, weeklyGoal:3, unit:'lbs', autoRest:true, confirmEnd:true, soundEnabled:true, soundVolume:40, alertSound:'beep', vibrate:true, playThroughSilent:true, trackEffort:true, warmupSets:true,
+const defaultSettings = { theme:themeChoices.includes(legacyTheme) ? legacyTheme : 'system', restDuration:90, weeklyGoal:3, unit:'lbs', autoRest:true, confirmEnd:true, soundEnabled:true, soundVolume:40, alertSound:'beep', vibrate:true, playThroughSilent:true, trackEffort:true, warmupSets:true, keepAwakeVideo:true,
   barLbs:45, barKg:20, platesLbs:[45, 35, 25, 10, 5, 2.5, 1.25], platesKg:[25, 20, 15, 10, 5, 2.5, 1.25], stepLbs:5, stepKg:2.5 };
 const getSettingElement = id => document.getElementById(id);
 const canVibrate = typeof navigator.vibrate === 'function';
@@ -187,7 +187,7 @@ function readSettingsForm() {
   const soundVolume = Math.min(100, Math.max(0, Number(getSettingElement('soundVolumeSetting').value) || 0));
   const weeklyGoal = weeklyGoalFrom(getSettingElement('weeklyGoalSetting').value);
   const unit = getSettingElement('unitSetting').value === 'kg' ? 'kg' : 'lbs';
-  return { theme:getSettingElement('themeSetting').querySelector('input[name=theme]:checked')?.value || 'system', unit, restDuration, weeklyGoal, autoRest:getSettingElement('autoRestSetting').checked, confirmEnd:getSettingElement('confirmEndSetting').checked, trackEffort:getSettingElement('effortSetting').checked, warmupSets:getSettingElement('warmupSetting').checked, soundEnabled:getSettingElement('soundEnabledSetting').checked, soundVolume, alertSound:getSettingElement('alertSoundSetting').value, vibrate:getSettingElement('vibrateSetting').checked, playThroughSilent:getSettingElement('silentSetting').checked,
+  return { theme:getSettingElement('themeSetting').querySelector('input[name=theme]:checked')?.value || 'system', unit, restDuration, weeklyGoal, autoRest:getSettingElement('autoRestSetting').checked, confirmEnd:getSettingElement('confirmEndSetting').checked, trackEffort:getSettingElement('effortSetting').checked, warmupSets:getSettingElement('warmupSetting').checked, keepAwakeVideo:getSettingElement('keepAwakeSetting').checked, soundEnabled:getSettingElement('soundEnabledSetting').checked, soundVolume, alertSound:getSettingElement('alertSoundSetting').value, vibrate:getSettingElement('vibrateSetting').checked, playThroughSilent:getSettingElement('silentSetting').checked,
     ...readEquipmentFields(getWorkoutSettings()) };
 }
 
@@ -220,6 +220,9 @@ function applySettings(settings) {
   getSettingElement('confirmEndSetting').checked = settings.confirmEnd;
   getSettingElement('effortSetting').checked = settings.trackEffort !== false;
   getSettingElement('warmupSetting').checked = settings.warmupSets !== false;
+  getSettingElement('keepAwakeSetting').checked = settings.keepAwakeVideo !== false;
+  // Only where the browser has no Wake Lock of its own (a plain http:// address): elsewhere the screen stays on anyway.
+  getSettingElement('keepAwakeSettingRow').hidden = 'wakeLock' in navigator;
   getSettingElement('soundEnabledSetting').checked = settings.soundEnabled;
   getSettingElement('alertSoundSetting').value = alertTones[settings.alertSound] ? settings.alertSound : defaultSettings.alertSound;
   getSettingElement('soundVolumeSetting').value = settings.soundVolume;

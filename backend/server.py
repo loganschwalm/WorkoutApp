@@ -106,6 +106,8 @@ SECURITY_HEADERS = {
 # bytes goes as it is, since gzip's own overhead would eat most of the saving.
 COMPRESSIBLE = ('.html', '.js', '.css', '.json', '.webmanifest', '.svg')
 MIN_COMPRESS = 1024
+# Video, which Safari only plays from a server that answers a Range request with just those bytes (206).
+RANGED = ('.mp4',)
 # Each file gzipped once, until it changes on disk: {path: ((mtime, size), gzipped bytes)}.
 gzipped_files = {}
 gzipped_files_lock = threading.Lock()
@@ -850,8 +852,45 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
         if self.path.startswith('//') or '\\' in unquote(urlparse(self.path).path):
             self.send_error(HTTPStatus.NOT_FOUND)
             return None
+        if urlparse(self.path).path.endswith(RANGED):
+            return self.send_ranged_file()
         compressed = self.send_compressed_file()
         return super().send_head() if compressed is False else compressed
+
+    def send_ranged_file(self):
+        """A video, whole or the one byte range asked for. Several ranges in one request are answered with the whole file,
+        which HTTP allows; no browser asks a video for more than one."""
+        path = self.translate_path(self.path)
+        if not os.path.isfile(path):
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return None
+        with open(path, 'rb') as handle:
+            body = handle.read()
+        size = len(body)
+        start, end, status = 0, size - 1, HTTPStatus.OK
+        asked = re.fullmatch(r'\s*bytes\s*=\s*(\d*)\s*-\s*(\d*)\s*', self.headers.get('Range', ''))
+        if asked and (asked.group(1) or asked.group(2)):
+            if asked.group(1):
+                start = int(asked.group(1))
+                end = min(int(asked.group(2)), size - 1) if asked.group(2) else size - 1
+            else:  # bytes=-N: the last N
+                start = max(0, size - int(asked.group(2)))
+            if start >= size or start > end:
+                self.send_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                self.send_header('Content-Range', f'bytes */{size}')
+                self.send_header('Content-Length', '0')
+                self.end_headers()
+                return None
+            status = HTTPStatus.PARTIAL_CONTENT
+        self.send_response(status)
+        self.send_header('Content-Type', self.guess_type(path))
+        self.send_header('Accept-Ranges', 'bytes')
+        if status == HTTPStatus.PARTIAL_CONTENT:
+            self.send_header('Content-Range', f'bytes {start}-{end}/{size}')
+        self.send_header('Content-Length', str(end - start + 1))
+        self.send_header('Last-Modified', self.date_time_string(os.stat(path).st_mtime))
+        self.end_headers()
+        return io.BytesIO(body[start:end + 1])
 
     def accepts_gzip(self):
         for part in self.headers.get('Accept-Encoding', '').split(','):

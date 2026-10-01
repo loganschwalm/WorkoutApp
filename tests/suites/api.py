@@ -1359,6 +1359,38 @@ def run_compression(t, check, request):
     check('an export is gzipped on its way too', status == 200 and headers.get('content-encoding') == 'gzip'
           and gzip.decompress(body).decode('utf-8').lstrip('﻿').startswith('Date,Workout'), f"{status} {headers.get('content-encoding')}")
 
+    print('A29b the keep-awake video is served in byte ranges, as Safari needs to play it')
+    with open(os.path.join(frontend, 'media', 'keep-awake.mp4'), 'rb') as file:
+        video = file.read()
+    size = len(video)
+    status, headers, body = request('GET', '/media/keep-awake.mp4', None, gz)
+    check('the whole video, saying ranges can be asked for', status == 200 and body == video and headers.get('accept-ranges') == 'bytes'
+          and headers.get('content-type') == 'video/mp4' and headers.get('content-length') == str(size) and 'content-encoding' not in headers,
+          f"{status} {headers}")
+    check('with the same security headers as everything else', "default-src 'self'" in headers.get('content-security-policy', '')
+          and headers.get('x-content-type-options') == 'nosniff', headers)
+    status, headers, body = request('GET', '/media/keep-awake.mp4', None, {'Range': 'bytes=0-1'})
+    check("Safari's first ask, the first two bytes -> 206 with just those", status == 206 and body == video[:2]
+          and headers.get('content-range') == f'bytes 0-1/{size}' and headers.get('content-length') == '2', f"{status} {headers.get('content-range')} {body!r}")
+    status, headers, body = request('GET', '/media/keep-awake.mp4', None, {'Range': 'bytes=100-'})
+    check('from a byte to the end', status == 206 and body == video[100:] and headers.get('content-range') == f'bytes 100-{size - 1}/{size}',
+          headers.get('content-range'))
+    status, headers, body = request('GET', '/media/keep-awake.mp4', None, {'Range': 'bytes=-10'})
+    check('the last ten bytes', status == 206 and body == video[-10:] and headers.get('content-range') == f'bytes {size - 10}-{size - 1}/{size}',
+          headers.get('content-range'))
+    status, headers, body = request('GET', '/media/keep-awake.mp4', None, {'Range': f'bytes=0-{size + 500}'})
+    check('a range past the end stops at the end', status == 206 and body == video, headers.get('content-range'))
+    status, headers, _ = request('GET', '/media/keep-awake.mp4', None, {'Range': f'bytes={size}-'})
+    check('one starting past the end -> 416, saying the size', status == 416 and headers.get('content-range') == f'bytes */{size}', f"{status} {headers.get('content-range')}")
+    status, headers, body = request('GET', '/media/keep-awake.mp4', None, {'Range': 'bytes=0-1,5-9'})
+    check('several ranges at once get the whole video, which HTTP allows', status == 200 and body == video, status)
+    status, headers, body = request('HEAD', '/media/keep-awake.mp4', None, {'Range': 'bytes=0-1'})
+    check('HEAD answers the same headers with no body', status == 206 and not body and headers.get('content-length') == '2', f"{status} {body!r}")
+    status, _, _ = request('GET', '/media/no-such.mp4', None, {'Range': 'bytes=0-1'})
+    check('a video that is not there -> 404', status == 404, status)
+    status, headers, _ = request('GET', '/media/../../backend/server.py.mp4')
+    check('and a path cannot climb out of the frontend', status == 404, status)
+
 
 def run_deletion(t, check, request):
     main = t.server

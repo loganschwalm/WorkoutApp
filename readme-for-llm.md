@@ -99,11 +99,18 @@ own workouts, templates, and settings.
   End rest skips what is left of it, and the screen flashes green, softly and once, when a rest is over,
   whether it ran out or you ended it (not with reduced motion on).
 - Keep accurate rest time even when the screen locks or the tab is in the background; the timer alerts you with a sound and vibration when rest is over (configurable in Settings).
-- Keep the screen awake during a workout (on browsers that support it). A page cannot run while the phone is
-  locked, so a rest that outlasts the phone's auto-lock ends without its alert; the time is still right when you
-  look again. Browsers only keep the screen on over HTTPS (or `localhost`), so at a plain `http://` address, as a
-  server on your network usually is, the workout says so: set the phone's Auto-Lock to Never while you train, or
-  put the app behind HTTPS (see [Offline support needs HTTPS](#offline-support-needs-https)).
+- Keep the screen awake during a workout. A page cannot run while the phone is locked, so a rest that outlasts
+  the phone's auto-lock would end without its alert (the time is still right when you look again). Over HTTPS (or
+  `localhost`) the browser's Wake Lock does it. A browser only offers that there, so at a plain `http://` address,
+  as a server on your network usually is, or where the browser refuses the lock, the app plays a tiny silent video
+  instead while the workout is on screen, as NoSleep.js does: a phone does not sleep while a video plays. The video
+  (`frontend/media/keep-awake.mp4`, two seconds of black with a silent sound track, about 2.5 KB) is muted, so it
+  never stops your music; it carries a sound track and is sent back to its start before it ends rather than
+  looping, since Safari lets the screen sleep under a video with no sound or one that loops. It stops whenever the
+  page is hidden or the workout ends, and a refused start (Low Power Mode, say) is tried again with each set.
+  Settings can turn it off. The workout says what is being done, and if the phone locks anyway: set Auto-Lock to
+  Never while you train, or put the app behind HTTPS (see [Offline support needs HTTPS](#offline-support-needs-https)).
+  The server answers byte-range requests for the video (206), which Safari needs before it plays one.
 - On an iPhone, sound the phone paused (a locked screen, a call, another app taking the audio) is started again
   before the next alert, rather than leaving every alert after it silent.
 - Move to the next exercise with the rest timer reset to that exercise's rest.
@@ -403,6 +410,8 @@ the button that opened them. Settings include:
 - End-workout confirmation toggle.
 - Effort toggle: whether to ask how many reps each set had left.
 - Warm-up toggle: whether to suggest warm-up sets for barbell lifts.
+- Keep-awake video toggle, shown only where the browser has no Wake Lock of its own (a plain `http://` address):
+  whether to keep the screen on during a workout with a silent video. On by default.
 - Bar and plates: the bar's weight, the plates you have, and the weight step, for pounds and kilograms
   separately. The training programs keep their own rounding.
 - Rest-timer alert: play a sound on or off, choose the alert sound (double beep, chime, or long tone), set the volume, and turn vibration on or off. The vibration option only appears on devices that support it.

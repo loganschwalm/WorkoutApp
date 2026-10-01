@@ -132,8 +132,9 @@ Open the server's address in Safari or Chrome and add it to your home screen.
 
 Over a plain `http://` address, as a home server usually is, two things are limited:
 
-- **The phone can lock during a rest**, and a locked phone can't play the rest alert. Browsers only keep
-  the screen on over HTTPS, so on an iPhone set Auto-Lock to Never while you train. The workout reminds you.
+- **Keeping the screen on.** Browsers only do this over HTTPS, so on `http://` the app plays a tiny silent,
+  muted video during a workout to keep the phone awake (Settings can turn it off). A locked phone can't play
+  the rest alert, so if yours still locks, set Auto-Lock to Never while you train.
 - **Reloading with no connection** and **installing on Android** also need HTTPS.
 
 To serve it over HTTPS, put it behind something that provides a trusted certificate:

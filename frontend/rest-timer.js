@@ -101,41 +101,90 @@ function startRestTimer() {
   runRestTimer();
 }
 
-// Keeps the screen awake during a workout so the timer can alert you; the browser drops the lock whenever the page is hidden.
+// Keeps the screen awake during a workout so the timer can alert you; the browser drops the lock whenever the page is
+// hidden. Where it has no Wake Lock to give (any page at a plain http:// address), or refuses one, a silent video does
+// the job instead, unless Settings turns that off.
 async function syncWakeLock() {
-  const wanted = Boolean(activeSession) && !document.hidden && 'wakeLock' in navigator;
-  if (!('wakeLock' in navigator)) showScreenAwakeNotice(Boolean(activeSession));
-  if (wanted && !wakeLock && !wakeLockRequesting) {
+  const onScreen = Boolean(activeSession) && !document.hidden;
+  if (!('wakeLock' in navigator)) {
+    keepAwakeInstead(onScreen);
+    return;
+  }
+  if (onScreen && !wakeLock && !wakeLockRequesting) {
     wakeLockRequesting = true;
     try {
       wakeLock = await navigator.wakeLock.request('screen');
       wakeLock.addEventListener('release', () => { wakeLock = null; });
+      playKeepAwakeVideo(false);
       showScreenAwakeNotice(false);
     } catch (error) {
       console.error('Unable to keep the screen awake.', error);
-      showScreenAwakeNotice(true);
+      keepAwakeInstead(Boolean(activeSession) && !document.hidden);
     } finally {
       wakeLockRequesting = false;
     }
-  } else if (!wanted && wakeLock) {
+  } else if (!onScreen && wakeLock) {
     await wakeLock.release();
   }
+  if (!onScreen) playKeepAwakeVideo(false);
   if (!activeSession) showScreenAwakeNotice(false);
 }
 
-// A page cannot run while the phone is locked, so a rest that outlasts the phone's auto-lock ends in silence. When the
-// screen cannot be kept on, the workout says so. Browsers only offer it over HTTPS (or on localhost), which a server
-// reached at a plain http:// address is not.
-function showScreenAwakeNotice(show) {
+// The screen kept on without a Wake Lock: the video while a workout is on screen, and the note saying how it stands.
+function keepAwakeInstead(onScreen) {
+  const video = getWorkoutSettings().keepAwakeVideo !== false;
+  playKeepAwakeVideo(onScreen && video);
+  showScreenAwakeNotice(Boolean(activeSession), video);
+}
+
+// The way NoSleep.js keeps a phone awake: a phone does not sleep while a video plays. The video is two seconds of
+// black, muted, so it never takes the audio from music; it carries a silent sound track all the same, since Safari lets
+// the screen sleep under a video with no sound at all. Nor does it loop, which Safari also lets the screen sleep under:
+// it is sent back to its start before it ends instead. Made with
+//   ffmpeg -f lavfi -i color=c=black:s=16x16:r=10:d=2 -f lavfi -i anullsrc=channel_layout=mono:sample_rate=8000 -t 2
+//     -c:v libx264 -profile:v baseline -pix_fmt yuv420p -c:a aac -b:a 8k -movflags +faststart media/keep-awake.mp4
+let keepAwakeVideo = null;
+
+function playKeepAwakeVideo(on) {
+  if (!on) {
+    if (keepAwakeVideo && !keepAwakeVideo.paused) keepAwakeVideo.pause();
+    return;
+  }
+  if (!keepAwakeVideo) {
+    keepAwakeVideo = document.createElement('video');
+    keepAwakeVideo.muted = true;
+    keepAwakeVideo.setAttribute('muted', '');
+    keepAwakeVideo.setAttribute('playsinline', '');
+    keepAwakeVideo.setAttribute('title', 'Keeping the screen on');
+    keepAwakeVideo.src = '/media/keep-awake.mp4';
+    keepAwakeVideo.addEventListener('timeupdate', () => { if (keepAwakeVideo.currentTime > 1) keepAwakeVideo.currentTime = 0; });
+  }
+  // Refused (a phone in Low Power Mode, or before any tap): logging the next set asks again.
+  Promise.resolve(keepAwakeVideo.play()).catch(() => {});
+}
+
+// A page cannot run while the phone is locked, so a rest that outlasts the phone's auto-lock ends in silence. Browsers
+// only keep the screen on over HTTPS (or on localhost), which a server at a plain http:// address is not, so there the
+// workout says what is being done about it, and what to do if the phone locks all the same.
+function showScreenAwakeNotice(show, video = false) {
   const notice = $('screenAwakeNotice');
   if (show) {
-    notice.textContent = window.isSecureContext
-      ? 'This browser will not keep the screen on, and a locked phone cannot sound the rest alert. Keep the screen awake while you rest.'
-      : 'Over a plain http:// address the app cannot keep the screen on, and a locked phone cannot sound the rest alert. '
-        + 'Keep the screen awake while you rest (on an iPhone, set Auto-Lock to Never while you train), or reach the app over HTTPS, where it does this itself.';
+    const advice = 'Keep the screen awake while you rest (on an iPhone, set Auto-Lock to Never while you train)';
+    if (video) {
+      notice.textContent = window.isSecureContext
+        ? `This browser will not keep the screen on, so the app plays a silent video to do it. If your phone still locks during a rest, a locked phone cannot sound the rest alert: ${advice.charAt(0).toLowerCase()}${advice.slice(1)}.`
+        : 'Over a plain http:// address the browser will not keep the screen on, so the app plays a silent video to do it. '
+          + `If your phone still locks during a rest, a locked phone cannot sound the rest alert: ${advice.charAt(0).toLowerCase()}${advice.slice(1)}, or reach the app over HTTPS.`;
+    } else {
+      notice.textContent = window.isSecureContext
+        ? `This browser will not keep the screen on, and a locked phone cannot sound the rest alert. ${advice}.`
+        : `Over a plain http:// address the app cannot keep the screen on, and a locked phone cannot sound the rest alert. ${advice}, or reach the app over HTTPS, where it does this itself.`;
+    }
   }
   notice.hidden = !show;
 }
+
+window.addEventListener('settingschange', () => syncWakeLock());
 
 // ---- Timed exercises --------------------------------------------------------
 // A set of a timed exercise is a hold. Start timer counts down the seconds in the Seconds field; when they are up it
