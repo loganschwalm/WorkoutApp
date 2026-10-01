@@ -178,20 +178,26 @@ function doneInWeek(program, week) {
 // program it is, so finishing the workout can mark that day done.
 function programWorkout(program, week, day) {
   const definition = programDefinition(program);
+  const exercises = definition.workout(program, week, day);
+  // The day's main lift and its number as the day was planned, which the card's Progress charts.
+  const lift = definition.lifts.find(item => item.name === exercises[0].name);
   return {
     name:`${definition.shortName} ${programDays(program)[day].name}`,
     notes:'',
     unit:program.unit,
-    exercises:definition.workout(program, week, day),
-    programDay:{ definition:definition.id, startedAt:program.startedAt, cycle:program.cycle, week, day, label:blockLabel(program, week) }
+    exercises,
+    programDay:{ definition:definition.id, startedAt:program.startedAt, cycle:program.cycle, week, day, label:blockLabel(program, week),
+      ...(lift ? { lift:lift.key, number:program.trainingMaxes[lift.key] } : {}) }
   };
 }
 
-// What a saved workout keeps about the program day it came from, for History. Kept under a different name from the
-// session's programDay, so starting a saved workout again never passes for a day of the program.
+// What a saved workout keeps about the program day it came from, for History and the card's Progress. Kept under a
+// different name from the session's programDay, so starting a saved workout again never passes for a day of the program.
 function programInfo(programDay) {
   const definition = findProgramDefinition(programDay.definition);
-  return { name:definition ? definition.name : '', cycle:storedNumber(programDay.cycle), week:storedNumber(programDay.week) + 1, label:String(programDay.label || '') };
+  const number = positiveWeight(programDay.number);
+  return { name:definition ? definition.name : '', cycle:storedNumber(programDay.cycle), week:storedNumber(programDay.week) + 1, label:String(programDay.label || ''),
+    ...(number !== null && typeof programDay.lift === 'string' ? { lift:programDay.lift, number } : {}) };
 }
 
 // ---- Progress -------------------------------------------------------------
@@ -272,6 +278,86 @@ function completeProgramWorkout(session) {
   const main = session.exercises[0];
   const swapped = main && (isSwappedIn(main) || main.swappedOut) ? `${isSwappedIn(main) ? main.swappedFrom.name : main.name} was swapped out, so this workout does not count toward its progress.` : '';
   return [swapped, progress.note, recordProgramDay(progress.program, programDay.week, programDay.day, entry)].filter(Boolean).join(' ');
+}
+
+// ---- Progress over the program --------------------------------------------
+
+// Each lift's sessions in this run of the program (since it was set up), oldest first: when, the number it worked from
+// (a training max or working weight), and the best one-rep max its sets estimate (sets of up to 12 reps, as Progress
+// counts them). Workouts saved before they kept their number have it read back from what was lifted: through
+// definition.numberFrom from all of a block's sessions of the lift together, which shared one number, or else each
+// session's heaviest weight. All in the program's unit.
+function programProgress(program, workouts) {
+  const definition = programDefinition(program);
+  const sessions = Object.fromEntries(definition.lifts.map(lift => [lift.key, []]));
+  const unknown = new Map();
+  workouts.forEach(workout => {
+    const info = workout && workout.program;
+    if (!info || info.name !== definition.name || !(workout.createdAt >= program.startedAt) || !Array.isArray(workout.exercises)) return;
+    const lift = definition.lifts.find(item => item.key === info.lift)
+      || definition.lifts.find(item => workout.exercises[0] && exerciseKey(workout.exercises[0].name) === exerciseKey(item.name));
+    const exercise = lift && workout.exercises.find(item => exerciseKey(item.name) === exerciseKey(lift.name));
+    if (!exercise) return;
+    const from = recordUnit(workout);
+    const sets = (exercise.sets || []).map(set => ({ weight:convertWeight(storedNumber(set.weight), from, program.unit), reps:storedNumber(set.reps) }))
+      .filter(set => set.weight > 0 && set.reps > 0);
+    if (!sets.length) return;
+    const kept = positiveWeight(info.number);
+    const estimates = sets.filter(set => set.reps <= 12).map(set => estimateOneRepMax(set.weight, set.reps));
+    const session = { at:workout.createdAt, number:kept !== null ? convertWeight(kept, from, program.unit) : Math.max(...sets.map(set => set.weight)),
+      best:estimates.length ? Math.max(...estimates) : null };
+    sessions[lift.key].push(session);
+    if (kept === null && definition.numberFrom) {
+      const block = `${lift.key} ${storedNumber(info.cycle)}`;
+      if (!unknown.has(block)) unknown.set(block, []);
+      unknown.get(block).push({ session, week:Math.max(0, storedNumber(info.week) - 1), weights:sets.map(set => set.weight) });
+    }
+  });
+  unknown.forEach(block => {
+    const number = definition.numberFrom(program, block);
+    if (number > 0) block.forEach(({ session }) => { session.number = number; });
+  });
+  Object.values(sessions).forEach(list => list.sort((a, b) => a.at - b.at));
+  return sessions;
+}
+
+// A lift's number as a stepped line, from its first session to now (where it is the number the program holds now, so a
+// new cycle's training max shows), and the estimated one-rep maxes as dots. Coloured by class, from the theme.
+function progressChart(sessions, current, label) {
+  const width = 320, height = 112, left = 6, right = 6, top = 10, bottom = 10;
+  const first = sessions[0].at, now = Math.max(Date.now(), sessions[sessions.length - 1].at);
+  const values = [...sessions.map(session => session.number), current, ...sessions.map(session => session.best).filter(Boolean)];
+  const low = Math.min(...values), high = Math.max(...values), pad = Math.max(1, (high - low) * 0.12);
+  const x = at => now > first ? left + (at - first) / (now - first) * (width - left - right) : width / 2;
+  const y = value => top + (1 - (value - (low - pad)) / (high - low + 2 * pad)) * (height - top - bottom);
+  const round = value => Math.round(value * 10) / 10;
+  const steps = [...sessions.map(session => [session.at, session.number]), [now, current]];
+  const path = steps.map(([at, value], index) => index ? `H ${round(x(at))} V ${round(y(value))}` : `M ${round(x(at))} ${round(y(value))}`).join(' ');
+  const dots = sessions.filter(session => session.best).map(session => `<circle class="progress-best" cx="${round(x(session.at))}" cy="${round(y(session.best))}" r="3.5" />`).join('');
+  return `<svg class="program-progress-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHTML(label)}"><path class="progress-number" d="${path}" />${dots}</svg>`;
+}
+
+function renderProgramProgress(program) {
+  const definition = programDefinition(program);
+  const workouts = [...(typeof savedWorkouts === 'undefined' ? [] : savedWorkouts), ...readPendingWorkouts()];
+  const progress = programProgress(program, workouts);
+  const unit = weightUnit();
+  const weight = value => `${formatWeight(Math.round(value * 10) / 10)} ${unit}`;
+  const day = at => new Date(at).toLocaleDateString(undefined, { month:'short', day:'numeric' });
+  const rows = definition.lifts.filter(lift => progress[lift.key].length).map(lift => {
+    const sessions = progress[lift.key];
+    const current = program.trainingMaxes[lift.key];
+    const bests = sessions.map(session => session.best).filter(Boolean);
+    const number = `${definition.numberLabel} ${weight(sessions[0].number)}${sessions[0].number === current ? ' throughout' : ` \u2192 ${weight(current)}`}`;
+    const estimate = bests.length ? `estimated max ${weight(bests[0])}${bests.length > 1 ? ` \u2192 ${weight(bests[bests.length - 1])}` : ''}` : '';
+    const summary = `${number}${estimate ? `; ${estimate}` : ''}, over ${sessions.length} session${sessions.length === 1 ? '' : 's'} since ${day(sessions[0].at)}`;
+    return `<li><div class="program-progress-head"><strong>${escapeHTML(lift.name)}</strong><span>${escapeHTML(weight(current))}</span></div>`
+      + `${progressChart(sessions, current, `${lift.name}: ${summary}`)}<p>${escapeHTML(summary)}</p></li>`;
+  });
+  $('programProgressSection').hidden = !rows.length;
+  $('programProgressKey').innerHTML = `<span class="key-item"><span class="key-number" aria-hidden="true"></span>${escapeHTML(definition.numberLabel)}</span>`
+    + `<span class="key-item"><span class="key-best" aria-hidden="true"></span>Estimated one-rep max, from each session's sets</span>`;
+  $('programProgress').innerHTML = rows.join('');
 }
 
 // ---- Formatting -----------------------------------------------------------
@@ -381,6 +467,7 @@ function renderProgram() {
     const note = definition.numberNote(program, lift);
     return `<li><span>${escapeHTML(lift.name)}</span><strong>${escapeHTML(formatWeight(program.trainingMaxes[lift.key]))} ${weightUnit()}</strong><small${note.warn ? ' class="warn"' : ''}>${escapeHTML(note.text)}</small></li>`;
   }).join('');
+  renderProgramProgress(program);
   $('programBlockHeading').textContent = `This ${definition.block}`;
   const rows = week => days.map((entry, day) => programDayRow(program, week, day, next)).join('');
   // A block of one week is just its days; longer blocks list each week, the current one open.

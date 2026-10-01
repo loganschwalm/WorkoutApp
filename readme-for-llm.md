@@ -239,6 +239,18 @@ up another replaces it, and the workouts you finished stay in your history. They
 - The plan is on the Tracker: the next workout, ready to start or skip, and folded under it the
   numbers the program works from and every day of the current cycle or week with its weights. Edit
   program and End program are in the card's ⋯ menu.
+- Progress, folded on the card too, charts each main lift over this run of the program: its number (the
+  training max in 5/3/1, the working weight in the others) as a line that steps up as it moves, with where
+  it is now at the end, and the best one-rep max each session's sets estimate (Epley, sets of up to 12) as
+  dots, so you can see the training max keeping pace with what you lift. Under each chart, in words: the
+  number from the first session to now, the estimate from the first to the latest, and over how many
+  sessions since when. Only workouts of this program since it was set up count, from History and any
+  still waiting to upload. Each program workout keeps the number it was planned from; ones saved before
+  that have it read back from what was lifted. In 5/3/1 that is the training max whose plan for the
+  cycle's weeks, warm-ups included, gives the most of the weights actually loaded, worked out from all of
+  a cycle's sessions of the lift together, since one week can be loaded the same from two training maxes a
+  step apart (150 and 155 lbs both load 100, 115 and 130 in the 5s week); in the others it is the heaviest
+  weight lifted.
 - Every set is planned. Each planned set's weight and reps are filled in as you go. In 5/3/1 and PPL
   the main lift ends with a "+" set of as many reps as you can, and the app turns it into an estimated
   one-rep max.

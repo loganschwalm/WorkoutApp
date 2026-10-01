@@ -174,10 +174,15 @@ def run(t):
     check('under the day’s name, with where it was in the program',
           saved.get('name') == '5/3/1 Press Day' and (saved.get('program') or {}).get('label') == 'Cycle 1, week 1 · 5s week', json.dumps({k: saved.get(k) for k in ('name', 'program')}))
     check('with every set logged', [len(e['sets']) for e in saved.get('exercises', [])] == [6, 1, 1], json.dumps(saved.get('exercises')))
+    check('and the training max it was planned from, for Progress', {k: (saved.get('program') or {}).get(k) for k in ('lift', 'number')} == {'lift': 'press', 'number': 100},
+          json.dumps(saved.get('program')))
     check('the user is told what is next', 'Next in Wendler 5/3/1: Deadlift Day, week 1.' in text('formFeedback'), text('formFeedback'))
     done = (program() or {}).get('done', {})
     check('the day is marked done with its + set', done.get('0-0', {}).get('amrap') == {'weight': 85, 'reps': 9, 'target': 5}, done)
     check('the card shows it', 'Done · + set 85 × 9' in week_rows(0)[0] and '1 of 16 workouts done' in text('programSummary'), week_rows(0))
+    check("and its Progress has the day's lift", cdp.wait("!document.getElementById('programProgressSection').hidden")
+          and cdp.ev("[...document.querySelectorAll('#programProgress li strong')].map(e => e.textContent)") == ['Overhead Press']
+          and f'Training max 100 lbs throughout; estimated max {estimate} lbs, over 1 session' in text('programProgress'), text('programProgress'))
     check('and the next workout is Deadlift Day', 'Deadlift Day' in text('programNext'), text('programNext'))
     check('the saved list says where it came from', cdp.wait("document.getElementById('savedWorkoutList').textContent.includes('Cycle 1, week 1 · 5s week')"))
     cdp.ev("document.querySelector('#savedWorkoutList .saved-workout [data-action=start]').click()")
@@ -481,6 +486,7 @@ def run(t):
     check('no Content-Security-Policy violations with PPL either', violations() == [], violations())
 
     run_apartment_gym(t, text, visible, field, set_field, click, server_program, program, chips, complete_set, finish_workout, violations)
+    run_progress(t, text, violations)
 
 
 # Every exercise of each Apartment Gym day, in order. The equipment is dumbbells, an adjustable bench, a cable stack
@@ -681,3 +687,75 @@ def run_apartment_gym(t, text, visible, field, set_field, click, server_program,
     click('#endProgramBtn')
     check('ending the program keeps its workouts', sum(w['name'].startswith('Apartment Gym') for w in t.workouts()) == 8, [w['name'] for w in t.workouts()])
     check('no Content-Security-Policy violations with Apartment Gym either', violations() == [], violations())
+
+
+def js_round(value):
+    return math.floor(value + 0.5)
+
+
+def wendler_sets(training_max, percents, reps):
+    """A 5/3/1 main lift's sets as the app plans them: each percentage of the training max, rounded to 5 lbs."""
+    return [{'weight': max(5, js_round(training_max * percent / 100 / 5) * 5), 'reps': count} for percent, count in zip(percents, reps)]
+
+
+def run_progress(t, text, violations):
+    cdp, check, api = t.cdp, t.check, t.api
+    day = 86400000
+    now = int(time.time() * 1000)
+
+    # ------------------------------------------------------------------ P21 progress over the program
+    print("P21 the card charts each lift's training max and estimated max over the program")
+    cookie = api('POST', '/api/auth/register', {'username': 'progressing', 'email': 'progressing@example.test', 'password': 'chalk-and-plates-42'})[1]
+    token = cookie.split('session=')[1].split(';')[0]
+    started = now - 30 * day
+    maxes = {'press': 125, 'deadlift': 325, 'bench': 190, 'squat': 255}
+    api('PUT', '/api/state', {'program': {
+        'definition': 'wendler-531', 'unit': 'lbs', 'startedAt': started, 'cycle': 2, 'trainingMaxes': maxes, 'stalls': {}, 'done': {}, 'lastRollover': None,
+        'options': {'tmPercent': 90, 'assistance': 'none', 'rounding': 5, 'warmups': True, 'deload': True}}}, token)
+
+    def press_day(when, cycle, week, sets, number=None, name='Wendler 5/3/1'):
+        info = {'name': name, 'cycle': cycle, 'week': week, 'label': f'Cycle {cycle}, week {week}'}
+        if number is not None:
+            info.update(lift='press', number=number)
+        api('POST', '/api/workouts', {'name': '5/3/1 Press Day', 'createdAt': when, 'unit': 'lbs', 'program': info, 'clientId': f'press-{when}',
+                                      'exercises': [{'name': 'Overhead Press', 'weight': sets[-1]['weight'], 'reps': sets[-1]['reps'], 'sets': sets}]}, token)
+
+    warmups = [40, 50, 60]
+    # Cycle 1 at a training max of 120, saved before workouts kept it: read back from what was lifted.
+    press_day(started + 2 * day, 1, 1, wendler_sets(120, warmups + [65, 75, 85], [5, 5, 3, 5, 5, 8]))
+    press_day(started + 9 * day, 1, 2, wendler_sets(120, warmups + [70, 80, 90], [5, 5, 3, 3, 3, 6]))
+    # Cycle 2 at 125, kept with the workout.
+    press_day(started + 25 * day, 2, 1, wendler_sets(125, warmups + [65, 75, 85], [5, 5, 3, 5, 5, 9]), number=125)
+    # Neither a run of the program from before this one, nor another program's day, belongs to it.
+    press_day(started - 5 * day, 3, 1, wendler_sets(200, warmups + [65, 75, 85], [5, 5, 3, 5, 5, 5]))
+    press_day(started + 4 * day, 1, 1, wendler_sets(150, warmups + [65, 75, 85], [5, 5, 3, 5, 5, 5]), name='Reddit PPL')
+
+    t.set_cookie(token)
+    t.open_tracker()
+    check('Progress is on the card once the workouts load', cdp.wait("!document.getElementById('programProgressSection').hidden"))
+    rows = cdp.ev("[...document.querySelectorAll('#programProgress li strong')].map(e => e.textContent)")
+    check('with a row for each lift that has sessions, and no others', rows == ['Overhead Press'], rows)
+    summary = text('programProgress')
+    # The + sets: 100 x 8, 110 x 6 and 105 x 9, by Epley.
+    check('the training max read back for the older workouts, and kept for the newer one, then where it is now',
+          'Training max 120 lbs → 125 lbs' in summary, summary)
+    check('the estimated max from the first session to the latest', 'estimated max 127 lbs → 137 lbs' in summary, summary)
+    check('over this run of the program only', 'over 3 sessions since' in summary, summary)
+    check("the current number beside the lift's name", cdp.ev("document.querySelector('.program-progress-head span').textContent") == '125 lbs')
+    chart = cdp.ev("""(() => { const svg = document.querySelector('.program-progress-chart');
+      return { dots: svg.querySelectorAll('circle.progress-best').length, steps: (svg.querySelector('path.progress-number').getAttribute('d').match(/V/g) || []).length,
+               label: svg.getAttribute('aria-label'), role: svg.getAttribute('role') }; })()""")
+    check('the chart: a dot for each session, and the line stepping to each number', chart['dots'] == 3 and chart['steps'] == 3, chart)
+    check('described for screen readers', chart['role'] == 'img' and chart['label'].startswith('Overhead Press: Training max 120 lbs'), chart)
+    check('the key names the line and the dots', text('programProgressKey') == "Training maxEstimated one-rep max, from each session's sets", text('programProgressKey'))
+    colours = cdp.ev("""(() => { const path = getComputedStyle(document.querySelector('path.progress-number')).stroke;
+      return { path, accent: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() }; })()""")
+    check('the line in the theme\'s accent', colours['path'] == 'rgb(91, 92, 226)', colours)
+    check('drawn with nothing inline the Content-Security-Policy would refuse', violations() == [], violations())
+    api('PUT', '/api/state', {'settings': {'unit': 'kg'}}, token)
+    t.open_tracker()
+    cdp.wait("!document.getElementById('programProgressSection').hidden")
+    summary = text('programProgress')
+    check('in kilograms, it is all in kilograms', summary.count(' kg') >= 4 and 'lbs' not in summary
+          and cdp.ev("document.querySelector('.program-progress-head span').textContent").endswith(' kg'), summary)
+    t.set_cookie(t.token)

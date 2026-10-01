@@ -425,6 +425,8 @@ async function loadSavedWorkouts() {
     personalBests = bestsOf([...workouts, ...readPendingWorkouts()]);
     writeLocal(localKey('bests'), personalBests);
     renderExerciseSuggestions();
+    // The program card's Progress is drawn from the workouts, which have only now arrived.
+    renderProgram();
     workoutsReachable = true;
     renderStorageStatus();
     return workouts;

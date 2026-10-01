@@ -45,7 +45,9 @@ library, with SQLite for storage, so there is no build step, no package manager 
 - **Reddit PPL**: the beginner push/pull/legs program, six days a week with linear progression.
 - **Apartment Gym**: upper/lower for a small gym with dumbbells, a cable stack and a few machines.
 
-Every set is planned for you, weights progress on their own, and the plan shows what's next.
+Every set is planned for you, weights progress on their own, and the plan shows what's next. Its Progress
+charts each lift's training max (or working weight) against the one-rep max your sets estimate, so you can
+see a program working over the weeks.
 
 **History and progress**
 - A calendar of the last 12 weeks, a weekly goal, and your streak.

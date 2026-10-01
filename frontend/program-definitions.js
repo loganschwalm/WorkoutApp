@@ -5,6 +5,7 @@
 //   id, name, shortName, summary, schedule  how the program is listed; workouts are named "<shortName> <day name>"
 //   block                    what one pass through the plan is called ('cycle', 'week'); days are done block by block
 //   numbersLabel             what the one number kept per lift is ('Training maxes', 'Working weights')
+//   numberLabel              the same for one of them ('Training max', 'Working weight')
 //   lifts                    [{ key, name, ... }], one number each, asked for at setup
 //   oneRepMaxes              true if setup may take one-rep maxes and convert them (see toNumber)
 //   options                  settings asked for at setup: { id, type:'select' | 'check', label, choices, default, help, ... };
@@ -19,6 +20,9 @@
 //                            exercises are the finished workout's, with each exercise's plan and logged sets
 //   nextBlock(program)       optional: what changes when a block is complete, e.g. new training maxes
 //   numberNote(program, lift)  { text, warn } under each lift's number on the card
+//   numberFrom(program, sessions)  optional: a lift's number read back from what was lifted in sessions of it that
+//                            shared one ([{ week, weights }], a block's), for workouts saved before they kept the
+//                            number (see programProgress); without it, each session's heaviest weight is its number
 //   roundNumber(program, lift, value)  optional: a number converted to the program's (new) unit, rounded to a step it uses
 //   setup                    { intro(editing), estimated, estimate(lift), hint(lift, value, form), toNumber(value, form, lift) }
 //
@@ -105,6 +109,7 @@ const wendler531 = {
   schedule:'4 days a week · 4-week cycles',
   block:'cycle',
   numbersLabel:'Training maxes',
+  numberLabel:'Training max',
   lifts:wendlerLifts,
   oneRepMaxes:true,
   options:[
@@ -140,6 +145,24 @@ const wendler531 = {
     return exercises;
   },
   roundNumber:roundToOption,
+  // Dividing a heaviest set by its week's top percentage only gets near the training max, since the weight was rounded
+  // (315 lbs at 85% is 267.75, loaded as 270, which reads back as 317.6). So the training maxes around that are each
+  // tried, and the one whose plans for the cycle's weeks, warm-ups included, give the most of the weights actually
+  // lifted is it. One week alone cannot always tell (150 and 155 lbs load the same 5s week), but its other weeks can.
+  numberFrom(program, sessions) {
+    const step = program.options.rounding;
+    const weeks = sessions.map(({ week, weights }) => ({ plan:wendlerWeekPlans(program)[week], weights })).filter(({ plan, weights }) => plan && weights.length);
+    if (!weeks.length) return null;
+    const guesses = weeks.map(({ plan, weights }) => Math.max(...weights) / (plan.sets[plan.sets.length - 1][0] / 100));
+    const guess = guesses.reduce((sum, value) => sum + value, 0) / guesses.length;
+    const score = trainingMax => weeks.reduce((total, { plan, weights }) => total + [...wendlerWarmups, ...plan.sets]
+      .filter(([percent]) => weights.some(weight => Math.abs(weight - roundToStep(trainingMax * percent / 100, step)) < 0.01)).length, 0);
+    const candidates = Array.from({ length:13 }, (_, index) => roundToStep(guess, step) + (index - 6) * step).filter(value => value > 0);
+    return candidates.reduce((best, value) => {
+      const better = score(value) - score(best);
+      return better > 0 || (better === 0 && Math.abs(value - guess) < Math.abs(best - guess)) ? value : best;
+    });
+  },
   nextBlock(program) {
     const changes = wendlerNextMaxes(program);
     return { trainingMaxes:Object.fromEntries(changes.map(change => [change.lift, change.to])), lastRollover:{ cycle:program.cycle, changes } };
@@ -210,6 +233,7 @@ const redditPpl = {
   schedule:'6 days a week · weight added every session',
   block:'week',
   numbersLabel:'Working weights',
+  numberLabel:'Working weight',
   lifts:pplLifts,
   oneRepMaxes:false,
   options:[{ ...roundingOption, help:'Used when a lift drops 10% after three missed sessions.' }],
@@ -319,6 +343,7 @@ const apartmentGym = {
   schedule:'4 days a week · upper and lower body twice each',
   block:'week',
   numbersLabel:'Working weights',
+  numberLabel:'Working weight',
   lifts:apartmentLifts,
   oneRepMaxes:false,
   options:[

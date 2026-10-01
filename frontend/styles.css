@@ -248,6 +248,19 @@ html[data-theme="dark"] .program-notice { color:#a5e5c2; background:#193b2d; bor
 .program-maxes strong { font-size:1.1rem; }
 .program-maxes small.warn { color:#c14b5a; }
 html[data-theme="dark"] .program-maxes small.warn { color:#ff9eaa; }
+/* Progress on the program card: a chart a lift, the program's number as a line and estimated maxes as dots. */
+.program-progress-key { display:flex; flex-wrap:wrap; gap:6px 16px; margin:0 0 10px; color:var(--muted); font-size:.8rem; }
+.program-progress-key .key-item { display:inline-flex; align-items:center; gap:8px; }
+.program-progress-key .key-number { flex:none; width:18px; height:3px; background:var(--accent); border-radius:2px; }
+.program-progress-key .key-best { flex:none; width:9px; height:9px; background:var(--card); border:2px solid var(--muted); border-radius:50%; }
+.program-progress { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:10px; margin:0 0 6px; padding:0; list-style:none; }
+.program-progress li { padding:12px; border:1px solid var(--line); border-radius:10px; }
+.program-progress-head { display:flex; justify-content:space-between; gap:8px; }
+.program-progress-head span { color:var(--accent); font-weight:800; }
+.program-progress-chart { display:block; width:100%; height:auto; margin:8px 0 6px; overflow:visible; }
+.program-progress-chart .progress-number { fill:none; stroke:var(--accent); stroke-width:3; stroke-linejoin:round; stroke-linecap:round; }
+.program-progress-chart .progress-best { fill:var(--card); stroke:var(--muted); stroke-width:2; }
+.program-progress p { margin:0; color:var(--muted); font-size:.8rem; line-height:1.4; }
 .program-week { border-top:1px solid var(--line); }
 .program-week summary { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 12px; padding:12px 0; cursor:pointer; }
 .program-week summary span { color:var(--muted); font-size:.85rem; }
