@@ -523,7 +523,9 @@ Open a **shell on the Proxmox VE host** (Datacenter → your node → Shell, or 
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/loganschwalm/WorkoutApp/stable/ct/workout-tracker.sh)"
 ```
 
-A menu offers default settings, advanced settings, or updating an existing install. The script then:
+A menu offers default settings, advanced settings, updating an existing install, or serving an existing
+install over HTTPS with Tailscale (see [Offline support needs HTTPS](#offline-support-needs-https)). The
+script then:
 
 1. Downloads a Debian LXC template, to whichever storage on your node accepts templates.
 2. Creates an unprivileged LXC with networking on `vmbr0` via DHCP. Its console signs in as root by
@@ -599,6 +601,8 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/loganschwalm/WorkoutApp/
 | `APP_DIR` / `DATA_DIR` | `/opt/workout-tracker` / `/var/lib/workout-tracker` | Code and database paths |
 | `HOST_BACKUP_DIR` | `/var/backups/workout-tracker` | Where on the Proxmox host to keep daily copies of the database, in a folder per container; `none` for none (see [Backups](#backups)) |
 | `HOST_BACKUP_KEEP` | `14` | How many of those copies to keep |
+| `TAILSCALE` | `0` | `1` also serves the app over HTTPS through Tailscale, on an install or an update |
+| `TS_AUTHKEY` | *(none)* | A Tailscale auth key, which signs the container in to your tailnet with no link to open; needed with `TAILSCALE=1` when nobody is at a terminal |
 
 `STORAGE` and `TEMPLATE_STORAGE` are detected from the storages your node actually has: the script
 asks when there is more than one candidate, and only offers storages that accept the right content
@@ -910,8 +914,24 @@ The app needs no change for any of these. It marks the session cookie `Secure` w
 HTTPS (set it before then, and signing in at the plain `http://` address stops working).
 
 **Tailscale** gives a trusted `https://<hostname>.<tailnet>.ts.net` address with no domain, which also
-works away from home on any device running Tailscale. An unprivileged container has no TUN device, so on
-the Proxmox host add these two lines to `/etc/pve/lxc/<CTID>.conf` and run `pct reboot <CTID>`:
+works away from home on any device running Tailscale. The Proxmox helper script sets it up: choose *Serve a
+container over HTTPS (Tailscale)* in its menu for an existing install, say yes to it in advanced settings,
+or give `TAILSCALE=1` (with `TS_AUTHKEY=tskey-auth-…` to run unattended) on an install or update. It:
+
+1. Adds the TUN device Tailscale needs to the container's config (the two lines below, above any snapshot
+   section), and restarts the container once if they were not there.
+2. Installs Tailscale in the container with Tailscale's install script, and starts it.
+3. Signs the container in to your tailnet, named after its hostname: by `TS_AUTHKEY`, or by a link it shows
+   you to open.
+4. Checks that the tailnet has HTTPS certificates. They are off until turned on in the admin console (DNS:
+   MagicDNS and HTTPS Certificates); from a terminal it says so and waits, and otherwise it says how to
+   finish and carries on.
+5. Runs `tailscale serve --bg <port>`, which Tailscale keeps through restarts and updates, and waits for the
+   first certificate, checking the sign-in page answers at the new address.
+
+The app stays at its `http://` address on the network as well. Signing in to Tailscale and turning on
+certificates are the only steps it cannot take for you. By hand, the same is: on the Proxmox host add these
+two lines to `/etc/pve/lxc/<CTID>.conf` and run `pct reboot <CTID>`:
 
 ```text
 lxc.cgroup2.devices.allow: c 10:200 rwm

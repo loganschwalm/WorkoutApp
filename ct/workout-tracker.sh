@@ -57,6 +57,11 @@ ONBOOT="${ONBOOT:-1}"
 _ENV_HOST_BACKUP_DIR="${HOST_BACKUP_DIR-}"
 HOST_BACKUP_DIR="${HOST_BACKUP_DIR:-/var/backups/workout-tracker}"
 HOST_BACKUP_KEEP="${HOST_BACKUP_KEEP:-14}"
+# HTTPS through Tailscale (see "HTTPS with Tailscale"): 1 sets it up on an install or update. TS_AUTHKEY, an auth key
+# from the Tailscale admin console, signs the container in without anyone opening a link.
+TAILSCALE="${TAILSCALE:-0}"
+TS_AUTHKEY="${TS_AUTHKEY:-}"
+HTTPS_URL=""
 
 if [[ -t 2 ]]; then
   RD=$'\033[01;31m'; GN=$'\033[1;92m'; YW=$'\033[33m'; BL=$'\033[36m'; CL=$'\033[m'
@@ -504,6 +509,126 @@ apply_host_backups() {
 host_backups_wanted() { [[ -n "$HOST_BACKUP_DIR" && "$HOST_BACKUP_DIR" != none ]]; }
 
 # ---------------------------------------------------------------------------
+# HTTPS with Tailscale
+# ---------------------------------------------------------------------------
+# A phone only keeps its screen on for a page, reloads it offline, or installs it (on Android) over HTTPS, which a server
+# at a plain http:// address is not. Tailscale gives the container a name with a certificate every device trusts, such
+# as https://workout-tracker.example-tailnet.ts.net, reachable from any device signed in to the same tailnet, at home or
+# away, with no domain to buy and no port to open. The app stays at its http:// address on the network as well.
+
+# Tailscale needs a TUN device, which a container is not given. These are the two lines Tailscale's guide for Proxmox
+# adds. They go above any snapshot section, since lines after one belong to that snapshot, and take effect when the
+# container next starts. Returns 1 when they were there already.
+add_tun_device() {
+  local conf="/etc/pve/lxc/$1.conf" updated
+  [[ -f "$conf" ]] || die "no $conf: is $1 a container on this node?"
+  grep -q '^lxc.mount.entry: /dev/net/tun ' "$conf" && return 1
+  updated="$(awk -v lines='lxc.cgroup2.devices.allow: c 10:200 rwm\nlxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file' '
+    !done && /^\[/ { print lines; done = 1 } { print } END { if (!done) print lines }' "$conf")"
+  # Written in place: /etc/pve is the cluster's own file system, so the file is replaced, not renamed over.
+  printf '%s\n' "$updated" >"$conf"
+}
+
+# A value from the container's Tailscale status: a Python expression over it (s), or nothing if it cannot say.
+ts_status() {
+  pct exec "$1" -- python3 -c "import json, subprocess
+out = subprocess.run(['tailscale', 'status', '--json'], capture_output=True, text=True).stdout
+s = json.loads(out or '{}')
+print($2)" 2>/dev/null || true
+}
+
+setup_https() {
+  local ctid="$1" name port url ip _attempt
+  name="$(pct config "$ctid" | awk -F': ' '/^hostname:/ {print $2}')"
+  port="$(pct exec "$ctid" -- sh -c ". $CONF_FILE && printf %s \"\$APP_PORT\"")"
+  if add_tun_device "$ctid"; then
+    msg_info "Restarting LXC $ctid with a TUN device for Tailscale"
+    pct reboot "$ctid" >/dev/null
+    CTID="$ctid" wait_for_container
+  fi
+  if ! pct exec "$ctid" -- sh -c 'command -v tailscale' >/dev/null 2>&1; then
+    msg_info "Installing Tailscale in LXC $ctid"
+    pct exec "$ctid" -- sh -c 'curl -fsSL https://tailscale.com/install.sh | sh' >/dev/null
+  fi
+  pct exec "$ctid" -- systemctl enable --quiet --now tailscaled
+
+  if [[ "$(ts_status "$ctid" 's.get("BackendState", "")')" != Running ]]; then
+    if [[ -n "$TS_AUTHKEY" ]]; then
+      msg_info "Signing LXC $ctid in to Tailscale with TS_AUTHKEY"
+      pct exec "$ctid" -- tailscale up --auth-key="$TS_AUTHKEY" --hostname="${name:-workout-tracker}"
+    elif interactive; then
+      msg_info "Open the link Tailscale prints below and sign in, to add LXC $ctid to your tailnet"
+      pct exec "$ctid" -- tailscale up --hostname="${name:-workout-tracker}"
+    else
+      die "LXC $ctid is not signed in to Tailscale. Set TS_AUTHKEY to an auth key from the Tailscale admin console, or run this from a terminal."
+    fi
+  fi
+  msg_ok "LXC $ctid is on your tailnet"
+
+  # Certificates are a setting of the tailnet, off until turned on, which only its admin console can do.
+  while [[ -z "$(ts_status "$ctid" '" ".join(s.get("CertDomains") or [])')" ]]; do
+    if interactive && whiptail --title "$APP" --yesno "HTTPS certificates are off in your tailnet.\n\nIn the Tailscale admin console, open DNS (login.tailscale.com/admin/dns), turn on MagicDNS and HTTPS Certificates, then choose Yes to carry on." 13 70; then
+      continue
+    fi
+    msg_warn "HTTPS certificates are off in your tailnet, so the app is not on HTTPS yet. Turn on MagicDNS"
+    msg_warn "and HTTPS Certificates at https://login.tailscale.com/admin/dns, then run this again, or:"
+    msg_warn "  pct exec $ctid -- tailscale serve --bg $port"
+    return 0
+  done
+
+  # Serves https://<name>.<tailnet>.ts.net from the app's port. Tailscale keeps it, through restarts and updates.
+  pct exec "$ctid" -- tailscale serve --bg "$port"
+  url="https://$(ts_status "$ctid" 's["Self"]["DNSName"].rstrip(".")')"
+  ip="$(ts_status "$ctid" 's["Self"]["TailscaleIPs"][0]')"
+  HTTPS_URL="$url"
+  # The first visit fetches the certificate, which can take a little while. Asked by its Tailscale address, so the
+  # answer does not hang on whether the container itself looks names up through Tailscale.
+  msg_info "Waiting for the certificate"
+  for _attempt in $(seq 1 30); do
+    if pct exec "$ctid" -- curl -fsS -o /dev/null --max-time 10 --resolve "${url#https://}:443:$ip" "$url/login.html" >/dev/null 2>&1; then
+      msg_ok "HTTPS: $url"
+      return 0
+    fi
+    sleep 2
+  done
+  msg_warn "$url has not answered yet; a first certificate can take a few minutes. Try it shortly."
+}
+
+# Which running container to act on, by a menu when there is a choice.
+pick_container() {
+  local prompt="$1" row
+  local -a found=() menu=()
+  msg_info "Looking for running containers with $APP installed"
+  mapfile -t found < <(installed_containers)
+  [[ ${#found[@]} -gt 0 ]] ||
+    die "no running container has $APP installed. Start it first, or create a new one."
+  if [[ ${#found[@]} -eq 1 ]] || ! interactive; then
+    if [[ ${#found[@]} -gt 1 ]]; then
+      msg_warn "${#found[@]} containers have $APP installed; using LXC ${found[0]%% *}."
+      msg_warn "Run this from a terminal to choose, or use 'pct enter <CTID>' on the one you want."
+    fi
+    printf '%s' "${found[0]%% *}"
+    return 0
+  fi
+  for row in "${found[@]}"; do menu+=("${row%% *}" "${row#* }"); done
+  whiptail --title "$APP" --menu "$prompt" 16 62 6 "${menu[@]}" 3>&1 1>&2 2>&3 || die "cancelled."
+}
+
+# The phone's side of it.
+https_advice() {
+  cat <<EOF
+
+  ${GN}  $APP is on HTTPS at $1${CL}
+
+  On your phone: install Tailscale, sign in to the same account, and open that
+  address. Sign in to the app again there, and add it to the Home Screen from it.
+  It keeps the screen on through rests by itself, and reloads offline.
+  The app is still at its http:// address on your network too.
+
+EOF
+}
+
+# ---------------------------------------------------------------------------
 # In-container mode: update this installation in place.
 # ---------------------------------------------------------------------------
 run_in_container() {
@@ -658,6 +783,7 @@ validate_settings() {
     die "HOST_BACKUP_DIR must be a directory on the host starting with / (or 'none')."
   fi
   [[ "$HOST_BACKUP_KEEP" =~ ^[1-9][0-9]*$ ]] || die "HOST_BACKUP_KEEP must be a whole number of backups, 1 or more."
+  [[ "$TAILSCALE" == "0" || "$TAILSCALE" == "1" ]] || die "TAILSCALE must be 0 or 1."
   if pct status "$CTID" >/dev/null 2>&1; then
     die "LXC $CTID already exists. Set CTID to a free ID."
   fi
@@ -694,6 +820,11 @@ advanced_settings() {
     "Root password for the container.\n\nLeave blank for none: its console in the Proxmox web UI then signs in as root by itself, and 'pct enter' on the host always gives a shell." \
     13 66 3>&1 1>&2 2>&3)" || die "cancelled."
   HOST_BACKUP_DIR="$(ask "Host directory for daily copies of the database ('none' for none); a NAS storage under /mnt/pve keeps them off this disk" "$HOST_BACKUP_DIR")"
+  if whiptail --title "$APP" --defaultno --yesno "Serve the app over HTTPS with Tailscale as well?\n\nIt then has an https:// address that phones signed in to your tailnet trust, at home or away. You need a Tailscale account; this script asks you to sign in." 12 70; then
+    TAILSCALE=1
+  else
+    TAILSCALE=0
+  fi
   if whiptail --title "$APP" --yesno "Create an unprivileged container?\n\nYes is recommended." 10 66; then
     UNPRIVILEGED=1
   else
@@ -713,6 +844,7 @@ summary() {
   ${BL}Network${CL}     $BRIDGE - $IP_CONFIG${GATEWAY:+ - gateway $GATEWAY}${VLAN:+ - vlan $VLAN}
   ${BL}App${CL}         $REPO_URL ($BRANCH) on port $APP_PORT
   ${BL}Backups${CL}     $backups
+  ${BL}HTTPS${CL}       $([[ "$TAILSCALE" == 1 ]] && echo "through Tailscale" || echo "none (TAILSCALE=1, or the menu later, adds it)")
 
 EOF
 }
@@ -781,13 +913,15 @@ do_install() {
     apply_host_backups "$CTID"
     host_backups="copied to $HOST_BACKUP_DIR/$CTID on this host every day (newest $HOST_BACKUP_KEEP)"
   fi
+  [[ "$TAILSCALE" != 1 ]] || setup_https "$CTID"
 
   ip="$(container_ip "$CTID")"
   cat <<EOF
 
 ${GN}  $APP is ready.${CL}
 
-  URL          http://${ip:-<container-ip>}:$APP_PORT
+  URL          http://${ip:-<container-ip>}:$APP_PORT${HTTPS_URL:+
+  HTTPS        $HTTPS_URL (on devices signed in to your tailnet)}
   Container    $CTID ($CT_HOSTNAME)
   Shell        pct enter $CTID, or the Console in the Proxmox web UI
   Logs         pct exec $CTID -- journalctl -u $SERVICE -f
@@ -802,9 +936,15 @@ ${GN}  $APP is ready.${CL}
   who can reach the port, so create your accounts now and keep the app on a
   trusted network, or put it behind a reverse proxy that requires auth.
 
-  Installing to a phone's home screen and reloading offline both need HTTPS,
-  which this plain-HTTP address is not. Put the app behind a TLS reverse proxy
-  to turn them on; everything else works as it is.
+$(if [[ -n "$HTTPS_URL" ]]; then
+  printf '%s\n' "  On your phone, install Tailscale, sign in to the same account, and open the" \
+    "  HTTPS address. There the app keeps the screen on through rests, reloads" \
+    "  offline, and installs to the home screen."
+else
+  printf '%s\n' "  Keeping the screen on, reloading offline and installing to a phone's home" \
+    "  screen all work best over HTTPS, which this plain-HTTP address is not. Run" \
+    "  this script again and choose 'Serve a container over HTTPS' to add it."
+fi)
 
   To update later, run this same command again on the Proxmox host.
 
@@ -815,24 +955,8 @@ EOF
 # Update an existing container, from the host
 # ---------------------------------------------------------------------------
 do_update() {
-  local target tmp row
-  local -a found=() menu=()
-  msg_info "Looking for running containers with $APP installed"
-  mapfile -t found < <(installed_containers)
-  [[ ${#found[@]} -gt 0 ]] ||
-    die "no running container has $APP installed. Start it first, or create a new one."
-
-  if [[ ${#found[@]} -eq 1 ]] || ! interactive; then
-    target="${found[0]%% *}"
-    if [[ ${#found[@]} -gt 1 ]]; then
-      msg_warn "${#found[@]} containers have $APP installed; updating LXC $target."
-      msg_warn "Run this from a terminal to choose, or use 'pct enter <CTID>' on the one you want."
-    fi
-  else
-    for row in "${found[@]}"; do menu+=("${row%% *}" "${row#* }"); done
-    target="$(whiptail --title "$APP" --menu "Update which container?" 16 62 6 "${menu[@]}" \
-      3>&1 1>&2 2>&3)" || die "cancelled."
-  fi
+  local target tmp
+  target="$(pick_container "Update which container?")"
 
   if [[ -n "$_ENV_REPO_URL$_ENV_BRANCH$_ENV_APP_PORT$_ENV_APP_DIR$_ENV_DATA_DIR$_ENV_SERVICE_USER" ]]; then
     msg_warn "An update reuses the settings stored in the container."
@@ -854,6 +978,18 @@ do_update() {
   ip="$(container_ip "$target")"
   msg_ok "URL: http://${ip:-<container-ip>}:${port:-<port>}"
   update_host_backups "$target"
+  if [[ "$TAILSCALE" == 1 ]]; then
+    setup_https "$target"
+    [[ -z "$HTTPS_URL" ]] || https_advice "$HTTPS_URL"
+  fi
+}
+
+# HTTPS for a container already installed: the menu's own entry.
+do_https() {
+  local target
+  target="$(pick_container "Serve which container over HTTPS?")"
+  setup_https "$target"
+  [[ -z "$HTTPS_URL" ]] || https_advice "$HTTPS_URL"
 }
 
 # An update keeps a container's host backups as they were set, refreshing the script and timer. One from before they
@@ -909,21 +1045,27 @@ main() {
 
   local action="install" choice
   if interactive; then
-    choice="$(whiptail --title "$APP" --menu "Proxmox VE helper script" 15 66 4 \
+    choice="$(whiptail --title "$APP" --menu "Proxmox VE helper script" 16 66 5 \
       "1" "Create a new LXC with default settings" \
       "2" "Create a new LXC with advanced settings" \
       "3" "Update an existing $APP container" \
-      "4" "Exit" 3>&1 1>&2 2>&3)" || die "cancelled."
+      "4" "Serve a container over HTTPS (Tailscale)" \
+      "5" "Exit" 3>&1 1>&2 2>&3)" || die "cancelled."
     case "$choice" in
       1) action="install" ;;
       2) action="advanced" ;;
       3) action="update" ;;
+      4) action="https" ;;
       *) msg_info "Nothing to do."; return 0 ;;
     esac
   fi
 
   if [[ "$action" == "update" ]]; then
     do_update
+    return 0
+  fi
+  if [[ "$action" == "https" ]]; then
+    do_https
     return 0
   fi
 

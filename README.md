@@ -144,9 +144,10 @@ Over a plain `http://` address, as a home server usually is, two things are limi
 
 To serve it over HTTPS, put it behind something that provides a trusted certificate:
 
-- **Tailscale** (no domain needed): give the container a TUN device, install Tailscale in it, and run
-  `tailscale serve --bg 6769`. You get a `https://….ts.net` address that works from anywhere your phone
-  runs Tailscale.
+- **Tailscale** (no domain needed, and the installer does it for you): run the install command again and
+  choose *Serve a container over HTTPS*, or say yes in advanced settings when installing. Sign in to
+  Tailscale when it shows a link, and turn on HTTPS certificates in your tailnet when it asks. You get a
+  `https://….ts.net` address that works anywhere your phone runs Tailscale, at home or away.
 - **Your own domain** with a reverse proxy such as Nginx Proxy Manager or Caddy, using a DNS challenge
   for the certificate and a local DNS record pointing at the proxy.
 
