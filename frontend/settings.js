@@ -56,11 +56,19 @@ function getWorkoutSettings() {
 // Browsers only allow sound after a tap, so the audio context is created from buttons the user presses (rest timer, Test alert).
 function unlockAudio() {
   try {
+    if (audioContext && audioContext.state === 'closed') audioContext = null;
     audioContext = audioContext || new (window.AudioContext || window.webkitAudioContext)();
-    if (audioContext.state === 'suspended') audioContext.resume();
+    wakeAudio();
   } catch (error) {
     audioContext = null;
   }
+}
+
+// Sound that is not running plays nothing until it is resumed. Besides 'suspended', Safari has an 'interrupted' state of
+// its own, which an iPhone puts the sound in when the screen locks, a call comes in, or another app takes the audio; left
+// there, every alert after it would be silent.
+function wakeAudio() {
+  if (audioContext && audioContext.state !== 'running') Promise.resolve(audioContext.resume()).catch(() => {});
 }
 
 function setAudioSession(type) {
@@ -80,8 +88,8 @@ function playRestAlert(settings) {
   const throughSilent = canPlayThroughSilent && settings.playThroughSilent !== false;
   clearTimeout(audioReleaseTimer);
   if (throughSilent) setAudioSession('playback');
-  // Tones scheduled while the sound is suspended wait for it, and play as soon as it resumes.
-  if (audioContext.state === 'suspended') Promise.resolve(audioContext.resume()).catch(() => {});
+  // Tones scheduled while the sound is suspended (or interrupted) wait for it, and play as soon as it resumes.
+  wakeAudio();
   scheduleTones(tones, level);
   if (throughSilent) {
     const length = Math.max(...tones.map(note => note.at + note.length)) + 0.3;

@@ -78,6 +78,33 @@ def run(t):
     check('re-acquires it when the page is visible again', cdp.ev('window.__lock.requests') == 2, cdp.ev('window.__lock.requests'))
     end_workout()
     check('releases it when the workout ends', cdp.ev('window.__lock.releases') == 2, cdp.ev('window.__lock.releases'))
+    check('and says nothing about the screen while it can keep it on', cdp.ev("document.getElementById('screenAwakeNotice').hidden") is True)
+
+    print('W2  where the screen cannot be kept on, the workout says so')
+    NOTICE = "document.getElementById('screenAwakeNotice')"
+    # A plain http:// address, as a server on the local network is: no Wake Lock API, and not a secure context.
+    plain_http = cdp.send('Page.addScriptToEvaluateOnNewDocument', source="""
+      delete Navigator.prototype.wakeLock;
+      Object.defineProperty(window, 'isSecureContext', { configurable: true, get: () => false });""")['result']['identifier']
+    open_tracker()
+    check('nothing is said before a workout starts', cdp.ev(f'{NOTICE}.hidden') is True)
+    start(0)
+    cdp.pause(0.4)
+    check('during one, it says a locked phone cannot sound the rest alert', cdp.ev(f'!{NOTICE}.hidden') is True
+          and 'locked phone cannot sound the rest alert' in cdp.ev(f'{NOTICE}.textContent'), cdp.ev(f'{NOTICE}.textContent'))
+    check('why: a plain http:// address, and what to do about it', all(words in cdp.ev(f'{NOTICE}.textContent') for words in ('http://', 'Auto-Lock', 'HTTPS')),
+          cdp.ev(f'{NOTICE}.textContent'))
+    end_workout()
+    check('and it goes when the workout ends', cdp.ev(f'{NOTICE}.hidden') is True)
+    cdp.send('Page.removeScriptToEvaluateOnNewDocument', identifier=plain_http)
+    open_tracker()
+    cdp.ev("Object.defineProperty(navigator, 'wakeLock', { configurable: true, value: { request: async () => { throw new DOMException('no', 'NotAllowedError'); } } })")
+    start(0)
+    cdp.pause(0.4)
+    check('a browser that refuses the lock over HTTPS gets the note too, without the http:// advice', cdp.ev(f'!{NOTICE}.hidden') is True
+          and 'http://' not in cdp.ev(f'{NOTICE}.textContent') and 'locked phone' in cdp.ev(f'{NOTICE}.textContent'), cdp.ev(f'{NOTICE}.textContent'))
+    end_workout()
+    check('which goes with the workout as well', cdp.ev(f'{NOTICE}.hidden') is True)
 
     # ------------------------------------------------------------------ offline
     print('P1  sets logged while the server is unreachable')

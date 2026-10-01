@@ -104,19 +104,37 @@ function startRestTimer() {
 // Keeps the screen awake during a workout so the timer can alert you; the browser drops the lock whenever the page is hidden.
 async function syncWakeLock() {
   const wanted = Boolean(activeSession) && !document.hidden && 'wakeLock' in navigator;
+  if (!('wakeLock' in navigator)) showScreenAwakeNotice(Boolean(activeSession));
   if (wanted && !wakeLock && !wakeLockRequesting) {
     wakeLockRequesting = true;
     try {
       wakeLock = await navigator.wakeLock.request('screen');
       wakeLock.addEventListener('release', () => { wakeLock = null; });
+      showScreenAwakeNotice(false);
     } catch (error) {
       console.error('Unable to keep the screen awake.', error);
+      showScreenAwakeNotice(true);
     } finally {
       wakeLockRequesting = false;
     }
   } else if (!wanted && wakeLock) {
     await wakeLock.release();
   }
+  if (!activeSession) showScreenAwakeNotice(false);
+}
+
+// A page cannot run while the phone is locked, so a rest that outlasts the phone's auto-lock ends in silence. When the
+// screen cannot be kept on, the workout says so. Browsers only offer it over HTTPS (or on localhost), which a server
+// reached at a plain http:// address is not.
+function showScreenAwakeNotice(show) {
+  const notice = $('screenAwakeNotice');
+  if (show) {
+    notice.textContent = window.isSecureContext
+      ? 'This browser will not keep the screen on, and a locked phone cannot sound the rest alert. Keep the screen awake while you rest.'
+      : 'Over a plain http:// address the app cannot keep the screen on, and a locked phone cannot sound the rest alert. '
+        + 'Keep the screen awake while you rest (on an iPhone, set Auto-Lock to Never while you train), or reach the app over HTTPS, where it does this itself.';
+  }
+  notice.hidden = !show;
 }
 
 // ---- Timed exercises --------------------------------------------------------
@@ -191,6 +209,8 @@ $('restAdjust').onclick = e => {
 };
 
 document.addEventListener('visibilitychange', () => {
+  // Back from a locked screen or another app, an iPhone's sound is interrupted; it is woken before the rest catches up.
+  if (!document.hidden) wakeAudio();
   if (!document.hidden && restInterval) tickRest();
   if (!document.hidden && holdInterval) tickHold();
   syncWakeLock();

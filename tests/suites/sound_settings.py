@@ -211,3 +211,20 @@ def run(t):
     open_settings()
     check('and kept when the page opens again', cdp.ev("document.getElementById('silentSetting').checked") is False)
     cdp.send('Page.removeScriptToEvaluateOnNewDocument', identifier=session)
+
+    print('S9  sound an iPhone interrupted (a locked screen, a call) is woken, not left silent')
+    open_settings()
+    cdp.ev(STUBS)
+    cdp.ev("""window.__resumes = 0;
+      const resume = AudioContext.prototype.resume; AudioContext.prototype.resume = function () { window.__resumes++; return resume.call(this); };""")
+    test_alert()
+    # Safari's own state: Chrome never reports it, so the context is made to.
+    cdp.ev("Object.defineProperty(audioContext, 'state', { configurable: true, get: () => 'interrupted' }); window.__resumes = 0")
+    c = test_alert()
+    check('an alert while interrupted asks for the sound back, and still plays its tones', cdp.ev('window.__resumes') >= 1 and c['osc'] == 2,
+          f"{cdp.ev('window.__resumes')} {c}")
+    cdp.ev("window.__resumes = 0; document.dispatchEvent(new Event('visibilitychange'))")
+    check('so does coming back to the page, before any alert', cdp.ev('window.__resumes') >= 1, cdp.ev('window.__resumes'))
+    cdp.ev("window.__closed = audioContext; Object.defineProperty(audioContext, 'state', { configurable: true, get: () => 'closed' })")
+    c = test_alert()
+    check('sound the browser has closed is started afresh', cdp.ev('audioContext !== window.__closed') is True and c['osc'] == 2, str(c))

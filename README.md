@@ -94,7 +94,13 @@ own workouts, templates, and settings.
   End rest skips what is left of it, and the screen flashes green, softly and once, when a rest is over,
   whether it ran out or you ended it (not with reduced motion on).
 - Keep accurate rest time even when the screen locks or the tab is in the background; the timer alerts you with a sound and vibration when rest is over (configurable in Settings).
-- Keep the screen awake during a workout (on browsers that support it).
+- Keep the screen awake during a workout (on browsers that support it). A page cannot run while the phone is
+  locked, so a rest that outlasts the phone's auto-lock ends without its alert; the time is still right when you
+  look again. Browsers only keep the screen on over HTTPS (or `localhost`), so at a plain `http://` address, as a
+  server on your network usually is, the workout says so: set the phone's Auto-Lock to Never while you train, or
+  put the app behind HTTPS (see [Offline support needs HTTPS](#offline-support-needs-https)).
+- On an iPhone, sound the phone paused (a locked screen, a call, another app taking the audio) is started again
+  before the next alert, rather than leaving every alert after it silent.
 - Move to the next exercise with the rest timer reset to that exercise's rest.
 - Timed exercises, such as a plank or a dead hang, are held for seconds rather than done for reps. The
   built-in plank is one, and a template exercise or one added mid-workout can be marked Timed. Its set
