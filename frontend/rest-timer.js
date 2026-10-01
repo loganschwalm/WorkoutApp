@@ -105,7 +105,8 @@ function startRestTimer() {
 // hidden. Where it has no Wake Lock to give (any page at a plain http:// address), or refuses one, a silent video does
 // the job instead, unless Settings turns that off.
 async function syncWakeLock() {
-  const onScreen = Boolean(activeSession) && !document.hidden;
+  // The server's settings can arrive (settingschange) before script.js, which declares activeSession, has run.
+  const onScreen = typeof activeSession !== 'undefined' && Boolean(activeSession) && !document.hidden;
   if (!('wakeLock' in navigator)) {
     keepAwakeInstead(onScreen);
     return;
