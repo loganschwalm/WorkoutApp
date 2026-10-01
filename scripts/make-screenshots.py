@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate the README screenshots in docs/screenshots/.
+"""Regenerate the screenshots in docs/screenshots/, which README.md and readme-for-llm.md show.
 
 Starts the real server on a throwaway database, fills it with six weeks of demo
 training, and captures the pages with the same headless Chrome the tests use:

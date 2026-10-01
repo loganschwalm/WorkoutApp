@@ -14,7 +14,7 @@ services:
       ALLOW_REGISTRATION: "1"
       # Mail server for "Forgot password?" emails. Without SMTP_HOST, reset passwords from the command line:
       #   docker compose exec workout-tracker python /app/server.py reset-password <username>
-      # See "Password reset emails" in the README.
+      # See "Password reset emails" in README.md (the full detail is in readme-for-llm.md).
       # SMTP_HOST: smtp.gmail.com
       # SMTP_USERNAME: you@gmail.com
       # SMTP_PASSWORD: your-app-password
