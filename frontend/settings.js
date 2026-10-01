@@ -1,7 +1,8 @@
 let legacyTheme = null;
 try { legacyTheme = localStorage.getItem('workout-tracker-theme'); } catch (error) { /* no storage: follow the device */ }
 // Appearance: 'system' follows the device's light or dark mode; 'light' and 'dark' fix it.
-const themeChoices = ['system', 'light', 'dark'];
+// Match system, or one of the themes theme.js knows. A page without theme.js (an old one, from the cache) has light and dark.
+const themeChoices = ['system', ...Object.keys(window.colorThemes || { light:'light', dark:'dark' })];
 const defaultSettings = { theme:themeChoices.includes(legacyTheme) ? legacyTheme : 'system', restDuration:90, weeklyGoal:3, unit:'lbs', autoRest:true, confirmEnd:true, soundEnabled:true, soundVolume:40, alertSound:'beep', vibrate:true, playThroughSilent:true, trackEffort:true, warmupSets:true,
   barLbs:45, barKg:20, platesLbs:[45, 35, 25, 10, 5, 2.5, 1.25], platesKg:[25, 20, 15, 10, 5, 2.5, 1.25], stepLbs:5, stepKg:2.5 };
 const getSettingElement = id => document.getElementById(id);
@@ -186,7 +187,7 @@ function readSettingsForm() {
   const soundVolume = Math.min(100, Math.max(0, Number(getSettingElement('soundVolumeSetting').value) || 0));
   const weeklyGoal = weeklyGoalFrom(getSettingElement('weeklyGoalSetting').value);
   const unit = getSettingElement('unitSetting').value === 'kg' ? 'kg' : 'lbs';
-  return { theme:getSettingElement('themeSetting').value, unit, restDuration, weeklyGoal, autoRest:getSettingElement('autoRestSetting').checked, confirmEnd:getSettingElement('confirmEndSetting').checked, trackEffort:getSettingElement('effortSetting').checked, warmupSets:getSettingElement('warmupSetting').checked, soundEnabled:getSettingElement('soundEnabledSetting').checked, soundVolume, alertSound:getSettingElement('alertSoundSetting').value, vibrate:getSettingElement('vibrateSetting').checked, playThroughSilent:getSettingElement('silentSetting').checked,
+  return { theme:getSettingElement('themeSetting').querySelector('input[name=theme]:checked')?.value || 'system', unit, restDuration, weeklyGoal, autoRest:getSettingElement('autoRestSetting').checked, confirmEnd:getSettingElement('confirmEndSetting').checked, trackEffort:getSettingElement('effortSetting').checked, warmupSets:getSettingElement('warmupSetting').checked, soundEnabled:getSettingElement('soundEnabledSetting').checked, soundVolume, alertSound:getSettingElement('alertSoundSetting').value, vibrate:getSettingElement('vibrateSetting').checked, playThroughSilent:getSettingElement('silentSetting').checked,
     ...readEquipmentFields(getWorkoutSettings()) };
 }
 
@@ -210,7 +211,8 @@ function applySettings(settings) {
   // cache for one load after an update) lacks it, and just gets light or dark.
   if (window.setColorTheme) window.setColorTheme(settings.theme);
   else document.documentElement.dataset.theme = settings.theme === 'dark' ? 'dark' : 'light';
-  getSettingElement('themeSetting').value = themeChoices.includes(settings.theme) ? settings.theme : 'system';
+  const theme = themeChoices.includes(settings.theme) ? settings.theme : 'system';
+  getSettingElement('themeSetting').querySelectorAll('input[name=theme]').forEach(input => { input.checked = input.value === theme; });
   getSettingElement('unitSetting').value = settings.unit === 'kg' ? 'kg' : 'lbs';
   getSettingElement('restDurationSetting').value = settings.restDuration;
   getSettingElement('weeklyGoalSetting').value = String(weeklyGoalFrom(settings.weeklyGoal));
@@ -363,7 +365,7 @@ function openSettings() {
   showAccount();
   getSettingElement('dataStatus').hidden = true;
   getSettingElement('settingsModal').hidden = false;
-  getSettingElement('themeSetting').focus();
+  getSettingElement('themeSetting').querySelector('input[name=theme]:checked').focus();
 }
 
 window.getWorkoutSettings = getWorkoutSettings;

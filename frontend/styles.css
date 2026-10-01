@@ -4,21 +4,47 @@
   unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
 @font-face { font-family:Inter; font-style:normal; font-weight:100 900; font-display:swap; src:url(fonts/inter-latin-ext.woff2) format("woff2");
   unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
-:root { --bg:#f4f7fb; --card:#fff; --ink:#172033; --muted:#687386; --accent:#5b5ce2; --line:#e3e8f0; --tab-bar:0px; }
-html[data-theme="dark"] { color-scheme:dark; --bg:#151923; --card:#202532; --ink:#edf1fa; --muted:#aab4c7; --accent:#8183f4; --line:#353d4e; }
+/* Colour themes. Every colour that changes with the theme is one of these variables: the page and card (--bg, --card,
+   --sunk for panels set into a card), text (--ink, --muted), lines, the accent and what goes on it (--on-accent), a
+   tint of it for chosen and secondary things (--accent-soft, --accent-line), the focus ring, and the glow the page's
+   background starts from. theme.js sets data-palette on <html> to the chosen theme, and data-theme to light or dark,
+   which the rules further down that differ in the dark (warnings, successes) go by. Each block also colours the
+   previews in Settings, which carry a data-palette of their own. */
+:root, [data-palette="light"] { --bg:#f4f7fb; --card:#fff; --ink:#172033; --muted:#687386; --accent:#5b5ce2; --line:#e3e8f0; --on-accent:#fff;
+  --accent-soft:var(--accent-soft); --accent-line:#c9caf6; --accent-ring:#5b5ce21f; --sunk:var(--sunk); --glow:#eef1ff; }
+:root { --tab-bar:0px; }
+[data-theme="dark"], [data-palette="dark"] { color-scheme:dark; --bg:#151923; --card:#202532; --ink:#edf1fa; --muted:#aab4c7; --accent:#8183f4; --line:#353d4e; --on-accent:#fff;
+  --accent-soft:#303653; --accent-line:#4a4f86; --accent-ring:#8183f42e; --sunk:#171c27; --glow:#252b42; }
+/* Light themes. */
+[data-palette="sunrise"] { --bg:#fbf5ef; --card:#fffdfb; --ink:#2b1d16; --muted:#7d6659; --accent:#cf4f25; --line:#efe1d4; --on-accent:#fff;
+  --accent-soft:#fde8de; --accent-line:#f2c2ad; --accent-ring:#cf4f2524; --sunk:#fcf6f1; --glow:#ffe6d6; }
+[data-palette="meadow"] { --bg:#f2f7f3; --card:#fff; --ink:#15281d; --muted:#5d7266; --accent:#23805a; --line:#dde9e1; --on-accent:#fff;
+  --accent-soft:#e2f2e8; --accent-line:#b5dcc4; --accent-ring:#23805a24; --sunk:#f6faf7; --glow:#dff2e5; }
+[data-palette="blossom"] { --bg:#fbf3f6; --card:#fff; --ink:#2d1622; --muted:#7c6270; --accent:#c23a78; --line:#f0dfe7; --on-accent:#fff;
+  --accent-soft:#fbe5ef; --accent-line:#f0bcd3; --accent-ring:#c23a7824; --sunk:#fdf7fa; --glow:#fde1ed; }
+/* Dark themes, most of them on black. A bright accent takes dark text, which white on it would be hard to read. */
+[data-palette="crimson"] { --bg:#0c0c0e; --card:#17171b; --ink:#f3f3f5; --muted:#a6a6b0; --accent:#ef4444; --line:#2a2a30; --on-accent:#fff;
+  --accent-soft:#3a1a1e; --accent-line:#6b2a31; --accent-ring:#ef444438; --sunk:#111114; --glow:#2a1316; }
+[data-palette="emerald"] { --bg:#0b0e0c; --card:#151a17; --ink:#eef5f0; --muted:#9fb0a5; --accent:#34d399; --line:#25302a; --on-accent:#052e1f;
+  --accent-soft:#12352a; --accent-line:#1f6b4f; --accent-ring:#34d39938; --sunk:#0f1311; --glow:#10261d; }
+[data-palette="ocean"] { --bg:#0a1220; --card:#101c2f; --ink:#e8f1fb; --muted:#9db0c8; --accent:#38bdf8; --line:#1f3150; --on-accent:#03243a;
+  --accent-soft:#12324d; --accent-line:#1d5b83; --accent-ring:#38bdf838; --sunk:#0c1626; --glow:#0f2a45; }
+[data-palette="gold"] { --bg:#0e0d0a; --card:#1a1813; --ink:#f6f2e8; --muted:#b3aa96; --accent:#f5b72f; --line:#2f2b22; --on-accent:#251a00;
+  --accent-soft:#3a2f12; --accent-line:#6e5820; --accent-ring:#f5b72f38; --sunk:#13120e; --glow:#2a220e; }
+[data-palette="violet"] { --bg:#110c1c; --card:#1b1429; --ink:#f1ecfa; --muted:#ada3c2; --accent:#b98cff; --line:#2e2442; --on-accent:#1d0b3a;
+  --accent-soft:#2f2150; --accent-line:#55408a; --accent-ring:#b98cff38; --sunk:#150f22; --glow:#2a1a4a; }
 * { box-sizing:border-box; }
 /* The hidden attribute always wins. A class that sets display (flex, grid) would otherwise override it and
    leave the element showing, as it did for the rest timer and the empty-chart message. */
 [hidden] { display:none !important; }
-body { margin:0; min-height:100vh; font-family:Inter,system-ui,-apple-system,sans-serif; color:var(--ink); background:linear-gradient(135deg,#eef1ff,var(--bg) 45%); transition:background .2s,color .2s; }
-html[data-theme="dark"] body { background:linear-gradient(135deg,#252b42,var(--bg) 45%); }
+body { margin:0; min-height:100vh; font-family:Inter,system-ui,-apple-system,sans-serif; color:var(--ink); background:linear-gradient(135deg,var(--glow),var(--bg) 45%); transition:background .2s,color .2s; }
 .shell { width:min(960px,calc(100% - 32px)); margin:0 auto; padding:42px 0 60px; }
 .auth-shell { width:min(440px,calc(100% - 32px)); margin:0 auto; padding:12vh 0; }
 .auth-card h1 { font-size:2rem; margin:0; }
 .auth-tabs { display:flex; gap:8px; margin:24px 0; }
 .auth-tabs button { flex:1; }
 /* Specific enough to beat the dark theme's .secondary background, which would otherwise hide which tab is chosen. */
-.auth-tabs button.secondary.active { color:#fff; background:var(--accent); }
+.auth-tabs button.secondary.active { color:var(--on-accent); background:var(--accent); }
 .auth-card form { display:grid; gap:8px; }
 .auth-card form label { margin-top:8px; }
 .auth-card form h2 { margin:24px 0 0; }
@@ -35,8 +61,7 @@ header { display:flex; justify-content:space-between; align-items:flex-end; gap:
 .form-feedback.success { color:#22634c; background:#edf9f2; border-color:#b9e3ca; }
 html[data-theme="dark"] .form-feedback { color:#ffb1ba; background:#482934; border-color:#6d3b49; }
 html[data-theme="dark"] .form-feedback.success { color:#a5e5c2; background:#193b2d; border-color:#2f654b; }
-.form-feedback.info { color:var(--ink); background:#eef0ff; border-color:#d5d9fb; }
-html[data-theme="dark"] .form-feedback.info { color:var(--ink); background:#2b3150; border-color:#3d4570; }
+.form-feedback.info { color:var(--ink); background:var(--accent-soft); border-color:var(--accent-line); }
 .feedback-action { margin-left:6px; padding:4px 12px; color:inherit; background:transparent; border:1px solid currentColor; border-radius:8px; font-weight:800; }
 #formFeedback { cursor:pointer; }
 #formFeedback::after { content:"\00d7"; float:right; margin-left:12px; font-size:1.25rem; line-height:1; opacity:.6; }
@@ -57,16 +82,15 @@ h2 { font-size:1.25rem; margin:0 0 20px; }
 .workout-field { flex:1; }
 input, select { width:100%; border:1px solid var(--line); border-radius:10px; padding:12px 13px; color:var(--ink); background:var(--card); font:inherit; outline:none; }
 textarea { width:100%; resize:vertical; border:1px solid var(--line); border-radius:10px; padding:12px 13px; color:var(--ink); background:var(--card); font:inherit; outline:none; }
-input:focus, select:focus { border-color:var(--accent); box-shadow:0 0 0 3px #5b5ce21f; }
-textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px #5b5ce21f; }
+input:focus, select:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-ring); }
+textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-ring); }
 input[aria-invalid="true"] { border-color:#c14b5a; box-shadow:0 0 0 3px #c14b5a1f; }
 .grid { display:grid; grid-template-columns:2fr 1fr 1fr auto; gap:12px; align-items:end; }
 label { display:block; color:var(--muted); font-size:.78rem; font-weight:700; margin:0 0 7px; }
 /* The font shorthand cannot mix "inherit" with a size and weight (the browser drops the whole declaration, leaving
    buttons in its own default font), so the family is inherited first and the rest set after it. */
 button { border:0; border-radius:10px; padding:12px 17px; cursor:pointer; font:inherit; font-size:.92rem; font-weight:700; transition:transform .15s,opacity .15s; }
-button:hover { transform:translateY(-1px); } .primary { color:#fff; background:var(--accent); } .secondary { color:var(--accent); background:#eef0ff; }
-html[data-theme="dark"] .secondary { background:#303653; }
+button:hover { transform:translateY(-1px); } .primary { color:var(--on-accent); background:var(--accent); } .secondary { color:var(--accent); background:var(--accent-soft); }
 .exercise-list { margin:22px 0 0; padding:0; list-style:none; }
 .exercise { display:grid; grid-template-columns:1fr 90px 90px auto; gap:12px; align-items:center; padding:13px 0; border-top:1px solid var(--line); }
 .exercise-edit { padding:9px 10px; }
@@ -106,8 +130,7 @@ html[data-theme="dark"] .row-menu-items .danger { color:#ff9eaa; }
 .recent-workout span { color:var(--muted); font-size:.85rem; }
 .recent-workout button { flex-shrink:0; padding:9px 18px; }
 .template-area-actions { display:flex; justify-content:flex-end; margin-top:14px; }
-.workout-details { margin-top:14px; padding:14px; background:#f8f9fd; border-radius:10px; }
-html[data-theme="dark"] .workout-details { background:#171c27; }
+.workout-details { margin-top:14px; padding:14px; background:var(--sunk); border-radius:10px; }
 .workout-details ul { margin:0; padding:0; list-style:none; }
 .workout-details li { display:flex; justify-content:space-between; gap:16px; padding:8px 0; border-bottom:1px solid var(--line); }
 .workout-details li:last-child { border-bottom:0; }
@@ -124,15 +147,14 @@ html[data-theme="dark"] .danger, html[data-theme="dark"] .remove { color:#ff9eaa
 .plate-hint { margin:10px 0 0; color:var(--muted); font-size:.88rem; }
 /* The plates for each side of the bar, each drawn to its size. */
 .plates { display:inline-flex; align-items:center; gap:3px; margin-left:4px; vertical-align:middle; }
-.plate { display:inline-grid; place-items:center; min-width:22px; padding:0 4px; color:#fff; background:var(--accent); border-radius:4px; font-size:.7rem; font-weight:800; line-height:1; }
+.plate { display:inline-grid; place-items:center; min-width:22px; padding:0 4px; color:var(--on-accent); background:var(--accent); border-radius:4px; font-size:.7rem; font-weight:800; line-height:1; }
 .plate-size-0 { height:36px; } .plate-size-1 { height:32px; } .plate-size-2 { height:28px; } .plate-size-3 { height:24px; }
 .plate-size-4 { height:20px; opacity:.85; } .plate-size-5 { height:18px; opacity:.75; } .plate-size-6 { height:16px; min-width:18px; opacity:.65; }
 .plate-size-7 { height:15px; min-width:17px; opacity:.6; } .plate-size-8 { height:14px; min-width:16px; opacity:.55; } .plate-size-9 { height:13px; min-width:15px; opacity:.5; }
 .visually-hidden { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
 .notes-input { margin-top:12px; }
 .set-list { display:grid; gap:8px; margin:18px 0 0; padding:0; list-style:none; }
-.set-list li { display:grid; grid-template-columns:3.4rem minmax(0,1fr) minmax(0,1fr) auto; align-items:center; gap:10px; padding:8px 11px; background:#f8f9fd; border:1px solid var(--line); border-radius:8px; }
-html[data-theme="dark"] .set-list li { background:#171c27; }
+.set-list li { display:grid; grid-template-columns:3.4rem minmax(0,1fr) minmax(0,1fr) auto; align-items:center; gap:10px; padding:8px 11px; background:var(--sunk); border:1px solid var(--line); border-radius:8px; }
 .set-number { color:var(--muted); font-size:.85rem; font-weight:700; }
 .set-field { display:flex; align-items:center; gap:6px; color:var(--muted); font-size:.85rem; }
 .set-edit { min-width:0; padding:8px 9px; }
@@ -170,8 +192,7 @@ html[data-theme="dark"] .link-button.danger-link { color:#ff9eaa; }
 .data-section .subtitle, .data-section .auth-feedback { margin:0; }
 .data-actions { display:flex; flex-wrap:wrap; gap:8px; }
 .account-editor-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:6px; }
-.rest-panel { position:sticky; top:12px; bottom:calc(12px + var(--tab-bar)); z-index:4; display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:16px; padding:10px 10px 10px 16px; background:#eef0ff; border-radius:12px; box-shadow:0 8px 22px rgba(36,48,90,.12); }
-html[data-theme="dark"] .rest-panel { background:#303653; }
+.rest-panel { position:sticky; top:12px; bottom:calc(12px + var(--tab-bar)); z-index:4; display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:16px; padding:10px 10px 10px 16px; background:var(--accent-soft); border-radius:12px; box-shadow:0 8px 22px rgba(36,48,90,.12); }
 .rest-time { display:flex; align-items:baseline; gap:10px; }
 .rest-time span { color:var(--accent); font-size:1.5rem; font-weight:800; font-variant-numeric:tabular-nums; }
 .rest-actions { display:flex; gap:8px; margin-left:auto; }
@@ -201,24 +222,20 @@ html[data-theme="dark"] .rest-panel { background:#303653; }
 .template-exercise-row .template-row-actions { display:flex; gap:4px; }
 .template-exercise-row button { width:32px; height:42px; padding:0; }
 .template-modal { max-height:min(720px,90vh); overflow:auto; }
-.badge { display:inline-block; padding:3px 8px; color:var(--accent); background:#eef0ff; border-radius:999px; font-size:.7rem; font-weight:800; letter-spacing:.04em; text-transform:uppercase; white-space:nowrap; }
-html[data-theme="dark"] .badge { background:#303653; }
+.badge { display:inline-block; padding:3px 8px; color:var(--accent); background:var(--accent-soft); border-radius:999px; font-size:.7rem; font-weight:800; letter-spacing:.04em; text-transform:uppercase; white-space:nowrap; }
 .template-card-heading { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:6px; }
 .template-card-heading h3 { margin:0; }
-.program-template { border-color:#c9caf6; }
-html[data-theme="dark"] .program-template { border-color:#4a4f86; }
+.program-template { border-color:var(--accent-line); }
 .template-card p.program-schedule { margin-top:8px; color:var(--accent); font-weight:700; }
 .plan-sets { display:flex; flex-wrap:wrap; gap:6px; margin:12px 0 0; padding:0; list-style:none; }
 .plan-sets li { padding:5px 10px; color:var(--muted); border:1px solid var(--line); border-radius:999px; font-size:.82rem; font-weight:700; }
 .plan-sets li.done { color:#22634c; background:#edf9f2; border-color:#b9e3ca; }
 .plan-sets li.done::before { content:"\2713\00a0"; }
-.plan-sets li.current { color:var(--accent); background:#eef0ff; border-color:var(--accent); }
+.plan-sets li.current { color:var(--accent); background:var(--accent-soft); border-color:var(--accent); }
 html[data-theme="dark"] .plan-sets li.done { color:#a5e5c2; background:#193b2d; border-color:#2f654b; }
-html[data-theme="dark"] .plan-sets li.current { background:#303653; }
 .program-notice { margin:0 0 16px; padding:12px 14px; color:#22634c; background:#edf9f2; border:1px solid #b9e3ca; border-radius:10px; font-size:.9rem; }
 html[data-theme="dark"] .program-notice { color:#a5e5c2; background:#193b2d; border-color:#2f654b; }
-.program-next { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:16px; background:#eef0ff; border-radius:12px; }
-html[data-theme="dark"] .program-next { background:#303653; }
+.program-next { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:16px; background:var(--accent-soft); border-radius:12px; }
 .program-kicker { color:var(--accent); font-size:.75rem; font-weight:800; letter-spacing:.04em; text-transform:uppercase; }
 .program-next strong { display:block; margin-top:4px; font-size:1.1rem; }
 .program-next ul { margin:8px 0 0; padding:0; list-style:none; color:var(--muted); font-size:.88rem; line-height:1.6; }
@@ -239,8 +256,7 @@ html[data-theme="dark"] .program-maxes small.warn { color:#ff9eaa; }
 .program-days { padding-top:8px; border-top:1px solid var(--line); }
 .program-day { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:10px 12px; border-radius:10px; }
 .program-day + .program-day { margin-top:4px; }
-.program-day.next { background:#f8f9fd; }
-html[data-theme="dark"] .program-day.next { background:#171c27; }
+.program-day.next { background:var(--sunk); }
 .program-day strong { display:block; font-size:.92rem; }
 .program-day > div:first-child span { display:block; margin-top:2px; color:var(--muted); font-size:.85rem; }
 .program-day button { padding:8px 12px; font-size:.8rem; }
@@ -258,8 +274,7 @@ html[data-theme="dark"] .program-status.missed { color:#ff9eaa; }
 .program-option label { margin:8px 0 0; }
 .program-modal .setting-check { margin-top:6px; }
 .progress-card h2 { margin-bottom:5px; }
-.progress-filters { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px; align-items:end; margin-top:22px; padding:16px; background:#f8f9fd; border:1px solid var(--line); border-radius:12px; }
-html[data-theme="dark"] .progress-filters { background:#171c27; }
+.progress-filters { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px; align-items:end; margin-top:22px; padding:16px; background:var(--sunk); border:1px solid var(--line); border-radius:12px; }
 .progress-filters button { justify-self:start; white-space:nowrap; }
 .chart-shell { position:relative; min-height:360px; margin-top:22px; }
 #progressChart { display:block; width:100%; height:360px; }
@@ -282,6 +297,19 @@ html[data-theme="dark"] .progress-filters { background:#171c27; }
 .modal-close { width:34px; height:34px; padding:0; color:var(--muted); background:transparent; font-size:1.5rem; line-height:1; }
 .settings-modal form { display:grid; gap:8px; }
 .settings-modal form > label:not(.setting-check) { margin-top:8px; }
+/* Appearance: a swatch for each theme, its preview drawn in the theme's own colours (a data-palette of its own), the
+   name in the page's. The radio itself is invisible but still takes the focus and the arrow keys. */
+.theme-picker { display:grid; grid-template-columns:repeat(auto-fill,minmax(86px,1fr)); gap:10px; margin:8px 0 0; padding:0; border:0; }
+.theme-picker legend { margin:0 0 7px; padding:0; color:var(--muted); font-size:.78rem; font-weight:700; }
+.theme-swatch { position:relative; display:grid; gap:6px; color:var(--muted); font-size:.8rem; font-weight:600; text-align:center; cursor:pointer; }
+.theme-swatch input { position:absolute; width:1px; height:1px; margin:0; opacity:0; }
+.theme-preview { display:flex; height:52px; overflow:hidden; border:2px solid var(--line); border-radius:12px; }
+.theme-preview > span { position:relative; flex:1; background:linear-gradient(135deg,var(--glow),var(--bg) 60%); }
+.theme-preview > span::before { content:""; position:absolute; left:8px; right:8px; top:8px; height:10px; background:var(--card); border:1px solid var(--line); border-radius:4px; }
+.theme-preview > span::after { content:""; position:absolute; left:8px; bottom:8px; width:26px; height:12px; background:var(--accent); border-radius:999px; }
+.theme-swatch input:checked + .theme-preview { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-ring); }
+.theme-swatch input:checked ~ .theme-name { color:var(--ink); }
+.theme-swatch input:focus-visible + .theme-preview { outline:2px solid var(--accent); outline-offset:2px; }
 .setting-check { display:flex; align-items:flex-start; gap:9px; margin-top:12px; color:var(--muted); font-size:.9rem; line-height:1.4; }
 .setting-check input { width:auto; margin:2px 0 0; }
 input[type="range"] { padding:0; border:0; background:transparent; accent-color:var(--accent); }
@@ -333,8 +361,7 @@ body.training:not(.showing-all) .between-workouts { display:none; }
 .exercise-jump { display:grid; gap:2px; margin:0 0 16px; padding:6px; list-style:none; border:1px solid var(--line); border-radius:12px; }
 .exercise-jump button { display:flex; justify-content:space-between; align-items:baseline; gap:12px; width:100%; padding:10px 12px; color:var(--ink); background:none; font-weight:600; text-align:left; }
 .exercise-jump button:hover { background:var(--bg); transform:none; }
-.exercise-jump button[aria-current] { color:var(--accent); background:#eef0ff; }
-html[data-theme="dark"] .exercise-jump button[aria-current] { background:#303653; }
+.exercise-jump button[aria-current] { color:var(--accent); background:var(--accent-soft); }
 .exercise-jump .jump-sets { flex:none; color:var(--muted); font-size:.85rem; font-weight:400; }
 .exercise-jump .done .jump-sets::before { content:"\2713\00a0"; color:#22634c; }
 html[data-theme="dark"] .exercise-jump .done .jump-sets::before { color:#a5e5c2; }
@@ -348,8 +375,7 @@ html[data-theme="dark"] .exercise-jump .done .jump-sets::before { color:#a5e5c2;
 .swap-panel .subtitle { margin:10px 0 0; font-size:.85rem; line-height:1.45; }
 /* A timed exercise's hold: the seconds counting down, and the button to start or stop them. */
 .hold-timer { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:12px; padding:10px 10px 10px 16px; border:1px solid var(--line); border-radius:12px; }
-.hold-timer.running { background:#eef0ff; border-color:var(--accent); }
-html[data-theme="dark"] .hold-timer.running { background:#303653; }
+.hold-timer.running { background:var(--accent-soft); border-color:var(--accent); }
 .hold-time { display:flex; align-items:baseline; gap:10px; }
 .hold-time span { color:var(--accent); font-size:1.5rem; font-weight:800; font-variant-numeric:tabular-nums; }
 .hold-timer button { padding:9px 16px; }
@@ -372,8 +398,7 @@ html[data-theme="dark"] .exercise-note { background:#3a3122; }
 .note-actions { display:flex; gap:8px; margin-top:8px; }
 .superset-line { margin:0 0 6px; color:var(--accent); font-weight:600; }
 .active-exercise-heading { align-items:center; }
-.jump-superset { margin-left:4px; padding:1px 6px; color:var(--accent); background:#eef0ff; border-radius:6px; font-size:.75rem; font-weight:600; }
-html[data-theme="dark"] .jump-superset { background:#303653; }
+.jump-superset { margin-left:4px; padding:1px 6px; color:var(--accent); background:var(--accent-soft); border-radius:6px; font-size:.75rem; font-weight:600; }
 /* Go heavier, with a button that fills in the weight. */
 .progression-hint { margin:6px 0 0; color:#22634c; font-size:.9rem; }
 html[data-theme="dark"] .progression-hint { color:#a5e5c2; }
@@ -389,7 +414,7 @@ html[data-theme="dark"] .progression-hint { color:#a5e5c2; }
 .effort-choices span { flex-basis:100%; }
 .effort-choices button { flex:1; max-width:64px; }
 .effort-choices button { min-width:44px; padding:8px 10px; }
-.effort-choices button[aria-pressed="true"] { color:#fff; background:var(--accent); }
+.effort-choices button[aria-pressed="true"] { color:var(--on-accent); background:var(--accent); }
 .set-effort { display:block; color:var(--muted); font-size:.75rem; font-weight:400; }
 .template-exercise-row .template-superset { grid-column:1 / -1; margin:0; }
 /* Every session of one exercise, on Progress. */
@@ -412,8 +437,7 @@ html[data-theme="dark"] .progression-hint { color:#a5e5c2; }
   .site-nav { position:fixed; left:0; right:0; bottom:0; z-index:8; order:0; width:auto; gap:6px; height:calc(var(--tab-bar) + env(safe-area-inset-bottom));
     padding:8px 12px calc(8px + env(safe-area-inset-bottom)); background:var(--card); border-top:1px solid var(--line); box-shadow:0 -8px 24px rgba(16,21,35,.08); }
   .site-nav a { display:grid; flex:1; place-items:center; padding:0; font-size:.92rem; }
-  .site-nav a.active { color:var(--accent); background:#eef0ff; }
-  html[data-theme="dark"] .site-nav a.active { background:#303653; }
+  .site-nav a.active { color:var(--accent); background:var(--accent-soft); }
   .install-banner { bottom:var(--tab-bar); }
   body.has-install-banner { padding-bottom:calc(96px + var(--tab-bar)); }
 }
@@ -432,10 +456,8 @@ body.has-install-banner .rest-panel { bottom:calc(84px + var(--tab-bar)); }
 .history-month-list { margin:0; padding:0; list-style:none; }
 .row-actions > .button-link { padding:8px 16px; }
 /* A day picked on the calendar marks its workouts for a moment. */
-@keyframes picked { from { background:#e4e6ff; box-shadow:0 0 0 8px #e4e6ff; } to { background:transparent; box-shadow:0 0 0 8px transparent; } }
-@keyframes picked-dark { from { background:#353b63; box-shadow:0 0 0 8px #353b63; } to { background:transparent; box-shadow:0 0 0 8px transparent; } }
+@keyframes picked { from { background:var(--accent-soft); box-shadow:0 0 0 8px var(--accent-soft); } to { background:transparent; box-shadow:0 0 0 8px transparent; } }
 .history-workout.picked { border-radius:6px; animation:picked 2.4s ease-out; }
-html[data-theme="dark"] .history-workout.picked { animation-name:picked-dark; }
 
 /* ---- Condensed: less padding, fewer words, and what is used less folded away ---------------------------------- */
 .card { padding:22px; }

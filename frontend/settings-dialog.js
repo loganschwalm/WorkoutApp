@@ -10,6 +10,15 @@ function accountEditor(id, fields, actions, lead = '') {
 
 const weeklyGoals = [1, 2, 3, 4, 5, 6, 7].map(goal => `<option value="${goal}">${goal} workout${goal === 1 ? '' : 's'} a week</option>`).join('');
 
+// Appearance: Match system, then the light themes, then the dark ones (theme.js says which is which). Each preview is
+// drawn in its theme's colours; Match system shows Light and Dark side by side.
+const themeNames = { system:'Match system', light:'Light', sunrise:'Sunrise', meadow:'Meadow', blossom:'Blossom',
+  dark:'Dark', crimson:'Crimson', emerald:'Emerald', ocean:'Ocean', gold:'Gold', violet:'Violet' };
+const themeSwatches = Object.keys(themeNames).map(id => {
+  const previews = (id === 'system' ? ['light', 'dark'] : [id]).map(palette => `<span data-palette="${palette}"></span>`).join('');
+  return `<label class="theme-swatch"><input type="radio" name="theme" value="${id}" /><span class="theme-preview" aria-hidden="true">${previews}</span><span class="theme-name">${themeNames[id]}</span></label>`;
+}).join('');
+
 document.body.insertAdjacentHTML('beforeend', `
 <div class="modal-backdrop" id="settingsModal" hidden>
   <section class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
@@ -19,10 +28,7 @@ document.body.insertAdjacentHTML('beforeend', `
     </div>
     <form id="settingsForm">
       <h3 class="settings-section">General</h3>
-      <label for="themeSetting">Appearance</label>
-      <select id="themeSetting">
-        <option value="system">Match system</option><option value="light">Light mode</option><option value="dark">Dark mode</option>
-      </select>
+      <fieldset class="theme-picker" id="themeSetting"><legend>Appearance</legend>${themeSwatches}</fieldset>
       <label for="unitSetting">Weight unit</label>
       <select id="unitSetting"><option value="lbs">Pounds (lbs)</option><option value="kg">Kilograms (kg)</option></select>
       <label for="weeklyGoalSetting">Weekly goal</label>

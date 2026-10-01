@@ -1,4 +1,10 @@
 const colors = ['#5b5ce2', '#e26d5c', '#2a9d8f', '#d9912f', '#c25bd8', '#3c8dcc'];
+
+// The first line is drawn in the theme's accent, so the chart matches the colours chosen in Settings.
+function seriesColour(index) {
+  const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+  return index % colors.length === 0 && accent ? accent : colors[index % colors.length];
+}
 let chartData = null;
 let allWorkouts = [];
 // As loaded; allWorkouts is these in the unit shown, and is worked out again when the unit changes.
@@ -148,6 +154,9 @@ function drawChart() {
   context.scale(ratio, ratio);
   context.clearRect(0, 0, width, height);
 
+  // Set through the DOM: the Content-Security-Policy refuses style="" attributes written into markup. Coloured with the
+  // chart, so a change of theme recolours both.
+  $('legend').querySelectorAll('.legend-swatch').forEach((swatch, index) => { swatch.style.background = seriesColour(index); });
   const styles = getComputedStyle(document.documentElement);
   const ink = styles.getPropertyValue('--muted').trim();
   const line = styles.getPropertyValue('--line').trim();
@@ -193,7 +202,7 @@ function drawChart() {
   context.font = '11px Inter, system-ui, sans-serif';
   const latest = [], others = [];
   chartData.types.forEach((type, typeIndex) => {
-    const colour = colors[typeIndex % colors.length];
+    const colour = seriesColour(typeIndex);
     context.strokeStyle = colour;
     context.fillStyle = colour;
     context.lineWidth = 3;
@@ -256,8 +265,6 @@ function renderProgress(workouts) {
       : 'Nothing to chart for these filters.';
   }
   $('legend').innerHTML = chartData.types.map(type => `<div class="legend-item"><span class="legend-swatch"></span><span>${escapeHTML(type.name)}</span></div>`).join('');
-  // Set through the DOM: the Content-Security-Policy refuses style="" attributes written into markup.
-  $('legend').querySelectorAll('.legend-swatch').forEach((swatch, index) => { swatch.style.background = colors[index % colors.length]; });
   $('progressChart').setAttribute('aria-label', describeChart());
   $('chartDetail').textContent = chartData.points.length ? 'Tap a point to see its value.' : '';
   drawChart();

@@ -5,20 +5,18 @@
 // to a LAN address. The app itself works exactly as before; only offline reloads, and
 // installing on Android, need HTTPS (or localhost).
 (() => {
-  const THEME_COLORS = { light: '#f4f7fb', dark: '#151923' };
-
+  // The theme's own page colour, as styles.css gives it.
   function syncThemeColor() {
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (!meta) return;
-    const theme = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
-    meta.setAttribute('content', THEME_COLORS[theme]);
+    const colour = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+    if (meta && colour) meta.setAttribute('content', colour);
   }
 
-  // settings.js sets data-theme on <html>; watching it keeps this decoupled from that,
-  // and works on the login page, which does not load settings.js at all.
+  // theme.js sets data-theme and data-palette on <html>; watching them keeps this decoupled
+  // from that, and works on the login page, which does not load settings.js at all.
   syncThemeColor();
   new MutationObserver(syncThemeColor)
-    .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-palette'] });
 
   if (!('serviceWorker' in navigator) || !window.isSecureContext) return;
 

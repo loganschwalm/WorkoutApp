@@ -176,7 +176,7 @@ works while the page stays loaded, and a reload needs the server.
   on an iPhone or iPad, and an Install button on Android once the browser offers one. Closing it
   hides it for a week; it never shows inside the installed app.
 - The app icon, name, and theme colour come from a web app manifest.
-- The status bar follows the light or dark theme.
+- The status bar follows the colour theme.
 - Reloading offline opens the app from the cache instead of failing.
 
 Offline reloads need HTTPS, or `localhost`, and so does installing on Android. An iPhone or iPad
@@ -380,9 +380,13 @@ button, just Done; closing it any other way (the ×, Escape, or a tap outside) k
 Closing it puts the keyboard focus back on the gear button, as the template and program editors do on
 the button that opened them. Settings include:
 
-- Appearance: match the device's own light or dark mode (the default, which also follows it when it changes
-  while the app is open), or always light, or always dark. Pages open in the right theme straight away, with no
-  flash of the other, and the sign-in page follows it too.
+- Appearance: a swatch for each colour theme, previewed in its own colours. Match system (the default) is Light
+  or Dark as the device's own mode is, and follows it when it changes while the app is open. Besides Light and
+  Dark there are three more light themes, Sunrise (coral on cream), Meadow (green) and Blossom (rose), and five
+  dark ones, Crimson (red on black), Emerald (green on black), Ocean (sky blue on navy), Gold (amber on black)
+  and Violet (lilac on deep purple). Buttons, tints, focus rings, the browser's bar and the Progress chart's first
+  line all take the theme's colours. Pages open in the right theme straight away, with no flash of another, and
+  the sign-in page follows it too.
 - Weight unit: pounds (the default) or kilograms. Everything follows it, from the weight fields to
   History, Progress and the training programs, which use kilogram steps (2.5 kg jumps, kg
   dumbbells and weight stacks). Workouts are stored in the unit they were logged in and only
