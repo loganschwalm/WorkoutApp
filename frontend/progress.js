@@ -448,10 +448,14 @@ async function loadProgress() {
     renderRecords();
     loadGoals();
     renderGoals();
+    // muscles.js, loaded after this, counts the same workouts.
+    renderMuscles();
+    renderLibrary();
   } catch (error) {
     $('chartEmpty').hidden = false;
     $('chartEmpty').textContent = 'Progress data could not be loaded.';
     $('recordsList').innerHTML = '<li class="empty">Your records show once your workouts load.</li>';
+    $('muscleList').innerHTML = '<li class="empty">Your sets show once your workouts load.</li>';
     console.error('Unable to load progress.', error);
   }
 }

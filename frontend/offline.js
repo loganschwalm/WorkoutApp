@@ -217,7 +217,7 @@ function flushPendingWorkouts() {
 // ---- Settings, custom templates and the training program -----------------
 // The same rule as the in-progress workout: a change is saved on this device first and stays marked dirty until the
 // server has it, and a dirty local copy beats the server's when a page loads, so a change made offline is never undone.
-const accountStateParts = ['settings', 'templates', 'program', 'exerciseNotes', 'goals', 'bodyweight'];
+const accountStateParts = ['settings', 'templates', 'program', 'exerciseNotes', 'goals', 'bodyweight', 'exerciseLibrary'];
 
 // Before these were kept per account, one copy per browser was shared by whoever signed in. It was last written
 // by the last account seen here, so it becomes that account's copy, marked clean so the server's copy replaces it.

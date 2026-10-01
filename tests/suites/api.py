@@ -394,20 +394,22 @@ def run_structure(t, check, request):
     t.start_server('fresh.db')  # the harness only asks /api/auth/me, which never opens the database
     schema = schema_of(t.db_path('fresh.db'))
     check('a new database has every table before any request touches it', schema['tables'] == tables, schema['tables'])
-    check('it is at schema version 9', schema['version'] == 9, schema['version'])
+    check('it is at schema version 10', schema['version'] == 10, schema['version'])
     check('with the client_id column and its unique index',
           'client_id' in schema['columns'] and 'workouts_user_client' in schema['indexes'], schema)
     check('with a column for the training program', 'program_json' in schema['state_columns'], schema['state_columns'])
     check('and one for notes kept with each exercise', 'notes_json' in schema['state_columns'], schema['state_columns'])
     check('and one for goals', 'goals_json' in schema['state_columns'], schema['state_columns'])
     check('and one for bodyweight', 'bodyweight_json' in schema['state_columns'], schema['state_columns'])
+    check('and one for the muscle and equipment of each exercise', 'library_json' in schema['state_columns'], schema['state_columns'])
     check('with an email for each account, and its unique index',
           'email' in schema['user_columns'] and 'users_email' in schema['user_indexes'], schema)
     check('and whether each session was remembered', 'remember' in schema['session_columns'], schema['session_columns'])
     check('in write-ahead-log mode', schema['journal'] == 'wal', schema['journal'])
     legacy = schema_of(t.db_path('legacy.db'))
-    check('the database from before client_id (A3) is now at version 9 too', legacy['version'] == 9, legacy['version'])
-    check('and has the training program, exercise notes, goals and bodyweight columns', {'program_json', 'notes_json', 'goals_json', 'bodyweight_json'} <= set(legacy['state_columns']), legacy['state_columns'])
+    check('the database from before client_id (A3) is now at version 10 too', legacy['version'] == 10, legacy['version'])
+    check('and has the training program, exercise notes, goals, bodyweight and exercise library columns',
+          {'program_json', 'notes_json', 'goals_json', 'bodyweight_json', 'library_json'} <= set(legacy['state_columns']), legacy['state_columns'])
     check('and the email column, and the table of reset codes',
           'email' in legacy['user_columns'] and 'password_resets' in legacy['tables'], legacy)
     check('and the remembered column on its sessions', 'remember' in legacy['session_columns'], legacy['session_columns'])
@@ -428,7 +430,7 @@ def run_structure(t, check, request):
     kept = db.execute("SELECT name, client_id FROM workouts").fetchall()
     db.close()
     check('an unversioned database that already has client_id upgrades cleanly',
-          schema['version'] == 9 and schema['columns'].count('client_id') == 1 and kept == [('Kept', 'k1')], f'{schema} {kept}')
+          schema['version'] == 10 and schema['columns'].count('client_id') == 1 and kept == [('Kept', 'k1')], f'{schema} {kept}')
 
     path = t.db_path('newer.db')
     db = sqlite3.connect(path)
@@ -630,6 +632,21 @@ def run_structure(t, check, request):
         check(f'PUT /api/state with {label} -> {expected}', status == expected, f'{status} {reply}')
     state = t.api('GET', '/api/state', token=token)[0]
     check('the bodyweights are stored, and nothing else changed', state.get('bodyweight') == weighed and state['goals'] == {}
+          and state['templates'] == [template], state)
+    library = {'landmine press': {'name': 'Landmine Press', 'muscle': 'shoulders', 'equipment': 'other'},
+               'squat': {'name': 'Squat', 'muscle': '', 'equipment': 'machine'}}
+    for label, body, expected in [
+        ('an exercise library that is a list', {'exerciseLibrary': []}, 400),
+        ('an exercise that is text', {'exerciseLibrary': {'squat': 'quads'}}, 400),
+        ('an exercise with no name', {'exerciseLibrary': {'squat': {'name': ' ', 'muscle': 'quads'}}}, 400),
+        ('an exercise for a muscle the app does not offer', {'exerciseLibrary': {'squat': {'name': 'Squat', 'muscle': 'legs'}}}, 400),
+        ('an exercise done with equipment the app does not offer', {'exerciseLibrary': {'squat': {'name': 'Squat', 'equipment': 'sandbag'}}}, 400),
+        ('valid exercises, one leaving its muscle to the guess', {'exerciseLibrary': library}, 200),
+    ]:
+        status, _, reply = request('PUT', '/api/state', json.dumps(body).encode(), json_headers, token=token)
+        check(f'PUT /api/state with {label} -> {expected}', status == expected, f'{status} {reply}')
+    state = t.api('GET', '/api/state', token=token)[0]
+    check('the exercises are stored, and nothing else changed', state.get('exerciseLibrary') == library and state['bodyweight'] == weighed
           and state['templates'] == [template], state)
     check('a null program ends it', status == 200 and state.get('program', 'missing') is None and state['settings'].get('restDuration') == 75, f'{status} {state}')
     for label, session, expected in [('text', 'running', 400), ('a list', [], 400), ('null', None, 200),
@@ -1055,7 +1072,9 @@ def run_export(t, check, request):
              'exerciseNotes': {'bench press': 'Grip on the rings', 'squat': 'Safeties on 7'},
              'goals': {'bench press': {'name': 'Bench Press', 'target': 100, 'unit': 'kg', 'by': ''},
                        'squat': {'name': 'Squat', 'target': 140, 'unit': 'kg', 'by': '2027-01-01'}},
-             'bodyweight': {'2026-03-01': {'weight': 82.5, 'unit': 'kg'}, '2026-03-08': {'weight': 82.1, 'unit': 'kg'}}}
+             'bodyweight': {'2026-03-01': {'weight': 82.5, 'unit': 'kg'}, '2026-03-08': {'weight': 82.1, 'unit': 'kg'}},
+             'exerciseLibrary': {'thruster': {'name': 'Thruster', 'muscle': 'quads', 'equipment': 'barbell'},
+                                 'squat': {'name': 'Squat', 'muscle': '', 'equipment': 'machine'}}}
     t.api('PUT', '/api/state', state, source)
 
     status, headers, export = request('GET', '/api/export', token=source)
@@ -1069,10 +1088,10 @@ def run_export(t, check, request):
     check('as it was saved: sets, unit, notes, duration and clientId', names and export['workouts'][0]['exercises'] == finished['exercises']
           and export['workouts'][0]['unit'] == 'kg' and export['workouts'][0]['notes'] == 'felt strong'
           and export['workouts'][0]['duration'] == 3000 and export['workouts'][0]['clientId'] == 'export-1', export.get('workouts', [None])[0])
-    check('with the templates, program, settings, exercise notes, goals and bodyweight',
+    check('with the templates, program, settings, exercise notes, goals, bodyweight and exercise library',
           export.get('templates') == state['templates'] and export.get('program') == state['program'] and export.get('settings') == state['settings']
           and export.get('exerciseNotes') == state['exerciseNotes'] and export.get('goals') == state['goals']
-          and export.get('bodyweight') == state['bodyweight'], export.get('bodyweight'))
+          and export.get('bodyweight') == state['bodyweight'] and export.get('exerciseLibrary') == state['exerciseLibrary'], export.get('exerciseLibrary'))
     check('and whose account it was', export.get('account') == {'username': 'exporter', 'email': 'exporter@example.test'}, export.get('account'))
 
     # Five hours behind UTC, 02:00 UTC on the 10th is still the 9th.
@@ -1097,10 +1116,12 @@ def run_export(t, check, request):
     t.api('POST', '/api/workouts', {'name': 'Already Mine', 'notes': '', 'exercises': [{'name': 'Curl', 'weight': 20, 'reps': 10}]}, target)
     t.api('PUT', '/api/state', {'exerciseNotes': {'squat': 'My own squat note'},
                                 'goals': {'squat': {'name': 'Squat', 'target': 300, 'unit': 'lbs', 'by': ''}},
-                                'bodyweight': {'2026-03-08': {'weight': 180, 'unit': 'lbs'}}}, target)
+                                'bodyweight': {'2026-03-08': {'weight': 180, 'unit': 'lbs'}},
+                                'exerciseLibrary': {'squat': {'name': 'Squat', 'muscle': 'glutes', 'equipment': ''}}}, target)
     status, _, result = import_file(export, target)
     check('an export imports into another account', status == 200 and result == {'workouts': 2, 'alreadyHere': 0, 'templates': 1, 'settings': True,
-                                                                                  'program': True, 'notes': 1, 'goals': 1, 'bodyweights': 1},
+                                                                                  'program': True, 'notes': 1, 'goals': 1, 'bodyweights': 1,
+                                                                                  'exercises': 1},
           f'{status} {result}')
     mine = {w['name']: w for w in workouts_of(target)}
     check('its workouts arrive as they were, beside what was there',
@@ -1117,10 +1138,13 @@ def run_export(t, check, request):
     check("and the bodyweight for days that had none, keeping the account's own",
           imported_state['bodyweight'] == {'2026-03-08': {'weight': 180, 'unit': 'lbs'}, '2026-03-01': {'weight': 82.5, 'unit': 'kg'}},
           imported_state['bodyweight'])
+    check("and the muscle and equipment of exercises that had none, keeping the account's own",
+          imported_state['exerciseLibrary'] == {'squat': {'name': 'Squat', 'muscle': 'glutes', 'equipment': ''},
+                                                'thruster': state['exerciseLibrary']['thruster']}, imported_state['exerciseLibrary'])
     status, _, result = import_file(export, target)
     check('importing the same file again adds nothing', status == 200 and result == {'workouts': 0, 'alreadyHere': 2, 'templates': 0,
                                                                                      'settings': False, 'program': False, 'notes': 0, 'goals': 0,
-                                                                                     'bodyweights': 0}, f'{status} {result}')
+                                                                                     'bodyweights': 0, 'exercises': 0}, f'{status} {result}')
     check('so nothing is there twice', len(workouts_of(target)) == 3, len(workouts_of(target)))
     status, _, result = import_file(export, source)
     check('nor into the account it came from, even the workout with no clientId', status == 200 and result['workouts'] == 0

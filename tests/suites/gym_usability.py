@@ -553,7 +553,7 @@ def run(t):
            "window.dispatchEvent(new Event('settingschange'))")
     judged = cdp.ev("""['Bench Press', 'Back Squat', 'Deadlift', 'Overhead Press', 'Barbell Row', 'Romanian Deadlift',
         'Dumbbell Bench Press', 'Leg Press', 'Goblet Squat', 'Lat Pulldown', 'Tricep Pushdown', 'Bench Dips']
-        .filter(name => barbellNames.test(name) && !notBarbellNames.test(name))""")
+        .filter(name => isBarbellExercise({ name }))""")
     check('only barbell lifts get plates, going by their names',
           judged == ['Bench Press', 'Back Squat', 'Deadlift', 'Overhead Press', 'Barbell Row', 'Romanian Deadlift'], judged)
     cdp.ev("document.getElementById('nextExerciseBtn').click(); document.getElementById('nextExerciseBtn').click()")

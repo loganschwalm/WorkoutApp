@@ -157,13 +157,14 @@ function renderRecentWorkouts() {
 }
 
 // Names suggested wherever an exercise is typed (the <datalist> every exercise field uses): everything logged, spelled
-// the way it was most recently, then the templates' and the program's. Picking one keeps "Bench press" and "Bench
-// Press" from becoming two exercises.
+// the way it was most recently, then the exercises added on Progress, the templates' and the program's. Picking one keeps
+// "Bench press" and "Bench Press" from becoming two exercises.
 function renderExerciseSuggestions() {
   const names = new Map();
   const add = name => { const key = exerciseKey(name ?? ''); if (key && !names.has(key)) names.set(key, String(name).trim()); };
   [...savedWorkouts, ...readPendingWorkouts()].sort((a, b) => b.createdAt - a.createdAt).forEach(workout => workout.exercises.forEach(item => add(item.name)));
   Object.values(lastPerformance).sort((a, b) => b.date - a.date).forEach(entry => add(entry.name));
+  Object.values(exerciseLibrary).forEach(entry => add(entry.name));
   getAllTemplates().forEach(template => template.exercises.forEach(item => add(item.name)));
   if (currentProgram) {
     programDays(currentProgram).forEach((entry, day) => programDefinition(currentProgram).workout(currentProgram, 0, day).forEach(item => add(item.name)));
@@ -780,7 +781,11 @@ renderTemplates();
 window.serverStateReady.then(() => {
   customTemplates = loadCustomTemplates();
   exerciseNotes = loadExerciseNotes();
+  exerciseLibrary = loadExerciseLibrary();
   renderExerciseNote();
+  renderExerciseSuggestions();
+  // An exercise's equipment, which says whether it gets plates, may only arrive now.
+  if (activeSession) showPlates();
   reloadProgram();
   renderTemplates();
 });

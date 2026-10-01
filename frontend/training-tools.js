@@ -13,15 +13,9 @@ function loadExerciseNotes() {
 
 // What to load on each side of the bar, with the bar and plates from Settings (gymEquipment in settings.js): by default a
 // 45 lb bar and pound plates down to the 1.25s that a weight in 2.5 lb steps (as 5/3/1 can round to) needs, or a 20 kg
-// bar and kilogram plates. Only for a lift done with a barbell, which the exercise's name has to tell (it is all a
-// custom exercise has): Bench Press yes, Dumbbell Bench Press or Leg Press no.
+// bar and kilogram plates. Only for a lift done with a barbell: the equipment chosen for it on Progress, or else what its
+// name tells (exercise-library.js): Bench Press yes, Dumbbell Bench Press or Leg Press no.
 const barName = equipment => `${formatWeight(equipment.bar)} ${equipment.unit === 'kg' ? 'kg' : 'lb'} bar`;
-// A name matches when it has any of these as a whole word (or words), in any case.
-const anyOfWords = words => new RegExp(`\\b(${words.join('|')})\\b`, 'i');
-const barbellNames = anyOfWords(['barbell', 'bench', 'squat', 'deadlift', 'rdl', 'overhead press', 'military press', 'push press', 'ohp', 'pendlay',
-  'bent[- ]over row', 'power clean', 'hang clean', 'good morning', 'hip thrust']);
-const notBarbellNames = anyOfWords(['dumbbells?', 'db', 'kettlebells?', 'machine', 'cable', 'smith', 'leg press', 'hack', 'goblet', 'split', 'bulgarian',
-  'trap bar', 'hex bar', 'landmine', 'band', 'dips?', 'pistol']);
 
 // The fewest plates that make each side, heaviest first. Taking the heaviest plate that fits each time does not always
 // manage that: with 2.5s and 2s but no 1.25s, 4 a side is two 2s, and the heaviest first would stop at 2.5. So it
@@ -47,7 +41,7 @@ function platesPerSide(weight, equipment = gymEquipment()) {
 }
 
 function isBarbellExercise(exercise) {
-  return Boolean(exercise) && barbellNames.test(exercise.name) && !notBarbellNames.test(exercise.name);
+  return Boolean(exercise) && exerciseDetails(exercise.name).equipment === 'barbell';
 }
 
 // Warm-up sets to work up to a barbell lift's working weight: the empty bar for 10, then about 40%, 60% and 80% of the

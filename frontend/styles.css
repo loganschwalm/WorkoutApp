@@ -619,3 +619,41 @@ html[data-theme="dark"] .goal.reached .goal-foot span { color:#a5e5c2; }
    around them stay where they were. */
 .progress-toggle { margin:-8px 0 -12px; padding:12px 16px 12px 0; }
 .progression-hint .link-button { margin:-13px 0; padding:13px 6px; }
+
+/* Sets per muscle on Progress: a bar a muscle, from one baseline, its end rounded, with a mark at the weekly average of
+   the weeks before. The mark is ink, so it shows on the bar and past its end in every theme. */
+.week-nav { display:flex; flex:none; gap:6px; }
+.week-nav button { min-width:44px; min-height:44px; padding:0; font-size:1.3rem; line-height:1; }
+.week-nav button:disabled { opacity:.45; cursor:default; transform:none; }
+.muscle-list { display:grid; gap:4px; margin:18px 0 0; padding:0; list-style:none; }
+.muscle-list li:not(.empty) { display:grid; grid-template-columns:6.5rem minmax(0,1fr) auto; align-items:center; gap:12px; min-height:32px; font-size:.9rem; }
+.muscle-name { color:var(--ink); font-weight:600; }
+.muscle-bar { position:relative; height:14px; border-left:1px solid var(--line); }
+.muscle-fill { display:block; height:100%; background:var(--accent); border-radius:0 4px 4px 0; }
+.muscle-average { position:absolute; top:-3px; bottom:-3px; width:2px; margin-left:-1px; background:var(--ink); border-radius:1px; }
+.muscle-count { color:var(--ink); font-variant-numeric:tabular-nums; white-space:nowrap; text-align:right; }
+.muscle-usual { color:var(--muted); }
+.muscle-key { margin-top:14px; font-size:.85rem; }
+.muscle-key .link-button { padding:4px; }
+@media (max-width:620px) { .muscle-list li:not(.empty) { grid-template-columns:5.2rem minmax(0,1fr) auto; gap:8px; font-size:.85rem; } }
+
+/* The Exercises card: each exercise with its muscle and equipment, folded away until it is wanted. */
+.library { margin-top:16px; }
+.library > summary { padding:12px 0; color:var(--accent); font-weight:700; cursor:pointer; }
+.library-search { margin:4px 0 8px; }
+.library-list { display:grid; margin:0; padding:0; list-style:none; }
+.library-list li:not(.empty) { display:grid; grid-template-columns:minmax(0,1fr) 9rem 9rem 4.5rem; align-items:center; gap:10px; padding:8px 0; border-top:1px solid var(--line); }
+.library-name { display:grid; gap:2px; min-width:0; }
+.library-name strong { overflow-wrap:anywhere; }
+.library-name span { color:var(--muted); font-size:.8rem; }
+.library-list select { padding:9px 10px; min-height:44px; }
+.library-list .link-button { padding:12px 4px; }
+.library-form { grid-template-columns:2fr 1fr 1fr auto; }
+.library-form select { height:48px; }
+@media (max-width:620px) {
+  .library-list li:not(.empty) { grid-template-columns:1fr 1fr; }
+  .library-name { grid-column:1 / -1; }
+  .library-list .link-button { grid-column:1 / -1; justify-self:start; padding:8px 0; }
+  .library-form { grid-template-columns:1fr 1fr; }
+  .library-form > div:first-child, .library-form button { grid-column:1 / -1; }
+}

@@ -65,11 +65,11 @@ own workouts, templates, and settings.
   with the sets left. Swapping back to the original brings its planned weights back.
 - Exercise names are suggested as you type, everywhere an exercise is entered (a new workout, a
   template, Add an exercise, Swap): everything you have logged, spelled as you last did, and the
-  templates' and your program's exercises. Picking one keeps "Bench press" and "Bench Press" from
-  becoming two exercises.
+  exercises added on Progress, and the templates' and your program's exercises. Picking one keeps "Bench press" and
+  "Bench Press" from becoming two exercises.
 - Enter the weight and reps completed for each set, right under the exercise, with −5 and +5 buttons
   beside the weight.
-- For barbell lifts (going by the exercise's name), see the plates to load on each side of a 45 lb
+- For barbell lifts (the equipment chosen for the exercise on Progress, or else going by its name), see the plates to load on each side of a 45 lb
   bar, down to 1.25s, drawn to size: 187.5 lbs is 45 + 25 + 1.25. A weight the plates cannot make says
   what they do.
   In kilograms it is a 20 kg bar with 25, 20, 15, 10, 5, 2.5 and 1.25 kg plates, and the weight
@@ -395,6 +395,24 @@ cable stack with a single handle, and chest press, lat pulldown, leg extension a
   Sep 29 · Down 3 lbs in 30 days"). The newest five are listed under the chart to remove one. Weights are kept with
   your account, in the unit they were logged in, and shown in the unit you use.
 - Review repeated workouts as separate progress points.
+- Sets per muscle: a week's logged sets, each counted for the muscle its exercise works most, as a bar per muscle (chest,
+  back, shoulders, biceps, triceps, forearms, quads, hamstrings, glutes, calves, core, other), always in that order so
+  a muscle stays in one place from week to week. A mark on each bar, and "avg" beside it, is the sets a week over the
+  four weeks before, so a muscle being left behind shows ("0 sets · avg 11.3"). Only weeks since the first workout make
+  the average, so a new account is not measured against weeks it never had. The arrows move a week at a time, back to
+  the first week trained. Weeks start on Monday, as on the History calendar. A skipped exercise counts nothing, and
+  one saved from the workout form without sets counts as one set. An exercise with no muscle is named under the bars
+  as not counted, with a link to give it one.
+- Exercises: every exercise you have logged, and any you add, A to Z, each with its muscle and its equipment (barbell,
+  dumbbell, machine, cable, bodyweight, kettlebell, band or other). Until you choose, both are guessed from the name,
+  and the list says so: Leg Curl is hamstrings on a machine, Chest-Supported Dumbbell Row is back with dumbbells,
+  Incline Dumbbell Curl is biceps. Every exercise in the templates and programs has a guess; a name that gives nothing
+  away (Thruster) has none until you choose. Choosing applies to that exercise in every workout, past and to come, and
+  the equipment decides the plates and warm-ups during a workout: a Bench Press marked Machine gets neither, and a
+  Landmine Press marked Barbell gets both. The list folds away under how many exercises there are and how many have no
+  muscle, and can be searched. Add exercise adds one of your own, with a muscle and equipment or left to the guess
+  (shown as you type the name); it is then suggested wherever an exercise is typed, and can be removed until it is
+  logged. Adding one already there changes only what was chosen for it. Kept with your account like notes and goals.
 
 ### Settings
 
@@ -449,7 +467,8 @@ uploads when the server is reachable again.
 Everything in your account can be saved to a file from Settings, and brought back in.
 
 - **Export** saves one JSON file with every workout, your custom templates, the training program you
-  follow, your settings, your exercise notes, your goals and your bodyweight.
+  follow, your settings, your exercise notes, your goals, your bodyweight, and the muscle and equipment chosen for
+  your exercises.
 - **Export sets as CSV** saves every logged set for a spreadsheet, one row each: its date, workout,
   exercise, set number, weight, unit, and reps (or seconds, for a timed exercise). Skipped exercises are
   left out. Dates are the days in your own time zone, and a name that starts like a formula (`=`, `+`,
@@ -458,7 +477,8 @@ Everything in your account can be saved to a file from Settings, and brought bac
 - **Import** reads a JSON export back, into this account or into one on another server. It only ever
   adds. Workouts already in the account are skipped, so importing the same file twice changes nothing,
   and templates you already have stay as they are. Settings and a training program come in only if the
-  account has none of its own, and a bodyweight only for a day that has none. If any workout in the file is not valid, nothing is imported, and the
+  account has none of its own, a bodyweight only for a day that has none, and an exercise's muscle and equipment only
+  for an exercise that has none chosen. If any workout in the file is not valid, nothing is imported, and the
   message says which workout.
 
 An export covers one account. It is not a substitute for [backing up the database](#data-storage),

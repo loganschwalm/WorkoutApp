@@ -54,6 +54,8 @@ see a program working over the weeks.
 - Search, repeat, edit or copy any past workout.
 - Charts of heaviest weight, estimated one-rep max, best reps or volume, per exercise and over time.
 - Personal records, goals to aim for, and a bodyweight log.
+- Sets per muscle each week against your recent average, and your exercises' muscles and equipment, guessed from
+  their names until you choose (which also decides which lifts get plates). Add exercises of your own.
 
 **Everywhere**
 - Works through network drops: everything saves on the phone first and uploads when the server is back.

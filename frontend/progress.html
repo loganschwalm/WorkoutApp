@@ -37,6 +37,14 @@
       <ul class="session-list" id="sessionList"></ul>
     </section>
 
+    <section class="card" id="musclesCard" aria-labelledby="musclesTitle">
+      <div class="section-heading"><div><h2 id="musclesTitle">Sets per muscle</h2><p class="subtitle" id="musclesSummary">Every set you log, counted for the muscle its exercise works most.</p></div>
+        <div class="week-nav"><button class="secondary" id="musclesEarlier" type="button" aria-label="Week before" disabled>&#8249;</button><button class="secondary" id="musclesLater" type="button" aria-label="Week after" disabled>&#8250;</button></div></div>
+      <ul class="muscle-list" id="muscleList"><li class="empty">Your sets appear once your workouts load.</li></ul>
+      <p class="subtitle muscle-key" id="musclesKey" hidden></p>
+      <p class="subtitle muscle-key" id="musclesUncounted" hidden><span id="musclesUncountedNames"></span> <button class="link-button" id="musclesUncountedLink" type="button">Give them a muscle</button></p>
+    </section>
+
     <section class="card" aria-labelledby="bodyweightTitle">
       <div class="section-heading"><div><h2 id="bodyweightTitle">Bodyweight</h2><p class="subtitle" id="bodyweightSummary">Log your weight to see how it changes alongside your lifts.</p></div></div>
       <div class="bodyweight-chart"><canvas id="bodyweightChart" role="img" aria-label="No bodyweight logged yet." hidden></canvas></div>
@@ -66,6 +74,22 @@
       <div class="section-heading"><div><h2 id="recordsTitle">Personal records</h2><p class="subtitle">Your best in each exercise, the most recent record first. Tap one to chart it.</p></div></div>
       <ul class="records-list" id="recordsList"><li class="empty">Your records appear once your workouts load.</li></ul>
     </section>
+
+    <section class="card" id="exercisesCard" aria-labelledby="exercisesTitle">
+      <div class="section-heading"><div><h2 id="exercisesTitle">Exercises</h2><p class="subtitle">The muscle each exercise works most, for Sets per muscle, and what it is done with: a barbell lift gets plates and warm-ups. Each is guessed from its name until you choose.</p></div></div>
+      <details class="library" id="libraryDetails">
+        <summary id="librarySummary">Show your exercises</summary>
+        <div class="library-search"><label for="librarySearch">Find an exercise</label><input id="librarySearch" type="search" autocomplete="off" placeholder="Bench" /></div>
+        <ul class="library-list" id="libraryList"></ul>
+      </details>
+      <form class="goal-form library-form" id="libraryForm" novalidate>
+        <div><label for="libraryName">New exercise</label><input id="libraryName" autocomplete="off" placeholder="Landmine Press" /></div>
+        <div><label for="libraryMuscle">Muscle</label><select id="libraryMuscle"></select></div>
+        <div><label for="libraryEquipment">Equipment</label><select id="libraryEquipment"></select></div>
+        <button class="primary" type="submit">Add exercise</button>
+      </form>
+      <p class="goal-feedback" id="libraryFeedback" role="status"></p>
+    </section>
   </main>
   <script src="common.js"></script>
   <script src="offline.js"></script>
@@ -73,8 +97,10 @@
   <script src="account-rules.js"></script>
   <script src="settings-dialog.js"></script>
   <script src="settings.js"></script>
+  <script src="exercise-library.js"></script>
   <script src="progress.js"></script>
   <script src="bodyweight.js"></script>
+  <script src="muscles.js"></script>
   <script src="pwa.js"></script>
 </body>
 </html>
