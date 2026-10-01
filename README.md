@@ -93,11 +93,16 @@ pct exec <CTID> -- workout-tracker-backup            # back up the database now
 ```
 
 The container's **Console** in the Proxmox web UI signs you in as root by itself, unless you set a root
-password when installing. The database is backed up every day to `/var/backups/workout-tracker` inside the
-container (the newest 14 are kept).
+password when installing.
+
+**Backups:** the database is backed up every day inside the container, and a copy goes to the Proxmox
+host as well, in `/var/backups/workout-tracker/<CTID>`, so losing the container doesn't lose them. The
+newest 14 of each are kept. Advanced settings can put the host copies on a NAS storage instead. An install
+from before this asks whether you want them the next time you update it.
 
 The full reference covers [every install option](readme-for-llm.md#choosing-settings-without-the-menu),
-[restoring a backup](readme-for-llm.md#backups), and [the console](readme-for-llm.md#managing-the-container).
+[backups and restoring one](readme-for-llm.md#copies-on-the-proxmox-host), and
+[the console](readme-for-llm.md#managing-the-container).
 
 ## Other ways to run it
 

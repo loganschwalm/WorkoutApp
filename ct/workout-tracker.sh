@@ -52,6 +52,11 @@ SWAP="${SWAP:-512}"
 DISK="${DISK:-4}"
 UNPRIVILEGED="${UNPRIVILEGED:-1}"
 ONBOOT="${ONBOOT:-1}"
+# Daily copies of the database kept on the Proxmox host, in a directory per container under this one ('none' for
+# none); see "Backups on the Proxmox host". Remembered whether it came from the environment, which an update obeys.
+_ENV_HOST_BACKUP_DIR="${HOST_BACKUP_DIR-}"
+HOST_BACKUP_DIR="${HOST_BACKUP_DIR:-/var/backups/workout-tracker}"
+HOST_BACKUP_KEEP="${HOST_BACKUP_KEEP:-14}"
 
 if [[ -t 2 ]]; then
   RD=$'\033[01;31m'; GN=$'\033[1;92m'; YW=$'\033[33m'; BL=$'\033[36m'; CL=$'\033[m'
@@ -376,6 +381,129 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
+# Backups on the Proxmox host
+# ---------------------------------------------------------------------------
+# The container backs its database up every day, but those copies go with it if the container is ever lost. So the
+# host keeps its own: a timer per container (workout-tracker-host-backup@<CTID>.timer) takes a fresh snapshot inside the
+# container each day, copies it out with pct pull, and keeps the newest few. The container itself is left as it is: a
+# bind mount would need its user IDs mapped, and gets in the way of snapshots. Each container's directory and count
+# are in /etc/workout-tracker-host-backup/<CTID>.conf, written once and kept by later updates; an empty directory
+# there means host backups were turned down, so an update does not ask again.
+HOST_BACKUP_CONF_DIR=/etc/workout-tracker-host-backup
+HOST_BACKUP_BIN=/usr/local/sbin/workout-tracker-host-backup
+
+host_backup_script() {
+  cat <<'HOSTBACKUP'
+#!/usr/bin/env bash
+# Copies a consistent snapshot of a Workout Tracker container's database to this Proxmox host:
+#   workout-tracker-host-backup <CTID>
+# The directory and how many to keep are in /etc/workout-tracker-host-backup/<CTID>.conf. The timer
+# workout-tracker-host-backup@<CTID>.timer runs it every day; running it by hand is fine too.
+set -Eeuo pipefail
+ctid="${1:?usage: workout-tracker-host-backup <CTID>}"
+conf="/etc/workout-tracker-host-backup/$ctid.conf"
+[[ -f "$conf" ]] || { echo "LXC $ctid has no host backups set up ($conf is missing)" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$conf"
+[[ -n "${HOST_BACKUP_DIR:-}" ]] || { echo "host backups of LXC $ctid are turned off in $conf" >&2; exit 1; }
+keep="${HOST_BACKUP_KEEP:-14}"
+[[ "$keep" =~ ^[1-9][0-9]*$ ]] || keep=14
+if ! pct status "$ctid" >/dev/null 2>&1; then
+  echo "LXC $ctid no longer exists. Stop its backups with: systemctl disable --now workout-tracker-host-backup@$ctid.timer" >&2
+  exit 1
+fi
+[[ "$(pct status "$ctid")" == "status: running" ]] || { echo "LXC $ctid is not running, so it was not backed up" >&2; exit 1; }
+# Every account's workouts are in here: readable by root only.
+umask 077
+mkdir -p "$HOST_BACKUP_DIR"
+chmod 0700 "$HOST_BACKUP_DIR"
+stamp="$(date +%Y%m%d-%H%M%S)"
+inside="/root/workout-tracker-host-backup-$stamp.db"
+out="$HOST_BACKUP_DIR/workouts-$stamp.db"
+trap 'pct exec "$ctid" -- rm -f "$inside" >/dev/null 2>&1 || true; rm -f "$out.partial"' EXIT
+# The same snapshot workout-tracker-backup takes, safe while the app runs, made here so the container's own set is
+# left alone.
+pct exec "$ctid" -- sh -c ". /etc/workout-tracker/install.conf && umask 077 && sqlite3 \"\$DATA_DIR/workouts.db\" \".backup '$inside'\""
+# Copied under another name first, so a copy cut short is never mistaken for a backup.
+pct pull "$ctid" "$inside" "$out.partial"
+mv "$out.partial" "$out"
+chmod 0600 "$out"
+# The timestamp in each name sorts oldest to newest, so everything past the newest $keep goes.
+find "$HOST_BACKUP_DIR" -maxdepth 1 -name 'workouts-*.db' -printf '%f\n' | sort -r | tail -n +"$((keep + 1))" | while read -r old; do
+  rm -f -- "$HOST_BACKUP_DIR/$old"
+done
+echo "$out"
+HOSTBACKUP
+}
+
+# The script and the timer, written afresh by every install and update so they keep up with this one.
+write_host_backup_files() {
+  host_backup_script >"$HOST_BACKUP_BIN"
+  chmod 0755 "$HOST_BACKUP_BIN"
+  cat >/etc/systemd/system/workout-tracker-host-backup@.service <<UNIT
+[Unit]
+Description=Copy the Workout Tracker database out of LXC %i to this host
+After=pve-guests.service
+
+[Service]
+Type=oneshot
+ExecStart=$HOST_BACKUP_BIN %i
+Nice=10
+UNIT
+  # Every day at about a quarter past four, after the container's own backup, or at the next start if the host was off.
+  cat >/etc/systemd/system/workout-tracker-host-backup@.timer <<'UNIT'
+[Unit]
+Description=Copy the Workout Tracker database out of LXC %i every day
+
+[Timer]
+OnCalendar=*-*-* 04:15:00
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+UNIT
+  systemctl daemon-reload
+}
+
+host_backup_dir_of() {
+  # shellcheck source=/dev/null
+  (HOST_BACKUP_DIR=''; . "$HOST_BACKUP_CONF_DIR/$1.conf" && printf '%s' "$HOST_BACKUP_DIR")
+}
+
+# Records a container's host backups: a directory, or '' for turned down.
+record_host_backups() {
+  local ctid="$1" dir="$2"
+  mkdir -p "$HOST_BACKUP_CONF_DIR"
+  {
+    echo "# Daily copies of LXC $ctid's Workout Tracker database on this host (workout-tracker-host-backup@$ctid.timer)."
+    echo "# Empty, they are turned off: set a directory and run the helper script's update to start them."
+    printf "HOST_BACKUP_DIR='%s'\nHOST_BACKUP_KEEP='%s'\n" "$dir" "$HOST_BACKUP_KEEP"
+  } >"$HOST_BACKUP_CONF_DIR/$ctid.conf"
+}
+
+# Turns a container's recorded host backups on (or off), taking the first one straight away so a problem shows now.
+apply_host_backups() {
+  local ctid="$1" dir out
+  write_host_backup_files
+  dir="$(host_backup_dir_of "$ctid")"
+  if [[ -z "$dir" ]]; then
+    systemctl disable --quiet --now "workout-tracker-host-backup@$ctid.timer" >/dev/null 2>&1 || true
+    return 0
+  fi
+  systemctl enable --quiet --now "workout-tracker-host-backup@$ctid.timer"
+  msg_info "Copying a first backup of LXC $ctid to the host"
+  if out="$("$HOST_BACKUP_BIN" "$ctid" 2>&1)"; then
+    msg_ok "Daily backups on the host, in $dir (first: $(basename "$out"))"
+  else
+    msg_warn "The first backup on the host failed: ${out##*$'\n'}"
+    msg_warn "The timer stays on; see: journalctl -u workout-tracker-host-backup@$ctid"
+  fi
+}
+
+host_backups_wanted() { [[ -n "$HOST_BACKUP_DIR" && "$HOST_BACKUP_DIR" != none ]]; }
+
+# ---------------------------------------------------------------------------
 # In-container mode: update this installation in place.
 # ---------------------------------------------------------------------------
 run_in_container() {
@@ -526,6 +654,10 @@ validate_settings() {
   if [[ -n "$CT_PASSWORD" && ${#CT_PASSWORD} -lt 5 ]]; then
     die "CT_PASSWORD must be at least 5 characters (a Proxmox requirement)."
   fi
+  if host_backups_wanted && [[ "$HOST_BACKUP_DIR" != /* || "$HOST_BACKUP_DIR" == *"'"* ]]; then
+    die "HOST_BACKUP_DIR must be a directory on the host starting with / (or 'none')."
+  fi
+  [[ "$HOST_BACKUP_KEEP" =~ ^[1-9][0-9]*$ ]] || die "HOST_BACKUP_KEEP must be a whole number of backups, 1 or more."
   if pct status "$CTID" >/dev/null 2>&1; then
     die "LXC $CTID already exists. Set CTID to a free ID."
   fi
@@ -561,6 +693,7 @@ advanced_settings() {
   CT_PASSWORD="$(whiptail --title "$APP" --passwordbox \
     "Root password for the container.\n\nLeave blank for none: its console in the Proxmox web UI then signs in as root by itself, and 'pct enter' on the host always gives a shell." \
     13 66 3>&1 1>&2 2>&3)" || die "cancelled."
+  HOST_BACKUP_DIR="$(ask "Host directory for daily copies of the database ('none' for none); a NAS storage under /mnt/pve keeps them off this disk" "$HOST_BACKUP_DIR")"
   if whiptail --title "$APP" --yesno "Create an unprivileged container?\n\nYes is recommended." 10 66; then
     UNPRIVILEGED=1
   else
@@ -569,8 +702,9 @@ advanced_settings() {
 }
 
 summary() {
-  local privilege="unprivileged"
+  local privilege="unprivileged" backups="daily in the container"
   [[ "$UNPRIVILEGED" == "1" ]] || privilege="privileged"
+  if host_backups_wanted; then backups="$backups, and copied to $HOST_BACKUP_DIR/$CTID on this host"; fi
   cat >&2 <<EOF
 
   ${BL}Container${CL}   ID $CTID - $CT_HOSTNAME - Debian $DEBIAN_VERSION - $privilege
@@ -578,6 +712,7 @@ summary() {
   ${BL}Storage${CL}     root disk: $STORAGE - template: $TEMPLATE_STORAGE
   ${BL}Network${CL}     $BRIDGE - $IP_CONFIG${GATEWAY:+ - gateway $GATEWAY}${VLAN:+ - vlan $VLAN}
   ${BL}App${CL}         $REPO_URL ($BRANCH) on port $APP_PORT
+  ${BL}Backups${CL}     $backups
 
 EOF
 }
@@ -640,6 +775,13 @@ do_install() {
   pct exec "$CTID" -- bash /root/workout-tracker-setup.sh
   msg_ok "$APP installed"
 
+  local host_backups="none on this host (HOST_BACKUP_DIR=none)"
+  if host_backups_wanted; then
+    record_host_backups "$CTID" "$HOST_BACKUP_DIR/$CTID"
+    apply_host_backups "$CTID"
+    host_backups="copied to $HOST_BACKUP_DIR/$CTID on this host every day (newest $HOST_BACKUP_KEEP)"
+  fi
+
   ip="$(container_ip "$CTID")"
   cat <<EOF
 
@@ -653,7 +795,8 @@ ${GN}  $APP is ready.${CL}
   App files    $APP_DIR
   Database     $DATA_DIR/workouts.db
   Backups      every day, the newest 14 kept in /var/backups/workout-tracker
-               (or now: pct exec $CTID -- workout-tracker-backup)
+               (or now: pct exec $CTID -- workout-tracker-backup), and
+               $host_backups
 
   Open the URL and register the first account. Registration is open to anyone
   who can reach the port, so create your accounts now and keep the app on a
@@ -710,6 +853,41 @@ do_update() {
   port="$(pct exec "$target" -- sh -c ". $CONF_FILE && printf %s \"\$APP_PORT\"" 2>/dev/null || true)"
   ip="$(container_ip "$target")"
   msg_ok "URL: http://${ip:-<container-ip>}:${port:-<port>}"
+  update_host_backups "$target"
+}
+
+# An update keeps a container's host backups as they were set, refreshing the script and timer. One from before they
+# existed gets them if HOST_BACKUP_DIR says so, or, from a terminal, if you say yes; a no is remembered.
+update_host_backups() {
+  local target="$1" dir="$HOST_BACKUP_DIR/$1"
+  if [[ -f "$HOST_BACKUP_CONF_DIR/$target.conf" ]]; then
+    dir="$(host_backup_dir_of "$target")"
+    if [[ -n "$dir" ]]; then
+      apply_host_backups "$target"
+    else
+      write_host_backup_files
+    fi
+    return 0
+  fi
+  if [[ -n "$_ENV_HOST_BACKUP_DIR" ]]; then
+    if host_backups_wanted; then
+      [[ "$HOST_BACKUP_DIR" == /* && "$HOST_BACKUP_DIR" != *"'"* ]] ||
+        die "HOST_BACKUP_DIR must be a directory on the host starting with / (or 'none')."
+      record_host_backups "$target" "$dir"
+    else
+      record_host_backups "$target" ""
+    fi
+  elif interactive; then
+    if whiptail --title "$APP" --yesno "Keep a copy of each day's backup on this Proxmox host as well, in $dir?\n\nThe container's own backups go with it if it is ever lost. Choose No and you will not be asked again; HOST_BACKUP_DIR=... on a later update turns them on." 13 70; then
+      record_host_backups "$target" "$dir"
+    else
+      record_host_backups "$target" ""
+    fi
+  else
+    msg_info "Tip: HOST_BACKUP_DIR=$HOST_BACKUP_DIR on the next update keeps daily backups on this host too."
+    return 0
+  fi
+  apply_host_backups "$target"
 }
 
 # ---------------------------------------------------------------------------

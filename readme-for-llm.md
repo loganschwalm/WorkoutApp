@@ -597,6 +597,8 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/loganschwalm/WorkoutApp/
 | `APP_PORT` | `6769` | Port the app listens on |
 | `REPO_URL` / `BRANCH` | this repo / `stable` | Source to install from; `stable` only has commits whose tests passed |
 | `APP_DIR` / `DATA_DIR` | `/opt/workout-tracker` / `/var/lib/workout-tracker` | Code and database paths |
+| `HOST_BACKUP_DIR` | `/var/backups/workout-tracker` | Where on the Proxmox host to keep daily copies of the database, in a folder per container; `none` for none (see [Backups](#backups)) |
+| `HOST_BACKUP_KEEP` | `14` | How many of those copies to keep |
 
 `STORAGE` and `TEMPLATE_STORAGE` are detected from the storages your node actually has: the script
 asks when there is more than one candidate, and only offers storages that accept the right content
@@ -686,6 +688,48 @@ systemctl start workout-tracker
 
 For the whole container, use a normal Proxmox `vzdump` backup job. Because the database sits at
 `/var/lib/workout-tracker/workouts.db` inside the container's root disk, a container backup covers it.
+
+##### Copies on the Proxmox host
+
+Backups inside the container go with it if the container is ever lost, so the host keeps copies of its
+own. A new install sets this up by default: every day at about a quarter past four (or at the next start,
+if the host was off then), `workout-tracker-host-backup@<CTID>.timer` on the host takes a fresh snapshot
+inside the container, copies it out with `pct pull`, and keeps the newest 14 in
+`/var/backups/workout-tracker/<CTID>` on the host, readable by root only. The container itself is not
+changed (no bind mount). Advanced settings ask for the directory: a storage mounted from a NAS, such as
+`/mnt/pve/nas/workout-tracker`, keeps the copies off the host's own disk too. `HOST_BACKUP_DIR=none`
+leaves them out.
+
+An install from before this gets them when you next run the update from the host: from a terminal it asks
+(a no is remembered, so it does not ask again), and `HOST_BACKUP_DIR=/some/dir` or `HOST_BACKUP_DIR=none`
+on the update answers for it. The update takes a first copy straight away, so a problem shows at once.
+Each container's directory and count are in `/etc/workout-tracker-host-backup/<CTID>.conf` on the host,
+which updates leave as they are; set `HOST_BACKUP_DIR=''` there to turn them off, or a directory to turn
+them on, and run the update.
+
+```bash
+workout-tracker-host-backup <CTID>                              # one now, on the host
+ls -l /var/backups/workout-tracker/<CTID>                       # what is there
+systemctl list-timers 'workout-tracker-host-backup@*'           # when the next ones run
+journalctl -u workout-tracker-host-backup@<CTID>                # how the last ones went
+systemctl disable --now workout-tracker-host-backup@<CTID>.timer   # stop them (a container you deleted, say)
+```
+
+A stopped container is not backed up (the timer's run fails and says so, and catches up at the next
+one), and neither is one that no longer exists; that failure says how to stop the timer. To restore a copy
+from the host, push it into the container and restore it as above:
+
+```bash
+pct push <CTID> /var/backups/workout-tracker/<CTID>/workouts-20260926-041512.db /root/restore.db
+pct enter <CTID>
+systemctl stop workout-tracker
+cp /root/restore.db /var/lib/workout-tracker/workouts.db
+rm -f /var/lib/workout-tracker/workouts.db-wal /var/lib/workout-tracker/workouts.db-shm /root/restore.db
+chown workout:workout /var/lib/workout-tracker/workouts.db
+systemctl start workout-tracker
+```
+
+Into a new container instead (the old one gone): install afresh, then do the same with its CTID.
 
 #### Managing accounts
 
