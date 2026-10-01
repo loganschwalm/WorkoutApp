@@ -623,6 +623,8 @@ def run(t):
     check('a goal shows the heaviest weight so far against the target, under the exercise as it was written',
           cdp.ev(goal_items) == ['Bench Press | 150 of 200 lbs | 50 lbs to go | 75 | false'], cdp.ev(goal_items))
     check('and says so', cdp.ev("document.getElementById('goalFeedback').textContent") == 'Goal set for Bench Press.')
+    drawn = cdp.ev("(bar => bar.firstElementChild.getBoundingClientRect().width / bar.clientWidth)(document.querySelector('#goalList .goal-bar'))")
+    check('its bar is drawn three quarters full, not full (the CSP refuses widths written into markup)', drawn is not None and abs(drawn - 0.75) < 0.01, drawn)
     check('the form is cleared for the next', cdp.ev("document.getElementById('goalTarget').value") == '')
     tomorrow = "(d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'))(new Date(Date.now() + 86400000))"
     set_goal('Squat', 250, cdp.ev(tomorrow))

@@ -391,10 +391,13 @@ function renderGoals() {
     const deadline = goal.by && !reached ? ` · ${goalDeadline(goal.by)}` : '';
     return `<li class="goal${reached ? ' reached' : ''}"><div class="goal-head"><strong>${escapeHTML(goal.name)}</strong>`
       + `<span>${formatWeight(best)} of ${formatWeight(target)} ${unit}</span></div>`
-      + `<div class="goal-bar" role="progressbar" aria-label="${escapeHTML(goal.name)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}"><span style="width:${percent}%"></span></div>`
+      + `<div class="goal-bar" role="progressbar" aria-label="${escapeHTML(goal.name)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}"><span></span></div>`
       + `<div class="goal-foot"><span>${escapeHTML(status + deadline)}</span>`
       + `<button class="link-button" type="button" data-goal-remove="${escapeHTML(key)}" aria-label="Remove the goal for ${escapeHTML(goal.name)}">Remove</button></div></li>`;
   }).join('') : '<li class="empty">No goals yet. Set one below.</li>';
+  // Set through the DOM: the Content-Security-Policy refuses style="" attributes written into markup, which left every
+  // bar full whatever the goal's progress.
+  $('goalList').querySelectorAll('.goal-bar').forEach(bar => { bar.firstElementChild.style.width = `${bar.getAttribute('aria-valuenow')}%`; });
 }
 
 function showGoalFeedback(message, isError = false) {
