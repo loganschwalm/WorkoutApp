@@ -138,9 +138,11 @@ form.onsubmit = event => {
   event.preventDefault();
   if (mode === 'register' && refuseField([[emailInput, emailProblem(emailInput.value)], [loginInput, usernameProblem(loginInput.value)],
     [passwordInput, passwordProblem(passwordInput.value, loginInput.value.trim(), emailInput.value.trim())]])) return;
+  // Without "Remember me" the session ends when the browser closes, and after half a day without use (server.py).
+  const remember = document.getElementById('remember').checked;
   const body = mode === 'register'
-    ? { email:emailInput.value, username:loginInput.value, password:passwordInput.value }
-    : { login:loginInput.value, password:passwordInput.value };
+    ? { email:emailInput.value, username:loginInput.value, password:passwordInput.value, remember }
+    : { login:loginInput.value, password:passwordInput.value, remember };
   submitWith(submit, async () => signedIn(await post(`/api/auth/${mode}`, body)));
 };
 

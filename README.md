@@ -449,8 +449,10 @@ which has every account.
   is signed out everywhere else.
 - Accounts made before accounts had emails keep signing in with their username. Add an email in
   Settings to be able to reset a forgotten password.
-- A session lasts 30 days from when it was last used, so someone who trains every week stays signed in.
-  Signing out ends the session on the server.
+- The sign-in page has a **Remember me** box, ticked to begin with. Ticked, a session lasts 30 days from
+  when it was last used, so someone who trains every week stays signed in. Unticked, which suits a shared
+  computer, the browser forgets the session when it closes, and the server ends it after 12 hours
+  without use. Signing out ends the session on the server either way.
 - Change your password in Settings with your current one; every other device is signed out.
 - Delete your account in Settings, with your password. Every workout, template, setting and session
   goes with it.

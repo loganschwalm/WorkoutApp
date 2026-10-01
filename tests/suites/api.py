@@ -325,7 +325,7 @@ def run_security(t, check, request):
     print('A9  expired sessions are deleted')
     tester_id = main.api('GET', '/api/auth/me', token=t.token)[0]['user']['id']
     db = sqlite3.connect(db_path)
-    db.executemany('INSERT INTO sessions VALUES (?, ?, ?)', [(f'stale-{n}', tester_id, 1000 + n) for n in range(5)])
+    db.executemany('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)', [(f'stale-{n}', tester_id, 1000 + n) for n in range(5)])
     db.commit()
     db.close()
     login(main, 'tester', 'chalk-and-plates-42')
@@ -376,6 +376,7 @@ def schema_of(path):
             'columns': [r[1] for r in db.execute('PRAGMA table_info(workouts)')],
             'state_columns': [r[1] for r in db.execute('PRAGMA table_info(user_state)')],
             'user_columns': [r[1] for r in db.execute('PRAGMA table_info(users)')],
+            'session_columns': [r[1] for r in db.execute('PRAGMA table_info(sessions)')],
             'user_indexes': sorted(r[1] for r in db.execute("PRAGMA index_list('users')")),
         }
     finally:
@@ -393,7 +394,7 @@ def run_structure(t, check, request):
     t.start_server('fresh.db')  # the harness only asks /api/auth/me, which never opens the database
     schema = schema_of(t.db_path('fresh.db'))
     check('a new database has every table before any request touches it', schema['tables'] == tables, schema['tables'])
-    check('it is at schema version 8', schema['version'] == 8, schema['version'])
+    check('it is at schema version 9', schema['version'] == 9, schema['version'])
     check('with the client_id column and its unique index',
           'client_id' in schema['columns'] and 'workouts_user_client' in schema['indexes'], schema)
     check('with a column for the training program', 'program_json' in schema['state_columns'], schema['state_columns'])
@@ -402,12 +403,14 @@ def run_structure(t, check, request):
     check('and one for bodyweight', 'bodyweight_json' in schema['state_columns'], schema['state_columns'])
     check('with an email for each account, and its unique index',
           'email' in schema['user_columns'] and 'users_email' in schema['user_indexes'], schema)
+    check('and whether each session was remembered', 'remember' in schema['session_columns'], schema['session_columns'])
     check('in write-ahead-log mode', schema['journal'] == 'wal', schema['journal'])
     legacy = schema_of(t.db_path('legacy.db'))
-    check('the database from before client_id (A3) is now at version 8 too', legacy['version'] == 8, legacy['version'])
+    check('the database from before client_id (A3) is now at version 9 too', legacy['version'] == 9, legacy['version'])
     check('and has the training program, exercise notes, goals and bodyweight columns', {'program_json', 'notes_json', 'goals_json', 'bodyweight_json'} <= set(legacy['state_columns']), legacy['state_columns'])
     check('and the email column, and the table of reset codes',
           'email' in legacy['user_columns'] and 'password_resets' in legacy['tables'], legacy)
+    check('and the remembered column on its sessions', 'remember' in legacy['session_columns'], legacy['session_columns'])
 
     # A database written by the release before migrations were numbered: client_id already there, version 0.
     path = t.db_path('unversioned.db')
@@ -425,7 +428,7 @@ def run_structure(t, check, request):
     kept = db.execute("SELECT name, client_id FROM workouts").fetchall()
     db.close()
     check('an unversioned database that already has client_id upgrades cleanly',
-          schema['version'] == 8 and schema['columns'].count('client_id') == 1 and kept == [('Kept', 'k1')], f'{schema} {kept}')
+          schema['version'] == 9 and schema['columns'].count('client_id') == 1 and kept == [('Kept', 'k1')], f'{schema} {kept}')
 
     path = t.db_path('newer.db')
     db = sqlite3.connect(path)
@@ -1230,6 +1233,56 @@ def run_account_security(t, check, request):
     set_expires_at(regular, now - 60)
     status, headers, reply = request('GET', '/api/auth/me', token=regular)
     check('an expired session stays expired', reply['user'] is None and 'set-cookie' not in headers, f"{reply} {headers.get('set-cookie')}")
+
+    # ------------------------------------------------------------------ A27b "Remember me"
+    print('A27b without "Remember me" a session ends with the browser, and after half a day unused')
+    register('rememberer')
+
+    def remembered(token):
+        db = sqlite3.connect(db_path)
+        row = db.execute('SELECT remember FROM sessions WHERE token = ?', (hashlib.sha256(token.encode()).hexdigest(),)).fetchone()
+        db.close()
+        return row[0] if row else None
+
+    def sign_in_as(login, **extra):
+        status, headers, reply = post('/api/auth/login', {'login': login, 'password': 'first-password', **extra})
+        return status, headers.get('set-cookie', ''), session_of(headers), reply
+
+    now = int(time.time())
+    for label, extra in [('saying nothing, as pages from before the box do', {}), ('remember: true', {'remember': True})]:
+        status, cookie, token, _ = sign_in_as('rememberer', **extra)
+        check(f'signing in {label} lasts 30 days, and the cookie outlives the browser',
+              status == 200 and 'Max-Age=2592000' in cookie and 'HttpOnly' in cookie, cookie)
+        check(f'and the server keeps it 30 days ({label})', abs(expires_at(token) - (now + 30 * 86400)) < 60 and remembered(token) == 1, expires_at(token) - now)
+    status, cookie, forgotten, _ = sign_in_as('rememberer', remember=False)
+    check('remember: false is still a sign-in', status == 200 and me(forgotten)['username'] == 'rememberer', status)
+    check('its cookie has no Max-Age, so the browser drops it when it closes', 'Max-Age' not in cookie and 'Expires' not in cookie and 'HttpOnly' in cookie and 'SameSite=Lax' in cookie, cookie)
+    check('and the server drops it after half a day', abs(expires_at(forgotten) - (now + 12 * 3600)) < 60 and remembered(forgotten) == 0, expires_at(forgotten) - now)
+    for bad in ('yes', 1, 0, None, 'false', []):
+        status, _, reply = post('/api/auth/login', {'login': 'rememberer', 'password': 'first-password', 'remember': bad})
+        check(f'remember: {bad!r} is refused rather than guessed at -> 400', status == 400 and 'remember' in reply.get('error', ''), f'{status} {reply}')
+    status, headers, _ = post('/api/auth/login', {'login': 'rememberer', 'password': 'wrong-password', 'remember': False})
+    check('a wrong password gets no cookie either way', status == 401 and 'set-cookie' not in headers, status)
+    status, headers, _ = post('/api/auth/register', {'username': 'forgetful', 'email': 'forgetful@example.test', 'password': 'first-password', 'remember': False})
+    cookie = headers.get('set-cookie', '')
+    check('creating an account without it gives the same short session', status == 200 and 'Max-Age' not in cookie and remembered(session_of(headers)) == 0, f'{status} {cookie}')
+    status, headers, _ = post('/api/auth/register', {'username': 'mindful', 'email': 'mindful@example.test', 'password': 'first-password', 'remember': True})
+    check('creating one with it gives the long one', status == 200 and 'Max-Age=2592000' in headers.get('set-cookie', ''), headers.get('set-cookie'))
+    check('and so does saying nothing', remembered(register('saying-nothing')) == 1)
+
+    # Renewed on its own clock: once an hour of the half day has gone, and still without a Max-Age.
+    set_expires_at(forgotten, now + 12 * 3600 - 30 * 60)
+    status, headers, _ = request('GET', '/api/auth/me', token=forgotten)
+    check('one used half an hour in is left as it is', status == 200 and 'set-cookie' not in headers, headers.get('set-cookie'))
+    set_expires_at(forgotten, now + 2 * 3600)
+    status, headers, _ = request('GET', '/api/auth/me', token=forgotten)
+    cookie = headers.get('set-cookie', '')
+    check('one used ten hours in is renewed to a full half day', abs(expires_at(forgotten) - (now + 12 * 3600)) < 60, expires_at(forgotten) - now)
+    check('and its cookie is sent again, still ending with the browser', f'session={forgotten};' in cookie and 'Max-Age' not in cookie, cookie)
+    set_expires_at(forgotten, now - 60)
+    status, headers, reply = request('GET', '/api/auth/me', token=forgotten)
+    check('one unused for half a day is signed out', reply['user'] is None and 'set-cookie' not in headers, f"{reply} {headers.get('set-cookie')}")
+    check('while a remembered one from the same account carries on', me(token) is not None)
 
     # ------------------------------------------------------------------ A28 changes asked for by other pages
     print('A28 changes asked for by another page on the same site are refused')

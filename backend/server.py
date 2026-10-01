@@ -32,6 +32,10 @@ DB_PATH = os.environ.get('WORKOUT_DB', os.path.join(PROJECT_ROOT, 'data', 'worko
 SESSION_TTL = 60 * 60 * 24 * 30
 # A session in use is renewed to a full SESSION_TTL once this much of it has gone by.
 SESSION_RENEW = 60 * 60 * 24
+# Signing in without "Remember me" gives a cookie the browser drops when it closes, and a session the server drops after
+# half a day without use, so a copy of the cookie does not outlast the visit for long either. Renewed the same way.
+SHORT_SESSION_TTL = 60 * 60 * 12
+SHORT_SESSION_RENEW = 60 * 60
 # Years of workouts are a few hundred kilobytes, so anything bigger than this is not the app talking.
 MAX_BODY = 1024 * 1024
 # An import carries a whole account at once: room for tens of thousands of workouts.
@@ -244,8 +248,14 @@ def migration_8_bodyweight(database):
     database.execute("ALTER TABLE user_state ADD COLUMN bodyweight_json TEXT NOT NULL DEFAULT '{}'")
 
 
+def migration_9_remembered_sessions(database):
+    # Whether a session was started with "Remember me", which decides how long it lasts (SESSION_TTL or SHORT_SESSION_TTL)
+    # and whether its cookie outlives the browser. Every session from before had a cookie that did, so it counts as remembered.
+    database.execute('ALTER TABLE sessions ADD COLUMN remember INTEGER NOT NULL DEFAULT 1')
+
+
 MIGRATIONS = [migration_1_tables, migration_2_client_ids, migration_3_programs, migration_4_emails, migration_5_exercise_notes,
-              migration_6_hashed_sessions, migration_7_goals, migration_8_bodyweight]
+              migration_6_hashed_sessions, migration_7_goals, migration_8_bodyweight, migration_9_remembered_sessions]
 
 
 def init_database():
@@ -936,7 +946,9 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
         return SECURE_COOKIES or forwarded == 'https'
 
     def session_cookie(self, token, max_age):
-        return f"session={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={max_age}" + ('; Secure' if self.secure_cookies() else '')
+        """The cookie carrying a session. With no max_age it lasts until the browser is closed."""
+        lifetime = '' if max_age is None else f'; Max-Age={max_age}'
+        return f"session={token}; Path=/; HttpOnly; SameSite=Lax{lifetime}" + ('; Secure' if self.secure_cookies() else '')
 
     def send_json(self, status, payload, cookies=None, headers=None):
         body, encoding = self.encoded(json.dumps(payload).encode())
@@ -1002,12 +1014,17 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             return None
         now = int(time.time())
         with connection() as database:
-            row = database.execute('SELECT users.id, users.username, users.email, sessions.expires_at FROM sessions JOIN users ON users.id = sessions.user_id WHERE sessions.token = ? AND sessions.expires_at > ?', (session_hash(token), now)).fetchone()
+            row = database.execute('SELECT users.id, users.username, users.email, sessions.expires_at, sessions.remember FROM sessions JOIN users ON users.id = sessions.user_id WHERE sessions.token = ? AND sessions.expires_at > ?', (session_hash(token), now)).fetchone()
             # A session lasts SESSION_TTL from when it was last used, not from signing in, so someone who trains every week
             # stays signed in. Renewed at most once a day, and the cookie with it, or the browser would drop it on time anyway.
-            if row and row['expires_at'] < now + SESSION_TTL - SESSION_RENEW:
-                database.execute('UPDATE sessions SET expires_at = ? WHERE token = ?', (now + SESSION_TTL, session_hash(token)))
-                self.renewed_cookie = self.session_cookie(token, SESSION_TTL)
+            # One started without "Remember me" is renewed the same way on its shorter clock, and its cookie stays one
+            # that goes when the browser does.
+            if row:
+                remembered = bool(row['remember'])
+                lifetime, renew = (SESSION_TTL, SESSION_RENEW) if remembered else (SHORT_SESSION_TTL, SHORT_SESSION_RENEW)
+                if row['expires_at'] < now + lifetime - renew:
+                    database.execute('UPDATE sessions SET expires_at = ? WHERE token = ?', (now + lifetime, session_hash(token)))
+                    self.renewed_cookie = self.session_cookie(token, lifetime if remembered else None)
         return {key: row[key] for key in ('id', 'username', 'email')} if row else None
 
     def require_user(self):
@@ -1087,13 +1104,22 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             else:
                 self.send_json(HTTPStatus.NOT_FOUND, {'error': 'Endpoint not found.'})
 
-    def start_session(self, database, user_id):
-        """Sign this account in: a new session, and the cookie that carries it."""
+    def start_session(self, database, user_id, remember=True):
+        """Sign this account in: a new session, and the cookie that carries it. One that is not remembered ends when the
+        browser closes, or after SHORT_SESSION_TTL without use."""
         now = int(time.time())
         token = secrets.token_urlsafe(32)
+        lifetime = SESSION_TTL if remember else SHORT_SESSION_TTL
         database.execute('DELETE FROM sessions WHERE expires_at <= ?', (now,))
-        database.execute('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)', (session_hash(token), user_id, now + SESSION_TTL))
-        return self.session_cookie(token, SESSION_TTL)
+        database.execute('INSERT INTO sessions (token, user_id, expires_at, remember) VALUES (?, ?, ?, ?)', (session_hash(token), user_id, now + lifetime, int(remember)))
+        return self.session_cookie(token, lifetime if remember else None)
+
+    def wants_remembering(self, data):
+        """Whether the sign-in asked to be remembered. Pages from before "Remember me" say nothing, and were."""
+        remember = data.get('remember', True)
+        if not isinstance(remember, bool):
+            raise BadRequest('remember must be true or false.')
+        return remember
 
     def send_wait(self, wait, message):
         self.send_json(HTTPStatus.TOO_MANY_REQUESTS, {'error': f'{message} Try again in {wait_words(wait)}.'}, headers={'Retry-After': str(wait)})
@@ -1106,6 +1132,7 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
         email = email_address(data.get('email'))
         username = new_username(data.get('username'))
         password = new_password(str(data.get('password', '')), username, email)
+        remember = self.wants_remembering(data)
         with connection() as database:
             if database.execute('SELECT 1 FROM users WHERE username = ?', (username,)).fetchone():
                 raise BadRequest('That username is already registered.', HTTPStatus.CONFLICT)
@@ -1115,7 +1142,7 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             stored_hash = password_hash(password)
             user_id = database.execute('INSERT INTO users (username, email, password_hash, created_at) VALUES (?, ?, ?, ?)',
                                        (username, email, stored_hash, int(time.time() * 1000))).lastrowid
-            cookie = self.start_session(database, user_id)
+            cookie = self.start_session(database, user_id, remember)
         self.send_json(HTTPStatus.OK, {'user': {'id': user_id, 'username': username, 'email': email}}, [cookie])
 
     def sign_in(self):
@@ -1125,6 +1152,7 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
         password = str(data.get('password', ''))
         if len(login) < 3 or len(password) < 8:
             raise BadRequest('Enter your email or username, and a password of 8+ characters.')
+        remember = self.wants_remembering(data)
         with connection() as database:
             row = find_account(database, login)
             # Keyed by the account rather than what was typed, so its email and its username share one limit.
@@ -1143,7 +1171,7 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             if needs_rehash(row['password_hash']):
                 # The password is only known now, so this is the moment to move an older hash to the current strength.
                 database.execute('UPDATE users SET password_hash = ? WHERE id = ?', (password_hash(password), row['id']))
-            cookie = self.start_session(database, row['id'])
+            cookie = self.start_session(database, row['id'], remember)
         self.send_json(HTTPStatus.OK, {'user': public_user(row)}, [cookie])
 
     def send_reset_code(self):

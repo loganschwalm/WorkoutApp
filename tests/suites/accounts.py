@@ -5,6 +5,7 @@ import importlib.util
 import json
 import os
 import sqlite3
+import time
 
 from ..harness import REPO_ROOT
 
@@ -68,6 +69,36 @@ def run(t):
     fill(password='chalk-and-plates-42')
     submit('authForm')
     check('the email, in any case, signs in', signed_in_as('newbie'), cdp.ev('location.pathname'))
+
+    # ------------------------------------------------------------------ C2b remember me
+    print('C2b "Remember me" is ticked to begin with, and unticked signs in for this visit only')
+
+    def session_cookie():
+        cookies = cdp.send('Network.getCookies', urls=[cdp.ev('location.origin')])['result']['cookies']
+        return next((cookie for cookie in cookies if cookie['name'] == 'session'), None)
+
+    def sign_in_remembering(remember):
+        cdp.send('Network.clearBrowserCookies')
+        open_login()
+        cdp.ev(f"document.getElementById('remember').checked = {json.dumps(remember)}")
+        fill(username='newbie', password='chalk-and-plates-42')
+        submit('authForm')
+        return signed_in_as('newbie') and session_cookie()
+
+    cdp.send('Network.clearBrowserCookies')
+    open_login()
+    check('the sign-in form has a Remember me box, ticked', shown('remember') and cdp.ev("document.getElementById('remember').checked") is True)
+    check('labelled so, and the label ticks it', 'Remember me' in cdp.ev("document.querySelector('label[for=remember]').textContent")
+          and cdp.ev("document.querySelector('label[for=remember]').click(); document.getElementById('remember').checked") is False)
+    cdp.ev("document.getElementById('registerTab').click()")
+    check('Create account has it too', shown('remember'))
+    cdp.ev("document.getElementById('loginTab').click()")
+    cookie = sign_in_remembering(True)
+    check('signing in with it ticked gives a cookie that outlives the browser',
+          cookie and cookie['session'] is False and cookie['expires'] - time.time() > 25 * 86400, cookie)
+    cookie = sign_in_remembering(False)
+    check('with it unticked, a cookie the browser drops when it closes', cookie and cookie['session'] is True, cookie)
+    check('and it is still signed in for the visit', cdp.ev('window.localUsername') == 'newbie', cdp.ev('window.localUsername'))
 
     # ------------------------------------------------------------------ C3 forgot password
     print('C3  a forgotten password is reset with an emailed code')
