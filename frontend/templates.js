@@ -116,6 +116,13 @@ function withSupersetGroups(drafts) {
   });
 }
 
+// A template that is a day of the program you built takes that day's workout with it, so deleting it says so.
+function templateDeleteQuestion(template) {
+  const days = currentProgram && programDefinition(currentProgram).custom ? currentProgram.days.filter(day => day.template === template.id) : [];
+  return days.length ? `Delete template “${template.name}”? ${currentProgram.name} does it on ${days.map(day => day.name).join(' and ')}, which will need another template.`
+    : `Delete template “${template.name}”?`;
+}
+
 function openTemplateEditor(template = null) {
   rememberOpener('template');
   editingTemplateId = template?.id || null;
@@ -149,10 +156,11 @@ $('templateList').onclick = e => {
     renderTemplates();
     showFeedback(`Created a copy of “${template.name}”.`, 'success');
   }
-  if (action === 'delete' && confirm(`Delete template “${template.name}”?`)) {
+  if (action === 'delete' && confirm(templateDeleteQuestion(template))) {
     customTemplates = customTemplates.filter(item => item.id !== template.id);
     saveCustomTemplates();
     renderTemplates();
+    renderProgram();
   }
 };
 $('templateExerciseEditor').oninput = e => {
@@ -207,6 +215,8 @@ $('templateForm').onsubmit = event => {
   } else customTemplates.push({ id:`custom-${Date.now()}`, name, exercises:validExercises });
   saveCustomTemplates();
   renderTemplates();
+  // A day of a built program shows its template's exercises.
+  renderProgram();
   closeTemplateEditor();
   showFeedback(`Template “${name}” saved.`, 'success');
 };

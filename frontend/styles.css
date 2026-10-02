@@ -657,3 +657,17 @@ html[data-theme="dark"] .goal.reached .goal-foot span { color:#a5e5c2; }
   .library-form { grid-template-columns:1fr 1fr; }
   .library-form > div:first-child, .library-form button { grid-column:1 / -1; }
 }
+
+/* The program builder: each day of a built program, a name and a template, with buttons to move or remove it. */
+.builder-days { display:grid; gap:0; margin:6px 0 0; padding:0; list-style:none; }
+.builder-day { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.3fr) auto; gap:8px; align-items:end; padding:10px 0; }
+.builder-day + .builder-day { border-top:1px solid var(--line); }
+.builder-day .template-row-actions { display:flex; gap:4px; }
+.builder-day .template-row-actions button { width:36px; height:44px; padding:0; }
+.builder-day .template-row-actions button:disabled { opacity:.4; cursor:default; transform:none; }
+.builder-day select, .builder-day input { height:48px; }
+.builder-modal { max-height:min(760px,90vh); overflow:auto; }
+@media (max-width:620px) {
+  .builder-day { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+  .builder-day .template-row-actions { grid-column:1 / -1; justify-self:end; }
+}

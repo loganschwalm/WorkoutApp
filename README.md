@@ -42,9 +42,10 @@ library, with SQLite for storage, so there is no build step, no package manager 
 - Finishing shows a summary with any new personal records.
 
 **Training programs**
-- **Wendler 5/3/1**: four days a week, with training maxes that go up each cycle.
+- **Wendler 5/3/1**: four days a week, with training maxes that go up each cycle, and Boring But Big or First Set Last.
 - **Reddit PPL**: the beginner push/pull/legs program, six days a week with linear progression.
 - **Apartment Gym**: upper/lower for a small gym with dumbbells, a cable stack and a few machines.
+- **Your own program**: build a weekly split from your templates, 1 to 7 days, and the card says what's next.
 
 Every set is planned for you, weights progress on their own, and the plan shows what's next. Its Progress
 charts each lift's training max (or working weight) against the one-rep max your sets estimate, so you can

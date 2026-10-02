@@ -585,6 +585,18 @@ def run_structure(t, check, request):
     t.api('PUT', '/api/state', {'settings': {'restDuration': 75}}, token)
     state = t.api('GET', '/api/state', token=token)[0]
     check('saving only settings leaves the program alone', state.get('program') == program and state['templates'] == [template], state)
+    built = {'definition': 'custom', 'startedAt': 1, 'cycle': 1, 'trainingMaxes': {}, 'name': 'Upper/Lower',
+             'days': [{'name': 'Upper A', 'template': 'custom-1'}, {'name': 'Lower', 'template': 'built-in-2'}]}
+    for label, body, expected in [
+        ('a built program with a name that is a number', {'program': {**built, 'name': 5}}, 400),
+        ('a built program whose days are not a list', {'program': {**built, 'days': {'Upper': 'custom-1'}}}, 400),
+        ('a built program of 8 days', {'program': {**built, 'days': [{'name': f'Day {n}', 'template': 'custom-1'} for n in range(8)]}}, 400),
+        ('a built program with a day of no template', {'program': {**built, 'days': [{'name': 'Upper A', 'template': ''}]}}, 400),
+        ('a valid built program', {'program': built}, 200),
+    ]:
+        status, _, reply = request('PUT', '/api/state', json.dumps(body).encode(), json_headers, token=token)
+        check(f'PUT /api/state with {label} -> {expected}', status == expected, f'{status} {reply}')
+    check('the built program is stored as sent', t.api('GET', '/api/state', token=token)[0].get('program') == built)
     status, _, _ = request('PUT', '/api/state', json.dumps({'program': None}).encode(), json_headers, token=token)
     state = t.api('GET', '/api/state', token=token)[0]
     for label, body, expected in [

@@ -531,7 +531,7 @@ def run_apartment_gym(t, text, visible, field, set_field, click, server_program,
     print('P15 Apartment Gym is offered, and set up for its equipment')
     t.open_tracker()
     names = cdp.ev("[...document.querySelectorAll('#templateList .program-template h3')].map(h => h.textContent)")
-    check('Apartment Gym is listed after the other programs', names == ['Wendler 5/3/1', 'Reddit PPL', 'Apartment Gym'], names)
+    check('Apartment Gym is listed after the other programs, before building your own', names == ['Wendler 5/3/1', 'Reddit PPL', 'Apartment Gym', 'Your own program'], names)
     card = cdp.ev(f"document.querySelector('{APARTMENT}').textContent")
     check('its card says what it needs and how often', 'dumbbells up to 50 lbs' in card and '4 days a week · upper and lower body twice each' in card, card)
     click(f'{APARTMENT} [data-program-action=setup]')

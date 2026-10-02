@@ -233,7 +233,8 @@ Custom templates are saved to your account on the server, and cached in the brow
 still work while the server is unreachable. A template created or edited offline uploads when the
 server is reachable again.
 
-The templates also offer three [training programs](#training-programs): Wendler 5/3/1, Reddit PPL, and Apartment Gym.
+The templates also offer the [training programs](#training-programs): Wendler 5/3/1, Reddit PPL, Apartment Gym, and one you
+build from your templates.
 
 ### Training programs
 
@@ -279,7 +280,8 @@ up another replaces it, and the workouts you finished stay in your history. They
 - Four days a week, one main lift a day, through the 5s, 3s and 5/3/1 weeks and a deload week.
   Every weight is worked out from your training max and rounded to the nearest 5 or 2.5 lbs (2.5 or
   1.25 kg).
-- Choose the assistance work: Boring But Big (5 × 10 of the day's lift at 50%, plus one exercise),
+- Choose the assistance work: Boring But Big (5 × 10 of the day's lift at 50%, plus one exercise), First Set
+  Last (5 × 5 of the day's lift at the week's first working set, 65%, 70% or 75%, plus one exercise),
   Triumvirate (two exercises), or the main lifts only. Warm-up sets and the deload week can each be
   turned off.
 - When every day of a cycle is done, the next cycle starts with each training max raised: 5 lbs
@@ -341,6 +343,27 @@ cable stack with a single handle, and chest press, lat pulldown, leg extension a
   the app says to go heavier.
 - Working weights and equipment can be changed at any time. Lowering the heaviest dumbbells lowers
   any dumbbell lift that was above them.
+
+#### Your own program
+
+A weekly split you build from your templates, for training the way you already do with the program card's help.
+
+- Build program, on its card among the templates, asks for a name and the days, in the order you train them: 1 to 7,
+  each a name and a template (one of yours, or a built-in one). It starts from your own templates, or push, pull and
+  legs if you have none. A day left unnamed takes its template's name. Days can be added, removed and moved.
+- The same template can be more than one day (Upper A and Upper B). A day does its template as it is when you start
+  it, so changing the template changes the day.
+- The card works as it does for the other programs: the next workout to start or skip, and this week's days, each with
+  its template and exercises. A week is one pass through the days, with rest days wherever they suit you; once every
+  day is done or skipped, the next week starts.
+- There are no numbers per lift to enter. A template exercise with sets and a rep range goes up on its own once
+  every set reaches the top (see [Workout templates](#workout-templates)), so the card shows each day's weights as
+  they will be ("Bench Press 3 × 8–10 at 105 lbs"); anything else starts from last time.
+- Workouts are named after their day ("Upper A"), and History says which program and week ("Upper/Lower · Week 2").
+- Edit program, in the card's ⋯ menu, opens the builder again. A day already done this week stays done while it keeps
+  its place and template.
+- Deleting a template that a day does says so first. The day then asks for another template, and can only be skipped
+  until it has one.
 
 ### Workout history
 

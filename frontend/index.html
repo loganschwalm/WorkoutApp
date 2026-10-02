@@ -80,7 +80,7 @@
       <div class="section-heading program-heading"><div><h2 id="programTitle">Training program</h2><p id="programSummary" class="subtitle"></p></div><details class="row-menu program-menu"><summary class="secondary" aria-label="Program options">&middot;&middot;&middot;</summary><div class="row-menu-items"><button id="editProgramBtn" type="button">Edit program</button><button class="danger" id="endProgramBtn" type="button">End program</button></div></details></div>
       <p class="program-notice" id="programNotice" role="status" hidden></p>
       <div class="program-next" id="programNext"></div>
-      <details class="program-section"><summary id="programNumbersHeading">Training maxes</summary><ul class="program-maxes" id="programMaxes"></ul></details>
+      <details class="program-section" id="programNumbersSection"><summary id="programNumbersHeading">Training maxes</summary><ul class="program-maxes" id="programMaxes"></ul></details>
       <details class="program-section" id="programProgressSection" hidden><summary>Progress</summary><p class="program-progress-key" id="programProgressKey"></p><ul class="program-progress" id="programProgress"></ul></details>
       <details class="program-section"><summary id="programBlockHeading">This cycle</summary><div id="programWeeks"></div></details>
     </section>
@@ -124,6 +124,19 @@
       </form>
     </section>
   </div>
+  <div class="modal-backdrop" id="builderModal" hidden>
+    <section class="settings-modal program-modal builder-modal" role="dialog" aria-modal="true" aria-labelledby="builderModalTitle">
+      <div class="settings-heading"><h2 id="builderModalTitle">Build your program</h2><button class="modal-close" id="closeBuilder" type="button" aria-label="Close program builder">&times;</button></div>
+      <form id="builderForm" novalidate>
+        <p class="subtitle program-help" id="builderIntro"></p>
+        <div class="program-option"><label for="builderName">Program name</label><input id="builderName" type="text" maxlength="100" autocomplete="off" placeholder="e.g. Upper/Lower" /></div>
+        <div class="template-exercise-heading"><label id="builderDaysLabel">Days, in order</label><button class="secondary" id="builderAddDay" type="button">Add a day</button></div>
+        <ol class="builder-days" id="builderDays" aria-labelledby="builderDaysLabel"></ol>
+        <p class="auth-feedback" id="builderError" role="alert" hidden></p>
+        <div class="settings-actions"><button class="secondary" id="cancelBuilder" type="button">Cancel</button><button class="primary" id="builderSubmit" type="submit">Start program</button></div>
+      </form>
+    </section>
+  </div>
   <script src="common.js"></script>
   <script src="offline.js"></script>
   <!-- The Settings dialog is added by settings-dialog.js, one copy for every page. -->
@@ -136,6 +149,7 @@
   <script src="rest-timer.js"></script>
   <script src="records.js"></script>
   <script src="templates.js"></script>
+  <script src="program-builder.js"></script>
   <script src="exercise-library.js"></script>
   <script src="training-tools.js"></script>
   <script src="script.js"></script>

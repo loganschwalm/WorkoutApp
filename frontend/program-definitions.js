@@ -25,6 +25,11 @@
 //                            number (see programProgress); without it, each session's heaviest weight is its number
 //   roundNumber(program, lift, value)  optional: a number converted to the program's (new) unit, rounded to a step it uses
 //   setup                    { intro(editing), estimated, estimate(lift), hint(lift, value, form), toNumber(value, form, lift) }
+//   custom                   optional: true for a program the lifter builds (Your own program), set up and edited in
+//                            program-builder.js rather than the setup form; then also
+//   normalize(value)         what the stored program keeps of its own besides the shared fields ({ name, days }), or null
+//   forProgram(program)      the definition as one program has it: its own name
+//   workoutName(program, day), dayDescription(program, week, day)  optional: a day's workout name and its line on the card
 //
 // A program's numbers and weights are in its own unit, program.unit, which is always the unit shown: switching units
 // converts the program (program.js). A form's unit is form.unit. Rules that depend on the unit (a 5 lb or 2.5 kg jump)
@@ -80,6 +85,10 @@ const wendlerWarmups = [[40, 5], [50, 5], [60, 3]];
 const wendlerAssistance = [
   { id:'bbb', name:'Boring But Big', description:'5 sets of 10 of the day’s lift at 50% of its training max, then one assistance exercise.',
     supplemental:{ label:'BBB', percent:50, sets:5, reps:10 },
+    exercises:{ press:[['Chin-up', 5, 10]], deadlift:[['Hanging Leg Raise', 5, 15]], bench:[['Dumbbell Row', 5, 10]], squat:[['Leg Curl', 5, 10]] } },
+  // The week's first working set again (65%, 70% or 75%) for five sets of five.
+  { id:'fsl', name:'First Set Last', description:'5 sets of 5 of the day’s lift at the week’s first working set (65%, 70% or 75%), then one assistance exercise.',
+    supplemental:{ label:'FSL', firstSet:true, sets:5, reps:5 },
     exercises:{ press:[['Chin-up', 5, 10]], deadlift:[['Hanging Leg Raise', 5, 15]], bench:[['Dumbbell Row', 5, 10]], squat:[['Leg Curl', 5, 10]] } },
   { id:'triumvirate', name:'Triumvirate', description:'Two assistance exercises of 5 sets each after the main lift.',
     exercises:{ press:[['Dip', 5, 15], ['Chin-up', 5, 10]], deadlift:[['Good Morning', 5, 12], ['Hanging Leg Raise', 5, 15]], bench:[['Dumbbell Bench Press', 5, 15], ['Dumbbell Row', 5, 10]], squat:[['Leg Press', 5, 15], ['Leg Curl', 5, 10]] } },
@@ -138,8 +147,9 @@ const wendler531 = {
     const assistance = wendlerAssistance.find(item => item.id === program.options.assistance);
     const extra = assistance.supplemental;
     if (extra) {
-      const weight = roundToStep(trainingMax * extra.percent / 100, program.options.rounding);
-      exercises.push({ name:`${lift.name} (${extra.label})`, weight, reps:String(extra.reps), rest:accessoryRest(lift.name), plan:repeatSets(extra.sets, { percent:extra.percent, weight, reps:extra.reps }) });
+      const percent = extra.firstSet ? weekPlan.sets[0][0] : extra.percent;
+      const weight = roundToStep(trainingMax * percent / 100, program.options.rounding);
+      exercises.push({ name:`${lift.name} (${extra.label})`, weight, reps:String(extra.reps), rest:accessoryRest(lift.name), plan:repeatSets(extra.sets, { percent, weight, reps:extra.reps }) });
     }
     (assistance.exercises[lift.key] || []).forEach(([name, sets, reps]) => exercises.push({ name, weight:'', reps:String(reps), rest:accessoryRest(name), plan:repeatSets(sets, { weight:'', reps }) }));
     return exercises;
@@ -414,4 +424,57 @@ const apartmentGym = {
   }
 };
 
-const programDefinitions = [wendler531, redditPpl, apartmentGym];
+// ---- Your own program -----------------------------------------------------
+// A weekly split the lifter builds: up to seven days in order, each named and done from one of their templates (or a
+// built-in one), by its id, so a change to the template reaches the program. There is no number per lift: a template
+// exercise with sets and a rep range progresses on its own (templateSession in training-tools.js), and anything else
+// starts from last time. A week is one pass through the days, at whatever pace suits.
+const customProgramDayLimit = 7;
+
+// The template a day is done from, or null once that template has been deleted. Templates are loaded after this file,
+// so this is only asked once the page has every script.
+function customDayTemplate(program, day) {
+  const entry = program.days[day];
+  return entry && typeof getAllTemplates === 'function' ? getAllTemplates().find(template => template.id === entry.template) || null : null;
+}
+
+const customProgram = {
+  id:'custom',
+  custom:true,
+  name:'Your own program',
+  shortName:'Your own program',
+  summary:'Your own weekly split: name each day and choose the template it does. The program goes through the days in order and says what is next, and a template exercise with sets and a rep range goes up on its own.',
+  schedule:`1 to ${customProgramDayLimit} days a week · built from your templates`,
+  block:'week',
+  numbersLabel:'Working weights',
+  numberLabel:'Working weight',
+  lifts:[],
+  oneRepMaxes:false,
+  options:[],
+  normalize(value) {
+    const name = typeof value.name === 'string' ? value.name.trim().slice(0, 100) : '';
+    const days = (Array.isArray(value.days) ? value.days : []).slice(0, customProgramDayLimit)
+      .filter(day => day && typeof day === 'object' && typeof day.template === 'string' && day.template)
+      .map(day => ({ name:(typeof day.name === 'string' ? day.name.trim().slice(0, 60) : '') || 'Day', template:day.template }));
+    return name && days.length ? { name, days } : null;
+  },
+  forProgram:program => ({ ...customProgram, name:program.name, shortName:program.name }),
+  weeks:() => [{ name:'Week', summary:'' }],
+  days:program => program.days,
+  // The template's exercises, planned as starting the template would plan them; none once the template is gone.
+  workout(program, week, day) {
+    const template = customDayTemplate(program, day);
+    if (!template) return [];
+    return template.exercises.map(item => typeof templateSession === 'function' ? templateSession({ ...item, weight:item.weight ?? '' }) : { ...item });
+  },
+  // Named after the day alone ("Upper A"), as a template's workout is after the template; History says which program.
+  workoutName:(program, day) => program.days[day].name,
+  dayDescription(program, week, day) {
+    const template = customDayTemplate(program, day);
+    if (!template) return 'Its template was deleted. Edit the program to choose another.';
+    return `${template.name}: ${template.exercises.map(item => item.name).join(', ')}`;
+  },
+  numberNote:() => ({ text:'', warn:false })
+};
+
+const programDefinitions = [wendler531, redditPpl, apartmentGym, customProgram];

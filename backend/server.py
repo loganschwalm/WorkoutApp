@@ -423,6 +423,13 @@ def validate_program(program):
     for field in ('options', 'done', 'stalls'):
         if program.get(field) is not None and not isinstance(program[field], dict):
             raise BadRequest(f'program.{field} must be an object.')
+    # A program the lifter built has a name and up to 7 days, each named and done from a template, by its id.
+    text(program.get('name'), 'program.name', 200)
+    if program.get('days') is not None:
+        for index, day in enumerate(listed(program['days'], 'program.days', 7)):
+            text(day.get('name'), f'program.days[{index}].name', 200)
+            if not text(day.get('template'), f'program.days[{index}].template', 200):
+                raise BadRequest(f'program.days[{index}].template must name the template the day does.')
 
 
 # The muscle an exercise mostly works, and what it is done with, as exercise-library.js offers them.

@@ -9,8 +9,10 @@ function findProgramDefinition(id) {
   return programDefinitions.find(definition => definition.id === id) || null;
 }
 
+// The definition as this program has it: a program the lifter built (Your own program) goes by its own name.
 function programDefinition(program) {
-  return findProgramDefinition(program.definition);
+  const definition = findProgramDefinition(program.definition);
+  return definition && definition.forProgram ? definition.forProgram(program) : definition;
 }
 
 function capitalize(text) {
@@ -64,6 +66,9 @@ function normalizeProgram(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const definition = findProgramDefinition(value.definition);
   if (!definition) return null;
+  // A program the lifter built keeps its own name and days, and is no program without them.
+  const own = definition.normalize ? definition.normalize(value) : {};
+  if (!own) return null;
   const maxes = value.trainingMaxes && typeof value.trainingMaxes === 'object' ? value.trainingMaxes : {};
   const trainingMaxes = {};
   for (const lift of definition.lifts) {
@@ -86,7 +91,7 @@ function normalizeProgram(value) {
   // The unit its numbers are in; programs from before kilograms existed are in pounds.
   const unit = recordUnit(value);
   const options = normalizeOptions(definition, value.options && typeof value.options === 'object' ? value.options : {}, unit);
-  return { definition:definition.id, unit, startedAt:storedNumber(value.startedAt), cycle:Math.max(1, Math.floor(storedNumber(value.cycle))), trainingMaxes, stalls, options, done, lastRollover:rollover };
+  return { definition:definition.id, unit, startedAt:storedNumber(value.startedAt), cycle:Math.max(1, Math.floor(storedNumber(value.cycle))), trainingMaxes, stalls, options, done, lastRollover:rollover, ...own };
 }
 
 // The same program in the other unit, for when Settings change it. Its numbers are converted and rounded to steps the
@@ -180,13 +185,15 @@ function programWorkout(program, week, day) {
   const definition = programDefinition(program);
   const exercises = definition.workout(program, week, day);
   // The day's main lift and its number as the day was planned, which the card's Progress charts.
-  const lift = definition.lifts.find(item => item.name === exercises[0].name);
+  const lift = exercises[0] && definition.lifts.find(item => item.name === exercises[0].name);
+  // A built program's days go by their own names, so History says which program: "Upper/Lower · Week 3".
+  const label = definition.custom ? `${definition.name} · ${blockLabel(program, week)}` : blockLabel(program, week);
   return {
-    name:`${definition.shortName} ${programDays(program)[day].name}`,
+    name:definition.workoutName ? definition.workoutName(program, day) : `${definition.shortName} ${programDays(program)[day].name}`,
     notes:'',
     unit:program.unit,
     exercises,
-    programDay:{ definition:definition.id, startedAt:program.startedAt, cycle:program.cycle, week, day, label:blockLabel(program, week),
+    programDay:{ definition:definition.id, name:definition.name, startedAt:program.startedAt, cycle:program.cycle, week, day, label,
       ...(lift ? { lift:lift.key, number:program.trainingMaxes[lift.key] } : {}) }
   };
 }
@@ -196,7 +203,8 @@ function programWorkout(program, week, day) {
 function programInfo(programDay) {
   const definition = findProgramDefinition(programDay.definition);
   const number = positiveWeight(programDay.number);
-  return { name:definition ? definition.name : '', cycle:storedNumber(programDay.cycle), week:storedNumber(programDay.week) + 1, label:String(programDay.label || ''),
+  const name = typeof programDay.name === 'string' && programDay.name ? programDay.name : definition ? definition.name : '';
+  return { name, cycle:storedNumber(programDay.cycle), week:storedNumber(programDay.week) + 1, label:String(programDay.label || ''),
     ...(number !== null && typeof programDay.lift === 'string' ? { lift:programDay.lift, number } : {}) };
 }
 
@@ -409,8 +417,9 @@ function describeSets(sets) {
   return sets[0].weight === '' ? scheme : `${scheme} at ${formatWeight(sets[0].weight)} ${weightUnit()}`;
 }
 
-// "Bench Press 4 × 5, 1 × 5+ at 135 lbs", work sets only.
+// "Bench Press 4 × 5, 1 × 5+ at 135 lbs", work sets only. A template exercise with no set count has no plan: "Plank 30 s".
 function describeExercisePlan(exercise) {
+  if (!Array.isArray(exercise.plan) || !exercise.plan.length) return `${exercise.name} ${isTimed(exercise) ? `${exercise.reps} s` : `${exercise.reps} reps`}`;
   return `${exercise.name} ${describeSets(exercise.plan.filter(set => !set.warmup))}`;
 }
 
@@ -419,7 +428,10 @@ function describeExercisePlan(exercise) {
 function programTemplateCards() {
   return programDefinitions.map(definition => {
     const following = Boolean(currentProgram) && currentProgram.definition === definition.id;
-    const action = following ? '<button class="primary" type="button" data-program-action="view">View program</button>' : `<button class="primary" type="button" data-program-action="setup" data-program-id="${escapeHTML(definition.id)}">Set up program</button>`;
+    // Your own program is built in its own editor (program-builder.js) rather than set up from numbers.
+    const setup = definition.custom ? '<button class="primary" type="button" data-program-action="build">Build program</button>'
+      : `<button class="primary" type="button" data-program-action="setup" data-program-id="${escapeHTML(definition.id)}">Set up program</button>`;
+    const action = following ? '<button class="primary" type="button" data-program-action="view">View program</button>' : setup;
     return `<article class="template-card program-template" data-program-id="${escapeHTML(definition.id)}"><div><div class="template-card-heading"><h3>${escapeHTML(definition.name)}</h3><span class="badge">Program</span></div><p>${escapeHTML(typeof definition.summary === 'function' ? definition.summary(weightUnit()) : definition.summary)}</p><p class="program-schedule">${escapeHTML(definition.schedule)}${following ? ` · ${definition.block} ${currentProgram.cycle} in progress` : ''}</p></div><div class="template-actions">${action}</div></article>`;
   }).join('');
 }
@@ -435,10 +447,12 @@ function dayStatus(entry) {
 function programDayRow(program, week, day, next) {
   const entry = program.done[dayKey(week, day)];
   const isNext = Boolean(next) && next.week === week && next.day === day;
-  const main = programDefinition(program).workout(program, week, day)[0];
+  const definition = programDefinition(program);
+  const main = definition.workout(program, week, day)[0];
+  const description = definition.dayDescription ? definition.dayDescription(program, week, day) : main ? describeExercisePlan(main) : '';
   const label = `${entry ? 'Redo' : 'Start'} ${dayLabel(program, week, day)}`;
   const button = `<button class="${isNext ? 'primary' : 'secondary'}" type="button" data-program-action="start" data-week="${week}" data-day="${day}" aria-label="${escapeHTML(label)}">${entry ? 'Redo' : 'Start'}</button>`;
-  return `<li class="program-day${entry ? ' done' : ''}${isNext ? ' next' : ''}"><div><strong>${escapeHTML(programDays(program)[day].name)}</strong><span>${escapeHTML(describeExercisePlan(main))}</span></div><div class="program-day-actions">${entry ? dayStatus(entry) : ''}${button}</div></li>`;
+  return `<li class="program-day${entry ? ' done' : ''}${isNext ? ' next' : ''}"><div><strong>${escapeHTML(programDays(program)[day].name)}</strong><span>${escapeHTML(description)}</span></div><div class="program-day-actions">${entry ? dayStatus(entry) : ''}${button}</div></li>`;
 }
 
 function renderProgram() {
@@ -460,8 +474,14 @@ function renderProgram() {
   if (next) {
     const workout = programWorkout(program, next.week, next.day);
     const where = weeks.length > 1 ? ` · week ${next.week + 1}, ${weeks[next.week].name}` : '';
-    $('programNext').innerHTML = `<div><span class="program-kicker">Next workout${escapeHTML(where)}</span><strong>${escapeHTML(days[next.day].name)}</strong><ul>${workout.exercises.map(exercise => `<li>${escapeHTML(describeExercisePlan(exercise))}</li>`).join('')}</ul></div><div class="program-next-actions"><button class="primary" type="button" data-program-action="start" data-week="${next.week}" data-day="${next.day}">Start workout</button><button class="secondary" type="button" data-program-action="skip" data-week="${next.week}" data-day="${next.day}">Skip</button></div>`;
+    // A built program's day whose template has been deleted has nothing to start until it is given another.
+    const plan = workout.exercises.length ? workout.exercises.map(exercise => `<li>${escapeHTML(describeExercisePlan(exercise))}</li>`).join('')
+      : `<li>${escapeHTML(definition.dayDescription ? definition.dayDescription(program, next.week, next.day) : '')}</li>`;
+    const start = workout.exercises.length ? `<button class="primary" type="button" data-program-action="start" data-week="${next.week}" data-day="${next.day}">Start workout</button>` : '';
+    $('programNext').innerHTML = `<div><span class="program-kicker">Next workout${escapeHTML(where)}</span><strong>${escapeHTML(days[next.day].name)}</strong><ul>${plan}</ul></div><div class="program-next-actions">${start}<button class="secondary" type="button" data-program-action="skip" data-week="${next.week}" data-day="${next.day}">Skip</button></div>`;
   }
+  // A built program keeps no number per lift: its templates progress on their own.
+  $('programNumbersSection').hidden = !definition.lifts.length;
   $('programNumbersHeading').textContent = definition.numbersLabel;
   $('programMaxes').innerHTML = definition.lifts.map(lift => {
     const note = definition.numberNote(program, lift);
@@ -610,6 +630,7 @@ $('templateList').addEventListener('click', event => {
     const definition = findProgramDefinition(button.dataset.programId);
     if (definition) openProgramForm(definition);
   }
+  if (button.dataset.programAction === 'build') openProgramBuilder();
   if (button.dataset.programAction === 'view') $('programCard').scrollIntoView({ behavior:'smooth', block:'start' });
 });
 $('programCard').addEventListener('click', event => {
@@ -624,7 +645,11 @@ $('programCard').addEventListener('click', event => {
     showFeedback(`Skipped ${label}. ${recordProgramDay(currentProgram, week, day, { at:Date.now(), skipped:true, amrap:null, hit:null })}`, 'success');
   }
 });
-$('editProgramBtn').onclick = () => { if (currentProgram) openProgramForm(programDefinition(currentProgram)); };
+$('editProgramBtn').onclick = () => {
+  if (!currentProgram) return;
+  if (programDefinition(currentProgram).custom) openProgramBuilder(currentProgram);
+  else openProgramForm(programDefinition(currentProgram));
+};
 $('endProgramBtn').onclick = () => {
   if (!currentProgram) return;
   const name = programDefinition(currentProgram).name;
@@ -636,4 +661,5 @@ $('endProgramBtn').onclick = () => {
 window.addEventListener('settingschange', () => {
   if (currentProgram && currentProgram.unit !== weightUnit()) saveProgram(programInUnit(currentProgram, weightUnit()));
 });
-renderProgram();
+// Once every script has run: a built program's days are templates, which templates.js and training-tools.js bring.
+document.addEventListener('DOMContentLoaded', renderProgram);
