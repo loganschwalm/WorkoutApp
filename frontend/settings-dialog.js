@@ -34,7 +34,7 @@ document.body.insertAdjacentHTML('beforeend', `
       <label for="weeklyGoalSetting">Weekly goal</label>
       <select id="weeklyGoalSetting">${weeklyGoals}</select>
       <h3 class="settings-section">During a workout</h3>
-      <label class="setting-check"><input id="confirmEndSetting" type="checkbox" /> Confirm before ending an active workout</label>
+      <label class="setting-check"><input id="confirmEndSetting" type="checkbox" /> Ask before cancelling a workout with sets logged</label>
       <label class="setting-check"><input id="effortSetting" type="checkbox" /> Ask how many reps each set had left (effort)</label>
       <label class="setting-check"><input id="warmupSetting" type="checkbox" /> Suggest warm-up sets for barbell lifts</label>
       <label class="setting-check" id="keepAwakeSettingRow"><input id="keepAwakeSetting" type="checkbox" /> Keep the screen on with a silent video, as this browser will not do it itself</label>

@@ -148,7 +148,11 @@ own workouts, templates, and settings.
   the next exercise" in the template editor. Next exercise moves on past the whole superset, and an
   exercise added mid-superset goes after it. Reddit PPL does its triceps and lateral raises this way.
 - Restore an active workout after refreshing the page.
-- Finish or cancel an active workout.
+- Finish a workout by moving past its last exercise, or cancel it with Cancel workout, beside its name: for a workout
+  started by mistake, or one you do not want kept. A cancelled workout is not saved anywhere, as if it had never been
+  started: it is not in History, last time's numbers, personal records or Progress, a training program's day stays to
+  do, and other devices stop showing it. With nothing logged it goes at once; with sets logged it asks first (Settings
+  can turn that off). Either way the banner offers Undo for 10 seconds, which brings it back as it was.
 
 ### Network drops
 
@@ -437,7 +441,7 @@ the button that opened them. Settings include:
 - Weekly goal: 1 to 7 workouts a week (3 by default), which the History page's calendar counts.
 - Default rest duration from 15 to 600 seconds.
 - Automatic rest-timer start toggle.
-- End-workout confirmation toggle.
+- Cancel confirmation toggle: whether Cancel workout asks first when sets have been logged.
 - Effort toggle: whether to ask how many reps each set had left.
 - Warm-up toggle: whether to suggest warm-up sets for barbell lifts.
 - Keep-awake video toggle, shown only where the browser has no Wake Lock of its own (a plain `http://` address):

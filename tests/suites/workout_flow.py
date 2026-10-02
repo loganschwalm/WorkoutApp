@@ -3,7 +3,7 @@
 import json
 import time
 
-from ..harness import ACTIVE, TITLE
+from ..harness import ACTIVE, HIDDEN as HIDDEN_ACTIVE, TITLE
 
 INTERCEPT = False
 
@@ -145,3 +145,81 @@ def run(t):
     cdp.pause(0.5)
     thrown = [line for line in cdp.console if line.startswith('exceptionThrown')]
     check('and nothing threw along the way', not thrown, thrown[:2])
+
+    # A workout started by mistake: Cancel workout takes it away as if it had never been started, with Undo for a slip.
+    print('T7  cancelling a workout saves nothing and changes no stats, and Undo brings it back')
+    cookie = api('POST', '/api/auth/register', {'username': 'canceller', 'email': 'canceller@example.test', 'password': 'chalk-and-plates-42'})[1]
+    canceller = cookie.split('session=')[1].split(';')[0]
+    api('POST', '/api/workouts', {'name': 'Earlier Press', 'notes': '', 'createdAt': int(time.time() * 1000) - 2 * 86400000,
+                                  'exercises': [t.ex('Overhead Press', 95, 5, [(5, 95)])]}, canceller)
+    api('PUT', '/api/state', {'program': {'definition': 'wendler-531', 'unit': 'lbs',
+                                          'trainingMaxes': {'press': 100, 'deadlift': 300, 'bench': 200, 'squat': 250}}}, canceller)
+    t.set_cookie(canceller)
+    cdp.goto('/index.html')
+    cdp.wait("document.querySelector('#programNext [data-program-action=start]') && Object.keys(lastPerformance).length > 0")
+    cdp.pause(0.8)
+    feedback = "document.getElementById('formFeedback').textContent"
+    stats = "JSON.stringify([lastPerformance, personalBests, readPendingWorkouts().length, document.getElementById('programNext').textContent])"
+    before_stats, before_saved = cdp.ev(stats), len(api('GET', '/api/workouts', token=canceller)[0]['workouts'])
+    check('the cancel button says what it does', cdp.ev("document.getElementById('endWorkoutBtn').textContent") == 'Cancel workout')
+
+    cdp.ev("document.querySelector('#programNext [data-program-action=start]').click()")
+    cdp.wait(ACTIVE)
+    started = cdp.ev(TITLE)
+    cdp.pause(0.8)
+    check('a workout in progress reaches the server', t.wait_for(lambda: api('GET', '/api/active-session', token=canceller)[0]['session'] is not None))
+    cdp.dialogs.clear()
+    cdp.ev("document.getElementById('endWorkoutBtn').click()")
+    cdp.pause(0.4)
+    check('one started by mistake, with nothing logged, is cancelled at once, without a question',
+          not cdp.dialogs and cdp.ev("document.getElementById('activeWorkout').hidden") is True, cdp.dialogs)
+    check('and the banner says nothing was saved, with Undo', cdp.ev(feedback) == f'“{started}” was cancelled. Nothing was saved. Undo', cdp.ev(feedback))
+    check('the server is told it ended', t.wait_for(lambda: api('GET', '/api/active-session', token=canceller)[0]['session'] is None))
+    cdp.ev("document.querySelector('#formFeedback .feedback-action').click()")
+    cdp.pause(0.4)
+    check('Undo brings it back', cdp.ev(f"{ACTIVE} && {TITLE}") == started and cdp.ev(feedback) == f'“{started}” is back.', cdp.ev(feedback))
+    check('on the server too', t.wait_for(lambda: (api('GET', '/api/active-session', token=canceller)[0]['session'] or {}).get('name') == started))
+
+    # Two sets, the second heavier than anything before: a record, had it been kept.
+    cdp.ev("document.getElementById('activeWeight').value = '400'")
+    t.log_set(5)
+    cdp.pause(0.4)
+    cdp.ev("document.getElementById('activeWeight').value = '405'")
+    t.log_set(5)
+    cdp.pause(0.6)
+    cdp.dialogs.clear()
+    cdp.answer = False
+    cdp.ev("document.getElementById('endWorkoutBtn').click()")
+    cdp.pause(0.3)
+    check('with sets logged it asks first, saying how many would go', cdp.dialogs == ['Cancel this workout? Its 2 logged sets will not be saved.'], cdp.dialogs)
+    check('and declining keeps the workout and its sets', cdp.ev(ACTIVE) and cdp.ev('activeSession.exercises[activeSession.currentIndex].sets.length') == 2)
+    cdp.answer = True
+    cdp.ev("document.getElementById('endWorkoutBtn').click()")
+    cdp.pause(0.4)
+    check('accepting cancels it', cdp.ev("document.getElementById('activeWorkout').hidden") is True)
+    cdp.ev("document.querySelector('#formFeedback .feedback-action').click()")
+    cdp.pause(0.4)
+    check('and Undo brings it back with its sets', cdp.ev(ACTIVE) and cdp.ev('activeSession.exercises[activeSession.currentIndex].sets.length') == 2)
+    # Cancelled again, and another workout started before Undo: the cancelled one cannot take its place.
+    cdp.ev("window.__cancelled = activeSession; document.getElementById('endWorkoutBtn').click()")
+    cdp.pause(0.4)
+    cdp.ev("document.querySelectorAll('#templateList [data-template-action=start]')[0].click()")
+    cdp.wait(f"{ACTIVE} && {TITLE} === 'Push Day'")
+    cdp.ev('resumeWorkout(window.__cancelled)')
+    cdp.pause(0.2)
+    check('Undo once another workout has started says it cannot, and keeps the new one',
+          cdp.ev(feedback) == f'“{started}” cannot come back: another workout has started.' and cdp.ev(TITLE) == 'Push Day', cdp.ev(feedback))
+    cdp.ev("document.getElementById('endWorkoutBtn').click()")
+    cdp.pause(1)
+
+    check('nothing cancelled was saved', t.wait_for(lambda: len(api('GET', '/api/workouts', token=canceller)[0]['workouts']) == before_saved),
+          len(api('GET', '/api/workouts', token=canceller)[0]['workouts']))
+    check("and last time's numbers, the records, the upload queue and the program's next day are as they were", cdp.ev(stats) == before_stats,
+          [cdp.ev(stats), before_stats])
+    check('nor is anything left in progress', api('GET', '/api/active-session', token=canceller)[0]['session'] is None)
+    cdp.goto('/index.html')
+    cdp.wait("document.querySelector('#programNext [data-program-action=start]') && Object.keys(lastPerformance).length > 0")
+    cdp.pause(0.8)
+    check('even after a reload, with no record from the cancelled sets', cdp.ev(stats) == before_stats and cdp.ev(HIDDEN_ACTIVE) is True,
+          [cdp.ev(stats), before_stats])
+    t.set_cookie(token)

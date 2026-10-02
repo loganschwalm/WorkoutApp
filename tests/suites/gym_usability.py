@@ -646,6 +646,9 @@ def run(t):
     remove_set(0)
     no_confirm()
     end_workout()
-    undo()
-    check('once the workout has ended, Undo says it is too late', text('formFeedback') == 'That set cannot come back: its workout has ended.'
+    check("cancelling the workout replaces the set's offer with the workout's own", text('formFeedback').startswith('“Push Day” was cancelled.')
           and cdp.ev("document.getElementById('activeWorkout').hidden") is True, text('formFeedback'))
+    undo()
+    check('whose Undo brings the workout back as it was cancelled, the removed set still gone',
+          text('formFeedback') == '“Push Day” is back.' and local_sets() == [[120, 3]], [text('formFeedback'), local_sets()])
+    end_workout()

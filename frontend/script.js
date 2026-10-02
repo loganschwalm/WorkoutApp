@@ -626,7 +626,34 @@ $('nextExerciseBtn').onclick = () => {
   else goToExercise(after);
 };
 $('prevExerciseBtn').onclick = () => { if (activeSession.currentIndex > 0) goToExercise(activeSession.currentIndex - 1); };
-$('endWorkoutBtn').onclick = () => { if (!getWorkoutSettings().confirmEnd || confirm('End this workout without saving it?')) closeActiveWorkout(); };
+// Cancel takes the workout away without saving it, as if it had never been started: nothing joins History, last time's
+// numbers, the records or Progress, a program's day stays to do, and the server is told it ended. One started by mistake,
+// with nothing logged, goes at once; one with sets logged asks first (unless Settings says not to). Either way the banner
+// offers it back for a few seconds, in case the tap was the mistake.
+$('endWorkoutBtn').onclick = () => {
+  const session = activeSession;
+  if (!session) return;
+  const logged = session.exercises.reduce((total, item) => total + (item.sets?.length || 0), 0);
+  if (logged && getWorkoutSettings().confirmEnd && !confirm(`Cancel this workout? Its ${plural(logged, 'logged set')} will not be saved.`)) return;
+  closeActiveWorkout();
+  showFeedback(`“${session.name}” was cancelled. Nothing was saved.`, 'info', { label:'Undo', run:() => resumeWorkout(session) });
+};
+
+// Puts a cancelled workout back as it was, unless another has started since.
+function resumeWorkout(session) {
+  if (activeSession) {
+    showFeedback(`“${session.name}” cannot come back: another workout has started.`);
+    return;
+  }
+  activeSession = session;
+  restRemaining = restDuration();
+  updateRestTimer();
+  persistActiveSession();
+  renderActiveWorkout();
+  showActiveCard(true);
+  syncWakeLock();
+  showFeedback(`“${session.name}” is back.`, 'success');
+}
 // Tapping a number in the workout selects it, so typing replaces the prefilled weight or reps instead of adding to it.
 // Selecting a moment later keeps iOS Safari from undoing it as the tap that focused the box ends.
 $('activeWorkout').addEventListener('focusin', e => {
