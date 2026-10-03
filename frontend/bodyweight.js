@@ -85,7 +85,8 @@ function drawBodyweight() {
   const rough = (Math.max(...weights) - Math.min(...weights) + 2 * padding) / 3;
   const magnitude = 10 ** Math.floor(Math.log10(rough));
   const step = [1, 2, 2.5, 5, 10].map(multiple => multiple * magnitude).find(size => size >= rough);
-  const low = Math.floor((Math.min(...weights) - padding) / step) * step;
+  // Never below zero, which no one weighs, however far the room below the lowest weigh-in would reach.
+  const low = Math.max(0, Math.floor((Math.min(...weights) - padding) / step) * step);
   const high = Math.ceil((Math.max(...weights) + padding) / step) * step;
   const first = entries[0].time, span = entries[entries.length - 1].time - first;
   const x = entry => span ? left + (entry.time - first) / span * chartWidth : left + chartWidth / 2;

@@ -160,6 +160,7 @@ def run(t):
     cdp.wait(ACTIVE)
     cdp.pause(0.6)
     check('the plan survives a reload', [c[1] for c in chips()] == ['done'] * 6, chips())
+    check('a set done shows what was lifted, the + set its reps', [c[0] for c in chips()][-2:] == ['75 lbs × 5', '85 lbs × 9'], chips())
     cdp.ev("document.getElementById('nextExerciseBtn').click()")
     cdp.pause(0.3)
     check('Boring But Big follows at 50%', text('activeExerciseName') == 'Overhead Press (BBB)' and [c[0] for c in chips()] == ['50 lbs × 10'] * 5, f"{text('activeExerciseName')} {chips()}")

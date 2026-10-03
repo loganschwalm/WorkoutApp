@@ -556,6 +556,11 @@ def run(t):
     xs = cdp.ev('drawnPoints.map(point => point.x)') or []
     ratio = (xs[2] - xs[1]) / (xs[1] - xs[0]) if len(xs) >= 3 and xs[1] != xs[0] else 0
     check('workouts sit apart by the time between them: 29 days take 29 times the room of 1', 25 < ratio < 33, f'{ratio:.1f} {xs}')
+    ticks = cdp.ev("""(() => { const drawn = [], fill = CanvasRenderingContext2D.prototype.fillText;
+      CanvasRenderingContext2D.prototype.fillText = function (text, ...rest) { drawn.push(String(text)); return fill.call(this, text, ...rest); };
+      try { drawChart(); } finally { CanvasRenderingContext2D.prototype.fillText = fill; }
+      return drawn.filter(text => /^-?[\d,.]+$/.test(text)); })()""")
+    check('the axis is marked on round numbers, from zero to the round step above the best', ticks == ['0', '50', '100', '150'], ticks)
     label = cdp.ev("document.getElementById('progressChart').getAttribute('aria-label')")
     check('the chart is described in words for a screen reader', label.startswith('Heaviest weight for Bench Press: 5 workouts from ')
           and label.endswith('lowest 135 lbs, highest 150 lbs.'), label)
@@ -747,6 +752,13 @@ def run(t):
     cdp.pause(0.3)
     settle('/progress.html', "document.querySelectorAll('#bodyweightList li').length === 2")
     check('they are there when the page opens again', cdp.ev(rows) == ['186.6 lbs', '185 lbs'], cdp.ev(rows))
+    weigh(18.5)
+    ticks = cdp.ev("""(() => { const drawn = [], fill = CanvasRenderingContext2D.prototype.fillText;
+      CanvasRenderingContext2D.prototype.fillText = function (text, ...rest) { drawn.push(String(text)); return fill.call(this, text, ...rest); };
+      try { drawBodyweight(); } finally { CanvasRenderingContext2D.prototype.fillText = fill; }
+      return drawn.filter(text => /^[-−]?[\d,.]+$/.test(text)); })()""")
+    check('the bodyweight axis never goes below zero, however far apart the weigh-ins', ticks and ticks[0] == '0' and not any(t.startswith(('-', '−')) for t in ticks), ticks)
+    weigh(186.6)
     cdp.ev("document.querySelectorAll('#bodyweightList [data-bodyweight-remove]')[1].click()")
     cdp.pause(0.3)
     check('Remove takes a day away', cdp.ev(rows) == ['186.6 lbs'] and field('bodyweightFeedback').startswith('Removed the weight for '), field('bodyweightFeedback'))

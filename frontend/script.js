@@ -196,7 +196,12 @@ function renderActiveWorkout() {
     : `Target: ${exercise.reps} ${timed ? 'seconds' : 'reps'}${exercise.weight ? ` at ${formatWeight(exercise.weight)} ${weightUnit()}` : ''}`;
   $('activePlan').hidden = !plan;
   const planState = index => index < exercise.sets.length ? 'done' : index === exercise.sets.length ? 'current' : 'upcoming';
-  $('activePlan').innerHTML = plan ? plan.map((set, index) => `<li class="${planState(index)}">${escapeHTML(formatPlannedSet(set))}</li>`).join('') : '';
+  // A set done shows what was lifted, which may not be what was planned.
+  const chip = (set, index) => {
+    const logged = exercise.sets[index];
+    return logged ? formatPlannedSet({ weight:isBodyweight(logged.weight) ? '' : logged.weight, reps:logged.reps }) : formatPlannedSet(set);
+  };
+  $('activePlan').innerHTML = plan ? plan.map((set, index) => `<li class="${planState(index)}">${escapeHTML(chip(set, index))}</li>`).join('') : '';
   $('activeExerciseLast').hidden = !previous;
   if (previous) {
     const when = new Date(previous.date).toLocaleDateString(undefined, { month:'short', day:'numeric' });
@@ -521,6 +526,9 @@ $('clearBtn').onclick = () => {
   render();
   $('workoutBuilderCard').hidden = true;
 };
+// Equipment that always carries a weight (see exerciseDetails in exercise-library.js).
+const loadedEquipment = ['barbell', 'dumbbell', 'machine', 'cable', 'kettlebell'];
+
 function logSet() {
   const exercise = activeSession.exercises[activeSession.currentIndex];
   const timed = isTimed(exercise);
@@ -536,6 +544,14 @@ function logSet() {
     return;
   }
   if (weightValue !== '' && Number(weightValue) < 0) { showFeedback('Weight cannot be negative.'); $('activeWeight').focus(); return; }
+  // No weight logs the set as bodyweight. For an exercise that is always loaded, that is more likely a weight left out
+  // (a new exercise has none to start from) than meant, so it is asked first. A 0 typed in is taken as meant.
+  if (weightValue === '' && !timed && loadedEquipment.includes(exerciseDetails(exercise.name).equipment)
+    && !confirm(`No weight entered for ${exercise.name}. Log ${reps} reps with no weight?`)) {
+    markInvalid($('activeWeight'), true);
+    $('activeWeight').focus();
+    return;
+  }
   clearFeedback();
   const weight = Number(weightValue) || 0;
   const effort = effortAsked(exercise) && effortChoice !== null ? { rir:effortChoice } : {};
@@ -583,13 +599,15 @@ $('exerciseJump').onclick = e => {
   if (index !== activeSession.currentIndex && activeSession.exercises[index]) goToExercise(index);
 };
 // Next goes on past the superset the current exercise is in, which is done as rounds rather than one exercise at a time.
+// On the last exercise it is Finish, so a second tap can arrive after the workout has closed: that one does nothing.
 $('nextExerciseBtn').onclick = () => {
+  if (!activeSession) return;
   const members = supersetMembers(activeSession, activeSession.currentIndex);
   const after = members[members.length - 1] + 1;
   if (after >= activeSession.exercises.length) finishWorkout();
   else goToExercise(after);
 };
-$('prevExerciseBtn').onclick = () => { if (activeSession.currentIndex > 0) goToExercise(activeSession.currentIndex - 1); };
+$('prevExerciseBtn').onclick = () => { if (activeSession && activeSession.currentIndex > 0) goToExercise(activeSession.currentIndex - 1); };
 // Cancel takes the workout away without saving it, as if it had never been started: nothing joins History, last time's
 // numbers, the records or Progress, a program's day stays to do, and the server is told it ended. One started by mistake,
 // with nothing logged, goes at once; one with sets logged asks first (unless Settings says not to). Either way the banner

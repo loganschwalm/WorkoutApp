@@ -77,6 +77,8 @@ own workouts, templates, and settings.
   "Bench Press" from becoming two exercises.
 - Enter the weight and reps completed for each set, right under the exercise, with −5 and +5 buttons
   beside the weight.
+  A set with no weight is logged as bodyweight; for a barbell, dumbbell, machine, cable or kettlebell exercise the app
+  asks first, since an empty weight there is more likely left out than meant. A 0 typed in is taken as meant.
 - For barbell lifts (the equipment chosen for the exercise on Progress, or else going by its name), see the plates to load on each side of a 45 lb
   bar, down to 1.25s, drawn to size: 187.5 lbs is 45 + 25 + 1.25. A weight the plates cannot make says
   what they do.
@@ -275,7 +277,8 @@ up another replaces it, and the workouts you finished stay in your history. They
   a cycle's sessions of the lift together, since one week can be loaded the same from two training maxes a
   step apart (150 and 155 lbs both load 100, 115 and 130 in the 5s week); in the others it is the heaviest
   weight lifted.
-- Every set is planned. Each planned set's weight and reps are filled in as you go. In 5/3/1 and PPL
+- Every set is planned. Each planned set's weight and reps are filled in as you go, and once done its chip shows
+  what was lifted (a + set's reps, a weight changed on the day). In 5/3/1 and PPL
   the main lift ends with a "+" set of as many reps as you can, and the app turns it into an estimated
   one-rep max.
 - Finishing a program workout marks its day done. A day can also be skipped, or done again.

@@ -656,3 +656,49 @@ def run(t):
     check('whose Undo brings the workout back as it was cancelled, the removed set still gone',
           text('formFeedback') == '“Push Day” is back.' and local_sets() == [[120, 3]], [text('formFeedback'), local_sets()])
     end_workout()
+
+    # ---- V: slips a lifter makes
+    print('V   no weight on a loaded lift, a second tap on Finish, and the edit form on a phone')
+    open_tracker()
+    start(0)
+    cdp.pause(0.4)
+
+    def sets_of(index):
+        return safe_ev(f'activeSession.exercises[{index}].sets.map(s => [s.weight, s.reps])', None)
+
+    cdp.dialogs.clear(); cdp.answer = False
+    log('', 8)
+    check('no weight on a barbell lift asks first', len(cdp.dialogs) == 1 and cdp.dialogs[0] == 'No weight entered for Bench Press. Log 8 reps with no weight?', cdp.dialogs)
+    check('saying no logs nothing and points at the weight', sets_of(0) == [] and cdp.ev("document.getElementById('activeWeight').getAttribute('aria-invalid')") == 'true'
+          and cdp.ev("document.activeElement.id") == 'activeWeight', sets_of(0))
+    cdp.answer = True
+    log('', 8)
+    check('saying yes logs it with no weight', sets_of(0) == [[0, 8]], sets_of(0))
+    cdp.dialogs.clear()
+    log(0, 8)
+    check('a 0 typed in is taken as meant', not cdp.dialogs and sets_of(0) == [[0, 8], [0, 8]], f'{cdp.dialogs} {sets_of(0)}')
+    cdp.ev("document.getElementById('activeAddName').value = 'Dips'; document.getElementById('activeAddReps').value = '10'; document.getElementById('activeAddBtn').click()")
+    cdp.ev("document.getElementById('nextExerciseBtn').click()")
+    cdp.pause(0.3)
+    log('', 10)
+    check('nor asked of a bodyweight exercise', text('activeExerciseName') == 'Dips' and not cdp.dialogs and sets_of(1) == [[0, 10]], f"{text('activeExerciseName')} {cdp.dialogs} {sets_of(1)}")
+
+    cdp.ev('goToExercise(activeSession.exercises.length - 1)')
+    cdp.pause(0.3)
+    log(50, 10)
+    cdp.console.clear()
+    cdp.ev("document.getElementById('nextExerciseBtn').click(); document.getElementById('nextExerciseBtn').click(); document.getElementById('prevExerciseBtn').click()")
+    cdp.pause(0.5)
+    errors = [line for line in cdp.console if line.startswith('exceptionThrown')]
+    check('Finish tapped twice saves the workout once, without an error', cdp.ev(HIDDEN) is True and not errors, errors)
+
+    cdp.send('Emulation.setDeviceMetricsOverride', width=375, height=740, deviceScaleFactor=1, mobile=True)
+    open_tracker()
+    cdp.ev("document.querySelector('#savedWorkoutList .saved-workout [data-action=edit]').click()")
+    cdp.wait('exercises.length > 0')
+    widths = cdp.ev("(() => { const row = document.querySelector('#exerciseList li.exercise'); const width = field => row.querySelector(`[data-field=${field}]`).getBoundingClientRect().width;"
+                    " return { row: row.getBoundingClientRect().width, name: width('name'), weight: width('weight'), reps: width('reps') }; })()")
+    check('on a phone, editing a workout shows each exercise’s name across the row', widths['name'] >= widths['row'] - 1 and widths['weight'] >= 100 and widths['reps'] >= 100, widths)
+    check('and nothing is wider than the screen', cdp.ev('document.documentElement.scrollWidth - innerWidth') <= 0)
+    cdp.ev("document.getElementById('clearBtn').click()")
+    cdp.send('Emulation.clearDeviceMetricsOverride')

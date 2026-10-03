@@ -198,7 +198,8 @@ function applyFilters() {
 // What the chart measures: its axis label, how a value is written by a point and in words, and how the axis writes one.
 // A time (a session's, a pace or split) is a clock; anything else a number and its unit.
 function chartFormat() {
-  const plain = (axis, unit = '') => ({ axis, value:value => `${Math.round(value).toLocaleString()}${unit}`, tick:value => Math.round(value).toLocaleString() });
+  // A tick keeps a step's half (2.5, 7.5) rather than rounding it to a number the line is not on.
+  const plain = (axis, unit = '') => ({ axis, value:value => `${Math.round(value).toLocaleString()}${unit}`, tick:value => (Math.round(value * 10) / 10).toLocaleString() });
   if (chartingCardio()) {
     const activity = keyActivity(selectedExercise);
     const unit = shownDistanceUnit(activity);
@@ -229,14 +230,23 @@ function chartFormat() {
   return selectedMetric === 'reps' ? plain('Reps') : plain(`Volume (${unit})`);
 }
 
-// Where the chart's axis runs. A strength chart starts at zero, as it always has. A cardio chart spans its sessions with
-// a little room either side, on round steps (a clock's for a time), since a pace that moves from 9:10 to 8:20 a mile is
-// a flat line along the top of an axis from zero. A pace or split, where less is faster, runs the other way up, so
-// getting faster climbs as getting stronger does.
+// Steps of 1, 2, 2.5, 5 or 10 of a power of ten, the smallest at least `rough`: what a scale's lines fall on.
+function roundStep(rough) {
+  const magnitude = 10 ** Math.floor(Math.log10(rough));
+  return [1, 2, 2.5, 5, 10].map(multiple => multiple * magnitude).find(size => size >= rough);
+}
+
+// Where the chart's axis runs. A strength chart starts at zero, as it always has, up to the round step above its top
+// (four of them: 0, 50, 100, 150, 200). A cardio chart spans its sessions with a little room either side, on round steps
+// (a clock's for a time), since a pace that moves from 9:10 to 8:20 a mile is a flat line along the top of an axis from
+// zero. A pace or split, where less is faster, runs the other way up, so getting faster climbs as getting stronger does.
 function chartScale(values) {
   if (!chartingCardio()) {
-    const high = Math.max(...values, 1);
-    return { low:0, high, invert:false, ticks:[0, 1, 2, 3, 4].map(tick => tick * high / 4) };
+    const step = roundStep(Math.max(...values, 4) / 4);
+    const high = Math.ceil(Math.max(...values, 4) / step) * step;
+    const ticks = [];
+    for (let value = 0; value <= high + step / 1000; value += step) ticks.push(Math.round(value * 1e6) / 1e6);
+    return { low:0, high, invert:false, ticks };
   }
   const slower = selectedMetric === 'rate' && keyActivity(selectedExercise).rate !== 'speed';
   const clock = slower || selectedMetric === 'duration';
@@ -244,11 +254,9 @@ function chartScale(values) {
   // Room either side; one that would be none (every session the same, at zero) is a whole one.
   const pad = Math.max((max - min) * 0.15, clock ? 0.25 : Math.abs(max) * 0.05) || 1;
   const rough = (max - min + 2 * pad) / 4;
-  const magnitude = 10 ** Math.floor(Math.log10(rough));
   // In minutes: from 5 seconds a step to 4 hours.
-  const steps = clock ? [5, 10, 15, 20, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 14400].map(seconds => seconds / 60)
-    : [1, 2, 2.5, 5, 10].map(multiple => multiple * magnitude);
-  const step = steps.find(size => size >= rough) || steps[steps.length - 1];
+  const clockSteps = [5, 10, 15, 20, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 14400].map(seconds => seconds / 60);
+  const step = clock ? clockSteps.find(size => size >= rough) || clockSteps[clockSteps.length - 1] : roundStep(rough);
   // Below zero only for what can be: a treadmill set downhill.
   const low = cardioSettings[selectedMetric] ? Math.floor((min - pad) / step) * step : Math.max(0, Math.floor((min - pad) / step) * step);
   const high = Math.ceil((max + pad) / step) * step;
