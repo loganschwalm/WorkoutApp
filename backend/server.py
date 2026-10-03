@@ -13,6 +13,7 @@ import math
 import os
 import re
 import secrets
+import signal
 import smtplib
 import sqlite3
 import ssl
@@ -1619,7 +1620,13 @@ def serve():
     print(f'Workout Tracker listening on http://0.0.0.0:{port}')
     print(f'Password reset codes are emailed through {SMTP_HOST}:{SMTP_PORT} ({SMTP_SECURITY}).' if SMTP_HOST else
           'Password reset by email is off: set SMTP_HOST to turn it on, or reset passwords with the reset-password command.')
+    # `docker stop` and `systemctl stop` ask with SIGTERM. In a container the server is process 1, which the kernel
+    # spares from any signal it has no handler for, so without this Docker waits 10 seconds and then kills it.
+    # shutdown() waits for serve_forever to return, so it is called from another thread, not from inside the handler.
+    signal.signal(signal.SIGTERM, lambda *_: threading.Thread(target=server.shutdown, daemon=True).start())
     server.serve_forever()
+    server.server_close()
+    print('Workout Tracker stopped.', flush=True)
 
 
 # ---- Account administration ---------------------------------------------------------------------------------

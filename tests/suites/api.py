@@ -7,8 +7,10 @@ import hashlib
 import io
 import json
 import os
+import signal
 import socket
 import sqlite3
+import subprocess
 import threading
 import time
 
@@ -1078,6 +1080,18 @@ def run_admin(t, check, request):
     elapsed = closed_after(b'GET /login.html HTTP/1.1\r\nHost: 127.0.0.1\r\n')
     check('one that stops halfway through a request', elapsed is not None and 1.5 < elapsed < 6, elapsed)
     check('and the server goes on answering', quick.raw('GET', '/login.html')[0] == 200)
+
+    # ------------------------------------------------------------------ A36 stopping
+    # On Windows a SIGTERM sent with os.kill ends the process outright, so there is no handler to check.
+    if hasattr(signal, 'SIGKILL'):
+        print('A36 SIGTERM (docker stop, systemctl stop) stops the server at once, cleanly')
+        stopping = t.start_server('stopping.db')
+        stopping.process.send_signal(signal.SIGTERM)
+        try:
+            status = stopping.process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            status = None
+        check('it exits within seconds, with status 0', status == 0, status)
 
 
 def run_export(t, check, request):
