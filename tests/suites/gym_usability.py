@@ -696,9 +696,12 @@ def run(t):
     open_tracker()
     cdp.ev("document.querySelector('#savedWorkoutList .saved-workout [data-action=edit]').click()")
     cdp.wait('exercises.length > 0')
-    widths = cdp.ev("(() => { const row = document.querySelector('#exerciseList li.exercise'); const width = field => row.querySelector(`[data-field=${field}]`).getBoundingClientRect().width;"
-                    " return { row: row.getBoundingClientRect().width, name: width('name'), weight: width('weight'), reps: width('reps') }; })()")
-    check('on a phone, editing a workout shows each exercise’s name across the row', widths['name'] >= widths['row'] - 1 and widths['weight'] >= 100 and widths['reps'] >= 100, widths)
+    layout = cdp.ev("""(() => { const row = document.querySelector('#exerciseList li.exercise'); const box = e => e.getBoundingClientRect();
+      const add = row.querySelector('[data-add-set]'), remove = row.querySelector(':scope > .remove'), set = row.querySelector('.set-list li');
+      return { row: box(row).width, name: box(row.querySelector('[data-field=name]')).width, set: box(set).right <= box(row).right + 1,
+               weight: box(set.querySelector('[data-field=weight]')).width, buttons: box(add).top === box(remove).top && box(add).width === box(remove).width }; })()""")
+    check('on a phone, editing a workout shows each exercise’s name across the row, its sets under it, and Add set beside Remove exercise',
+          layout['name'] >= layout['row'] - 1 and layout['set'] and layout['weight'] >= 60 and layout['buttons'], layout)
     check('and nothing is wider than the screen', cdp.ev('document.documentElement.scrollWidth - innerWidth') <= 0)
     cdp.ev("document.getElementById('clearBtn').click()")
     cdp.send('Emulation.clearDeviceMetricsOverride')

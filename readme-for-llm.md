@@ -48,6 +48,11 @@ own workouts, templates, and settings.
 - Create custom workouts with a name and workout date, from Create workout beside your saved workouts.
 - Add exercises with weight and target reps.
 - Edit exercise names, weights, and reps inline.
+- Editing a finished workout (Edit, in a saved workout's ⋯ menu) changes it a set at a time: each logged set's
+  weight and reps (or seconds), Add set for one missed at the time, and × to take one away (an exercise keeps at
+  least one; Remove exercise takes the whole exercise). Saving sets each exercise's weight to its heaviest set and
+  its reps to the last set's, as finishing a workout does, so records, last time and Progress follow the fix.
+  Cancel leaves the workout as it was.
 - Remove exercises before saving.
 - Add notes to custom workouts.
 - Validate exercise names, weights, reps, and dates with inline feedback.

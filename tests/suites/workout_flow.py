@@ -81,14 +81,59 @@ def run(t):
     cdp.pause(1.0)
     w = workout(W1)
     check('saving an unchanged edit keeps set details', len(w['exercises'][0].get('sets', [])) == 2 and len(w['exercises'][1].get('sets', [])) == 1, json.dumps(w['exercises']))
+
+    # A finished workout is changed a set at a time.
+    def set_rows(exercise):
+        return cdp.ev(f"[...document.querySelectorAll('#exerciseList > li')[{exercise}].querySelectorAll('.set-list li')]"
+                      ".map(li => [li.querySelector('[data-field=weight]').value, li.querySelector('[data-field=reps]').value, !!li.querySelector('[data-remove-set]')])")
+
+    def change_set(exercise, index, field, value):
+        cdp.ev(f"(i => {{ i.value = '{value}'; i.dispatchEvent(new Event('change', {{ bubbles: true }})); }})"
+               f"(document.querySelector('#exerciseList [data-exercise=\"{exercise}\"][data-set=\"{index}\"][data-field={field}]'))")
+
+    def tap(selector):
+        cdp.ev(f"document.querySelector('#exerciseList {selector}').click()")
+
+    def saved_sets(exercise):
+        return [(s['weight'], s['reps']) for s in workout(W1)['exercises'][exercise].get('sets', [])]
+
     edit()
-    cdp.ev("const i = document.querySelector('#exerciseList input[data-index=\"0\"][data-field=\"weight\"]'); i.value = '110'; i.dispatchEvent(new Event('input', { bubbles: true })); document.getElementById('saveBtn').click();")
-    cdp.pause(1.0)
-    w = workout(W1)
-    e0, e1 = w['exercises']
-    check('changed weight replaces that exercise\'s stale sets', 'sets' not in e0 and str(e0['weight']) == '110', json.dumps(e0))
-    check('untouched exercises keep their sets', len(e1.get('sets', [])) == 1, json.dumps(e1))
-    check('user is told sets were replaced', 'replaced' in (cdp.ev("document.getElementById('formFeedback').textContent") or ''))
+    check('editing shows every logged set, its weight and reps', set_rows(0) == [['100', '8', True], ['100', '8', True]] and [r[:2] for r in set_rows(1)] == [['60', '8']], [set_rows(0), set_rows(1)])
+    check('an exercise’s last set cannot be taken away, only the exercise', set_rows(1)[0][2] is False
+          and cdp.ev("document.querySelectorAll('#exerciseList > li')[1].querySelector(':scope > .remove').textContent") == 'Remove exercise')
+    check('and no weight or reps for the exercise as a whole', cdp.ev("document.querySelectorAll('#exerciseList input[data-index][data-field=weight]').length") == 0)
+    check('the form says what it is for', cdp.ev("document.getElementById('workoutBuilderIntro').textContent").startswith('Change any set'))
+    change_set(0, 1, 'reps', '0')
+    check('a set’s reps below 1 snap back, and say why', set_rows(0)[1][1] == '8' and cdp.ev("document.getElementById('formFeedback').textContent") == 'Reps must be at least 1.', set_rows(0))
+    change_set(0, 1, 'weight', '-5')
+    check('and a weight below zero', set_rows(0)[1][0] == '100' and cdp.ev("document.getElementById('formFeedback').textContent") == 'Weight cannot be negative.', set_rows(0))
+    change_set(0, 1, 'weight', '110')
+    change_set(0, 1, 'reps', '6')
+    tap('[data-exercise="1"][data-add-set]')
+    check('Add set adds one like the last, its reps ready to change', [r[:2] for r in set_rows(1)] == [['60', '8'], ['60', '8']]
+          and cdp.ev("document.activeElement.matches('[data-exercise=\"1\"][data-set=\"1\"][data-field=reps]')") is True, set_rows(1))
+    change_set(1, 1, 'reps', '7')
+    cdp.ev("document.getElementById('saveBtn').click()")
+    check('a set changed and a set added are saved', t.wait_for(lambda: saved_sets(0) == [(100, 8), (110, 6)] and saved_sets(1) == [(60, 8), (60, 7)]), [saved_sets(0), saved_sets(1)])
+    e0, e1 = workout(W1)['exercises']
+    check('each exercise’s weight and reps follow its sets: the heaviest, and the last set’s reps', (e0['weight'], e0['reps'], e1['weight'], e1['reps']) == (110, 6, 60, 7), json.dumps([e0, e1]))
+    check('and it says it was saved', cdp.ev("document.getElementById('formFeedback').textContent") == '“Seed Push” saved successfully.', cdp.ev("document.getElementById('formFeedback').textContent"))
+    cdp.pause(0.6)
+    edit()
+    tap('[data-exercise="0"][data-remove-set="0"]')
+    check('× takes a set away, and the rest renumber', [r[:2] for r in set_rows(0)] == [['110', '6']]
+          and cdp.ev("document.querySelector('#exerciseList .set-number').textContent") == 'Set 1', set_rows(0))
+    change_set(1, 0, 'weight', '65')
+    cdp.ev("document.getElementById('clearBtn').click()")
+    check('Cancel leaves the workout as it was, on the server and on the page', saved_sets(0) == [(100, 8), (110, 6)]
+          and cdp.ev(f"JSON.stringify(savedWorkouts.find(w => w.id === {W1}).exercises.map(e => e.sets.map(s => [s.weight, s.reps])))") == '[[[100,8],[110,6]],[[60,8],[60,7]]]',
+          cdp.ev(f"JSON.stringify(savedWorkouts.find(w => w.id === {W1}).exercises.map(e => e.sets))"))
+    edit()
+    check('so editing again starts from what was saved', [r[:2] for r in set_rows(0)] == [['100', '8'], ['110', '6']] and set_rows(1)[0][:2] == ['60', '8'], [set_rows(0), set_rows(1)])
+    tap('[data-exercise="0"][data-remove-set="1"]')
+    cdp.ev("document.getElementById('saveBtn').click()")
+    check('and a set taken away is gone once saved', t.wait_for(lambda: saved_sets(0) == [(100, 8)]), saved_sets(0))
+    cdp.pause(0.6)
     known = {w['id'] for w in workouts()}
     cdp.ev(f"document.querySelector('.saved-workout[data-id=\"{W3}\"] [data-action=repeat]').click()")
     cdp.wait('exercises.length === 2')

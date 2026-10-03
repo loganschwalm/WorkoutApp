@@ -74,7 +74,7 @@ see a program working over the weeks.
 
 **History and progress**
 - A calendar of the last 12 weeks, strength and cardio alike, a weekly goal, and your streak.
-- Search, repeat, edit or copy any past workout or session.
+- Search, repeat, edit or copy any past workout or session, and fix a finished workout a set at a time.
 - Charts of heaviest weight, estimated one-rep max, best reps or volume, per exercise and over time, and of each
   cardio activity's distance, time, pace or speed, calories and heart rate.
 - Personal records, goals to aim for, and a bodyweight log.

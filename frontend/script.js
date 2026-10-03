@@ -6,8 +6,6 @@ let editingWorkout = null;
 // The saved workouts as last loaded, so the list's buttons act without asking the server again.
 let savedWorkouts = [];
 let savedWorkoutsLoaded = false;
-// Weight/reps an exercise had when its logged sets were loaded for editing; used to tell whether the user changed them.
-const setBaselines = new WeakMap();
 let activeSession = null;
 let workoutsReachable = true;
 let initialLoadDone = false;
@@ -17,6 +15,8 @@ $('workoutDate').value = dateInputValue(Date.now());
 // The form for writing a workout down by hand opens as its own card at the top, and closes again on Cancel or once saved.
 function showWorkoutBuilder(editing = false) {
   $('workoutBuilderTitle').textContent = editing ? 'Edit workout' : 'Create a workout';
+  $('workoutBuilderIntro').textContent = editing ? 'Change any set, add one you missed, or take one away, then update the workout.'
+    : 'Add each exercise with its weight and reps, then save it to your history.';
   $('workoutBuilderCard').hidden = false;
   $('workoutBuilderCard').scrollIntoView({ behavior:'smooth', block:'start' });
 }
@@ -49,17 +49,36 @@ function getActiveSession() {
     .then(result => result.session);
 }
 
+// An exercise saved with its sets (done in a workout) is changed a set at a time, as it was logged: each set's weight and
+// reps, a set added or taken away. One written down without them is changed by its weight and reps.
+function exerciseRow(item, i) {
+  const name = `<input class="exercise-edit" type="text" list="exerciseNames" autocomplete="off" value="${escapeHTML(item.name)}"`
+    + ` data-index="${i}" data-field="name" aria-label="Exercise name">`;
+  const remove = label => `<button class="remove" type="button" data-index="${i}">${label}</button>`;
+  if (!item.sets?.length) {
+    return `<li class="exercise">${name}`
+      + `<input class="exercise-edit" type="number" inputmode="decimal" min="0" step="0.5" value="${escapeHTML(item.weight || '')}"`
+      + ` data-index="${i}" data-field="weight" aria-label="Exercise weight">`
+      + `<input class="exercise-edit" type="number" inputmode="numeric" min="1" step="1" value="${escapeHTML(item.reps)}"`
+      + ` data-index="${i}" data-field="reps" aria-label="Exercise reps">${remove('Remove')}</li>`;
+  }
+  const count = isTimed(item) ? { unit:'s', label:'seconds' } : { unit:'reps', label:'reps' };
+  const label = number => `${escapeHTML(item.name)} set ${number}`;
+  // The last set stays: an exercise with none left is removed with Remove instead.
+  const sets = item.sets.map((set, index) => `<li><span class="set-number">Set ${index + 1}</span>`
+    + `<div class="set-field"><input class="set-edit" type="number" inputmode="decimal" min="0" step="0.5" value="${escapeHTML(set.weight || '')}"`
+    + ` data-exercise="${i}" data-set="${index}" data-field="weight" aria-label="${label(index + 1)} weight in ${weightUnit()}"><span>${weightUnit()}</span></div>`
+    + `<div class="set-field"><input class="set-edit" type="number" inputmode="numeric" min="1" step="1" value="${escapeHTML(set.reps)}"`
+    + ` data-exercise="${i}" data-set="${index}" data-field="reps" aria-label="${label(index + 1)} ${count.label}"><span>${count.unit}</span></div>`
+    + (item.sets.length > 1 ? `<button class="remove" type="button" data-exercise="${i}" data-remove-set="${index}" aria-label="Remove ${label(index + 1)}" title="Remove">&times;</button>` : '<span></span>')
+    + '</li>').join('');
+  return `<li class="exercise has-sets">${name}<ol class="set-list">${sets}</ol>`
+    + `<button class="secondary" type="button" data-exercise="${i}" data-add-set>Add set</button>${remove('Remove exercise')}</li>`;
+}
+
 function render() {
   const list = $('exerciseList');
-  list.innerHTML = exercises.length ? exercises.map((item, i) => '<li class="exercise">'
-    + `<input class="exercise-edit" type="text" list="exerciseNames" autocomplete="off" value="${escapeHTML(item.name)}"`
-    + ` data-index="${i}" data-field="name" aria-label="Exercise name">`
-    + `<input class="exercise-edit" type="number" inputmode="decimal" min="0" step="0.5" value="${escapeHTML(item.weight || '')}"`
-    + ` data-index="${i}" data-field="weight" aria-label="Exercise weight">`
-    + `<input class="exercise-edit" type="number" inputmode="numeric" min="1" step="1" value="${escapeHTML(item.reps)}"`
-    + ` data-index="${i}" data-field="reps" aria-label="Exercise reps">`
-    + `<button class="remove" type="button" data-index="${i}">Remove</button></li>`).join('')
-    : '<li class="empty">Your exercises will appear here.</li>';
+  list.innerHTML = exercises.length ? exercises.map(exerciseRow).join('') : '<li class="empty">Your exercises will appear here.</li>';
   $('count').textContent = `${exercises.length} exercise${exercises.length === 1 ? '' : 's'}`;
 }
 
@@ -144,11 +163,10 @@ function loadWorkoutIntoForm(stored, editMode) {
   $('workoutName').value = workout.name;
   $('workoutDate').value = editMode ? dateInputValue(workout.createdAt) : dateInputValue(Date.now());
   $('workoutNotes').value = workout.notes || '';
+  // The sets are copied, so a change abandoned with Cancel leaves the saved workout as it was.
   exercises.splice(0, exercises.length, ...workout.exercises.map(item => {
     if (!editMode) { const { sets, ...plan } = item; return plan; }
-    const copy = { ...item };
-    if (item.sets?.length) setBaselines.set(copy, { weight:String(item.weight ?? ''), reps:String(item.reps ?? '') });
-    return copy;
+    return { ...item, ...(Array.isArray(item.sets) ? { sets:item.sets.map(set => ({ ...set })) } : {}) };
   }));
   $('saveBtn').textContent = editMode ? 'Update workout' : 'Save workout';
   render();
@@ -512,8 +530,39 @@ $('exerciseList').oninput = e => {
   const field = e.target.dataset.field;
   if (index !== undefined && field) exercises[+index][field] = e.target.value;
 };
+// A set's weight or reps is taken once it is changed; one that is not valid snaps back, as during a workout.
+$('exerciseList').onchange = e => {
+  const item = exercises[Number(e.target.dataset.exercise)];
+  const set = item?.sets?.[Number(e.target.dataset.set)];
+  const field = e.target.dataset.field;
+  if (!set || !field) return;
+  const value = e.target.value;
+  if (field === 'reps' && (!value || Number(value) < 1)) {
+    showFeedback(isTimed(item) ? 'Seconds must be at least 1.' : 'Reps must be at least 1.');
+    e.target.value = set.reps;
+    return;
+  }
+  if (field === 'weight' && value !== '' && Number(value) < 0) { showFeedback('Weight cannot be negative.'); e.target.value = set.weight || ''; return; }
+  set[field] = Number(value) || 0;
+  clearFeedback();
+};
 $('exerciseList').onclick = e => {
-  if (e.target.classList.contains('remove') && e.target.dataset.index !== undefined) { exercises.splice(+e.target.dataset.index, 1); render(); }
+  const button = e.target.closest('button');
+  if (!button) return;
+  const item = exercises[Number(button.dataset.exercise)];
+  if (item && button.dataset.removeSet !== undefined) {
+    item.sets.splice(Number(button.dataset.removeSet), 1);
+    render();
+  } else if (item && button.hasAttribute('data-add-set')) {
+    // A set forgotten at the time: another like the last, its reps ready to change.
+    const last = item.sets[item.sets.length - 1];
+    item.sets.push({ weight:last.weight, reps:last.reps });
+    render();
+    document.querySelector(`#exerciseList [data-exercise="${exercises.indexOf(item)}"][data-set="${item.sets.length - 1}"][data-field=reps]`)?.focus();
+  } else if (button.classList.contains('remove') && button.dataset.index !== undefined) {
+    exercises.splice(Number(button.dataset.index), 1);
+    render();
+  }
 };
 $('activeNotes').oninput = () => { if (activeSession) { activeSession.notes = $('activeNotes').value; persistActiveSession(); } };
 $('clearBtn').onclick = () => {
@@ -762,14 +811,11 @@ $('recentList').onclick = e => {
 $('saveBtn').onclick = async () => {
   if (!exercises.length) { showFeedback('Add at least one exercise before saving the workout.'); return; }
   if (!$('workoutDate').value) { showFeedback('Choose a workout date before saving.'); $('workoutDate').focus(); return; }
-  let replacedSets = 0;
-  const savedExercises = exercises.map(item => {
-    const baseline = setBaselines.get(item);
-    if (!baseline || (String(item.weight ?? '') === baseline.weight && String(item.reps ?? '') === baseline.reps)) return { ...item };
-    const { sets, ...plan } = item;
-    replacedSets += 1;
-    return plan;
-  });
+  // An exercise with sets takes its weight and reps from them, as finishing a workout gives them: the heaviest set, and
+  // the last set's reps (or the reps a template planned, which it progresses from).
+  const savedExercises = exercises.map(item => item.sets?.length
+    ? { ...item, weight:Math.max(...item.sets.map(set => Number(set.weight) || 0)), reps:item.setCount ? item.reps : item.sets[item.sets.length - 1].reps }
+    : { ...item });
   const workout = {
     ...editingWorkout, name:$('workoutName').value.trim() || 'Untitled workout', notes:$('workoutNotes').value.trim(), exercises:savedExercises,
     createdAt:timestampFromDateInput($('workoutDate').value), unit:weightUnit()
@@ -796,8 +842,7 @@ $('saveBtn').onclick = async () => {
   } finally {
     $('saveBtn').disabled = false;
   }
-  const replaced = replacedSets ? ' Set-by-set details were replaced for exercises whose weight or reps you changed.' : '';
-  showFeedback(`“${workout.name}” saved successfully.${replaced}`, 'success');
+  showFeedback(`“${workout.name}” saved successfully.`, 'success');
   $('clearBtn').click();
   await loadSavedWorkouts();
 };
