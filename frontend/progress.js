@@ -613,12 +613,21 @@ $('goalForm').onsubmit = event => {
   // The exercise's own spelling when it has been done, so "bench press" and "Bench Press" are one goal.
   const known = recordsOf(allWorkouts).find(record => record.key === key);
   const name = known ? known.name : typed;
+  // A target already lifted is reached the moment it is set, which is seldom what a goal is for; asked first, since it
+  // can be meant (getting back to a weight after time off). Saying no asks for one above the best.
+  const best = known && known.heaviest ? known.heaviest.value : 0, unit = weightUnit();
+  const reached = best >= target;
+  if (reached && !confirm(`You've already lifted ${formatWeight(best)} ${unit} on ${name}, so ${formatWeight(target)} ${unit} is reached already. Set it anyway?`)) {
+    showGoalFeedback(`Choose a target above ${formatWeight(best)} ${unit} to aim for.`, true);
+    $('goalTarget').focus();
+    return;
+  }
   const replaced = key in goals;
-  goals = { ...goals, [key]:{ name, target, unit:weightUnit(), by:$('goalBy').value } };
+  goals = { ...goals, [key]:{ name, target, unit, by:$('goalBy').value } };
   saveGoals();
   $('goalForm').reset();
   renderGoals();
-  showGoalFeedback(`${replaced ? 'Goal updated' : 'Goal set'} for ${name}.`);
+  showGoalFeedback(`${replaced ? 'Goal updated' : 'Goal set'} for ${name}${reached ? ', reached already' : ''}.`);
 };
 
 $('goalList').onclick = event => {

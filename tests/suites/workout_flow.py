@@ -105,6 +105,8 @@ def run(t):
     check('the form says what it is for', cdp.ev("document.getElementById('workoutBuilderIntro').textContent").startswith('Change any set'))
     change_set(0, 1, 'reps', '0')
     check('a set’s reps below 1 snap back, and say why', set_rows(0)[1][1] == '8' and cdp.ev("document.getElementById('formFeedback').textContent") == 'Reps must be at least 1.', set_rows(0))
+    change_set(0, 1, 'reps', '7.5')
+    check('and reps that are not whole', set_rows(0)[1][1] == '8' and cdp.ev("document.getElementById('formFeedback').textContent") == 'Reps must be a whole number.', set_rows(0))
     change_set(0, 1, 'weight', '-5')
     check('and a weight below zero', set_rows(0)[1][0] == '100' and cdp.ev("document.getElementById('formFeedback').textContent") == 'Weight cannot be negative.', set_rows(0))
     change_set(0, 1, 'weight', '110')

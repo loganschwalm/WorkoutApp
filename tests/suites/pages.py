@@ -636,7 +636,16 @@ def run(t):
     set_goal('Squat', 250, cdp.ev(tomorrow))
     squat = [g for g in cdp.ev(goal_items) if g.startswith('Squat')]
     check('a goal with a day says how long is left', squat and '60 lbs to go' in squat[0] and '1 day left' in squat[0], squat)
+    cdp.dialogs.clear(); cdp.answer = False
     set_goal('Squat', 190)
+    check('a target already lifted asks first', cdp.dialogs == ["You've already lifted 190 lbs on Squat, so 190 lbs is reached already. Set it anyway?"], cdp.dialogs)
+    check('and saying no keeps the goal there was, asking for one above the best', '60 lbs to go' in [g for g in cdp.ev(goal_items) if g.startswith('Squat')][0]
+          and cdp.ev("document.getElementById('goalFeedback').textContent") == 'Choose a target above 190 lbs to aim for.'
+          and cdp.ev("document.activeElement.id") == 'goalTarget', cdp.ev("document.getElementById('goalFeedback').textContent"))
+    cdp.answer = True
+    set_goal('Squat', 190)
+    check('saying yes sets it, and says it is reached already', cdp.ev("document.getElementById('goalFeedback').textContent") == 'Goal updated for Squat, reached already.',
+          cdp.ev("document.getElementById('goalFeedback').textContent"))
     reached = cdp.ev(goal_items)
     check('setting a goal again replaces it, and one already met is marked Reached',
           len(reached) == 2 and 'Squat | 190 of 190 lbs | Reached | 100 | true' in reached, reached)

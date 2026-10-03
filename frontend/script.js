@@ -517,6 +517,7 @@ $('addBtn').onclick = () => {
   markInvalid($('weight'), weight !== '' && Number(weight) < 0);
   if (!name) { showFeedback('Enter an exercise name before adding it.'); $('exercise').focus(); return; }
   if (!reps || Number(reps) < 1) { showFeedback('Enter at least 1 rep for this exercise.'); $('reps').focus(); return; }
+  if (!Number.isInteger(Number(reps))) { markInvalid($('reps'), true); showFeedback('Reps must be a whole number.'); $('reps').focus(); return; }
   if (weight !== '' && Number(weight) < 0) { showFeedback('Weight cannot be negative.'); $('weight').focus(); return; }
   const doubt = implausibleSet({ name }, { weight:Number(weight) || 0, reps:Number(reps) });
   if (doubt && !confirm(doubt.message)) { markInvalid($(doubt.field), true); $(doubt.field).focus(); return; }
@@ -558,6 +559,7 @@ $('exerciseList').onchange = e => {
     e.target.value = set.reps;
     return;
   }
+  if (field === 'reps' && !isTimed(item) && !Number.isInteger(Number(value))) { showFeedback('Reps must be a whole number.'); e.target.value = set.reps; return; }
   if (field === 'weight' && value !== '' && Number(value) < 0) { showFeedback('Weight cannot be negative.'); e.target.value = set.weight || ''; return; }
   if (!confirmSetChange(item, Number(e.target.dataset.set), field, Number(value) || 0, e.target)) return;
   set[field] = Number(value) || 0;
@@ -606,6 +608,13 @@ function logSet() {
   markInvalid($('activeWeight'), weightValue !== '' && Number(weightValue) < 0);
   if (!reps || reps < 1) {
     showFeedback(timed ? 'Enter the seconds held for this set.' : 'Enter the reps completed for this set.');
+    $('completedReps').focus();
+    return;
+  }
+  // A rep is done or not; a hold's seconds are left as typed.
+  if (!timed && !Number.isInteger(reps)) {
+    markInvalid($('completedReps'), true);
+    showFeedback('Reps must be a whole number.');
     $('completedReps').focus();
     return;
   }
@@ -735,6 +744,11 @@ $('completedSets').onchange = e => {
   const value = e.target.value;
   if (field === 'reps' && (!value || Number(value) < 1)) {
     showFeedback(isTimed(activeSession.exercises[activeSession.currentIndex]) ? 'Seconds must be at least 1.' : 'Reps must be at least 1.');
+    e.target.value = set.reps;
+    return;
+  }
+  if (field === 'reps' && !isTimed(activeSession.exercises[activeSession.currentIndex]) && !Number.isInteger(Number(value))) {
+    showFeedback('Reps must be a whole number.');
     e.target.value = set.reps;
     return;
   }

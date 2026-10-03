@@ -728,6 +728,12 @@ def run(t):
     log(135, 5)
     log(145, 5)
     check('a set like the ones before is logged without a question', not cdp.dialogs and sets_of(0) == [[135, 5], [145, 5]], f'{cdp.dialogs} {sets_of(0)}')
+    log(145, 2.5)
+    check('reps must be whole: 2.5 is refused, saying why', sets_of(0) == [[135, 5], [145, 5]] and text('formFeedback') == 'Reps must be a whole number.'
+          and cdp.ev("document.activeElement.id") == 'completedReps', text('formFeedback'))
+    edit_set(1, 'reps', '4.5')
+    cdp.pause(0.2)
+    check('and a logged set corrected to 4.5 reps snaps back', rows()[1]['reps'] == '5' and sets_of(0)[1] == [145, 5] and text('formFeedback') == 'Reps must be a whole number.', rows())
     edit_set(1, 'weight', '1450')
     cdp.pause(0.2)
     check('a logged set corrected to ten times as much asks too, and saying no puts it back', len(cdp.dialogs) == 1

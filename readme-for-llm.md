@@ -86,6 +86,8 @@ own workouts, templates, and settings.
   beside the weight.
   A set with no weight is logged as bodyweight; for a barbell, dumbbell, machine, cable or kettlebell exercise the app
   asks first, since an empty weight there is more likely left out than meant. A 0 typed in is taken as meant.
+  Reps are whole numbers (2.5 is refused, saying so), when a set is logged, corrected or edited; a hold's seconds are
+  taken as typed.
 - A value far past anything you have done is asked about before it is logged, since it is more likely a slip of the
   thumb (1355 for 135) than a record: "That's 10× your heaviest Bench Press (175 lbs). Log 1355 lbs anyway?" A set
   asks when its weight is 3× the exercise's heaviest and at least 50 lbs (25 kg) more, or over 1,000 lbs (450 kg) with
@@ -510,6 +512,8 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
 - Goals: a weight to reach in an exercise, optionally by a day. Each shows your heaviest set so far against it, in a bar
   that turns green once it is reached, with how far there is to go and how many days are left. Setting a goal for an
   exercise again replaces it, and Remove takes it away. Goals are kept with your account, in the unit they were set in.
+  A target you have already lifted asks first ("You've already lifted 235 lbs on Back Squat, so 150 lbs is reached
+  already. Set it anyway?"): saying yes sets it, which suits getting back to a weight, and no asks for one above your best.
 - Bodyweight: log your weight for a day (today unless you choose an earlier one; weighing in again that day replaces
   it), and it is charted over time, with the latest weight and how it has moved over the last 30 days ("182.4 lbs on
   Sep 29 · Down 3 lbs in 30 days"). The newest five are listed under the chart to remove one. Weights are kept with
