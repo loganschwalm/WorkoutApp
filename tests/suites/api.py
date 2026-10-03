@@ -530,6 +530,9 @@ def run_structure(t, check, request):
         ('a distance in yards', cardio(cardio={'activity': 'run', 'distance': 3, 'distanceUnit': 'yd'})),
         ('a heart rate of 500', cardio(cardio={'activity': 'run', 'heartRate': 500})),
         ('calories that are a word', cardio(cardio={'activity': 'run', 'calories': 'lots'})),
+        ('a treadmill incline of 50%', cardio(cardio={'activity': 'run', 'incline': 50})),
+        ('a damper of 0', cardio(cardio={'activity': 'rower', 'damper': 0})),
+        ('a resistance level that is text', cardio(cardio={'activity': 'bike', 'resistance': 'hard'})),
     ]
     for label, body in refused:
         status, _, reply = request('POST', '/api/workouts', json.dumps(body).encode(), json_headers, token=token)
@@ -549,8 +552,11 @@ def run_structure(t, check, request):
          good(exercises=exercise(group='s1', sets=[{'weight': 100, 'reps': 5, 'rir': 2}, {'weight': 100, 'reps': 5, 'rir': 0}]))),
         ('a cardio session', cardio()),
         ('a cardio session with only its time', cardio(name='Elliptical', cardio={'activity': 'elliptical'})),
-        ('a rowing session in metres',
-         cardio(name='Rowing machine', cardio={'activity': 'rower', 'distance': 5000, 'distanceUnit': 'm'})),
+        ('a rowing session in metres, at a damper and stroke rate',
+         cardio(name='Rowing machine', cardio={'activity': 'rower', 'distance': 5000, 'distanceUnit': 'm', 'damper': 6, 'strokeRate': 26})),
+        ('a treadmill walk downhill',
+         cardio(name='Walk', cardio={'activity': 'walk', 'incline': -2.5})),
+        ('a bike at a resistance and cadence', cardio(name='Exercise bike', cardio={'activity': 'bike', 'resistance': 8, 'cadence': 85})),
     ]
     for label, body in accepted:
         status, _, reply = request('POST', '/api/workouts', json.dumps(body).encode(), json_headers, token=token)
@@ -1139,8 +1145,9 @@ def run_export(t, check, request):
     check('it starts with a byte-order mark, so Excel reads it as UTF-8', text.startswith('﻿'))
     rows = list(csv.reader(io.StringIO(text.lstrip('﻿'))))
     check('with a header row', rows[:1] == [['Date', 'Workout', 'Exercise', 'Set', 'Weight', 'Unit', 'Reps', 'Seconds', 'Distance', 'Distance unit', 'Calories',
-                                         'Average heart rate', 'Floors']], rows[:1])
-    blank = ['', '', '', '', '']
+                                         'Average heart rate', 'Floors', 'Incline (%)', 'Resistance level', 'Incline level', 'Cadence (rpm)',
+                                         'Damper', 'Stroke rate (spm)', 'Level']], rows[:1])
+    blank = [''] * 12
     check('one row per logged set, in the time zone asked for', ["2026-03-09", "'=SUM(A1) Push", 'Bench Press', '1', '80', 'kg', '5', ''] + blank in rows
           and ["2026-03-09", "'=SUM(A1) Push", 'Bench Press', '2', '82.5', 'kg', '5', ''] + blank in rows, rows)
     check('a timed set under Seconds', ["2026-03-09", "'=SUM(A1) Push", 'Plank', '1', '', 'kg', '', '45'] + blank in rows, rows)
@@ -1222,15 +1229,15 @@ def run_export(t, check, request):
     run = {'kind': 'cardio', 'name': 'Run', 'notes': 'Hills', 'createdAt': utc_ms(2026, 4, 2, 2), 'clientId': 'cardio-1', 'exercises': [], 'duration': 1680,
            'cardio': {'activity': 'run', 'distance': 3.1, 'distanceUnit': 'mi', 'calories': 310, 'heartRate': 152}}
     stairs = {'kind': 'cardio', 'name': 'Stair climber', 'notes': '', 'createdAt': utc_ms(2026, 4, 3, 12), 'clientId': 'cardio-2', 'exercises': [],
-              'duration': 900, 'cardio': {'activity': 'stairs', 'floors': 60}}
+              'duration': 900, 'cardio': {'activity': 'stairs', 'floors': 60, 'level': 8}}
     for session in (run, stairs):
         t.api('POST', '/api/workouts', session, runner)
     status, _, body = request('GET', '/api/export.csv?offset=-300', token=runner)
     rows = list(csv.reader(io.StringIO((body.decode('utf-8') if isinstance(body, bytes) else '').lstrip('﻿'))))
     check('a session is one row: its time under Seconds, then its distance and unit, calories and heart rate',
-          ['2026-04-01', 'Run', 'Run', '', '', '', '', '1680', '3.1', 'mi', '310', '152', ''] in rows, rows)
-    check('and floors for the stair climber, with no distance unit where there is no distance',
-          ['2026-04-03', 'Stair climber', 'Stair climber', '', '', '', '', '900', '', '', '', '', '60'] in rows, rows)
+          ['2026-04-01', 'Run', 'Run', '', '', '', '', '1680', '3.1', 'mi', '310', '152', ''] + [''] * 7 in rows, rows)
+    check('and floors and the level for the stair climber, with no distance unit where there is no distance',
+          ['2026-04-03', 'Stair climber', 'Stair climber', '', '', '', '', '900', '', '', '', '', '60', '', '', '', '', '', '', '8'] in rows, rows)
     _, _, export = request('GET', '/api/export', token=runner)
     kept = {w['name']: w for w in export.get('workouts', [])} if isinstance(export, dict) else {}
     check('the JSON export keeps each session as it was saved', kept.get('Run', {}).get('cardio') == run['cardio']

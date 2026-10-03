@@ -34,6 +34,8 @@ function cardioValue(workout, metric) {
     const rate = sessionRate(workout);
     return rate ? (activityOf(workout).rate === 'speed' ? rate.value : rate.value / 60) : null;
   }
+  // What a machine was set to counts at zero too (a flat treadmill), so long as it was entered.
+  if (cardioSettings[metric]) return typeof cardio[metric] === 'number' ? cardio[metric] : null;
   return ['calories', 'heartRate', 'floors'].includes(metric) && Number(cardio[metric]) > 0 ? Number(cardio[metric]) : null;
 }
 
@@ -43,7 +45,8 @@ function metricChoices() {
   if (!chartingCardio()) return [['weight', 'Heaviest weight'], ['oneRepMax', 'Estimated one-rep max'], ['reps', 'Best reps'], ['volume', 'Total volume']];
   const activity = keyActivity(selectedExercise);
   return [...(activity.distance ? [['distance', 'Distance']] : []), ...(activity.floors ? [['floors', 'Floors']] : []), ['duration', 'Time'],
-    ...(activity.rate ? [['rate', rateName(activity)]] : []), ['calories', 'Calories'], ['heartRate', 'Average heart rate']];
+    ...(activity.rate ? [['rate', rateName(activity)]] : []), ['calories', 'Calories'], ['heartRate', 'Average heart rate'],
+    ...(activity.settings || []).map(id => [id, cardioSettings[id].label])];
 }
 
 // The metric filter offers what the chosen exercise or activity has, keeping the metric chosen where it still applies.
@@ -78,7 +81,7 @@ function buildCardioChartData(workouts) {
   const points = [], values = new Map();
   [...workouts].filter(workout => isCardio(workout) && cardioKey(workout) === selectedExercise).sort((a, b) => a.createdAt - b.createdAt).forEach((workout, index) => {
     const value = cardioValue(workout, selectedMetric);
-    if (!(value > 0)) return;
+    if (value === null || !(value > 0 || (cardioSettings[selectedMetric] && Number.isFinite(value)))) return;
     const key = String(workout.id ?? `${workout.createdAt}-${index}`);
     points.push({ key, createdAt:workout.createdAt });
     values.set(key, value);
@@ -210,6 +213,11 @@ function chartFormat() {
       const speed = unit === 'km' ? 'km/h' : 'mph';
       return { axis:`Speed (${speed})`, value:value => `${Math.round(value * 10) / 10} ${speed}`, tick:value => String(Math.round(value * 10) / 10) };
     }
+    if (cardioSettings[selectedMetric]) {
+      const setting = cardioSettings[selectedMetric];
+      return { axis:`${setting.label}${setting.unit ? ` (${setting.unit})` : ''}`, value:value => setting.says(Math.round(value * 10) / 10),
+        tick:value => String(Math.round(value * 10) / 10) };
+    }
     if (selectedMetric === 'calories') return plain('Calories', ' cal');
     if (selectedMetric === 'heartRate') return plain('Heart rate (bpm)', ' bpm');
     return plain('Floors', ' floors');
@@ -233,14 +241,16 @@ function chartScale(values) {
   const slower = selectedMetric === 'rate' && keyActivity(selectedExercise).rate !== 'speed';
   const clock = slower || selectedMetric === 'duration';
   const min = Math.min(...values), max = Math.max(...values);
-  const pad = Math.max((max - min) * 0.15, clock ? 0.25 : max * 0.05);
+  // Room either side; one that would be none (every session the same, at zero) is a whole one.
+  const pad = Math.max((max - min) * 0.15, clock ? 0.25 : Math.abs(max) * 0.05) || 1;
   const rough = (max - min + 2 * pad) / 4;
   const magnitude = 10 ** Math.floor(Math.log10(rough));
   // In minutes: from 5 seconds a step to 4 hours.
   const steps = clock ? [5, 10, 15, 20, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 14400].map(seconds => seconds / 60)
     : [1, 2, 2.5, 5, 10].map(multiple => multiple * magnitude);
   const step = steps.find(size => size >= rough) || steps[steps.length - 1];
-  const low = Math.max(0, Math.floor((min - pad) / step) * step);
+  // Below zero only for what can be: a treadmill set downhill.
+  const low = cardioSettings[selectedMetric] ? Math.floor((min - pad) / step) * step : Math.max(0, Math.floor((min - pad) / step) * step);
   const high = Math.ceil((max + pad) / step) * step;
   const ticks = [];
   for (let value = low; value <= high + step / 1000; value += step) ticks.push(Math.round(value * 1e6) / 1e6);
@@ -388,14 +398,16 @@ function renderProgress(workouts) {
       : activity.rate === 'split' ? ['Split', 'Time per 500 metres in each session. Faster is higher up.']
         : ['Pace', `Time per ${per} in each session. Faster is higher up.`],
     calories:['Calories', 'The calories of each session, where you entered them.'],
-    heartRate:['Average heart rate', 'The average heart rate of each session, where you entered it.']
+    heartRate:['Average heart rate', 'The average heart rate of each session, where you entered it.'],
+    ...Object.fromEntries((activity.settings || []).map(id => [id, [cardioSettings[id].label, `The ${cardioSettings[id].label.toLowerCase()} of each session, where you entered it.`]]))
   } : chartingTimed()
     ? { weight:['Heaviest weight', 'Track the heaviest weight you have held by workout type and date.'], oneRepMax:['Estimated one-rep max', 'A timed exercise has no one-rep max. Choose Longest hold or Total time held.'], reps:['Longest hold', 'Track your longest hold, in seconds, by workout type and date.'], volume:['Total time held', 'Track the seconds held in each workout, all sets together.'] }
     : { weight:['Heaviest weight', 'Track your heaviest weight by workout type and date.'], oneRepMax:['Estimated one-rep max', 'Your best set in each workout as a one-rep max, from sets of up to 12 reps, so heavier weights and more reps both count.'], reps:['Best reps', 'Track your highest completed reps by workout type and date.'], volume:['Total volume', 'Track total weight moved by workout type and date.'] };
   $('progressTitle').textContent = labels[selectedMetric][0];
   $('progressDescription').textContent = labels[selectedMetric][1];
   if (!chartData.points.length && allWorkouts.length && activity) {
-    const missing = { distance:'a distance', floors:'floors', rate:'a distance to work it out from', calories:'calories', heartRate:'a heart rate' }[selectedMetric];
+    const missing = { distance:'a distance', floors:'floors', rate:'a distance to work it out from', calories:'calories', heartRate:'a heart rate' }[selectedMetric]
+      || (cardioSettings[selectedMetric] ? `a ${cardioSettings[selectedMetric].label.toLowerCase()}` : '');
     $('chartEmpty').textContent = missing && ofKind(workouts).some(workout => cardioKey(workout) === selectedExercise)
       ? `Nothing to chart: none of these sessions has ${missing} entered.` : 'Nothing to chart for these filters.';
   } else if (!chartData.points.length && allWorkouts.length) {

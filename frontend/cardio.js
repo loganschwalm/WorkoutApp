@@ -15,8 +15,21 @@ let cardioTicker = null;
 // that leaves it alone keeps what was logged exactly, rather than as converted and rounded.
 let cardioForm = null;
 let showingAllCardio = false;
+// Whether a tap on an activity opens the form to enter its time rather than starting the timer: a choice above the
+// activities, kept on this device (it is a habit of how this phone is used, not of the account).
+let cardioManual = readCardioMode();
 const cardioShownAtFirst = 5;
 const cardioListLimit = 20;
+
+function readCardioMode() {
+  try { return localStorage.getItem('workout-tracker-cardio-mode') === 'manual'; } catch (error) { return false; }
+}
+
+function setCardioMode(manual) {
+  cardioManual = manual;
+  try { localStorage.setItem('workout-tracker-cardio-mode', manual ? 'manual' : 'timer'); } catch (error) { /* only for this visit, then */ }
+  renderCardioStart();
+}
 
 function cardioActiveKey() {
   return localKey('cardio-active');
@@ -139,7 +152,20 @@ function finishCardio() {
     cardioActive.pausedAt = Date.now();
     saveCardioActive();
   }
-  openCardioForm('finish', { activity:cardioActive.activity, name:cardioActive.name, createdAt:Date.now(), duration:Math.floor(cardioElapsed()) });
+  openCardioForm('finish', { activity:cardioActive.activity, name:cardioActive.name, createdAt:Date.now(), duration:Math.floor(cardioElapsed()),
+    ...lastSettings(cardioActive.activity, cardioActive.name) });
+}
+
+// What the machine was set to last time this activity was done (Other's by its name), to start from: a gym's treadmill
+// incline or a rower's damper is usually the same as before. Clearing a field leaves it out.
+function lastSettings(activityId, name = '') {
+  const last = lastCardio(cardioKey({ name, cardio:{ activity:activityId } }));
+  return last ? Object.fromEntries(sessionSettings(last)) : {};
+}
+
+// A new session by hand, of an activity, for today, from last time's settings.
+function logDraft(activityId, name = '') {
+  return { activity:activityId, name, createdAt:Date.now(), ...lastSettings(activityId, name) };
 }
 
 // ---- The form -------------------------------------------------------------
@@ -148,7 +174,23 @@ function finishCardio() {
 function cardioDraft(workout) {
   const cardio = workout.cardio || {};
   return { activity:activityOf(workout).id, name:workout.name, createdAt:workout.createdAt, duration:Number(workout.duration) || 0, distance:sessionDistance(workout),
-    calories:cardio.calories, heartRate:cardio.heartRate, floors:cardio.floors, notes:workout.notes || '' };
+    calories:cardio.calories, heartRate:cardio.heartRate, floors:cardio.floors, notes:workout.notes || '', ...Object.fromEntries(sessionSettings(workout)) };
+}
+
+// A field for each setting the activity has, with what it had (or the draft gave) in it. Drawn again only when the
+// activity changes, so what is typed is never lost to a redraw; a setting both activities have keeps its value.
+function renderSettingsFields(activity, values) {
+  const box = $('cardioSettings');
+  const kept = Object.fromEntries([...box.querySelectorAll('[data-setting]')].map(input => [input.dataset.setting, input.value]));
+  box.dataset.activity = activity.id;
+  box.innerHTML = (activity.settings || []).map(id => {
+    const setting = cardioSettings[id];
+    const given = values ? values[id] : undefined;
+    const value = values ? (typeof given === 'number' ? String(given) : '') : kept[id] ?? '';
+    return `<div><label for="cardioSetting-${id}">${escapeHTML(setting.label)}${setting.unit ? ` (${setting.unit})` : ''}</label>`
+      + `<input id="cardioSetting-${id}" data-setting="${id}" type="number" inputmode="decimal" min="${setting.min}" max="${setting.max}" step="${setting.step}"`
+      + ` value="${escapeHTML(value)}" placeholder="${setting.help ? `${setting.help}, optional` : 'Optional'}" /></div>`;
+  }).join('');
 }
 
 // A number as a field shows it: up to two decimals, or whole metres.
@@ -160,7 +202,7 @@ function openCardioForm(mode, draft, workout = null) {
   const activity = cardioActivity(draft.activity);
   const titles = { log:'Log a session', finish:`Finish your ${activity.named ? 'session' : activity.name.toLowerCase()}`, edit:'Edit session', copy:'Log a session' };
   const intros = {
-    log:'A session you did without the timer: what it was, when, and for how long.',
+    log:'A session you did without the timer: what it was, when, and for how long. What the machine was set to starts as last time.',
     finish:'The time is from the timer. Add the distance and anything else the machine or your watch shows.',
     edit:'Change anything about this session.',
     copy:'The same as before, as a new session for today. Change what was different.'
@@ -181,6 +223,7 @@ function openCardioForm(mode, draft, workout = null) {
   $('cardioHeartRate').value = Number(draft.heartRate) > 0 ? String(Math.round(draft.heartRate)) : '';
   $('cardioFloors').value = Number(draft.floors) > 0 ? String(Math.round(draft.floors)) : '';
   $('cardioNotes').value = draft.notes || '';
+  renderSettingsFields(activity, draft);
   $('cardioForm').querySelectorAll('[aria-invalid]').forEach(field => field.removeAttribute('aria-invalid'));
   cardioForm = { mode, workout, distanceShown:$('cardioDistance').value };
   $('cardioFormTitle').textContent = titles[mode];
@@ -214,6 +257,7 @@ function syncCardioForm() {
   $('cardioNameField').hidden = !activity.named;
   $('cardioDistanceField').hidden = !activity.distance;
   $('cardioFloorsField').hidden = !activity.floors;
+  if ($('cardioSettings').dataset.activity !== activity.id) renderSettingsFields(activity, null);
   const unit = shownDistanceUnit(activity);
   const field = $('cardioDistance');
   // A distance typed for one activity carries over to another, converted when their units differ (a rower's metres).
@@ -241,6 +285,12 @@ function cardioFormProblem(values) {
   if (!Number.isFinite(values.heartRate) || (values.heartRate !== 0 && (values.heartRate < 20 || values.heartRate > 250))) {
     return ['Enter an average heart rate from 20 to 250 bpm, or leave it empty.', $('cardioHeartRate')];
   }
+  for (const [id, value] of Object.entries(values.settings)) {
+    const setting = cardioSettings[id];
+    if (!Number.isFinite(value) || value < setting.min || value > setting.max) {
+      return [`Enter a ${setting.label.toLowerCase()} from ${setting.min} to ${setting.max}${setting.unit ? ` ${setting.unit}` : ''}, or leave it empty.`, $(`cardioSetting-${id}`)];
+    }
+  }
   return null;
 }
 
@@ -263,7 +313,10 @@ async function saveCardioForm() {
   const number = id => ($(id).value === '' ? 0 : Number($(id).value));
   const values = { day:$('cardioDate').value, seconds:Math.round(formSeconds()), unit:shownDistanceUnit(activity),
     distance:activity.distance ? number('cardioDistance') : 0, floors:activity.floors ? number('cardioFloors') : 0,
-    calories:number('cardioCalories'), heartRate:number('cardioHeartRate') };
+    calories:number('cardioCalories'), heartRate:number('cardioHeartRate'),
+    // Only the settings filled in; zero is a setting too (a flat treadmill).
+    settings:Object.fromEntries([...$('cardioSettings').querySelectorAll('[data-setting]')].filter(input => input.value !== '')
+      .map(input => [input.dataset.setting, Number(input.value)])) };
   $('cardioForm').querySelectorAll('[aria-invalid]').forEach(field => field.removeAttribute('aria-invalid'));
   const problem = cardioFormProblem(values);
   if (problem) {
@@ -280,7 +333,8 @@ async function saveCardioForm() {
   const distance = values.distance > 0 ? (kept ? { distance:editing.cardio.distance, distanceUnit:enteredDistanceUnit(editing) }
     : { distance:values.unit === 'm' ? Math.round(values.distance) : Math.round(values.distance * 100) / 100, distanceUnit:values.unit }) : {};
   const cardio = { activity:activity.id, ...distance, ...(values.calories > 0 ? { calories:Math.round(values.calories) } : {}),
-    ...(values.heartRate > 0 ? { heartRate:Math.round(values.heartRate) } : {}), ...(values.floors > 0 ? { floors:Math.round(values.floors) } : {}) };
+    ...(values.heartRate > 0 ? { heartRate:Math.round(values.heartRate) } : {}), ...(values.floors > 0 ? { floors:Math.round(values.floors) } : {}),
+    ...Object.fromEntries(Object.entries(values.settings).map(([id, value]) => [id, Math.round(value * 10) / 10])) };
   const workout = { ...(mode === 'edit' ? editing : {}), kind:'cardio', name, notes:$('cardioNotes').value.trim(), exercises:[],
     createdAt:cardioTime(mode, values.day, editing), duration:values.seconds, cardio, clientId:mode === 'edit' ? editing.clientId : newClientId() };
   if (!workout.clientId) delete workout.clientId;
@@ -327,6 +381,7 @@ function showCardioSummary(workout, records) {
     ...(distance ? [[formatDistance(distance, shownDistanceUnit(activity)), 'Distance']] : []),
     ...(rate ? [[rate.text, rateName(activity)]] : []),
     ...(cardio.floors ? [[String(cardio.floors), 'Floors']] : []),
+    ...sessionSettings(workout).map(([id, value]) => [`${value}${cardioSettings[id].unit ? ` ${cardioSettings[id].unit}` : ''}`, cardioSettings[id].label]),
     ...(cardio.heartRate ? [[`${cardio.heartRate} bpm`, 'Heart rate']] : []),
     ...(cardio.calories ? [[String(cardio.calories), 'Calories']] : [])];
   $('cardioSummaryName').textContent = `${workout.name} · ${new Date(workout.createdAt).toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric' })}`;
@@ -368,11 +423,14 @@ function renderCardioStart() {
   $('cardioActivityGrid').innerHTML = cardioActivities.map(activity => {
     const last = activity.named ? null : sessions.find(workout => activityOf(workout).id === activity.id);
     const distance = last ? sessionDistance(last) : null;
-    const line = activity.named ? 'Anything else; name it when you finish'
+    const line = activity.named ? `Anything else; name it ${cardioManual ? 'in the form' : 'when you finish'}`
       : last ? `Last ${shortDate(last.createdAt)} · ${distance ? formatDistance(distance, shownDistanceUnit(activity)).replace(' ', '\u00a0') : formatClock(last.duration)}`
-        : 'Start the timer';
+        : cardioManual ? 'Enter its time' : 'Start the timer';
     return `<button class="cardio-activity" type="button" data-activity="${activity.id}"><strong>${escapeHTML(activity.name)}</strong><span>${escapeHTML(line)}</span></button>`;
   }).join('');
+  $('cardioModeTimer').setAttribute('aria-pressed', String(!cardioManual));
+  $('cardioModeManual').setAttribute('aria-pressed', String(cardioManual));
+  $('cardioStartHelp').textContent = cardioManual ? 'Tap what you did to enter its time, distance and the rest.' : 'Tap what you are doing and the timer starts.';
 }
 
 // The latest sessions, a line each like the Strength page's saved workouts: the name (tap it for everything the session
@@ -469,13 +527,12 @@ function actOnCardio(action, workout) {
 
 $('cardioActivityGrid').onclick = event => {
   const button = event.target.closest('[data-activity]');
-  if (button) startCardio(button.dataset.activity);
+  if (!button) return;
+  if (cardioManual) openCardioForm('log', logDraft(button.dataset.activity));
+  else startCardio(button.dataset.activity);
 };
-// Logging by hand starts from the activity done last.
-$('cardioLogBtn').onclick = () => {
-  const last = allCardio()[0];
-  openCardioForm('log', { activity:last ? activityOf(last).id : 'walk', name:last && activityOf(last).named ? last.name : '', createdAt:Date.now() });
-};
+$('cardioModeTimer').onclick = () => setCardioMode(false);
+$('cardioModeManual').onclick = () => setCardioMode(true);
 $('cardioPauseBtn').onclick = toggleCardioPause;
 $('cardioFinishBtn').onclick = finishCardio;
 $('cardioCancelBtn').onclick = cancelCardio;

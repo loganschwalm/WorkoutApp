@@ -65,7 +65,9 @@ see a program working over the weeks.
 - Walks and runs, cycling, an exercise bike, the elliptical, a rowing machine, a stair climber, or anything else
   under a name of your own.
 - Tap one to start a timer that keeps time with the screen off; pause it, cancel it with Undo, or finish and add the
-  distance, calories and heart rate. Or log a session you did by hand, for any day.
+  distance, calories and heart rate. Or switch to Enter the time to log one you did by hand, for any day.
+- What the machine was set to: a treadmill's incline, a bike's or elliptical's resistance, a rower's damper and stroke
+  rate, a stair climber's level, prefilled from last time.
 - Pace, speed or a rower's split worked out for you, last time under the clock, this week's totals, and records for the
   longest, the fastest and the longest time.
 - Miles or kilometres (rowing in metres, stairs in floors), and every session in History and on Progress.

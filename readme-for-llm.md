@@ -390,6 +390,9 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
 - The activities: Walk, Run, Cycling, Exercise bike, Elliptical, Rowing machine, Stair climber, and Other, under a name of
   your own (Jump rope, Swimming), which is then charted and kept apart under that name. Each button says when it was
   last done and how far ("Last Sep 30 · 3.5 mi").
+- Above the activities, a switch says what tapping one does: Start the timer (the first time, and whenever it is chosen),
+  or Enter the time, which opens the form below for that activity instead, for a session done without the app or timed
+  on a watch. The choice is kept on this device.
 - Tapping one starts a timer for it. The clock is worked out from when it started, so it keeps time with the screen
   off, another app open or the page closed, and a reload puts it back as it was. Under it is last time ("Last time
   (Sep 30): 3.5 mi in 31:30 · 9:00 /mi"). Pause stops the clock until Resume. The session being timed is kept on this
@@ -402,9 +405,16 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
   rate and notes, all but the time optional. Back to the timer leaves it paused. As the distance is typed, the form
   works out how fast that was: the pace (time a mile or kilometre) of a walk or run, the speed (mph or km/h) of a ride,
   the elliptical or Other, and a rower's split (time per 500 metres).
-- Log a session, beside the activities, is the same form for a session done without the timer: any activity, any day
-  up to today, and its time in hours, minutes and seconds. It starts on the activity done last. One logged for today is
+- With Enter the time chosen, tapping an activity opens the same form for a session done without the timer: any
+  activity (it can be changed there), any day up to today, and its time in hours, minutes and seconds. One logged for today is
   saved at the time it was logged, one for another day at noon on it.
+- What a machine (or a treadmill) was set to, each optional: the incline of a walk or run (a treadmill's, in percent,
+  from -10 to 40), the cadence of a ride, the resistance level and cadence of an exercise bike, the resistance level and
+  incline level of an elliptical, the damper (1 to 10) and stroke rate of a rowing machine, and the level of a stair
+  climber or Other. Finishing a timed session, or entering one by hand, starts from last time's settings for that
+  activity (a gym's machines tend to be set the same), and clearing one leaves it out; zero is a setting (a flat
+  treadmill). A session's line says them ("3.1 mi in 28:00 · 9:02 /mi · 2% incline"), the summary lists them, and
+  Progress charts each one.
 - Saving shows a summary (the time, distance, pace or speed, floors, heart rate and calories it had) with any new
   records and a link to the activity on Progress. Records are an activity's longest distance, its fastest pace, speed
   or split (from a session of at least five minutes, so a short burst does not stand for a whole session), its longest
@@ -486,7 +496,7 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
 - Review repeated workouts as separate progress points.
 - Cardio is charted on the same chart: the exercise filter lists your activities apart from your exercises, and an
   activity's chart offers its own measures, one point a session: distance (or floors), time, pace, speed or split as its
-  activity is told, calories and average heart rate. Times are written as clocks ("8:31 /mi"). The axis spans the
+  activity is told, calories, average heart rate, and what the machine was set to (incline, resistance, damper and so on). Times are written as clocks ("8:31 /mi"). The axis spans the
   sessions rather than starting at zero, and a pace or split runs the other way up, so getting faster climbs on the
   chart as getting stronger does. Every session of the activity is listed under it, its records are among the personal
   records (its longest, fastest and longest time), and the workout type filter, which is for strength workouts, is set
@@ -569,7 +579,8 @@ Everything in your account can be saved to a file from Settings, and brought bac
   your exercises.
 - **Export sets as CSV** saves every logged set for a spreadsheet, one row each: its date, workout,
   exercise, set number, weight, unit, and reps (or seconds, for a timed exercise). A cardio session is one row too: its
-  time under Seconds, then its distance and the unit it was entered in, calories, average heart rate and floors, where
+  time under Seconds, then its distance and the unit it was entered in, calories, average heart rate and floors, then a
+  column for each machine setting (incline, resistance level, incline level, cadence, damper, stroke rate, level), where
   it has them. Skipped exercises are
   left out. Dates are the days in your own time zone, and a name that starts like a formula (`=`, `+`,
   `-`, `@`) is kept as text rather than run.
@@ -1289,8 +1300,9 @@ The server is the record. Saved workouts and cardio sessions, the in-progress wo
 program, and settings are stored per account in SQLite, and every query is scoped to the signed-in account's user ID. The server
 checks the shape of everything it stores, so a malformed upload is refused rather than saved. A cardio session is a
 workout of its own kind: `{"kind": "cardio", "name": "Run", "exercises": [], "duration": 1680, "cardio": {"activity": "run",
-"distance": 3.1, "distanceUnit": "mi", "calories": 310, "heartRate": 152}}`, its time in seconds and everything in `cardio`
-but the activity optional (`floors` for the stair climber). A workout without `kind` is a strength workout, as every
+"distance": 3.1, "distanceUnit": "mi", "calories": 310, "heartRate": 152, "incline": 2}}`, its time in seconds and everything
+in `cardio` but the activity optional (`floors` for the stair climber, and the machine settings `incline`, `resistance`,
+`ramp`, `cadence`, `damper`, `strokeRate` and `level`, each checked against its range). A workout without `kind` is a strength workout, as every
 workout from before cardio is.
 
 The browser keeps a working copy in `localStorage`, separately for each account that signs in on it:

@@ -52,8 +52,9 @@
           <div><label for="cardioCalories">Calories</label><input id="cardioCalories" type="number" inputmode="numeric" min="0" step="1" placeholder="Optional" /></div>
           <div><label for="cardioHeartRate">Average heart rate</label><input id="cardioHeartRate" type="number" inputmode="numeric" min="0" step="1" placeholder="bpm, optional" /></div>
         </div>
+        <div class="cardio-fields" id="cardioSettings"></div>
         <p class="cardio-rate" id="cardioRate" role="status"></p>
-        <div class="notes-field"><label for="cardioNotes">Notes</label><textarea class="notes-input" id="cardioNotes" rows="2" maxlength="2000" placeholder="How did it feel? The route, or the machine's level."></textarea></div>
+        <div class="notes-field"><label for="cardioNotes">Notes</label><textarea class="notes-input" id="cardioNotes" rows="2" maxlength="2000" placeholder="How did it feel? The route, the weather, the machine."></textarea></div>
         <div class="footer-actions"><button class="secondary" id="cardioFormCancel" type="button">Cancel</button><button class="primary" id="cardioSave" type="submit">Save session</button></div>
       </form>
     </section>
@@ -66,7 +67,8 @@
     </section>
 
     <section class="card" id="cardioStartCard" aria-labelledby="cardioStartTitle">
-      <div class="section-heading"><div><h2 id="cardioStartTitle">Start a session</h2><p class="subtitle">Tap what you are doing and the timer starts.</p></div><div class="section-heading-actions"><button class="secondary" id="cardioLogBtn" type="button">Log a session</button></div></div>
+      <div class="section-heading"><div><h2 id="cardioStartTitle">Start a session</h2><p class="subtitle" id="cardioStartHelp">Tap what you are doing and the timer starts.</p></div></div>
+      <div class="cardio-mode" role="group" aria-label="How to log it"><button class="secondary" id="cardioModeTimer" type="button" aria-pressed="true">Start the timer</button><button class="secondary" id="cardioModeManual" type="button" aria-pressed="false">Enter the time</button></div>
       <div class="cardio-activity-grid" id="cardioActivityGrid"></div>
     </section>
 

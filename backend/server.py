@@ -409,6 +409,10 @@ def validate_workout(data):
 
 # The most a cardio session's numbers can be; nothing the app sends comes near them.
 CARDIO_LIMITS = {'distance': 1_000_000, 'calories': 100_000, 'heartRate': 400, 'floors': 100_000}
+# What a machine (or a treadmill) was set to, each optional, as cardioSettings in cardio-activities.js has them: (least,
+# most). A treadmill's incline can go below zero.
+CARDIO_SETTINGS = {'incline': (-10, 40), 'resistance': (0, 100), 'ramp': (0, 100), 'cadence': (0, 300), 'damper': (1, 10),
+                   'strokeRate': (0, 100), 'level': (0, 100)}
 
 
 def validate_cardio(data):
@@ -432,6 +436,10 @@ def validate_cardio(data):
             raise BadRequest(f'cardio.{field} must be a number from 0 to {most}.')
     if cardio.get('distanceUnit') not in (None, 'mi', 'km', 'm'):
         raise BadRequest('cardio.distanceUnit must be mi, km or m.')
+    for field, (least, most) in CARDIO_SETTINGS.items():
+        value = cardio.get(field)
+        if value is not None and not (is_number(value) and least <= value <= most):
+            raise BadRequest(f'cardio.{field} must be a number from {least} to {most}.')
 
 
 def validate_program(program):
@@ -691,11 +699,13 @@ def workouts_csv(workouts, zone):
     """One row per logged set, oldest first, for a spreadsheet. A skipped exercise has no rows, and one saved without
     sets (from the workout form) has one row of its weight and reps. A timed exercise's count goes under Seconds. A cardio
     session is one row: its time under Seconds, then its distance (in the unit it was entered in), calories, average heart
-    rate and floors, where it has them."""
+    rate and floors, then what the machine was set to, where it has them."""
     out = io.StringIO()
     writer = csv.writer(out)
+    settings = {'incline': 'Incline (%)', 'resistance': 'Resistance level', 'ramp': 'Incline level', 'cadence': 'Cadence (rpm)', 'damper': 'Damper',
+                'strokeRate': 'Stroke rate (spm)', 'level': 'Level'}
     writer.writerow(['Date', 'Workout', 'Exercise', 'Set', 'Weight', 'Unit', 'Reps', 'Seconds', 'Distance', 'Distance unit', 'Calories',
-                     'Average heart rate', 'Floors'])
+                     'Average heart rate', 'Floors', *settings.values()])
     for workout in workouts:
         date = local_date(workout['createdAt'], zone)
         unit = workout.get('unit') or 'lbs'
@@ -705,7 +715,7 @@ def workouts_csv(workouts, zone):
             name = spreadsheet_text(workout['name'])
             writer.writerow([date, name, name, '', '', '', '', workout.get('duration', ''), given('distance'),
                              cardio.get('distanceUnit', '') if cardio.get('distance') is not None else '', given('calories'), given('heartRate'),
-                             given('floors')])
+                             given('floors'), *(given(field) for field in settings)])
             continue
         for exercise in workout.get('exercises') or []:
             sets = exercise.get('sets')
@@ -715,7 +725,8 @@ def workouts_csv(workouts, zone):
                 weight, count = logged.get('weight'), logged.get('reps')
                 count = '' if count is None else count
                 writer.writerow([date, spreadsheet_text(workout['name']), spreadsheet_text(exercise.get('name') or ''), number,
-                                 '' if weight is None else weight, unit, '' if timed else count, count if timed else '', '', '', '', '', ''])
+                                 '' if weight is None else weight, unit, '' if timed else count, count if timed else '', '', '', '', '', '',
+                                 *('' for _ in settings)])
     # A byte-order mark, or Excel reads the file in its own code page and mangles anything beyond plain English.
     return '﻿' + out.getvalue()
 

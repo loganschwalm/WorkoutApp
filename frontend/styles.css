@@ -695,3 +695,10 @@ html[data-theme="dark"] .goal.reached .goal-foot span { color:#a5e5c2; }
 .cardio-time legend { padding:0; margin:0 0 8px; color:var(--ink); font-size:.9rem; font-weight:700; }
 .cardio-rate { min-height:1.3em; margin:12px 0 0; color:var(--ink); font-weight:600; }
 #cardioFormCard .notes-field { margin-top:12px; }
+
+/* Start the timer or enter the time: which one a tap on an activity does. */
+.cardio-mode { display:inline-grid; grid-template-columns:1fr 1fr; gap:4px; margin-top:16px; padding:4px; background:var(--line); border-radius:12px; }
+.cardio-mode button { min-height:44px; padding:0 16px; color:var(--muted); background:transparent; }
+.cardio-mode button[aria-pressed="true"] { color:var(--accent); background:var(--card); box-shadow:0 1px 3px rgba(16,21,35,.12); }
+.cardio-mode button:hover { transform:none; }
+#cardioSettings:empty { display:none; }

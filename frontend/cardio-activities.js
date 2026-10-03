@@ -7,17 +7,36 @@
 // distance: 'road' is in miles or kilometres (Settings), 'meters' in metres, as a rowing machine counts them; the stair
 // climber counts floors instead. rate: how fast a session went, as the activity is usually told: 'pace' is time a mile or
 // kilometre (lower is faster), 'speed' miles or kilometres an hour, and 'split' time per 500 metres, a rower's pace.
-// 'other' is anything else, under a name of your own (Jump rope, Swimming).
+// 'other' is anything else, under a name of your own (Jump rope, Swimming). settings: what a machine (or a treadmill) was
+// set to, each optional, from cardioSettings.
 const cardioActivities = [
-  { id:'walk', name:'Walk', distance:'road', rate:'pace' },
-  { id:'run', name:'Run', distance:'road', rate:'pace' },
-  { id:'cycle', name:'Cycling', distance:'road', rate:'speed' },
-  { id:'bike', name:'Exercise bike', distance:'road', rate:'speed' },
-  { id:'elliptical', name:'Elliptical', distance:'road', rate:'speed' },
-  { id:'rower', name:'Rowing machine', distance:'meters', rate:'split' },
-  { id:'stairs', name:'Stair climber', floors:true },
-  { id:'other', name:'Other', distance:'road', rate:'speed', named:true }
+  { id:'walk', name:'Walk', distance:'road', rate:'pace', settings:['incline'] },
+  { id:'run', name:'Run', distance:'road', rate:'pace', settings:['incline'] },
+  { id:'cycle', name:'Cycling', distance:'road', rate:'speed', settings:['cadence'] },
+  { id:'bike', name:'Exercise bike', distance:'road', rate:'speed', settings:['resistance', 'cadence'] },
+  { id:'elliptical', name:'Elliptical', distance:'road', rate:'speed', settings:['resistance', 'ramp'] },
+  { id:'rower', name:'Rowing machine', distance:'meters', rate:'split', settings:['damper', 'strokeRate'] },
+  { id:'stairs', name:'Stair climber', floors:true, settings:['level'] },
+  { id:'other', name:'Other', distance:'road', rate:'speed', named:true, settings:['level'] }
 ];
+// The settings a session can keep, each kept under its id in the session's cardio object: what the form calls it, the
+// unit after it, its range (the server's too), and how a session's line says it. A treadmill's incline is a percentage
+// and can go below zero; an elliptical's is a level on its own scale.
+const cardioSettings = {
+  incline:{ label:'Incline', unit:'%', min:-10, max:40, step:0.5, help:'Treadmill', says:value => `${value}% incline` },
+  resistance:{ label:'Resistance level', min:0, max:100, step:1, says:value => `resistance ${value}` },
+  ramp:{ label:'Incline level', min:0, max:100, step:1, says:value => `incline level ${value}` },
+  cadence:{ label:'Cadence', unit:'rpm', min:0, max:300, step:1, says:value => `${value} rpm` },
+  damper:{ label:'Damper', min:1, max:10, step:1, says:value => `damper ${value}` },
+  strokeRate:{ label:'Stroke rate', unit:'spm', min:0, max:100, step:1, says:value => `${value} spm` },
+  level:{ label:'Level', min:0, max:100, step:1, says:value => `level ${value}` }
+};
+
+// The settings a session has, as [id, value]: those of its activity it was given, in the activity's order.
+function sessionSettings(workout) {
+  const cardio = workout.cardio || {};
+  return (activityOf(workout).settings || []).filter(id => typeof cardio[id] === 'number' && Number.isFinite(cardio[id])).map(id => [id, cardio[id]]);
+}
 const metresIn = { mi:1609.344, km:1000, m:1 };
 // A pace, split or speed only counts as a record from a session of at least this many seconds, so a short burst (or a
 // timer started by mistake) does not stand for a whole session.
@@ -91,8 +110,8 @@ function fasterRate(activity, value, than) {
   return activity.rate === 'speed' ? value > than : value < than;
 }
 
-// Everything a session did, as History, Progress and the Cardio page write it: "3.1 mi in 27:42 · 8:56 /mi · 152 bpm ·
-// 320 cal", "20:00 · 60 floors". Only what was given is there.
+// Everything a session did, as History, Progress and the Cardio page write it: "3.1 mi in 27:42 · 8:56 /mi · 2% incline ·
+// 152 bpm · 320 cal", "20:00 · 60 floors · level 8". Only what was given is there.
 function describeCardio(workout) {
   const cardio = workout.cardio || {};
   const activity = activityOf(workout);
@@ -102,6 +121,7 @@ function describeCardio(workout) {
   const rate = sessionRate(workout);
   if (rate) parts.push(rate.text);
   if (activity.floors && Number(cardio.floors) > 0) parts.push(plural(Math.round(cardio.floors), 'floor'));
+  sessionSettings(workout).forEach(([id, value]) => parts.push(cardioSettings[id].says(value)));
   if (Number(cardio.heartRate) > 0) parts.push(`${Math.round(cardio.heartRate)} bpm`);
   if (Number(cardio.calories) > 0) parts.push(`${Math.round(cardio.calories)} cal`);
   return parts.join(' · ');

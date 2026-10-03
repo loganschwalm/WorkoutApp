@@ -47,7 +47,8 @@ def run(t):
     cdp.ev("document.querySelector('#cardioActivityGrid [data-activity=run]').click()")
     cdp.ev("document.getElementById('cardioPauseBtn').click(); document.getElementById('cardioFinishBtn').click()")
     cdp.ev("document.getElementById('cardioFormCancel').click(); confirm = () => true; document.getElementById('cardioCancelBtn').click()")
-    cdp.ev("document.getElementById('cardioLogBtn').click(); document.getElementById('cardioFormCancel').click()")
+    cdp.ev("document.getElementById('cardioModeManual').click(); document.querySelector('#cardioActivityGrid [data-activity=rower]').click()")
+    cdp.ev("document.getElementById('cardioFormCancel').click(); document.getElementById('cardioModeTimer').click()")
     cdp.pause(0.5)
     check('the Cardio page: the timer, the form and its fields', violations() == [], violations())
 

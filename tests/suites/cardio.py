@@ -143,11 +143,19 @@ def run(t):
     check('a faster pace than ever is a record; a shorter, quicker run is no other', records == ['Run: your fastest yet, 8:20 /mi (was 9:00 /mi)'], records)
 
     # ------------------------------------------------------------------ C4 logging by hand
-    print('C4  a session is logged by hand: any activity, any day, with what the machine said')
-    click('#cardioLogBtn')
-    check('Log a session opens the form, on the activity done last', not hidden('cardioFormCard') and text('cardioFormTitle') == 'Log a session'
-          and cdp.ev("document.getElementById('cardioActivity').value") == 'run', cdp.ev("document.getElementById('cardioActivity').value"))
-    fill('cardioActivity', 'bike')
+    print('C4  a session is logged by hand: any activity, any day, with what the machine said and was set to')
+    click('#cardioModeManual')
+    tile = lambda activity: cdp.ev(f"document.querySelector('#cardioActivityGrid [data-activity={activity}] span').textContent").replace('\u00a0', ' ')
+    check('Enter the time, above the activities, makes a tap open the form instead of the timer',
+          cdp.ev("document.getElementById('cardioModeManual').getAttribute('aria-pressed')") == 'true' and tile('cycle') == 'Enter its time'
+          and text('cardioStartHelp') == 'Tap what you did to enter its time, distance and the rest.', [tile('cycle'), text('cardioStartHelp')])
+    open_cardio()
+    check('and it is remembered on this device', cdp.ev("document.getElementById('cardioModeManual').getAttribute('aria-pressed')") == 'true')
+    click("#cardioActivityGrid [data-activity=bike]")
+    check('a tap opens the form for that activity, with no timer', not hidden('cardioFormCard') and text('cardioFormTitle') == 'Log a session'
+          and cdp.ev("document.getElementById('cardioActivity').value") == 'bike' and hidden('cardioActive'), cdp.ev("document.getElementById('cardioActivity').value"))
+    settings = lambda: cdp.ev("[...document.querySelectorAll('#cardioSettings label')].map(l => l.textContent)")
+    check("an exercise bike's settings: resistance and cadence", settings() == ['Resistance level', 'Cadence (rpm)'], settings())
     click('#cardioSave')
     check('it needs a time', text('formFeedback') == 'Enter how long the session took.'
           and cdp.ev("document.getElementById('cardioMinutes').getAttribute('aria-invalid')") == 'true', text('formFeedback'))
@@ -161,6 +169,12 @@ def run(t):
     check('and a heart rate a heart can have', text('formFeedback').startswith('Enter an average heart rate from 20 to 250'), text('formFeedback'))
     fill('cardioHeartRate', '')
     fill('cardioCalories', '250')
+    fill('cardioSetting-resistance', '150')
+    click('#cardioSave')
+    check('and a setting within its range', text('formFeedback') == 'Enter a resistance level from 0 to 100, or leave it empty.'
+          and cdp.ev("document.activeElement.id") == 'cardioSetting-resistance', text('formFeedback'))
+    fill('cardioSetting-resistance', '8')
+    fill('cardioSetting-cadence', '85')
     tomorrow = cdp.ev("dateInputValue(Date.now() + 86400000)")
     fill('cardioDate', tomorrow)
     click('#cardioSave')
@@ -169,13 +183,23 @@ def run(t):
     click('#cardioSave')
     cdp.pause(0.6)
     bike = t.wait_for(lambda: any(w['name'] == 'Exercise bike' for w in sessions())) and next(w for w in sessions() if w['name'] == 'Exercise bike')
-    check('it is saved for that day, at noon', bike and cdp.ev(f"dateInputValue({bike['createdAt']})") == yesterday
-          and cdp.ev(f"new Date({bike['createdAt']}).getHours()") == 12 and bike['cardio'] == {'activity': 'bike', 'distance': 9, 'distanceUnit': 'mi', 'calories': 250},
-          bike)
+    check('it is saved for that day, at noon, with its settings', bike and cdp.ev(f"dateInputValue({bike['createdAt']})") == yesterday
+          and cdp.ev(f"new Date({bike['createdAt']}).getHours()") == 12
+          and bike['cardio'] == {'activity': 'bike', 'distance': 9, 'distanceUnit': 'mi', 'calories': 250, 'resistance': 8, 'cadence': 85}, bike)
+    stats = cdp.ev("[...document.querySelectorAll('#cardioSummaryStats li')].map(li => li.textContent)")
+    check('which the summary says too', '8Resistance level' in stats and '85 rpmCadence' in stats, stats)
     click('#cardioSummaryDone')
-    click('#cardioLogBtn')
+    click("#cardioActivityGrid [data-activity=bike]")
+    check("the next bike starts from last time's settings", cdp.ev("document.getElementById('cardioSetting-resistance').value") == '8'
+          and cdp.ev("document.getElementById('cardioSetting-cadence').value") == '85')
+    fill('cardioActivity', 'rower')
+    check('another activity has its own: a rower its damper and stroke rate', settings() == ['Damper', 'Stroke rate (spm)'], settings())
+    fill('cardioActivity', 'run')
+    check('and a treadmill run its incline, which can go below zero', settings() == ['Incline (%)']
+          and cdp.ev("document.getElementById('cardioSetting-incline').min") == '-10', settings())
     fill('cardioActivity', 'stairs')
-    check('the stair climber counts floors rather than distance', hidden('cardioDistanceField') and not hidden('cardioFloorsField'))
+    check('the stair climber counts floors rather than distance, at a level', hidden('cardioDistanceField') and not hidden('cardioFloorsField')
+          and settings() == ['Level'], settings())
     fill('cardioActivity', 'other')
     check('Other asks for a name', not hidden('cardioNameField'))
     fill('cardioName', 'Jump rope')
@@ -183,6 +207,10 @@ def run(t):
     click('#cardioSave')
     cdp.pause(0.6)
     check('and keeps it', t.wait_for(lambda: any(w['name'] == 'Jump rope' and w['cardio']['activity'] == 'other' for w in sessions())))
+    click('#cardioSummaryDone')
+    click('#cardioModeTimer')
+    check('Start the timer goes back to timing', tile('cycle') == 'Start the timer' and cdp.ev("document.getElementById('cardioModeTimer').getAttribute('aria-pressed')") == 'true',
+          tile('cycle'))
 
     # ------------------------------------------------------------------ C5 changing one
     print('C5  a session is edited, copied, started again or deleted from its menu')
@@ -274,7 +302,8 @@ def run(t):
     check('the activities are listed apart from the exercises', groups == ['Strength: All exercises, Bench Press',
                                                                           'Cardio: Exercise bike, Jump rope, Rowing machine, Run, Walk'], groups)
     metrics = cdp.ev("[...document.getElementById('metricFilter').options].map(o => o.textContent)")
-    check("a run's measures: distance, time, pace, calories and heart rate", metrics == ['Distance', 'Time', 'Pace', 'Calories', 'Average heart rate'], metrics)
+    check("a run's measures: distance, time, pace, calories, heart rate and incline", metrics == ['Distance', 'Time', 'Pace', 'Calories', 'Average heart rate', 'Incline'],
+          metrics)
     values = cdp.ev('[...chartData.types[0].values.values()].map(v => Math.round(v * 100) / 100)')
     check('every run charted by distance, in the unit shown', values == [4.99, 5.63, 4.83, 5], values)
     check('counted among the sessions, not workouts, with no workout type to filter by', text('progressSummary') == '8 sessions'
