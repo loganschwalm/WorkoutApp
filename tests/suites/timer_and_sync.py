@@ -405,6 +405,40 @@ def run(t):
     cdp.ev("localStorage.removeItem('workout-tracker-held-test')")
     end_workout()
 
+    print('P14 a workout written in the form is saved on the device first, and once')
+    form_workout = lambda name: cdp.ev(f"document.getElementById('createWorkoutBtn').click(); document.getElementById('workoutName').value = '{name}';"
+                                       " document.getElementById('exercise').value = 'Curl'; document.getElementById('weight').value = '30';"
+                                       " document.getElementById('reps').value = '10'; document.getElementById('addBtn').click()")
+    named = lambda name: [w for w in workouts() if w['name'] == name]
+    open_tracker()
+    form_workout('Form Offline')
+    cdp.block_api = True
+    cdp.ev("document.getElementById('saveBtn').click(); document.getElementById('saveBtn').click()")
+    cdp.pause(0.8)
+    fb = cdp.ev("document.getElementById('formFeedback').textContent") or ''
+    check('saving offline says it is kept on this device', 'saved on this device' in fb, fb)
+    check('a double tap queues it once', safe_ev("readPendingWorkouts().filter(w => w.name === 'Form Offline').length", -1) == 1,
+          safe_ev("readPendingWorkouts().map(w => w.name)", None))
+    check('with a clientId, so a retry cannot store it twice', bool(safe_ev("readPendingWorkouts().find(w => w.name === 'Form Offline')?.clientId", '')))
+    check('and the form is closed', cdp.ev("document.getElementById('workoutBuilderCard').hidden") is True)
+    cdp.send('Page.reload')
+    time.sleep(0.4)
+    cdp.wait("document.readyState === 'complete'")
+    cdp.pause(1.0)
+    check('it survives a reload', safe_ev("readPendingWorkouts().filter(w => w.name === 'Form Offline').length", -1) == 1)
+    cdp.block_api = False
+    check('it uploads once the server is back', wait_for(lambda: len(named('Form Offline')) == 1), len(named('Form Offline')))
+    check('and the queue empties', wait_for(lambda: safe_ev('readPendingWorkouts().length', -1) == 0), safe_ev('readPendingWorkouts().length', -1))
+    check('one copy only', len(named('Form Offline')) == 1, len(named('Form Offline')))
+    open_tracker()
+    form_workout('Form Online')
+    cdp.ev("document.getElementById('saveBtn').click(); document.getElementById('saveBtn').click()")
+    check('online, a double tap saves it once too', wait_for(lambda: len(named('Form Online')) == 1) and (cdp.pause(1.0) or len(named('Form Online')) == 1),
+          len(named('Form Online')))
+    # Among the page's saved workouts, not necessarily on screen: it is dated noon today, and this suite has finished more
+    # than the 10 the list shows since then.
+    check('and the page has it without a reload', wait_for(lambda: safe_ev("savedWorkouts.some(w => w.name === 'Form Online')", False) is True))
+
     print('R2  30 seconds more or less rest')
     open_tracker()
     cdp.ev("""window.__offset = 0; const realNow = Date.now.bind(Date); Date.now = () => realNow() + window.__offset;

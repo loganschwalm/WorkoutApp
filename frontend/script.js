@@ -27,11 +27,10 @@ function markInvalid(element, invalid) {
   element.setAttribute('aria-invalid', String(invalid));
 }
 
-function persistWorkout(workout) {
-  const method = workout.id ? 'PUT' : 'POST';
-  const path = workout.id ? `/api/workouts/${workout.id}` : '/api/workouts';
-  return fetch(path, { method, headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(workout) })
-    .then(response => response.ok ? response.json() : Promise.reject(new Error('Unable to save workout.')));
+// Changes to a saved workout go straight to the server. A new one goes into the upload queue instead (see the form's Save).
+function updateSavedWorkout(workout) {
+  return syncFetch(`/api/workouts/${encodeURIComponent(workout.id)}`, { method:'PUT', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(workout) })
+    .then(response => response.ok ? response.json() : Promise.reject(new Error(`Unable to save workout (${response.status}).`)));
 }
 
 function deleteWorkout(id) {
@@ -757,16 +756,32 @@ $('saveBtn').onclick = async () => {
     ...editingWorkout, name:$('workoutName').value.trim() || 'Untitled workout', notes:$('workoutNotes').value.trim(), exercises:savedExercises,
     createdAt:timestampFromDateInput($('workoutDate').value), unit:weightUnit()
   };
-  try {
-    await persistWorkout(workout);
-    await loadSavedWorkouts();
-    const replaced = replacedSets ? ' Set-by-set details were replaced for exercises whose weight or reps you changed.' : '';
-    showFeedback(`“${workout.name}” saved successfully.${replaced}`, 'success');
+  if (!workout.id) {
+    // A new workout goes into the upload queue like a finished one, so it survives a dropped connection, and its clientId
+    // lets the server ignore a retried upload. The form is cleared first, so a second tap has nothing left to save twice.
+    // Once it uploads, the syncchange it reports lists it with the rest.
+    workout.clientId = newClientId();
+    queuePendingWorkout(workout);
     $('clearBtn').click();
+    const synced = await flushPendingWorkouts();
+    showFeedback(synced ? `“${workout.name}” saved successfully.`
+      : `“${workout.name}” is saved on this device and will sync when the server is reachable again.`, 'success');
+    return;
+  }
+  $('saveBtn').disabled = true;
+  try {
+    await updateSavedWorkout(workout);
   } catch (error) {
     showFeedback('This workout could not be saved. Check your connection and try again.');
     console.error('Unable to save workout.', error);
+    return;
+  } finally {
+    $('saveBtn').disabled = false;
   }
+  const replaced = replacedSets ? ' Set-by-set details were replaced for exercises whose weight or reps you changed.' : '';
+  showFeedback(`“${workout.name}” saved successfully.${replaced}`, 'success');
+  $('clearBtn').click();
+  await loadSavedWorkouts();
 };
 
 renderTemplates();

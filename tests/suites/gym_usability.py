@@ -273,12 +273,16 @@ def run(t):
     # ---- W: wording
     print('W   error wording')
     open_tracker()
-    cdp.ev("document.getElementById('createWorkoutBtn').click(); document.getElementById('exercise').value = 'Curl'; document.getElementById('reps').value = '10'; document.getElementById('addBtn').click()")
+    # A new workout is kept on the device offline (timer_and_sync's P14); a change to a saved one needs the server.
+    cdp.ev("document.querySelector('#savedWorkoutList .saved-workout [data-action=edit]').click()")
+    cdp.wait('exercises.length > 0')
     cdp.block_api = True
     cdp.ev("document.getElementById('saveBtn').click()")
     cdp.pause(1.0)
     fb = text('formFeedback')
     check('a failed save says what to do', 'connection' in fb and 'on this device' not in fb, fb)
+    check('and the button works again for another go', cdp.ev("document.getElementById('saveBtn').disabled") is False)
+    cdp.ev("document.getElementById('clearBtn').click()")
     cdp.goto('/history.html')
     cdp.pause(1.0)
     check('history says it could not load', text('historySummary') == 'Unable to load workouts.', text('historySummary'))

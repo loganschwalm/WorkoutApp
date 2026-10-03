@@ -179,6 +179,9 @@ Logged sets, notes, finished workouts, settings, custom templates, and your trai
   server, so it is back on screen even on a connection that stalls rather than fails, as in a basement gym. If the
   workout changed or ended on another device meanwhile, the server's copy replaces it once it answers.
 - Finishing a workout while offline queues it locally and shows how many workouts are waiting to sync. The History and Progress pages upload anything queued before they load your workouts.
+- A workout written down in the Tracker's form (Create a workout, or Copy as new) is queued the same way, so it saves
+  offline too, and a double tap on Save stores it once. Changing a saved workout (Edit) needs the server: offline,
+  the form says so and keeps what was typed for another go.
 - Uploads are safe to retry: each finished workout carries a unique `clientId`, and the server stores it once however many copies arrive, even at the same moment. Two open tabs (or the installed app and a browser tab) uploading the same queue never lose a workout between them.
 - If the server ever refuses a queued workout as invalid, it is set aside on the device and the status line says so, so it never holds up the workouts queued after it.
   One the server fails to store (an error on its side, which may pass) stays in the queue and is tried again later,
