@@ -79,13 +79,15 @@ def run(t):
     print('S5  the browser chrome follows the theme')
     cdp.goto('/index.html')
     cdp.wait("typeof getWorkoutSettings === 'function'")
-    cdp.pause(0.4)
-    light = cdp.ev("document.querySelector('meta[name=theme-color]').content")
-    check('light theme sets a light theme-color', light.lower() == '#f4f7fb', str(light))
+    # Waited for rather than given a fixed moment: on a busy machine the colour can take longer than that to follow.
+    theme_color = "document.querySelector('meta[name=theme-color]').content.toLowerCase()"
+    cdp.wait(f"{theme_color} === '#f4f7fb'")
+    light = cdp.ev(theme_color)
+    check('light theme sets a light theme-color', light == '#f4f7fb', str(light))
     cdp.ev("document.documentElement.dataset.theme = 'dark'")
-    cdp.pause(0.3)
-    dark = cdp.ev("document.querySelector('meta[name=theme-color]').content")
-    check('switching to dark updates it', dark.lower() == '#151923', str(dark))
+    cdp.wait(f"{theme_color} === '#151923'")
+    dark = cdp.ev(theme_color)
+    check('switching to dark updates it', dark == '#151923', str(dark))
 
     # ------------------------------------------------------------------ S6 signing out still works
     print('S6  the worker does not break the sign-in redirect')

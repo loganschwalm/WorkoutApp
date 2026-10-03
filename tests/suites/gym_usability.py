@@ -120,7 +120,11 @@ def run(t):
     cdp.pause(0.2)
     fb = text('formFeedback')
     check('an invalid edit snaps back and explains why', rows()[1]['reps'] == '7' and 'at least 1' in fb, f"{rows()[1]['reps']} / {fb}")
-    check('corrections reach the server', wait_for(lambda: (server_session() or {}).get('exercises', [{}])[0].get('sets', [{}])[0].get('weight') == 105), '')
+    def first_server_weight():
+        # None until the server has a set: its copy can arrive with no exercises or sets yet, which is not yet, not an error.
+        sets = (((server_session() or {}).get('exercises') or [{}])[0].get('sets')) or [{}]
+        return sets[0].get('weight')
+    check('corrections reach the server', wait_for(lambda: first_server_weight() == 105), first_server_weight())
     known = ids()
     for _ in range(3):
         cdp.ev("document.getElementById('nextExerciseBtn').click()")

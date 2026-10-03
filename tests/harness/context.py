@@ -168,6 +168,9 @@ class AppTest:
     def open_tracker(self):
         self.cdp.goto('/index.html')
         self.cdp.wait("document.querySelectorAll('#templateList [data-template-action=start]').length >= 3")
+        # Until the saved workouts have loaded (or failed to), last time's numbers and the records are only this device's
+        # copy, so a workout started sooner can show older ones. A fixed pause covered that, until a busy machine was slower.
+        self.cdp.wait('initialLoadDone === true', timeout=12)
         self.cdp.pause(0.4)
 
     def start(self, index):

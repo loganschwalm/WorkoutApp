@@ -98,9 +98,8 @@ def run(t):
     setf('soundVolumeSetting', 70)
     setf('vibrateSetting', checked=False)
     cdp.ev("document.getElementById('settingsForm').requestSubmit()")
-    cdp.pause(0.8)
-    s = stored_settings()
-    check('server stores the sound settings', s.get('alertSound') == 'chime' and s.get('soundVolume') == 70 and s.get('vibrate') is False and s.get('soundEnabled') is True, str(s))
+    stored = lambda s: s.get('alertSound') == 'chime' and s.get('soundVolume') == 70 and s.get('vibrate') is False and s.get('soundEnabled') is True
+    check('server stores the sound settings', t.wait_for(lambda: stored(stored_settings())), str(stored_settings()))
     for page in ('/index.html', '/history.html', '/progress.html'):
         open_settings(page)
         f = form()
