@@ -145,6 +145,14 @@ own workouts, templates, and settings.
   next step up (5 lbs, or 2.5 kg, or the weight step from Settings) in one tap. The target is the exercise's reps, or the first set's if
   that was more, so a set that fell away (8, 8, 6) does not count; nor does a set logged with no reps
   left. Training programs say this in their own way.
+- Stalls: a lift whose best estimated one-rep max (Epley, sets of up to 12 reps) is at least three weeks old, with at
+  least three sessions since that did not beat it and the latest within three weeks, has stalled. Before its first set
+  the line under it says so, in amber rather than Go heavier's green ("No new best since Sep 3, over 4 sessions. A
+  lighter week often gets a lift moving again: 10% off last time is 185 lbs."), with Use 185 lbs a tap away. The deload
+  is last time's heaviest weight less a tenth, on the weight step from Settings. A session at 92% or less of the weight
+  before it counts as a deload, and only the sessions from then on are weighed, so a lift working back up is not called
+  stalled again straight away. A lift a training program plans is left to the program, which deloads on its own, as is
+  a timed one.
 - Warm-up sets for barbell lifts, before the first working set: the empty bar for 10, then about 40%,
   60% and 80% of the weight for 5, 3 and 2, following the weight as you change it. They are a guide
   and are not logged. 5/3/1 plans its own warm-ups instead. Settings can turn them off.
@@ -462,6 +470,8 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
   lowest and highest values.
 - With one exercise chosen, every session of it, newest first, with its sets, the reps they had left,
   and the note kept with it. History's exercise names, and a workout's Past sessions, link here.
+- Stalled lifts: every lift that has stalled (see Stalls, under Guided workouts), the longest stalled first, with when
+  its best was set, what it was, and the week at 10% off to try. Tapping one charts it. With none, the card says so.
 - Personal records, under the chart: for each exercise, the heaviest weight (with the most reps done at
   it), the best estimated one-rep max and the set it came from, the most reps without weight, and the
   longest hold, each with the day it was set. The most recent record comes first, and tapping one

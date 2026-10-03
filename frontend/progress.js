@@ -510,6 +510,18 @@ function renderRecords() {
     : '<li class="empty">Your records appear once you have saved a workout.</li>';
 }
 
+// ---- Stalled lifts ------------------------------------------------------------
+// Each lift whose best has not moved in three weeks or more (stalls.js), the longest stalled first, with the deload to try.
+function renderStalls() {
+  const unit = weightUnit();
+  const stalls = stalledLifts(allWorkouts);
+  $('stallList').innerHTML = stalls.length ? stalls.map(({ key, name, stall }) => `<li><button class="record" type="button" data-exercise="${escapeHTML(key)}">`
+    + `<strong>${escapeHTML(name)}</strong><span>${escapeHTML(describeStall(stall))}</span>`
+    + `<span><span class="record-label">Best</span> est. one-rep max ${Math.round(stall.best)} ${unit} <span class="record-date">· ${escapeHTML(longDate(stall.bestAt))}</span></span>`
+    + `<span><span class="record-label">Try</span> a week at ${escapeHTML(formatWeight(stall.deload))} ${unit}, 10% off last time's ${escapeHTML(formatWeight(stall.heaviest))}</span></button></li>`).join('')
+    : '<li class="empty">Nothing has stalled: every lift you have trained lately has set a best within three weeks, or is still early on.</li>';
+}
+
 // ---- Goals ------------------------------------------------------------------
 // One goal per exercise (by exerciseKey): a weight to reach, and optionally a day to reach it by. It is kept with the account
 // like a note, in the unit it was set in, and measured against the heaviest weight in any saved workout.
@@ -618,6 +630,7 @@ async function loadProgress() {
     chartedDistanceUnit = distanceUnitOf();
     renderProgress(allWorkouts);
     renderRecords();
+    renderStalls();
     loadGoals();
     renderGoals();
     // muscles.js, loaded after this, counts the same workouts.
@@ -652,6 +665,7 @@ $('progressChart').addEventListener('click', event => {
   const nearest = drawnPoints.reduce((best, point) => !best || distance(point) < distance(best) ? point : best, null);
   if (nearest && distance(nearest) <= 40) $('chartDetail').textContent = nearest.text;
 });
+$('stallList').onclick = event => $('recordsList').onclick(event);
 $('recordsList').onclick = event => {
   const record = event.target.closest('[data-exercise]');
   if (!record) return;
@@ -675,6 +689,7 @@ window.addEventListener('settingschange', () => {
     allWorkouts = converted;
     applyFilters();
     renderRecords();
+    renderStalls();
     renderGoals();
   } else if (chartedDistanceUnit !== null && chartedDistanceUnit !== distanceUnitOf()) {
     chartedDistanceUnit = distanceUnitOf();

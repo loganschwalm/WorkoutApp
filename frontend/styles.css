@@ -417,6 +417,9 @@ html[data-theme="dark"] .exercise-note { background:#3a3122; }
 /* Go heavier, with a button that fills in the weight. */
 .progression-hint { margin:6px 0 0; color:#22634c; font-size:.9rem; }
 html[data-theme="dark"] .progression-hint { color:#a5e5c2; }
+/* A stalled lift's hint is a caution, not a go-ahead. */
+.progression-hint.stalled { color:#8a5a00; }
+html[data-theme="dark"] .progression-hint.stalled { color:#f5c97a; }
 .progression-hint .link-button { padding:0 4px; }
 .past-sessions { margin-top:8px; font-size:.88rem; }
 .past-sessions summary { color:var(--accent); font-weight:700; cursor:pointer; }

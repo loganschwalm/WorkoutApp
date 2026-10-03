@@ -338,11 +338,28 @@ function templateAdvice(exercise) {
     : ` The same as last time until every set reaches ${reps}.`;
 }
 
+// A stalled lift (stalls.js), said before its first set; not for one a program plans, which deloads on its own, nor a
+// timed one. Every saved strength workout and those still waiting to upload count, in the unit shown.
+function stallFor(exercise) {
+  const planned = Array.isArray(exercise.plan) && exercise.plan.length && !exercise.setCount;
+  if (exercise.sets.length || planned || isTimed(exercise)) return null;
+  const workouts = [...savedWorkouts, ...readPendingWorkouts().filter(workout => !isCardio(workout))].map(workout => inUnit(workout));
+  return stallOf(workouts, exerciseKey(exercise.name));
+}
+
 function renderProgression(exercise, previous) {
   const hint = progressionFor(exercise, previous);
-  $('progressionHint').hidden = !hint;
-  if (!hint) return;
+  const stall = hint ? null : stallFor(exercise);
+  $('progressionHint').hidden = !hint && !stall;
+  $('progressionHint').classList.toggle('stalled', Boolean(stall));
   const unit = weightUnit();
+  if (stall) {
+    $('progressionText').textContent = `${describeStall(stall)} A lighter week often gets a lift moving again: 10% off last time is ${formatWeight(stall.deload)} ${unit}.`;
+    $('progressionUse').textContent = `Use ${formatWeight(stall.deload)} ${unit}`;
+    $('progressionUse').dataset.weight = String(stall.deload);
+    return;
+  }
+  if (!hint) return;
   const reps = `${hint.reps} ${hint.reps === 1 ? 'rep' : 'reps'}`;
   $('progressionText').textContent = `Last time every set at ${formatWeight(hint.from)} ${unit} reached ${reps}: time to go heavier.`;
   $('progressionUse').textContent = `Use ${formatWeight(hint.to)} ${unit}`;

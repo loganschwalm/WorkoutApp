@@ -43,7 +43,8 @@ library, with SQLite for storage, so there is no build step, no package manager 
 **During a workout**
 - Start from a built-in template (Push, Pull, Leg, Upper Body, Full Body), one of your own, or a past workout.
 - Log each set's weight and reps, with last time's numbers filled in and −5/+5 buttons beside the weight.
-- See the plates to load for barbell lifts, warm-up sets, and a "go heavier" prompt when you've earned it.
+- See the plates to load for barbell lifts, warm-up sets, and a "go heavier" prompt when you've earned it, or a lighter
+  week to try when a lift has stalled for three weeks (listed on Progress too).
 - A rest timer starts after each set, with a sound and vibration when it's over (−30s/+30s, pause, skip).
 - Swap an exercise when the equipment is taken, add one mid-workout, superset two, or hold a timed one like a plank.
 - Correct or undo a set, keep notes per workout or per exercise, and rate how many reps you had left.
