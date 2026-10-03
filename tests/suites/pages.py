@@ -752,7 +752,13 @@ def run(t):
     cdp.pause(0.3)
     settle('/progress.html', "document.querySelectorAll('#bodyweightList li').length === 2")
     check('they are there when the page opens again', cdp.ev(rows) == ['186.6 lbs', '185 lbs'], cdp.ev(rows))
+    cdp.dialogs.clear(); cdp.answer = False
     weigh(18.5)
+    check('a weight a fifth away from the nearest weigh-in asks first, and saying no logs nothing', len(cdp.dialogs) == 1
+          and cdp.dialogs[0].startswith('18.5 lbs is far from your weigh-in on ') and cdp.ev(rows) == ['186.6 lbs', '185 lbs'], f'{cdp.dialogs} {cdp.ev(rows)}')
+    cdp.answer = True
+    weigh(18.5)
+    check('saying yes logs it', cdp.ev(rows)[0] == '18.5 lbs', cdp.ev(rows))
     ticks = cdp.ev("""(() => { const drawn = [], fill = CanvasRenderingContext2D.prototype.fillText;
       CanvasRenderingContext2D.prototype.fillText = function (text, ...rest) { drawn.push(String(text)); return fill.call(this, text, ...rest); };
       try { drawBodyweight(); } finally { CanvasRenderingContext2D.prototype.fillText = fill; }

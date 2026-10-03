@@ -48,6 +48,7 @@ library, with SQLite for storage, so there is no build step, no package manager 
 - A rest timer starts after each set, with a sound and vibration when it's over (−30s/+30s, pause, skip).
 - Swap an exercise when the equipment is taken, add one mid-workout, superset two, or hold a timed one like a plank.
 - Correct or undo a set, keep notes per workout or per exercise, and rate how many reps you had left.
+- A typo like 1355 lbs for 135 is asked about before it's logged, and Finish early ends a workout from any exercise.
 - Cancel a workout started by mistake: nothing is saved and no stats change, with Undo in case the tap was the slip.
 - Finishing shows a summary with any new personal records.
 

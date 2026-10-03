@@ -168,6 +168,15 @@ $('bodyweightForm').onsubmit = event => {
     $('bodyweightDate').focus();
     return;
   }
+  // A weight a fifth or more away from the nearest other weigh-in is more likely a slip (18.16 for 181.6) than a change,
+  // which is a pound or two from one day to the next, so it is asked about first.
+  const nearest = bodyweightEntries().filter(entry => entry.day !== day)
+    .sort((a, b) => Math.abs(a.time - dayStart(day)) - Math.abs(b.time - dayStart(day)))[0];
+  if (nearest && Math.abs(weight - nearest.weight) >= nearest.weight * 0.2
+    && !confirm(`${formatBodyweight(weight)} ${weightUnit()} is far from your weigh-in on ${longDate(nearest.time)} (${formatBodyweight(nearest.weight)} ${weightUnit()}). Log it anyway?`)) {
+    $('bodyweightValue').focus();
+    return;
+  }
   const replaced = day in bodyweights;
   // One a day: weighing in again that day replaces it.
   bodyweights = { ...bodyweights, [day]:{ weight:Math.round(weight * 100) / 100, unit:weightUnit() } };

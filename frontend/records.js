@@ -65,6 +65,40 @@ function bestsOf(workouts) {
   return bests;
 }
 
+// ---- Values that look like a slip ----------------------------------------
+// A set far past anything done before is more likely a slip of the thumb (1355 for 135, 500 reps for 50) than a record,
+// so it is asked about before it is logged. Far past is three times the exercise's best and a good step beyond it, so a
+// light first session (a 45 lb press, then 95) is never questioned. With nothing logged yet, only a weight past what
+// almost anyone lifts, or over a hundred reps in a set. Sets already logged this workout (`others`) count as bests too.
+const implausibleWeight = { lbs:1000, kg:450 };
+const implausibleStep = { lbs:50, kg:25 };
+const implausibleReps = 100;
+
+// { message, field } to ask with, field being the one to fix ('weight' or 'reps'); null when the set looks like a set.
+function implausibleSet(exercise, set, others = []) {
+  const unit = weightUnit(), weight = Number(set.weight) || 0, reps = Number(set.reps) || 0;
+  const name = String(exercise.name).trim();
+  const best = personalBests[exerciseKey(name)] || {};
+  const done = others.map(other => ({ weight:Number(other.weight) || 0, reps:Number(other.reps) || 0 }));
+  const times = (value, than) => `${Math.floor(value / than)}×`;
+  if (isTimed(exercise)) {
+    const longest = Math.max(best.seconds || 0, ...done.map(other => other.reps));
+    return longest > 0 && reps >= 3 * longest && reps - longest >= 60
+      ? { message:`That's ${times(reps, longest)} your longest ${name} (${longest} s). Log ${reps} s anyway?`, field:'reps' } : null;
+  }
+  if (weight > 0) {
+    const heaviest = Math.max(convertWeight(best.weight || 0, 'lbs', unit), ...done.map(other => other.weight));
+    if (heaviest > 0 && weight >= 3 * heaviest && weight - heaviest >= implausibleStep[unit]) {
+      return { message:`That's ${times(weight, heaviest)} your heaviest ${name} (${formatWeight(heaviest)} ${unit}). Log ${formatWeight(weight)} ${unit} anyway?`, field:'weight' };
+    }
+    if (weight > implausibleWeight[unit] && weight > heaviest) return { message:`${formatWeight(weight)} ${unit} is more than almost anyone lifts. Log it anyway?`, field:'weight' };
+    return reps > implausibleReps ? { message:`${reps} reps in one set? Log it anyway?`, field:'reps' } : null;
+  }
+  const most = Math.max(best.reps || 0, ...done.filter(other => !other.weight).map(other => other.reps));
+  if (most > 0 && reps >= 3 * most && reps - most >= 20) return { message:`That's ${times(reps, most)} your most ${name} reps (${most}). Log ${reps} anyway?`, field:'reps' };
+  return reps > implausibleReps && reps > most ? { message:`${reps} reps in one set? Log it anyway?`, field:'reps' } : null;
+}
+
 function rememberBests(workout) {
   Object.entries(bestsOf([workout])).forEach(([key, best]) => {
     const had = personalBests[key];

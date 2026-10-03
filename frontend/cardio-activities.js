@@ -173,6 +173,18 @@ function cardioBests(workouts) {
   return bests;
 }
 
+// A pace, split or speed half as fast again as the activity's best is more likely a slip (a distance of 30 for 3, a
+// time of 3 minutes for 30) than a record, so it is asked about before the session is saved: the question, or ''. The
+// first session of an activity has nothing to compare with.
+function implausibleRate(workout, earlier) {
+  const rate = sessionRate(workout);
+  const best = cardioBests(earlier).get(cardioKey(workout))?.rate;
+  if (!rate || !best) return '';
+  const activity = activityOf(workout);
+  const faster = activity.rate === 'speed' ? rate.value / best.value : best.value / rate.value;
+  return faster >= 1.5 ? `That's a ${rate.text} ${rateName(activity).toLowerCase()}, far faster than your best (${best.text}). Save it anyway?` : '';
+}
+
 // What a new session beats, against the sessions before it, in the words of the strength records: "Run: your longest
 // yet, 4.2 mi (was 3.1 mi)". The first session of an activity has nothing to beat, so it sets no records.
 function newCardioRecords(workout, earlier) {

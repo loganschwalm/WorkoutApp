@@ -179,7 +179,10 @@ function renderActiveProgress() {
   $('activeWorkoutProgress').textContent = `Exercise ${currentIndex + 1} of ${exercises.length}`;
   $('prevExerciseBtn').hidden = currentIndex === 0;
   const members = supersetMembers(activeSession, currentIndex);
-  $('nextExerciseBtn').textContent = members[members.length - 1] === exercises.length - 1 ? 'Finish workout' : 'Next exercise';
+  const onLast = members[members.length - 1] === exercises.length - 1;
+  $('nextExerciseBtn').textContent = onLast ? 'Finish workout' : 'Next exercise';
+  // Before the last exercise, Next goes on; Finish early ends the workout there instead.
+  $('finishEarlyBtn').hidden = onLast;
   $('exerciseJump').innerHTML = exercises.map((exercise, index) => {
     const sets = (exercise.sets || []).length;
     const planned = Array.isArray(exercise.plan) ? exercise.plan.length : 0;
@@ -515,6 +518,8 @@ $('addBtn').onclick = () => {
   if (!name) { showFeedback('Enter an exercise name before adding it.'); $('exercise').focus(); return; }
   if (!reps || Number(reps) < 1) { showFeedback('Enter at least 1 rep for this exercise.'); $('reps').focus(); return; }
   if (weight !== '' && Number(weight) < 0) { showFeedback('Weight cannot be negative.'); $('weight').focus(); return; }
+  const doubt = implausibleSet({ name }, { weight:Number(weight) || 0, reps:Number(reps) });
+  if (doubt && !confirm(doubt.message)) { markInvalid($(doubt.field), true); $(doubt.field).focus(); return; }
   clearFeedback();
   exercises.push({ name, weight, reps }); $('exercise').value = ''; $('weight').value = ''; $('reps').value = ''; render(); $('exercise').focus();
 };
@@ -530,6 +535,17 @@ $('exerciseList').oninput = e => {
   const field = e.target.dataset.field;
   if (index !== undefined && field) exercises[+index][field] = e.target.value;
 };
+// A set changed in place, during a workout or in a saved one, is asked about as a new set is when it looks like a slip
+// (see implausibleSet in records.js), against the exercise's other sets and its bests. Declining puts back what it was.
+// True when the change may stand.
+function confirmSetChange(exercise, index, field, value, input) {
+  const set = exercise.sets[index];
+  const doubt = implausibleSet(exercise, { ...set, [field]:value }, exercise.sets.filter((other, at) => at !== index));
+  if (!doubt || confirm(doubt.message)) return true;
+  input.value = field === 'weight' ? set.weight || '' : set.reps;
+  return false;
+}
+
 // A set's weight or reps is taken once it is changed; one that is not valid snaps back, as during a workout.
 $('exerciseList').onchange = e => {
   const item = exercises[Number(e.target.dataset.exercise)];
@@ -543,6 +559,7 @@ $('exerciseList').onchange = e => {
     return;
   }
   if (field === 'weight' && value !== '' && Number(value) < 0) { showFeedback('Weight cannot be negative.'); e.target.value = set.weight || ''; return; }
+  if (!confirmSetChange(item, Number(e.target.dataset.set), field, Number(value) || 0, e.target)) return;
   set[field] = Number(value) || 0;
   clearFeedback();
 };
@@ -601,6 +618,14 @@ function logSet() {
     $('activeWeight').focus();
     return;
   }
+  // A set far past anything done before is asked about too (see implausibleSet in records.js).
+  const doubt = implausibleSet(exercise, { weight:Number(weightValue) || 0, reps }, exercise.sets);
+  if (doubt && !confirm(doubt.message)) {
+    const input = doubt.field === 'weight' ? $('activeWeight') : $('completedReps');
+    markInvalid(input, true);
+    input.focus();
+    return;
+  }
   clearFeedback();
   const weight = Number(weightValue) || 0;
   const effort = effortAsked(exercise) && effortChoice !== null ? { rir:effortChoice } : {};
@@ -656,6 +681,15 @@ $('nextExerciseBtn').onclick = () => {
   if (after >= activeSession.exercises.length) finishWorkout();
   else goToExercise(after);
 };
+// Finish early ends the workout from any exercise, as Finish does on the last: the exercises with sets are saved and the
+// rest left out. With some of them still to do, it asks first, since a stray tap would end the workout.
+$('finishEarlyBtn').onclick = () => {
+  if (!activeSession) return;
+  const logged = activeSession.exercises.some(item => item.sets && item.sets.length);
+  const waiting = activeSession.exercises.filter(item => !(item.sets && item.sets.length)).length;
+  if (logged && waiting && !confirm(`Finish ${activeSession.name} now? ${plural(waiting, 'exercise')} with no sets will be left out.`)) return;
+  finishWorkout();
+};
 $('prevExerciseBtn').onclick = () => { if (activeSession && activeSession.currentIndex > 0) goToExercise(activeSession.currentIndex - 1); };
 // Cancel takes the workout away without saving it, as if it had never been started: nothing joins History, last time's
 // numbers, the records or Progress, a program's day stays to do, and the server is told it ended. One started by mistake,
@@ -705,6 +739,7 @@ $('completedSets').onchange = e => {
     return;
   }
   if (field === 'weight' && value !== '' && Number(value) < 0) { showFeedback('Weight cannot be negative.'); e.target.value = set.weight || ''; return; }
+  if (!confirmSetChange(activeSession.exercises[activeSession.currentIndex], index, field, Number(value) || 0, e.target)) return;
   set[field] = Number(value) || 0;
   clearFeedback();
   persistActiveSession();

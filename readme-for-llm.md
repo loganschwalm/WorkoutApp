@@ -69,6 +69,8 @@ own workouts, templates, and settings.
   workouts wait behind "Show the rest of the Tracker" under it, and come back when the workout ends.
 - On a phone the header is just the page's name and Settings, and Strength (the Tracker), Cardio, Progress and History
   are a tab bar along the bottom of the screen, in reach of a thumb.
+- Finish early, beside Next exercise until the last, ends the workout there: the exercises with sets are saved and the
+  rest left out, after asking first.
 - Move through exercises one at a time, or go straight to any of them: tap "Exercise 2 of 6" for a
   list of every exercise and how many sets each has, and tap one to go there. Handy when a machine is
   taken and you do the next free one first.
@@ -84,6 +86,14 @@ own workouts, templates, and settings.
   beside the weight.
   A set with no weight is logged as bodyweight; for a barbell, dumbbell, machine, cable or kettlebell exercise the app
   asks first, since an empty weight there is more likely left out than meant. A 0 typed in is taken as meant.
+- A value far past anything you have done is asked about before it is logged, since it is more likely a slip of the
+  thumb (1355 for 135) than a record: "That's 10× your heaviest Bench Press (175 lbs). Log 1355 lbs anyway?" A set
+  asks when its weight is 3× the exercise's heaviest and at least 50 lbs (25 kg) more, or over 1,000 lbs (450 kg) with
+  nothing to compare; when it has over 100 reps, or for a bodyweight exercise 3× your most and 20 more; or a hold 3× your
+  longest and a minute more. Sets earlier in the same workout count, so a real jump is asked about once. The same goes
+  for a logged set corrected during a workout, a set changed in a saved workout, and the workout form. On the Cardio
+  page a session half as fast again as the activity's best pace, split or speed asks before it is saved, and on Progress
+  a bodyweight a fifth or more away from the nearest weigh-in. Saying no logs nothing and puts you back in the field.
 - For barbell lifts (the equipment chosen for the exercise on Progress, or else going by its name), see the plates to load on each side of a 45 lb
   bar, down to 1.25s, drawn to size: 187.5 lbs is 45 + 25 + 1.25. A weight the plates cannot make says
   what they do.

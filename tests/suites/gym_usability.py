@@ -705,3 +705,60 @@ def run(t):
     check('and nothing is wider than the screen', cdp.ev('document.documentElement.scrollWidth - innerWidth') <= 0)
     cdp.ev("document.getElementById('clearBtn').click()")
     cdp.send('Emulation.clearDeviceMetricsOverride')
+
+    # ---- Q: a set far past anything done before
+    print('Q   a set far past your best is asked about, and Finish early ends a workout from any exercise')
+    open_tracker()
+    start(0)
+    cdp.pause(0.4)
+    cdp.dialogs.clear(); cdp.answer = False
+    log(1350, 5)
+    check('ten times your heaviest asks first, saying so', len(cdp.dialogs) == 1 and cdp.dialogs[0].startswith("That's ") and 'your heaviest Bench Press (' in cdp.dialogs[0]
+          and cdp.dialogs[0].endswith('Log 1350 lbs anyway?'), cdp.dialogs)
+    check('saying no logs nothing and points at the weight', sets_of(0) == [] and cdp.ev("document.activeElement.id") == 'activeWeight', sets_of(0))
+    cdp.dialogs.clear()
+    log(135, 500)
+    check('so do 500 reps in a set, pointing at the reps', cdp.dialogs == ['500 reps in one set? Log it anyway?'] and sets_of(0) == []
+          and cdp.ev("document.activeElement.id") == 'completedReps', cdp.dialogs)
+    cdp.dialogs.clear()
+    log(135, 5)
+    log(145, 5)
+    check('a set like the ones before is logged without a question', not cdp.dialogs and sets_of(0) == [[135, 5], [145, 5]], f'{cdp.dialogs} {sets_of(0)}')
+    edit_set(1, 'weight', '1450')
+    cdp.pause(0.2)
+    check('a logged set corrected to ten times as much asks too, and saying no puts it back', len(cdp.dialogs) == 1
+          and rows()[1]['weight'] == '145' and sets_of(0)[1] == [145, 5], f'{cdp.dialogs} {rows()}')
+    cdp.answer = True
+    cdp.dialogs.clear()
+    log(1350, 5)
+    check('saying yes logs it', len(cdp.dialogs) == 1 and sets_of(0)[-1] == [1350, 5], sets_of(0))
+    cdp.dialogs.clear()
+    log(1350, 5)
+    check('and the next one like it, now this workout’s best, is not asked about again', not cdp.dialogs and sets_of(0)[-1] == [1350, 5], cdp.dialogs)
+
+    check('Finish early is there before the last exercise', visible('finishEarlyBtn'))
+    cdp.answer = False
+    cdp.dialogs.clear()
+    known = ids()
+    cdp.ev("document.getElementById('finishEarlyBtn').click()")
+    cdp.pause(0.3)
+    waiting = cdp.ev('activeSession.exercises.length') - 1
+    check('it asks first, saying what will be left out', cdp.dialogs == [f'Finish Push Day now? {waiting} exercises with no sets will be left out.'] and cdp.ev(ACTIVE), cdp.dialogs)
+    cdp.answer = True
+    cdp.ev("document.getElementById('finishEarlyBtn').click()")
+    cdp.pause(0.8)
+    check('saying yes finishes the workout with what was done', cdp.ev(HIDDEN) is True and text('formFeedback').startswith('“Push Day” saved successfully.')
+          and f'{waiting} exercises with no sets were left out.' in text('formFeedback'), text('formFeedback'))
+    saved = wait_for(lambda: newest_workout(known)) and newest_workout(known)
+    check('and saves only the exercise that has sets', saved and [e['name'] for e in saved['exercises']] == ['Bench Press'], saved and [e['name'] for e in saved['exercises']])
+    start(0)
+    cdp.pause(0.4)
+    cdp.ev("goToExercise(activeSession.exercises.length - 1)")
+    cdp.pause(0.2)
+    check('on the last exercise Finish is the main button, and Finish early goes', not visible('finishEarlyBtn') and text('nextExerciseBtn') == 'Finish workout')
+    cdp.ev('goToExercise(0)')
+    cdp.pause(0.2)
+    cdp.dialogs.clear()
+    cdp.ev("document.getElementById('finishEarlyBtn').click()")
+    cdp.pause(0.3)
+    check('with nothing logged it asks as Finish does, not twice', len(cdp.dialogs) == 1 and 'No sets were logged' in cdp.dialogs[0], cdp.dialogs)

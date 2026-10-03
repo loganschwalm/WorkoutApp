@@ -130,6 +130,11 @@ def run(t):
           cdp.ev(f"JSON.stringify(savedWorkouts.find(w => w.id === {W1}).exercises.map(e => e.sets))"))
     edit()
     check('so editing again starts from what was saved', [r[:2] for r in set_rows(0)] == [['100', '8'], ['110', '6']] and set_rows(1)[0][:2] == ['60', '8'], [set_rows(0), set_rows(1)])
+    cdp.dialogs.clear(); cdp.answer = False
+    change_set(0, 0, 'weight', '1100')
+    check('a set changed to ten times the heaviest asks first, and saying no puts it back', len(cdp.dialogs) == 1
+          and 'your heaviest Bench Press' in cdp.dialogs[0] and set_rows(0)[0][0] == '100', f'{cdp.dialogs} {set_rows(0)}')
+    cdp.answer = True
     tap('[data-exercise="0"][data-remove-set="1"]')
     cdp.ev("document.getElementById('saveBtn').click()")
     check('and a set taken away is gone once saved', t.wait_for(lambda: saved_sets(0) == [(100, 8)]), saved_sets(0))

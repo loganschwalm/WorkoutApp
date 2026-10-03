@@ -197,6 +197,17 @@ def run(t):
     fill('cardioActivity', 'run')
     check('and a treadmill run its incline, which can go below zero', settings() == ['Incline (%)']
           and cdp.ev("document.getElementById('cardioSetting-incline').min") == '-10', settings())
+    fill('cardioMinutes', '30')
+    fill('cardioDistance', '9')
+    cdp.dialogs.clear(); cdp.answer = False
+    click('#cardioSave')
+    check('a run far faster than your best (9 miles in 30 minutes) asks first', len(cdp.dialogs) == 1
+          and cdp.dialogs[0].startswith("That's a 3:20 /mi pace, far faster than your best (") and cdp.dialogs[0].endswith('Save it anyway?'), cdp.dialogs)
+    check('and saying no saves nothing, leaving the form open at the distance', not hidden('cardioFormCard') and cdp.ev("document.activeElement.id") == 'cardioDistance'
+          and not any(w['name'] == 'Run' and w['cardio'].get('distance') == 9 for w in sessions()))
+    cdp.answer = True
+    fill('cardioMinutes', '')
+    fill('cardioDistance', '')
     fill('cardioActivity', 'stairs')
     check('the stair climber counts floors rather than distance, at a level', hidden('cardioDistanceField') and not hidden('cardioFloorsField')
           and settings() == ['Level'], settings())

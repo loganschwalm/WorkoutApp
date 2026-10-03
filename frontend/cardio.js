@@ -338,6 +338,14 @@ async function saveCardioForm() {
   const workout = { ...(mode === 'edit' ? editing : {}), kind:'cardio', name, notes:$('cardioNotes').value.trim(), exercises:[],
     createdAt:cardioTime(mode, values.day, editing), duration:values.seconds, cardio, clientId:mode === 'edit' ? editing.clientId : newClientId() };
   if (!workout.clientId) delete workout.clientId;
+  // Far faster than ever is asked about first, against every other session (an edited one is not its own best).
+  const doubt = implausibleRate(workout, allCardio().filter(other => !(mode === 'edit' && editing && other.id === editing.id)));
+  if (doubt && !confirm(doubt)) {
+    const field = activity.distance ? $('cardioDistance') : $('cardioMinutes');
+    markCardioField(field, true);
+    field.focus();
+    return;
+  }
   if (mode === 'edit') {
     $('cardioSave').disabled = true;
     try {
