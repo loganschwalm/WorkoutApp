@@ -5,6 +5,12 @@ try { legacyTheme = localStorage.getItem('workout-tracker-theme'); } catch (erro
 const themeChoices = ['system', ...Object.keys(window.colorThemes || { light:'light', dark:'dark' })];
 const defaultSettings = { theme:themeChoices.includes(legacyTheme) ? legacyTheme : 'system', restDuration:90, weeklyGoal:3, unit:'lbs', autoRest:true, confirmEnd:true, soundEnabled:true, soundVolume:40, alertSound:'beep', vibrate:true, playThroughSilent:true, trackEffort:true, warmupSets:true, keepAwakeVideo:true,
   barLbs:45, barKg:20, platesLbs:[45, 35, 25, 10, 5, 2.5, 1.25], platesKg:[25, 20, 15, 10, 5, 2.5, 1.25], stepLbs:5, stepKg:2.5 };
+// Settings never chosen are the defaults, on every page; the server is told so (see accountStateFill in offline.js), or
+// saving the form, which writes every setting, would look like choosing each default over another device's choice.
+// Guarded: for one load after an update, this file can run beside an older offline.js from the cache.
+if (typeof accountStateFill !== 'undefined') {
+  accountStateFill.settings = value => ({ ...defaultSettings, ...(value && typeof value === 'object' && !Array.isArray(value) ? value : {}) });
+}
 const getSettingElement = id => document.getElementById(id);
 const canVibrate = typeof navigator.vibrate === 'function';
 // Safari (iOS 16.4 and later) lets a page choose how the phone treats its sound; see playRestAlert.

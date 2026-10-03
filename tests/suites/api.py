@@ -185,6 +185,7 @@ def run(t):
     run_account_security(t, check, request)
     run_compression(t, check, request)
     run_deletion(t, check, request)
+    run_state_merge(t, check, request)
     run_bursts(t, check)
 
 
@@ -1563,6 +1564,139 @@ def run_deletion(t, check, request):
     check('and the account is gone', 'removable2' not in main.admin('users')[1])
     code, _, err = main.admin('delete-user', 'nobody-here', '--yes')
     check('an account that does not exist -> an error', code == 1 and 'No account' in err, err)
+
+
+def run_state_merge(t, check, request):
+    """Two devices changing the account state from the same copy (PATCH /api/state): both changes kept, the later winning
+    only where both changed the same thing, and a program's runs never mixed."""
+    print('A37 changes to the account state from two devices are merged, not lost')
+    api = t.api
+    _, cookie = api('POST', '/api/auth/register', {'username': 'two-devices', 'email': 'two@example.test', 'password': 'chalk-and-plates-42'})
+    me = cookie.split('session=')[1].split(';')[0]
+
+    def stored():
+        return api('GET', '/api/state', token=me)[0]
+
+    def patch(body):
+        return api('PATCH', '/api/state', body, me)[0]
+
+    def start_from(part, value):
+        api('PUT', '/api/state', {part: value}, me)
+        return value
+
+    def status_of(body, headers=None):
+        return request('PATCH', '/api/state', json.dumps(body).encode(), {'Content-Type': 'application/json', **(headers or {})}, token=me)[0]
+
+    base = start_from('settings', {'unit': 'lbs', 'restDuration': 90, 'weeklyGoal': 3})
+    patch({'settings': {'base': base, 'value': {**base, 'restDuration': 120}}})
+    merged = patch({'settings': {'base': base, 'value': {**base, 'unit': 'kg'}}})
+    check('settings changed on two devices from the same copy keep both changes', merged['settings'] == {'unit': 'kg', 'restDuration': 120, 'weeklyGoal': 3}, merged['settings'])
+    check('and the server keeps the merge', stored()['settings'] == merged['settings'], stored()['settings'])
+    merged = patch({'settings': {'base': base, 'value': {**base, 'restDuration': 150}}})
+    check('the same setting changed on both: the later change wins, and the rest stay', merged['settings'] == {'unit': 'kg', 'restDuration': 150, 'weeklyGoal': 3}, merged['settings'])
+
+    def goal(name, target):
+        return {'name': name, 'target': target, 'unit': 'lbs', 'by': ''}
+
+    base = start_from('goals', {'bench press': goal('Bench Press', 200)})
+    patch({'goals': {'base': base, 'value': {**base, 'squat': goal('Squat', 300)}}})
+    merged = patch({'goals': {'base': base, 'value': {}}})
+    check('a goal added on one device and another removed on the other: both happen', merged['goals'] == {'squat': goal('Squat', 300)}, merged['goals'])
+
+    base = start_from('bodyweight', {})
+    patch({'bodyweight': {'base': base, 'value': {'2026-10-01': {'weight': 181.4, 'unit': 'lbs'}}}})
+    merged = patch({'bodyweight': {'base': base, 'value': {'2026-10-02': {'weight': 82.3, 'unit': 'kg'}}}})
+    check('weigh-ins on different days from two devices are both kept', sorted(merged['bodyweight']) == ['2026-10-01', '2026-10-02'], merged['bodyweight'])
+    base = merged['bodyweight']
+    patch({'bodyweight': {'base': base, 'value': {**base, '2026-10-03': {'weight': 180, 'unit': 'lbs'}}}})
+    merged = patch({'bodyweight': {'base': base, 'value': {**base, '2026-10-03': {'weight': 81.5, 'unit': 'kg'}}}})
+    check('one day weighed on both: the later weigh-in, its weight and unit kept together', merged['bodyweight']['2026-10-03'] == {'weight': 81.5, 'unit': 'kg'},
+          merged['bodyweight'])
+
+    def template(id, name):
+        return {'id': id, 'name': name, 'exercises': [{'name': 'Row', 'reps': '10'}]}
+
+    base = start_from('templates', [template('custom-1', 'Upper'), template('custom-2', 'Lower')])
+    patch({'templates': {'base': base, 'value': [template('custom-1', 'Upper A'), template('custom-2', 'Lower'), template('custom-3', 'Push')]}})
+    merged = patch({'templates': {'base': base, 'value': [template('custom-1', 'Upper'), template('custom-4', 'Pull')]}})
+    check('templates: one renamed and one added on one device, one removed and one added on the other, all four happen',
+          [x['name'] for x in merged['templates']] == ['Upper A', 'Push', 'Pull'], [x['name'] for x in merged['templates']])
+    base = merged['templates']
+    patch({'templates': {'base': base, 'value': [{**base[0], 'name': 'Upper B'}, *base[1:]]}})
+    merged = patch({'templates': {'base': base, 'value': base[1:]}})
+    check('one template changed on one device and removed on the other, later: it is removed', [x['name'] for x in merged['templates']] == ['Push', 'Pull'],
+          [x['name'] for x in merged['templates']])
+    base = start_from('templates', [{'name': 'From before ids', 'exercises': []}])
+    patch({'templates': {'base': base, 'value': [*base, template('custom-5', 'Legs')]}})
+    merged = patch({'templates': {'base': base, 'value': []}})
+    check('templates from before they had ids cannot be told apart, so the later list wins whole', merged['templates'] == [], merged['templates'])
+
+    done = {'at': 1, 'skipped': False, 'amrap': None, 'hit': None}
+    skipped = {**done, 'skipped': True}
+    base = start_from('program', {'definition': 'wendler-531', 'unit': 'lbs', 'startedAt': 1, 'cycle': 1, 'stalls': {}, 'options': {}, 'done': {}, 'lastRollover': None,
+                                  'trainingMaxes': {'press': 100, 'deadlift': 300, 'bench': 200, 'squat': 250}})
+    patch({'program': {'base': base, 'value': {**base, 'done': {'0-0': done}}}})
+    merged = patch({'program': {'base': base, 'value': {**base, 'trainingMaxes': {**base['trainingMaxes'], 'bench': 205}}}})
+    check('a program day done on one device and a training max edited on the other: both kept',
+          merged['program']['done'] == {'0-0': done} and merged['program']['trainingMaxes'] == {**base['trainingMaxes'], 'bench': 205}, merged['program'])
+    base = merged['program']
+    patch({'program': {'base': base, 'value': {**base, 'done': {**base['done'], '0-1': done}}}})
+    merged = patch({'program': {'base': base, 'value': {**base, 'done': {**base['done'], '0-2': skipped}}}})
+    check('days done on two devices are all kept', sorted(merged['program']['done']) == ['0-0', '0-1', '0-2'], merged['program']['done'])
+    base = merged['program']
+    patch({'program': {'base': base, 'value': {**base, 'cycle': 2, 'done': {}, 'trainingMaxes': {lift: weight + 5 for lift, weight in base['trainingMaxes'].items()}}}})
+    merged = patch({'program': {'base': base, 'value': {**base, 'done': {**base['done'], '1-0': skipped}}}})
+    check('a day skipped on a device still in the last cycle is not carried into the next one, which another device started',
+          merged['program']['cycle'] == 2 and merged['program']['done'] == {} and merged['program']['trainingMaxes']['bench'] == 210, merged['program'])
+    base = merged['program']
+    patch({'program': {'base': base, 'value': {**base, 'done': {'0-0': done}}}})
+    in_kg = {lift: round(weight * 0.4536, 1) for lift, weight in base['trainingMaxes'].items()}
+    merged = patch({'program': {'base': base, 'value': {**base, 'unit': 'kg', 'trainingMaxes': in_kg}}})
+    check('a device converting the program to kilograms wins whole, its weights never mixed with pounds',
+          merged['program']['unit'] == 'kg' and merged['program']['trainingMaxes'] == in_kg and merged['program']['done'] == {}, merged['program'])
+    base = merged['program']
+    patch({'program': {'base': base, 'value': {**base, 'done': {'0-0': done}}}})
+    merged = patch({'program': {'base': base, 'value': None}})
+    check('ending the program on one device ends it, whatever the other did meanwhile', merged['program'] is None, merged['program'])
+
+    merged = patch({'goals': {'value': {'deadlift': goal('Deadlift', 405)}}})
+    check('a part sent without the copy it came from replaces the stored one whole, as before', merged['goals'] == {'deadlift': goal('Deadlift', 405)}, merged['goals'])
+    merged = api('PUT', '/api/state', {'goals': {}}, me)[0]
+    check('and PUT still replaces, for pages from before', merged['goals'] == {}, merged['goals'])
+
+    def many(prefix):
+        return {f'{prefix}{n}': goal(f'{prefix}{n}', 100) for n in range(300)}
+
+    start_from('goals', {})
+    patch({'goals': {'base': {}, 'value': many('a')}})
+    merged = patch({'goals': {'base': {}, 'value': many('b')}})
+    check('a merge that would break a limit (600 goals of 500) keeps the later copy, which was within it',
+          sorted(merged['goals']) == sorted(many('b')), len(merged['goals']))
+
+    start_from('bodyweight', {})
+    days = [(datetime.date(2026, 1, 1) + datetime.timedelta(days=n)).isoformat() for n in range(12)]
+
+    def weigh(day):
+        api('PATCH', '/api/state', {'bodyweight': {'base': {}, 'value': {day: {'weight': 180, 'unit': 'lbs'}}}}, me)
+
+    threads = [threading.Thread(target=weigh, args=(day,)) for day in days]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    check('twelve devices weighing in at the same moment, from the same copy: all twelve kept', sorted(stored()['bodyweight']) == days, sorted(stored()['bodyweight']))
+
+    lifetime = {(datetime.date(1960, 1, 1) + datetime.timedelta(days=n)).isoformat(): {'weight': 180.5, 'unit': 'lbs'} for n in range(30000)}
+    body = {'bodyweight': {'base': {}, 'value': lifetime}}
+    size = len(json.dumps(body))
+    check('a lifetime of daily weigh-ins goes up with its base, past the limit other requests have',
+          size > 1024 * 1024 and status_of(body) == 200 and len(stored()['bodyweight']) == 30000, size)
+
+    refused = [('a part that is not one', {'diary': {'value': {}}}), ('a part that is not an object', {'settings': 5}),
+               ('a part without its value', {'settings': {'base': {}}}), ('a value that is not valid', {'settings': {'base': {}, 'value': []}})]
+    for label, body in refused:
+        check(f'PATCH refuses {label}', status_of(body) == 400, status_of(body))
+    check('and a change sent from another site', status_of({'settings': {'value': {}}}, {'Sec-Fetch-Site': 'cross-site'}) == 403)
 
 
 def run_bursts(t, check):

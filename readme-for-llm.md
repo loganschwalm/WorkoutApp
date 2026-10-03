@@ -208,6 +208,14 @@ Logged sets, notes, finished workouts, settings, custom templates, and your trai
 - If the browser will not let the app save on the device (its storage is full, or blocked), a banner says so: anything
   not uploaded yet is then only kept while the page stays open. It goes once the browser saves again.
 - A setting, template or program change made while offline is kept when the page reloads and uploads once the server is back; it is never replaced by the server's older copy.
+- Nor does a change on one device undo one made on another meanwhile, say the phone at the gym while the laptop sits at
+  home: both are kept, and only where both changed the same thing does the one that uploads later win. Settings merge
+  setting by setting, templates one template at a time, goals, notes and the exercise library one exercise at a time,
+  and bodyweight a day at a time (a weigh-in's weight and unit always together). A program merges field by field, a day
+  done on the phone beside a training max edited on the laptop, but only within the same run of it: a device that
+  started the next cycle, converted it to the other unit, or switched or ended it wins whole, and a change to a cycle
+  another device has since moved on from is dropped rather than carried into the new one. A page open since before
+  another device's change keeps it too, and shows it from its next load.
 - Local copies are kept per account, so another account signed in on the same browser never sees them.
 - If your sign-in expires while a page is open, a banner offers to sign in again and returns you to the same page; nothing on screen is discarded, and a workout in progress stays on the device.
 
@@ -1336,6 +1344,13 @@ time's numbers for each exercise, settings, custom templates, the training progr
 (which is only ever kept there). That copy is what lets you keep
 training through a network drop; it uploads when the server is reachable again, and clearing the
 browser's site data only loses whatever had not uploaded yet.
+
+Settings, templates, the program, notes, goals, bodyweight and the exercise library go up with `PATCH /api/state`: each
+changed part as `{"value": ..., "base": ...}`, the part as changed and the copy the change started from (the one last
+loaded or uploaded, kept beside the change in `localStorage` until it is uploaded). The server merges the change into
+its own copy in one locked transaction (`merge_part` in `server.py`), so two devices sending at once both keep their
+changes, and answers with the merged state. A part sent without `base` replaces the stored one whole, as `PUT
+/api/state` does for pages from before.
 
 Include the SQLite file in your backup plan: it is at `/var/lib/workout-tracker/workouts.db` in an
 LXC install, and in the `workout_data` volume under Docker. The database runs in write-ahead-log mode,

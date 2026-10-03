@@ -41,6 +41,9 @@ SHORT_SESSION_RENEW = 60 * 60
 MAX_BODY = 1024 * 1024
 # An import carries a whole account at once: room for tens of thousands of workouts.
 MAX_IMPORT = 32 * 1024 * 1024
+# A change to the account state carries each changed part twice (as changed, and the copy it was changed from), and a
+# lifetime of daily weigh-ins is a part on its own.
+MAX_STATE_CHANGE = 4 * MAX_BODY
 # What an export file says it is, so an import can tell one from any other JSON.
 EXPORT_FORMAT = 'workout-tracker-export'
 
@@ -656,6 +659,77 @@ def store_state(database, user_id, state):
                      (user_id, *(json.dumps(state[part]) for part in STATE_COLUMNS), int(time.time() * 1000)))
 
 
+# ---- Merging changes from several devices ---------------------------------------------------------------------
+# A device that changed part of the state sends the part as it changed it, and the copy it started from (PATCH
+# /api/state). Another device may have changed the part on the server since; merging keeps both devices' changes, and
+# where both changed the same thing, the change arriving now wins. How finely each part is merged:
+#   depth     how many levels of objects below the part are merged key by key; a value deeper than that is one value,
+#             so a bodyweight's weight and unit, or a goal's target and unit, always travel together
+#   by_id     a list of objects told apart by their id, merged as if keyed by it (templates)
+#   identity  keys that say which run of a program the rest belongs to: its days are a cycle's, its weights a unit's,
+#             so changes to two different runs are never mixed (see merge_values)
+MERGE_SPECS = {
+    'settings': {'depth': 1},
+    'templates': {'depth': 1, 'by_id': True},
+    'program': {'depth': 2, 'identity': ('definition', 'startedAt', 'cycle', 'unit')},
+    'exerciseNotes': {'depth': 1},
+    'goals': {'depth': 1},
+    'bodyweight': {'depth': 1},
+    'exerciseLibrary': {'depth': 1},
+}
+# A key one side has and the other does not.
+MISSING = object()
+
+
+def merge_values(base, mine, theirs, depth, identity=()):
+    """`mine` (this device's copy, changed from `base`) merged with `theirs` (the server's, which may also have changed
+    from `base`). What only one side changed is kept; where both changed the same thing, `mine` wins, as the later.
+    Objects are merged key by key `depth` levels down. When `identity` keys differ, the two are different runs of a
+    program, which are not mixed: this device's own new run wins whole, and edits it made to a run the server has since
+    moved on from are dropped."""
+    if mine == base:
+        return theirs
+    if theirs == base or mine == theirs:
+        return mine
+    if depth <= 0 or not isinstance(mine, dict) or not isinstance(theirs, dict):
+        return mine
+    base = base if isinstance(base, dict) else {}
+    if any(mine.get(key, MISSING) != base.get(key, MISSING) for key in identity):
+        return mine
+    if any(theirs.get(key, MISSING) != base.get(key, MISSING) for key in identity):
+        return theirs
+    merged = {}
+    # The server's order, then what this device added.
+    for key in [*theirs, *(key for key in mine if key not in theirs)]:
+        value = merge_values(base.get(key, MISSING), mine.get(key, MISSING), theirs.get(key, MISSING), depth - 1)
+        if value is not MISSING:
+            merged[key] = value
+    return merged
+
+
+def keyed_by_id(items):
+    """A list of objects with distinct text ids as {id: object}, or None when it is not one."""
+    if not isinstance(items, list):
+        return None
+    keyed = {}
+    for item in items:
+        if not isinstance(item, dict) or not isinstance(item.get('id'), str) or item['id'] in keyed:
+            return None
+        keyed[item['id']] = item
+    return keyed
+
+
+def merge_part(part, base, mine, theirs):
+    spec = MERGE_SPECS[part]
+    if spec.get('by_id'):
+        keyed = [keyed_by_id(value) for value in (base, mine, theirs)]
+        # A list with an item that has no id (from before templates had them) cannot be told apart item by item.
+        if None in keyed:
+            return merge_values(base, mine, theirs, 0)
+        return list(merge_values(*keyed, spec['depth']).values())
+    return merge_values(base, mine, theirs, spec['depth'], spec.get('identity', ()))
+
+
 def delete_account_rows(database, user_id):
     """Everything an account has, then the account. The tables would cascade, but only with foreign keys on and on
     databases made since those references existed, so each is emptied by name."""
@@ -1194,6 +1268,13 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             return
         self.send_error(HTTPStatus.NOT_FOUND)
 
+    def do_PATCH(self):
+        parsed = urlparse(self.path)
+        if parsed.path.startswith('/api/'):
+            self.handle_api(self.api_patch, parsed.path)
+            return
+        self.send_error(HTTPStatus.NOT_FOUND)
+
     def do_DELETE(self):
         parsed = urlparse(self.path)
         if parsed.path.startswith('/api/'):
@@ -1574,15 +1655,55 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
                 return
             self.send_json(HTTPStatus.OK, {'ok': True})
         elif path == '/api/state':
+            # Each part sent replaces the stored one whole. Pages from before PATCH (below) send this, so it stays.
             data = self.read_json()
             validate_state(data)
             with connection() as database:
+                # Read and written in one locked go, so another request's change cannot land in between and be lost.
+                database.execute('BEGIN IMMEDIATE')
                 # Only the parts sent change. A missing key keeps the stored part; null is a real value for the program (ended).
                 state = {**load_state(database, user['id']), **{part: data[part] for part in STATE_COLUMNS if part in data}}
                 store_state(database, user['id'], state)
             self.send_json(HTTPStatus.OK, state)
         else:
             self.send_json(HTTPStatus.NOT_FOUND, {'error': 'Endpoint not found.'})
+
+    def api_patch(self, path):
+        user = self.require_user()
+        if not user:
+            return
+        if path != '/api/state':
+            self.send_json(HTTPStatus.NOT_FOUND, {'error': 'Endpoint not found.'})
+            return
+        # {part: {value, base}}: each part as this device changed it, and the copy it started from, so the change can be
+        # merged with any made on another device since (see merge_part). A part sent without its base (a change made
+        # before this device had loaded the server's copy) replaces the stored one, as PUT does.
+        data = self.read_json(MAX_STATE_CHANGE)
+        changes = {}
+        for part, change in data.items():
+            if part not in STATE_COLUMNS:
+                raise BadRequest(f'{part} is not part of the account state.')
+            if not isinstance(change, dict) or 'value' not in change:
+                raise BadRequest(f'{part} must be an object with its value, and the base it was changed from.')
+            changes[part] = change
+        validate_state({part: change['value'] for part, change in changes.items()})
+        with connection() as database:
+            # Read, merged and written in one locked go, so two devices sending at once both have their changes kept.
+            database.execute('BEGIN IMMEDIATE')
+            state = load_state(database, user['id'])
+            for part, change in changes.items():
+                mine = change['value']
+                merged = merge_part(part, change['base'], mine, state[part]) if 'base' in change else mine
+                if merged is not mine:
+                    # A merge of two valid copies can still break a limit (more goals than are allowed, say); this
+                    # device's own copy, already checked, is kept then, as it would have been without merging.
+                    try:
+                        validate_state({part: merged})
+                    except BadRequest:
+                        merged = mine
+                state[part] = merged
+            store_state(database, user['id'], state)
+        self.send_json(HTTPStatus.OK, state)
 
     def api_delete(self, path):
         user = self.require_user()

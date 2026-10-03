@@ -116,6 +116,10 @@ function programInUnit(program, to) {
   return converted;
 }
 
+// The program as this page reads it, so a field filled in by normalizeProgram is not mistaken for a change (see
+// accountStateFill in offline.js; guarded, as there).
+if (typeof accountStateFill !== 'undefined') accountStateFill.program = normalizeProgram;
+
 function loadProgram() {
   const stored = readLocalState('program');
   return normalizeProgram(stored ? stored.value : null);

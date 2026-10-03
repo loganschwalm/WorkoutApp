@@ -217,7 +217,13 @@ function flushPendingWorkouts() {
 // ---- Settings, custom templates and the training program -----------------
 // The same rule as the in-progress workout: a change is saved on this device first and stays marked dirty until the
 // server has it, and a dirty local copy beats the server's when a page loads, so a change made offline is never undone.
+// Nor does it undo a change made on another device meanwhile: a part goes up with the copy it was changed from (its
+// base), and the server keeps both devices' changes (merge_part in server.py), the later winning only where both changed
+// the same thing.
 const accountStateParts = ['settings', 'templates', 'program', 'exerciseNotes', 'goals', 'bodyweight', 'exerciseLibrary'];
+// For a part whose pages fill in what the stored copy leaves out (settings' defaults), how they do, so a default filled
+// in on a page is not mistaken for a change made there. settings.js and program.js add theirs.
+const accountStateFill = {};
 
 // Before these were kept per account, one copy per browser was shared by whoever signed in. It was last written
 // by the last account seen here, so it becomes that account's copy, marked clean so the server's copy replaces it.
@@ -238,7 +244,11 @@ function readLocalState(part) {
 }
 
 function saveLocalState(part, value) {
-  writeLocal(localKey(part), { value, dirty:true, stamp:`${Date.now()}-${++changeCounter}` });
+  const record = readLocalState(part);
+  // The copy this change starts from: the one last loaded or uploaded, kept while changes wait to go up. A part never
+  // loaded here, or changed by a version from before bases, has none, and its change replaces the server's whole.
+  const base = !record ? {} : !record.dirty ? { base:record.value } : 'base' in record ? { base:record.base } : {};
+  writeLocal(localKey(part), { value, dirty:true, stamp:`${Date.now()}-${++changeCounter}`, ...base });
   scheduleStateSync(0);
 }
 
@@ -247,21 +257,32 @@ function scheduleStateSync(delay) {
   stateSyncTimer = setTimeout(syncAccountState, delay);
 }
 
+// Resolves to the server's state once these changes are merged into it, or null if nothing went up.
 async function syncAccountState() {
   clearTimeout(stateSyncTimer);
   // Only once the signed-in account is known, so a copy kept for another account is never sent to this one.
   await window.localReady;
-  if (stateSyncing) return;
+  if (stateSyncing) return null;
   const dirty = accountStateParts.map(part => [part, readLocalState(part)]).filter(([, record]) => record && record.dirty);
-  if (!dirty.length) return;
+  if (!dirty.length) return null;
   stateSyncing = true;
+  let merged = null;
   try {
-    const body = Object.fromEntries(dirty.map(([part, record]) => [part, record.value]));
-    const response = await syncFetch('/api/state', { method:'PUT', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(body) });
+    const body = Object.fromEntries(dirty.map(([part, record]) => {
+      const fill = accountStateFill[part] || (value => value);
+      return [part, { value:fill(record.value), ...('base' in record ? { base:fill(record.base) } : {}) }];
+    }));
+    const response = await syncFetch('/api/state', { method:'PATCH', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(body) });
     if (!response.ok) throw new Error(`Settings sync failed (${response.status}).`);
+    merged = await response.json().catch(() => null);
     dirty.forEach(([part, record]) => {
       const latest = readLocalState(part);
-      if (latest && latest.stamp === record.stamp) writeLocal(localKey(part), { ...latest, dirty:false });
+      if (!latest) return;
+      // Unchanged since it went up: clean, and what the next change starts from. The copy here stays as this page knows
+      // it, rather than taking the server's merged one under it; the next page load brings that.
+      if (latest.stamp === record.stamp) writeLocal(localKey(part), { value:latest.value, dirty:false, stamp:latest.stamp });
+      // Changed while it went up: still to go, now from what just went, so the next upload carries only what came after.
+      else writeLocal(localKey(part), { ...latest, base:record.value });
     });
     stateRetryCount = 0;
   } catch (error) {
@@ -271,6 +292,7 @@ async function syncAccountState() {
     stateSyncing = false;
   }
   if (accountStateParts.some(part => readLocalState(part)?.dirty)) scheduleStateSync(stateRetryCount ? Math.min(60000, 2000 * 2 ** (stateRetryCount - 1)) : 0);
+  return merged;
 }
 
 // Resolves to { settings, templates, program } for the signed-in account: a part changed here and not uploaded yet keeps the
@@ -278,12 +300,16 @@ async function syncAccountState() {
 async function loadAccountState() {
   await window.localReady;
   const stampsBefore = Object.fromEntries(accountStateParts.map(part => [part, readLocalState(part)?.stamp]));
-  let server = null;
-  try {
-    const response = await syncFetch('/api/state');
-    if (response.ok) server = await response.json();
-  } catch (error) {
-    console.error('Unable to load settings and templates; using the copy on this device.', error);
+  // Changes still waiting go up first, so the copy loaded is the server's merge of them with any made elsewhere, rather
+  // than this device's, which would hide the other device's until the next load. Its answer is that merged copy.
+  let server = accountStateParts.some(part => readLocalState(part)?.dirty) ? await syncAccountState() : null;
+  if (!server) {
+    try {
+      const response = await syncFetch('/api/state');
+      if (response.ok) server = await response.json();
+    } catch (error) {
+      console.error('Unable to load settings and templates; using the copy on this device.', error);
+    }
   }
   const state = {};
   accountStateParts.forEach(part => {

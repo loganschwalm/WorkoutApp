@@ -199,3 +199,50 @@ def run(t):
     check('a file that is not an export is turned away without asking',
           cdp.wait("document.getElementById('dataStatus').textContent.startsWith('sets.csv is not a Workout Tracker export')") and len(cdp.dialogs) == asked,
           cdp.ev("document.getElementById('dataStatus').textContent"))
+
+    # ------------------------------------------------------------------ S7 two devices, one change each
+    print('S7  a setting changed here offline, and another changed on another device meanwhile: both kept')
+    loaded()
+    other_device = lambda **changes: api('PATCH', '/api/state', {'settings': {'base': server_state()['settings'], 'value': {**server_state()['settings'], **changes}}}, token)
+    cdp.block_api = True
+    save_settings(restDurationSetting=75)
+    other_device(weeklyGoal=5)
+    cdp.block_api = False
+    loaded()  # back online and reloading before the retry: the change waiting here goes up first, and the page loads the merge
+    check('reloading shows the change made here and the one made on the other device', rest_duration() == 75 and cdp.ev('getWorkoutSettings().weeklyGoal') == 5,
+          f"{rest_duration()} {cdp.ev('getWorkoutSettings().weeklyGoal')}")
+    settings = server_state()['settings']
+    check('and the server has both', settings.get('restDuration') == 75 and settings.get('weeklyGoal') == 5, settings)
+
+    # ------------------------------------------------------------------ S8 a page open from before another device's change
+    print('S8  a page opened before another device added a template: making one here keeps both')
+    loaded()
+    current = server_state()['templates']
+    api('PATCH', '/api/state', {'templates': {'base': current, 'value': [*current, {'id': 'custom-elsewhere', 'name': 'Made Elsewhere',
+                                                                                      'exercises': [{'name': 'Row', 'reps': '10'}]}]}}, token)
+    create_template('Made Here', 'Dip', 10)
+    names = lambda: [x.get('name') for x in server_state()['templates']]
+    check("the template made here reaches the server, beside the other device's", wait_for(lambda: {'Made Here', 'Made Elsewhere'} <= set(names())), names())
+    loaded()
+    check('and this page shows both once it loads again', {'Made Here', 'Made Elsewhere'} <= set(template_names()), template_names())
+
+    # ------------------------------------------------------------------ S9 a change made while the last one is still going up
+    print('S9  a change made while the last one is still going up carries only itself')
+    loaded()
+    # Uploads are held, to be let go one at a time.
+    cdp.ev("""window.__held = []; const realSyncFetch = syncFetch;
+      syncFetch = (path, options = {}, timeout) => options.method === 'PATCH'
+        ? new Promise(resolve => window.__held.push(() => resolve(realSyncFetch(path, options, timeout)))) : realSyncFetch(path, options, timeout);""")
+    save_settings(restDurationSetting=105)
+    check('the first change starts going up', cdp.wait('window.__held.length === 1'))
+    save_settings(weeklyGoalSetting=6)
+    cdp.ev('window.__held.shift()()')
+    check('once it is up, the change made meanwhile starts from it', cdp.wait("readLocalState('settings').dirty && readLocalState('settings').base.restDuration === 105"),
+          cdp.ev("JSON.stringify(readLocalState('settings'))"))
+    check('the server has the first', server_state()['settings'].get('restDuration') == 105, server_state()['settings'])
+    other_device(restDuration=100)
+    cdp.wait('window.__held.length === 1')
+    cdp.ev('window.__held.shift()()')
+    check("the second goes up without putting back the first over the other device's later change",
+          wait_for(lambda: server_state()['settings'].get('weeklyGoal') == 6) and server_state()['settings'].get('restDuration') == 100, server_state()['settings'])
+    check('and nothing is left waiting here', cdp.wait("!readLocalState('settings').dirty"), cdp.ev("JSON.stringify(readLocalState('settings'))"))

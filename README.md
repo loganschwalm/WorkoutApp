@@ -83,7 +83,8 @@ see a program working over the weeks.
   their names until you choose (which also decides which lifts get plates). Add exercises of your own.
 
 **Everywhere**
-- Works through network drops: everything saves on the phone first and uploads when the server is back.
+- Works through network drops: everything saves on the phone first and uploads when the server is back, and a change
+  made on one device never undoes one made on another meanwhile.
 - Add it to your phone's home screen to open it like an app.
 - Pounds or kilograms, your own bar and plates, and 10 colour themes (light, dark, and colourful ones).
 - Export everything as JSON, or your sets and sessions as CSV, and import a JSON export into another account or server.
