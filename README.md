@@ -3,7 +3,8 @@
 > **If you are an AI agent or LLM, read [readme-for-llm.md](readme-for-llm.md) instead.** It is the full, detailed
 > reference to every feature, setting and behaviour; this file is the short version for people.
 
-A self-hosted workout tracker for logging workouts, following training programs, and seeing your progress.
+A self-hosted workout tracker for logging strength workouts and cardio, following training programs, and seeing your
+progress.
 It runs on your own server, supports several accounts, and works on a phone at the gym, even when the
 connection drops.
 
@@ -24,6 +25,14 @@ library, with SQLite for storage, so there is no build step, no package manager 
   <tr>
     <td align="center">During a workout: last time's numbers, the plates to load, the rest timer, and your logged sets.</td>
     <td align="center">Settings, including the rest-timer sound and vibration.</td>
+  </tr>
+  <tr>
+    <td width="50%" align="center"><img src="docs/screenshots/cardio.png" width="320" alt="The Cardio page on a phone: an activity to start for each kind of cardio, when each was last done, and this week's sessions"></td>
+    <td width="50%" align="center"><img src="docs/screenshots/cardio-session.png" width="320" alt="A run being timed on a phone, at 27 minutes 14 seconds, with last time's distance and pace under the clock"></td>
+  </tr>
+  <tr>
+    <td align="center">Cardio: walks, runs and the machines, and how far each went last time.</td>
+    <td align="center">A run being timed, with last time's distance and pace.</td>
   </tr>
 </table>
 
@@ -51,10 +60,20 @@ Every set is planned for you, weights progress on their own, and the plan shows 
 charts each lift's training max (or working weight) against the one-rep max your sets estimate, so you can
 see a program working over the weeks.
 
+**Cardio**, a tab of its own
+- Walks and runs, cycling, an exercise bike, the elliptical, a rowing machine, a stair climber, or anything else
+  under a name of your own.
+- Tap one to start a timer that keeps time with the screen off; pause it, cancel it with Undo, or finish and add the
+  distance, calories and heart rate. Or log a session you did by hand, for any day.
+- Pace, speed or a rower's split worked out for you, last time under the clock, this week's totals, and records for the
+  longest, the fastest and the longest time.
+- Miles or kilometres (rowing in metres, stairs in floors), and every session in History and on Progress.
+
 **History and progress**
-- A calendar of the last 12 weeks, a weekly goal, and your streak.
-- Search, repeat, edit or copy any past workout.
-- Charts of heaviest weight, estimated one-rep max, best reps or volume, per exercise and over time.
+- A calendar of the last 12 weeks, strength and cardio alike, a weekly goal, and your streak.
+- Search, repeat, edit or copy any past workout or session.
+- Charts of heaviest weight, estimated one-rep max, best reps or volume, per exercise and over time, and of each
+  cardio activity's distance, time, pace or speed, calories and heart rate.
 - Personal records, goals to aim for, and a bodyweight log.
 - Sets per muscle each week against your recent average, and your exercises' muscles and equipment, guessed from
   their names until you choose (which also decides which lifts get plates). Add exercises of your own.
@@ -63,7 +82,7 @@ see a program working over the weeks.
 - Works through network drops: everything saves on the phone first and uploads when the server is back.
 - Add it to your phone's home screen to open it like an app.
 - Pounds or kilograms, your own bar and plates, and 10 colour themes (light, dark, and colourful ones).
-- Export everything as JSON or your sets as CSV, and import a JSON export into another account or server.
+- Export everything as JSON, or your sets and sessions as CSV, and import a JSON export into another account or server.
 - Accounts with email or username sign-in, "Remember me", and password reset by command or by email.
 
 The [full reference](readme-for-llm.md#features) describes each of these in detail.
@@ -131,7 +150,7 @@ Open `http://YOUR_SERVER_IP:6769`, create your accounts, then set `ALLOW_REGISTR
 
 ```bash
 python backend/server.py            # then open http://localhost:6769/
-python scripts/demo-server.py       # the same, on a fresh database with 3 weeks of 5/3/1 logged
+python scripts/demo-server.py       # the same, on a fresh database with 3 weeks of 5/3/1 and cardio logged
 ```
 
 The demo signs in as `wendler-test` / `Wendler-531-Test`. Add `--follow` to keep it on whatever CI last

@@ -26,21 +26,32 @@ function describeMonth(workouts) {
   return [plural(workouts.length, 'workout'), seconds ? formatDuration(seconds) : ''].filter(Boolean).join(' · ');
 }
 
-// The same row as the Tracker's: the name (tap for the sets), Start, and a ⋯ menu to copy, edit or delete it. Copying
-// and editing happen in the Tracker's workout form, which the menu opens.
+// What a row's details list: a strength workout's exercises and their sets, or a cardio session's numbers.
+function workoutLines(workout) {
+  if (isCardio(workout)) {
+    return `<li><strong><a href="progress.html?exercise=${encodeURIComponent(cardioKey(workout))}">${escapeHTML(workout.name)}</a></strong>`
+      + `<span>${escapeHTML(describeCardio(workout))}</span></li>`;
+  }
+  return inUnit(workout).exercises.map(item => `<li><strong><a href="progress.html?exercise=${encodeURIComponent(exerciseKey(item.name))}">`
+    + `${escapeHTML(item.name)}</a></strong><span>${escapeHTML(describeSavedExercise(item))}</span></li>`).join('');
+}
+
+// The same row as the Strength page's: the name (tap for the sets), Start, and a ⋯ menu to copy, edit or delete it.
+// Starting, copying and editing happen on the page the workout belongs to: the Strength page's workout form, or for a
+// cardio session, the Cardio page.
 function historyRow(workout) {
   const open = openWorkouts.has(workout.id);
+  const page = isCardio(workout) ? 'cardio.html' : 'index.html';
   return `<li class="saved-workout history-workout" data-id="${escapeHTML(workout.id)}" data-date="${calendarDayKey(new Date(workout.createdAt))}">`
     + '<div class="saved-workout-summary saved-workout-row">'
     + `<button class="saved-workout-toggle" type="button" data-action="view" aria-expanded="${open}">`
-    + `<strong>${escapeHTML(workout.name)}</strong><span>${escapeHTML(describeWorkoutDate(workout))}</span></button>`
-    + `<div class="row-actions"><a class="button-link primary" href="index.html?start=${encodeURIComponent(workout.id)}">Start</a>`
+    + `<strong>${escapeHTML(workout.name)}</strong><span>${escapeHTML(isCardio(workout) ? describeSessionDate(workout) : describeWorkoutDate(workout))}</span></button>`
+    + `<div class="row-actions"><a class="button-link primary" href="${page}?start=${encodeURIComponent(workout.id)}">Start</a>`
     + `<details class="row-menu"><summary class="secondary" aria-label="More for ${escapeHTML(workout.name)}">&middot;&middot;&middot;</summary>`
     + '<div class="row-menu-items"><button type="button" data-action="copy">Copy as new</button><button type="button" data-action="edit">Edit</button>'
     + '<button class="danger" type="button" data-action="delete">Delete</button></div></details></div></div>'
     + `<div class="workout-details"${open ? '' : ' hidden'}>${workout.notes ? `<p class="workout-note">${escapeHTML(workout.notes)}</p>` : ''}`
-    + `<ul>${inUnit(workout).exercises.map(item => `<li><strong><a href="progress.html?exercise=${encodeURIComponent(exerciseKey(item.name))}">`
-      + `${escapeHTML(item.name)}</a></strong><span>${escapeHTML(describeSavedExercise(item))}</span></li>`).join('')}</ul></div></li>`;
+    + `<ul>${workoutLines(workout)}</ul></div></li>`;
 }
 
 function renderHistory(workouts) {
@@ -115,7 +126,7 @@ $('historyList').onclick = event => {
   const menu = button.closest('.row-menu');
   if (menu) menu.open = false;
   if (action === 'view') showWorkoutDetails(row, row.querySelector('.workout-details').hidden);
-  if (action === 'copy' || action === 'edit') location.href = `index.html?${action}=${encodeURIComponent(workout.id)}`;
+  if (action === 'copy' || action === 'edit') location.href = `${isCardio(workout) ? 'cardio' : 'index'}.html?${action}=${encodeURIComponent(workout.id)}`;
   if (action === 'delete') deleteHistoryWorkout(workout);
 };
 $('historySearch').oninput = () => { if (historyWorkouts) renderHistory(historyWorkouts); };
@@ -144,16 +155,23 @@ function calendarDayKey(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
-// Workouts per day and per week (keyed by the week's Monday).
+// Workouts per day and per week (keyed by the week's Monday): strength and cardio alike, which both count toward the
+// weekly goal. The days whose workouts were all cardio are kept too, as the calendar marks them apart.
 function trainingByDate(workouts) {
-  const days = new Map(), weeks = new Map();
+  const days = new Map(), weeks = new Map(), cardioOnly = new Set();
+  const lifted = new Set();
   workouts.forEach(workout => {
     const date = new Date(workout.createdAt);
     const day = calendarDayKey(date), week = calendarDayKey(startOfWeek(date));
     days.set(day, [...(days.get(day) || []), workout.name]);
     weeks.set(week, (weeks.get(week) || 0) + 1);
+    if (!isCardio(workout)) lifted.add(day);
   });
-  return { days, weeks };
+  workouts.filter(isCardio).forEach(workout => {
+    const day = calendarDayKey(new Date(workout.createdAt));
+    if (!lifted.has(day)) cardioOnly.add(day);
+  });
+  return { days, weeks, cardioOnly };
 }
 
 // The current run of weeks at the goal, and the longest. This week counts once it reaches the goal; until then it is
@@ -181,7 +199,7 @@ function renderCalendar() {
   const today = startOfDay(new Date());
   const thisWeek = startOfWeek(today);
   const first = addDays(thisWeek, -7 * (calendarWeeks - 1));
-  const { days, weeks } = trainingByDate(historyWorkouts);
+  const { days, weeks, cardioOnly } = trainingByDate(historyWorkouts);
   const thisWeekCount = weeks.get(calendarDayKey(thisWeek)) || 0;
   $('calendarSummary').textContent = thisWeekCount >= goal
     ? `This week: ${plural(thisWeekCount, 'workout')} · goal of ${goal} reached`
@@ -204,7 +222,9 @@ function renderCalendar() {
     const names = days.get(calendarDayKey(date)) || [];
     const when = date.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric' });
     const description = names.length ? `${when}: ${names.join(', ')}` : `${when}: rest`;
-    const classes = ['calendar-day', names.length ? 'trained' : '', names.length > 1 ? 'many' : '', date > today ? 'future' : '', date.getTime() === today.getTime() ? 'today' : ''].filter(Boolean).join(' ');
+    const key = calendarDayKey(date);
+    const classes = ['calendar-day', names.length ? 'trained' : '', names.length > 1 ? 'many' : '', cardioOnly.has(key) ? 'cardio' : '',
+      date > today ? 'future' : '', date.getTime() === today.getTime() ? 'today' : ''].filter(Boolean).join(' ');
     if (date > today) return `<span class="${classes}" data-date="${calendarDayKey(date)}" aria-hidden="true"></span>`;
     // Today is where the keyboard comes in; the arrow keys go from there (see moveCalendarFocus).
     return `<button class="${classes}" type="button" data-date="${calendarDayKey(date)}" tabindex="${date.getTime() === today.getTime() ? 0 : -1}"`

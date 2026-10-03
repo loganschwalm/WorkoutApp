@@ -403,7 +403,35 @@ def validate_workout(data):
             raise BadRequest('program must be an object.')
         text(data['program'].get('name'), 'program.name', 1000)
         text(data['program'].get('label'), 'program.label', 1000)
+    validate_cardio(data)
     return name, notes, int(created_at)
+
+
+# The most a cardio session's numbers can be; nothing the app sends comes near them.
+CARDIO_LIMITS = {'distance': 1_000_000, 'calories': 100_000, 'heartRate': 400, 'floors': 100_000}
+
+
+def validate_cardio(data):
+    """A cardio session (the Cardio page) is a workout with kind 'cardio', no exercises, its time as duration, and what it
+    did as cardio: {activity, distance, distanceUnit, calories, heartRate, floors}, all but the activity optional."""
+    kind = data.get('kind')
+    if kind is None:
+        return
+    if kind != 'cardio':
+        raise BadRequest('kind must be cardio, or left out for a strength workout.')
+    cardio = data.get('cardio')
+    if not isinstance(cardio, dict):
+        raise BadRequest('cardio must be an object.')
+    if not text(cardio.get('activity'), 'cardio.activity', 50).strip():
+        raise BadRequest('cardio.activity must name the activity.')
+    if not (is_number(data.get('duration')) and 0 < data['duration'] < 10 ** 6):
+        raise BadRequest('A cardio session needs its time, as duration in seconds.')
+    for field, most in CARDIO_LIMITS.items():
+        value = cardio.get(field)
+        if value is not None and not (is_number(value) and 0 <= value <= most):
+            raise BadRequest(f'cardio.{field} must be a number from 0 to {most}.')
+    if cardio.get('distanceUnit') not in (None, 'mi', 'km', 'm'):
+        raise BadRequest('cardio.distanceUnit must be mi, km or m.')
 
 
 def validate_program(program):
@@ -661,13 +689,24 @@ def spreadsheet_text(value):
 
 def workouts_csv(workouts, zone):
     """One row per logged set, oldest first, for a spreadsheet. A skipped exercise has no rows, and one saved without
-    sets (from the workout form) has one row of its weight and reps. A timed exercise's count goes under Seconds."""
+    sets (from the workout form) has one row of its weight and reps. A timed exercise's count goes under Seconds. A cardio
+    session is one row: its time under Seconds, then its distance (in the unit it was entered in), calories, average heart
+    rate and floors, where it has them."""
     out = io.StringIO()
     writer = csv.writer(out)
-    writer.writerow(['Date', 'Workout', 'Exercise', 'Set', 'Weight', 'Unit', 'Reps', 'Seconds'])
+    writer.writerow(['Date', 'Workout', 'Exercise', 'Set', 'Weight', 'Unit', 'Reps', 'Seconds', 'Distance', 'Distance unit', 'Calories',
+                     'Average heart rate', 'Floors'])
     for workout in workouts:
         date = local_date(workout['createdAt'], zone)
         unit = workout.get('unit') or 'lbs'
+        if workout.get('kind') == 'cardio':
+            cardio = workout.get('cardio') or {}
+            given = lambda field: '' if cardio.get(field) is None else cardio[field]
+            name = spreadsheet_text(workout['name'])
+            writer.writerow([date, name, name, '', '', '', '', workout.get('duration', ''), given('distance'),
+                             cardio.get('distanceUnit', '') if cardio.get('distance') is not None else '', given('calories'), given('heartRate'),
+                             given('floors')])
+            continue
         for exercise in workout.get('exercises') or []:
             sets = exercise.get('sets')
             rows = [(index + 1, logged) for index, logged in enumerate(sets)] if sets is not None else [('', exercise)]
@@ -676,7 +715,7 @@ def workouts_csv(workouts, zone):
                 weight, count = logged.get('weight'), logged.get('reps')
                 count = '' if count is None else count
                 writer.writerow([date, spreadsheet_text(workout['name']), spreadsheet_text(exercise.get('name') or ''), number,
-                                 '' if weight is None else weight, unit, '' if timed else count, count if timed else ''])
+                                 '' if weight is None else weight, unit, '' if timed else count, count if timed else '', '', '', '', '', ''])
     # A byte-order mark, or Excel reads the file in its own code page and mangles anything beyond plain English.
     return '﻿' + out.getvalue()
 
@@ -1124,7 +1163,7 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             target = '/' + parsed.path[len('/frontend'):].lstrip('/\\')
             self.redirect(HTTPStatus.MOVED_PERMANENTLY, target + (f'?{parsed.query}' if parsed.query else ''))
             return
-        if parsed.path in ('/', '/index.html', '/progress.html', '/history.html') and not self.session_user():
+        if parsed.path in ('/', '/index.html', '/cardio.html', '/progress.html', '/history.html') and not self.session_user():
             self.redirect(HTTPStatus.SEE_OTHER, '/login.html?next=' + quote(self.path, safe=''))
             return
         super().do_GET()

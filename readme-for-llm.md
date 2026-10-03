@@ -27,11 +27,19 @@ own workouts, templates, and settings.
     <td align="center">During a workout: last time's numbers, the weight with &minus;5/+5 buttons and the plates to load, the rest timer, and logged sets you can correct.</td>
     <td align="center">Settings, including the rest-timer sound and vibration.</td>
   </tr>
+  <tr>
+    <td width="50%" align="center"><img src="docs/screenshots/cardio.png" width="320" alt="The Cardio page on a phone: an activity to start for each kind of cardio, when each was last done, and this week's sessions"></td>
+    <td width="50%" align="center"><img src="docs/screenshots/cardio-session.png" width="320" alt="A run being timed on a phone, at 27 minutes 14 seconds, with last time's distance and pace under the clock"></td>
+  </tr>
+  <tr>
+    <td align="center">Cardio: walks, runs and the machines, and how far each went last time.</td>
+    <td align="center">A run being timed, with last time's distance and pace.</td>
+  </tr>
 </table>
 
 ![The Progress page charting the heaviest weight for Push, Pull and Leg days over six weeks](docs/screenshots/progress.png)
 
-![The History page in dark mode, listing each workout's sets and notes](docs/screenshots/history-dark.png)
+![The History page in dark mode: the training calendar, with a ring for each day of cardio only, then the latest run and workout opened](docs/screenshots/history-dark.png)
 
 ## Features
 
@@ -54,8 +62,8 @@ own workouts, templates, and settings.
   program, a tap from showing again.
 - During a workout the Tracker is only the workout: the program, Start again, templates and saved
   workouts wait behind "Show the rest of the Tracker" under it, and come back when the workout ends.
-- On a phone the header is just the page's name and Settings, and Tracker, Progress and History are a
-  tab bar along the bottom of the screen, in reach of a thumb.
+- On a phone the header is just the page's name and Settings, and Strength (the Tracker), Cardio, Progress and History
+  are a tab bar along the bottom of the screen, in reach of a thumb.
 - Move through exercises one at a time, or go straight to any of them: tap "Exercise 2 of 6" for a
   list of every exercise and how many sets each has, and tap one to go there. Handy when a machine is
   taken and you do the next free one first.
@@ -365,10 +373,51 @@ A weekly split you build from your templates, for training the way you already d
 - Deleting a template that a day does says so first. The day then asks for another template, and can only be skipped
   until it has one.
 
+### Cardio
+
+The Cardio tab (`cardio.html`) is for walks, runs and the machines, kept apart from strength workouts but working the
+same way: started in one tap or logged by hand, saved on the device first and uploaded, and shown in History and on
+Progress beside them. The Strength tab is the Tracker, which keeps to strength workouts.
+
+- The activities: Walk, Run, Cycling, Exercise bike, Elliptical, Rowing machine, Stair climber, and Other, under a name of
+  your own (Jump rope, Swimming), which is then charted and kept apart under that name. Each button says when it was
+  last done and how far ("Last Sep 30 · 3.5 mi").
+- Tapping one starts a timer for it. The clock is worked out from when it started, so it keeps time with the screen
+  off, another app open or the page closed, and a reload puts it back as it was. Under it is last time ("Last time
+  (Sep 30): 3.5 mi in 31:30 · 9:00 /mi"). Pause stops the clock until Resume. The session being timed is kept on this
+  device only, unlike a strength workout in progress, which other devices see too.
+- Cancel session takes it away with nothing saved: one timed for under a minute (started by mistake) at once, a longer
+  one after asking (unless Settings' confirmation is off). Either way the banner offers Undo for 10 seconds, which brings
+  it back with its time still counting from when it started. Starting another activity while one is timed asks first.
+- Finish stops the clock and asks for the rest: the time is filled in from the timer, and there is the distance (in
+  miles or kilometres, metres for the rower), floors (the stair climber, instead of a distance), calories, average heart
+  rate and notes, all but the time optional. Back to the timer leaves it paused. As the distance is typed, the form
+  works out how fast that was: the pace (time a mile or kilometre) of a walk or run, the speed (mph or km/h) of a ride,
+  the elliptical or Other, and a rower's split (time per 500 metres).
+- Log a session, beside the activities, is the same form for a session done without the timer: any activity, any day
+  up to today, and its time in hours, minutes and seconds. It starts on the activity done last. One logged for today is
+  saved at the time it was logged, one for another day at noon on it.
+- Saving shows a summary (the time, distance, pace or speed, floors, heart rate and calories it had) with any new
+  records and a link to the activity on Progress. Records are an activity's longest distance, its fastest pace, speed
+  or split (from a session of at least five minutes, so a short burst does not stand for a whole session), its longest
+  time and the most floors ("Run: your fastest yet, 8:20 /mi (was 9:00 /mi)"). The first session of an activity has
+  nothing to beat. A record sets off a firework, as a strength record does (not with reduced motion on).
+- Your sessions lists the latest, as the Tracker lists saved workouts: the name, then the day, time and distance (tap
+  for everything it did, and its note), Start to time it again, and a ⋯ menu to copy it as a new session, edit it or
+  delete it. Five show, then Show more, then History for the rest. Above them, this week's totals ("This week: 3
+  sessions · 1 h 35 min · 8.3 mi", the distance being walking, running and riding).
+- History's Start, Copy as new and Edit lead here for a session, as they lead to the Tracker for a workout.
+- Distances keep the unit they were entered in and are only converted for showing, so switching between miles and
+  kilometres never changes what was logged. Rowing is always in metres. Settings' distance unit follows the weight unit
+  (kilograms bring kilometres) until one is chosen.
+- A session is saved as a workout with kind `cardio`, no exercises, its time as its duration, and what it did as
+  `cardio` (see [Data storage](#data-storage)), so it uploads, waits through a network drop, exports and imports as a
+  workout does. The server checks its shape: an activity, a time, and numbers within sense.
+
 ### Workout history
 
 - See the last 12 weeks at a glance on the History page: a calendar with a square for each day you
-  trained (tap one to see its workouts, or reach them from the keyboard: the calendar is one stop, at
+  trained, filled for a day you lifted and a ring for a day of cardio only, (tap one to see its workouts, or reach them from the keyboard: the calendar is one stop, at
   today, and the arrow keys move a day up or down and a week left or right), this week's workouts
   against your weekly goal, your current streak of weeks at the goal, and your best. A week still in progress never breaks the streak; it
   joins it once it reaches the goal. The goal is in Settings.
@@ -377,8 +426,11 @@ A weekly split you build from your templates, for training the way you already d
   name and date (tap it for the sets), Start, and a ⋯ menu to copy it as a new workout, edit it (both
   in the Tracker's form), or delete it. The latest three months show at first, and Show older brings
   the rest.
-- Search History by workout name, exercise or note; every word typed has to match, and the search
+- Search History by workout name, exercise, activity or note; every word typed has to match, and the search
   looks through every month.
+- Cardio sessions are listed with the workouts, under their activity's name with their day, time and distance ("Oct 1,
+  2026 · 32:20 · 3.8 mi"), and open to show everything they did ("3.8 mi in 32:20 · 8:31 /mi · 152 bpm"). Both kinds
+  count toward the weekly goal and the month's totals.
 - Tapping a day you trained on the calendar (or Enter on it) goes to that day's workouts in the list,
   opened and marked for a moment, even if a search or Show older was keeping them out of sight.
 - The Tracker lists the 3 most recent workouts, with Show more for the next 7 and a link to the rest
@@ -388,7 +440,7 @@ A weekly split you build from your templates, for training the way you already d
   as reps ("10, 9, 8 reps") rather than "0 lbs". The last-time line during a workout uses the same
   style.
 - Start a saved workout again from its history entry.
-- Navigate between Tracker, Progress, and History pages.
+- Navigate between the Strength (Tracker), Cardio, Progress and History pages.
 
 ### Progress analytics
 
@@ -422,6 +474,13 @@ A weekly split you build from your templates, for training the way you already d
   Sep 29 · Down 3 lbs in 30 days"). The newest five are listed under the chart to remove one. Weights are kept with
   your account, in the unit they were logged in, and shown in the unit you use.
 - Review repeated workouts as separate progress points.
+- Cardio is charted on the same chart: the exercise filter lists your activities apart from your exercises, and an
+  activity's chart offers its own measures, one point a session: distance (or floors), time, pace, speed or split as its
+  activity is told, calories and average heart rate. Times are written as clocks ("8:31 /mi"). The axis spans the
+  sessions rather than starting at zero, and a pace or split runs the other way up, so getting faster climbs on the
+  chart as getting stronger does. Every session of the activity is listed under it, its records are among the personal
+  records (its longest, fastest and longest time), and the workout type filter, which is for strength workouts, is set
+  aside. Someone with only cardio logged opens on the activity they do most.
 - Sets per muscle: a week's logged sets, each counted for the muscle its exercise works most, as a bar per muscle (chest,
   back, shoulders, biceps, triceps, forearms, quads, hamstrings, glutes, calves, core, other), always in that order so
   a muscle stays in one place from week to week. A mark on each bar, and "avg" beside it, is the sets a week over the
@@ -456,6 +515,8 @@ the button that opened them. Settings include:
   and Violet (lilac on deep purple). Buttons, tints, focus rings, the browser's bar and the Progress chart's first
   line all take the theme's colours. Pages open in the right theme straight away, with no flash of another, and
   the sign-in page follows it too.
+- Distance unit, for cardio: miles or kilometres. Until one is chosen it goes with the weight unit, kilometres with
+  kilograms. A rowing machine is always in metres.
 - Weight unit: pounds (the default) or kilograms. Everything follows it, from the weight fields to
   History, Progress and the training programs, which use kilogram steps (2.5 kg jumps, kg
   dumbbells and weight stacks). Workouts are stored in the unit they were logged in and only
@@ -497,7 +558,9 @@ Everything in your account can be saved to a file from Settings, and brought bac
   follow, your settings, your exercise notes, your goals, your bodyweight, and the muscle and equipment chosen for
   your exercises.
 - **Export sets as CSV** saves every logged set for a spreadsheet, one row each: its date, workout,
-  exercise, set number, weight, unit, and reps (or seconds, for a timed exercise). Skipped exercises are
+  exercise, set number, weight, unit, and reps (or seconds, for a timed exercise). A cardio session is one row too: its
+  time under Seconds, then its distance and the unit it was entered in, calories, average heart rate and floors, where
+  it has them. Skipped exercises are
   left out. Dates are the days in your own time zone, and a name that starts like a formula (`=`, `+`,
   `-`, `@`) is kept as text rather than run.
 - Workouts still waiting on the device upload first, so both files include them.
@@ -1172,7 +1235,7 @@ PORT=9000 WORKOUT_DB=/tmp/scratch.db python backend/server.py
 ```
 
 To try the app on realistic data, run it with three weeks of Wendler 5/3/1 already logged (the cycle's
-deload week still to do), and sign in as `wendler-test` / `Wendler-531-Test`:
+deload week still to do), and runs, rows and walks on the days between, and sign in as `wendler-test` / `Wendler-531-Test`:
 
 ```bash
 python scripts/demo-server.py             # this checkout, until Ctrl+C
@@ -1212,13 +1275,18 @@ installs and updates follow.
 
 ## Data storage
 
-The server is the record. Saved workouts, the in-progress workout, custom templates, the training program, and settings are
-stored per account in SQLite, and every query is scoped to the signed-in account's user ID. The server
-checks the shape of everything it stores, so a malformed upload is refused rather than saved.
+The server is the record. Saved workouts and cardio sessions, the in-progress workout, custom templates, the training
+program, and settings are stored per account in SQLite, and every query is scoped to the signed-in account's user ID. The server
+checks the shape of everything it stores, so a malformed upload is refused rather than saved. A cardio session is a
+workout of its own kind: `{"kind": "cardio", "name": "Run", "exercises": [], "duration": 1680, "cardio": {"activity": "run",
+"distance": 3.1, "distanceUnit": "mi", "calories": 310, "heartRate": 152}}`, its time in seconds and everything in `cardio`
+but the activity optional (`floors` for the stair climber). A workout without `kind` is a strength workout, as every
+workout from before cardio is.
 
 The browser keeps a working copy in `localStorage`, separately for each account that signs in on it:
 the in-progress workout, finished workouts still waiting to upload (and any the server refused), last
-time's numbers for each exercise, settings, custom templates, and the training program. That copy is what lets you keep
+time's numbers for each exercise, settings, custom templates, the training program, and a cardio session being timed
+(which is only ever kept there). That copy is what lets you keep
 training through a network drop; it uploads when the server is reachable again, and clearing the
 browser's site data only loses whatever had not uploaded yet.
 

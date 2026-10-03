@@ -119,6 +119,12 @@ function scheduleTones(tones, level) {
   }
 }
 
+// Miles or kilometres, for cardio: the one chosen in Settings, or until one is, the one that goes with the weight unit.
+function distanceUnitOf(settings = getWorkoutSettings()) {
+  if (settings.distanceUnit === 'mi' || settings.distanceUnit === 'km') return settings.distanceUnit;
+  return settings.unit === 'kg' ? 'km' : 'mi';
+}
+
 // Workouts a week the training calendar on the History page counts a week as done at: a whole number from 1 to 7.
 function weeklyGoalFrom(value) {
   const goal = Math.round(Number(value));
@@ -187,7 +193,10 @@ function readSettingsForm() {
   const soundVolume = Math.min(100, Math.max(0, Number(getSettingElement('soundVolumeSetting').value) || 0));
   const weeklyGoal = weeklyGoalFrom(getSettingElement('weeklyGoalSetting').value);
   const unit = getSettingElement('unitSetting').value === 'kg' ? 'kg' : 'lbs';
-  return { theme:getSettingElement('themeSetting').querySelector('input[name=theme]:checked')?.value || 'system', unit, restDuration, weeklyGoal, autoRest:getSettingElement('autoRestSetting').checked, confirmEnd:getSettingElement('confirmEndSetting').checked, trackEffort:getSettingElement('effortSetting').checked, warmupSets:getSettingElement('warmupSetting').checked, keepAwakeVideo:getSettingElement('keepAwakeSetting').checked, soundEnabled:getSettingElement('soundEnabledSetting').checked, soundVolume, alertSound:getSettingElement('alertSoundSetting').value, vibrate:getSettingElement('vibrateSetting').checked, playThroughSilent:getSettingElement('silentSetting').checked,
+  // The distance unit is only kept once it has been chosen; until then it follows the weight unit (distanceUnitOf).
+  const distance = getSettingElement('distanceUnitSetting');
+  const distanceUnit = distance.dataset.chosen === 'true' ? { distanceUnit:distance.value === 'km' ? 'km' : 'mi' } : {};
+  return { theme:getSettingElement('themeSetting').querySelector('input[name=theme]:checked')?.value || 'system', unit, ...distanceUnit, restDuration, weeklyGoal, autoRest:getSettingElement('autoRestSetting').checked, confirmEnd:getSettingElement('confirmEndSetting').checked, trackEffort:getSettingElement('effortSetting').checked, warmupSets:getSettingElement('warmupSetting').checked, keepAwakeVideo:getSettingElement('keepAwakeSetting').checked, soundEnabled:getSettingElement('soundEnabledSetting').checked, soundVolume, alertSound:getSettingElement('alertSoundSetting').value, vibrate:getSettingElement('vibrateSetting').checked, playThroughSilent:getSettingElement('silentSetting').checked,
     ...readEquipmentFields(getWorkoutSettings()) };
 }
 
@@ -214,6 +223,8 @@ function applySettings(settings) {
   const theme = themeChoices.includes(settings.theme) ? settings.theme : 'system';
   getSettingElement('themeSetting').querySelectorAll('input[name=theme]').forEach(input => { input.checked = input.value === theme; });
   getSettingElement('unitSetting').value = settings.unit === 'kg' ? 'kg' : 'lbs';
+  getSettingElement('distanceUnitSetting').value = distanceUnitOf(settings);
+  getSettingElement('distanceUnitSetting').dataset.chosen = String(settings.distanceUnit === 'mi' || settings.distanceUnit === 'km');
   getSettingElement('restDurationSetting').value = settings.restDuration;
   getSettingElement('weeklyGoalSetting').value = String(weeklyGoalFrom(settings.weeklyGoal));
   getSettingElement('autoRestSetting').checked = settings.autoRest;
@@ -386,6 +397,9 @@ getSettingElement('settingsForm').addEventListener('change', event => {
   // A bar weight that was not kept (empty, or too light or heavy) goes back to the one that was.
   else if (event.target.id === 'barSetting') event.target.value = formatWeight(gymEquipment().bar);
 });
+// Picking a distance unit keeps it, rather than leaving it to follow the weight unit. The select hears its change before
+// the form does, which then saves it.
+getSettingElement('distanceUnitSetting').addEventListener('change', event => { event.target.dataset.chosen = 'true'; });
 // Plays the alert with the values currently in the form, so changes can be heard before they are saved.
 getSettingElement('testAlertButton').onclick = () => { unlockAudio(); playRestAlert(readSettingsForm()); };
 getSettingElement('signOutButton').onclick = async () => {

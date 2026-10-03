@@ -11,17 +11,6 @@ const setBaselines = new WeakMap();
 let activeSession = null;
 let workoutsReachable = true;
 let initialLoadDone = false;
-let feedbackTimer = null;
-
-function dateInputValue(timestamp) {
-  const date = new Date(timestamp);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-}
-
-function timestampFromDateInput(value) {
-  const [year, month, day] = value.split('-').map(Number);
-  return new Date(year, month - 1, day, 12).getTime();
-}
 
 $('workoutDate').value = dateInputValue(Date.now());
 
@@ -32,32 +21,7 @@ function showWorkoutBuilder(editing = false) {
   $('workoutBuilderCard').scrollIntoView({ behavior:'smooth', block:'start' });
 }
 
-// The banner sticks to the top of the screen so a message is seen wherever the page is scrolled. Errors stay until
-// dismissed; successes and notes ('info') dismiss themselves. An action ({ label, run }), such as Undo, adds a button
-// that lasts as long as the banner does, so the banner then stays up a little longer.
-function showFeedback(message, type = 'error', action = null) {
-  const feedback = $('formFeedback');
-  feedback.textContent = message;
-  if (action) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'feedback-action';
-    button.textContent = action.label;
-    // Kept from reaching the banner, whose own click dismisses it; running the action decides what shows next.
-    button.onclick = event => { event.stopPropagation(); clearFeedback(); action.run(); };
-    feedback.append(' ', button);
-  }
-  feedback.className = `form-feedback ${type}`;
-  feedback.hidden = false;
-  clearTimeout(feedbackTimer);
-  if (type !== 'error') feedbackTimer = setTimeout(clearFeedback, action ? 10000 : 6000);
-}
-
-function clearFeedback() {
-  clearTimeout(feedbackTimer);
-  $('formFeedback').hidden = true;
-  $('formFeedback').textContent = '';
-}
+// The banner (showFeedback, clearFeedback) is common.js's, shared with the Cardio page.
 
 function markInvalid(element, invalid) {
   element.setAttribute('aria-invalid', String(invalid));
@@ -417,7 +381,8 @@ function renderStorageStatus() {
 
 async function loadSavedWorkouts() {
   try {
-    const workouts = await getSavedWorkouts();
+    // Strength workouts only: cardio sessions have the Cardio page, and no exercises for last time or the records.
+    const workouts = (await getSavedWorkouts()).filter(workout => !isCardio(workout));
     savedWorkouts = workouts;
     savedWorkoutsLoaded = true;
     renderSavedWorkouts(workouts);

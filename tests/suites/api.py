@@ -170,6 +170,10 @@ def run(t):
         check(f'{path} -> {expected}', status == 301 and location == expected, f'{status} {location}')
     status, _ = t.raw('GET', '/script.js')
     check('the real path is served directly', status == 200, status)
+    for page in ('/index.html', '/cardio.html', '/progress.html', '/history.html'):
+        status, location = t.raw('GET', page)
+        check(f'signed out, {page} leads to signing in, and back', status == 303 and location == f'/login.html?next={page.replace("/", "%2F")}',
+              f'{status} {location}')
 
     run_security(t, check, request)
     run_structure(t, check, request)
@@ -485,6 +489,13 @@ def run_structure(t, check, request):
     def exercise(**changes):
         return [{'name': 'Squat', 'weight': 100, 'reps': 5, 'sets': [{'weight': 100, 'reps': 5}], **changes}]
 
+    # A cardio session, as the Cardio page saves one.
+    def cardio(**changes):
+        session = {'kind': 'cardio', 'name': 'Run', 'notes': '', 'createdAt': int(time.time() * 1000), 'exercises': [], 'duration': 1680,
+                   'cardio': {'activity': 'run', 'distance': 3.1, 'distanceUnit': 'mi', 'calories': 310, 'heartRate': 152}}
+        session.update(changes)
+        return session
+
     before = len(t.workouts())
     refused = [
         ('a name that is a number', good(name=5)),
@@ -509,6 +520,16 @@ def run_structure(t, check, request):
         ('an effort that is a word', good(exercises=exercise(sets=[{'weight': 100, 'reps': 5, 'rir': 'easy'}]))),
         ('an effort below zero', good(exercises=exercise(sets=[{'weight': 100, 'reps': 5, 'rir': -1}]))),
         ('an effort above ten', good(exercises=exercise(sets=[{'weight': 100, 'reps': 5, 'rir': 11}]))),
+        ('a kind that is neither strength nor cardio', cardio(kind='yoga')),
+        ('a cardio session with no cardio', {k: v for k, v in cardio().items() if k != 'cardio'}),
+        ('a cardio session that names no activity', cardio(cardio={'activity': ' '})),
+        ('a cardio session with no time', {k: v for k, v in cardio().items() if k != 'duration'}),
+        ('a cardio session of no time', cardio(duration=0)),
+        ('a negative distance', cardio(cardio={'activity': 'run', 'distance': -1, 'distanceUnit': 'mi'})),
+        ('a distance as text', cardio(cardio={'activity': 'run', 'distance': '3.1', 'distanceUnit': 'mi'})),
+        ('a distance in yards', cardio(cardio={'activity': 'run', 'distance': 3, 'distanceUnit': 'yd'})),
+        ('a heart rate of 500', cardio(cardio={'activity': 'run', 'heartRate': 500})),
+        ('calories that are a word', cardio(cardio={'activity': 'run', 'calories': 'lots'})),
     ]
     for label, body in refused:
         status, _, reply = request('POST', '/api/workouts', json.dumps(body).encode(), json_headers, token=token)
@@ -526,6 +547,10 @@ def run_structure(t, check, request):
          good(program={'name': 'Wendler 5/3/1', 'cycle': 1, 'week': 2, 'label': 'Cycle 1, week 2 · 3s week'})),
         ('a superset, and each set with the reps it had left',
          good(exercises=exercise(group='s1', sets=[{'weight': 100, 'reps': 5, 'rir': 2}, {'weight': 100, 'reps': 5, 'rir': 0}]))),
+        ('a cardio session', cardio()),
+        ('a cardio session with only its time', cardio(name='Elliptical', cardio={'activity': 'elliptical'})),
+        ('a rowing session in metres',
+         cardio(name='Rowing machine', cardio={'activity': 'rower', 'distance': 5000, 'distanceUnit': 'm'})),
     ]
     for label, body in accepted:
         status, _, reply = request('POST', '/api/workouts', json.dumps(body).encode(), json_headers, token=token)
@@ -1113,12 +1138,14 @@ def run_export(t, check, request):
     text = body.decode('utf-8') if isinstance(body, bytes) else ''
     check('it starts with a byte-order mark, so Excel reads it as UTF-8', text.startswith('﻿'))
     rows = list(csv.reader(io.StringIO(text.lstrip('﻿'))))
-    check('with a header row', rows[:1] == [['Date', 'Workout', 'Exercise', 'Set', 'Weight', 'Unit', 'Reps', 'Seconds']], rows[:1])
-    check('one row per logged set, in the time zone asked for', ["2026-03-09", "'=SUM(A1) Push", 'Bench Press', '1', '80', 'kg', '5', ''] in rows
-          and ["2026-03-09", "'=SUM(A1) Push", 'Bench Press', '2', '82.5', 'kg', '5', ''] in rows, rows)
-    check('a timed set under Seconds', ["2026-03-09", "'=SUM(A1) Push", 'Plank', '1', '', 'kg', '', '45'] in rows, rows)
+    check('with a header row', rows[:1] == [['Date', 'Workout', 'Exercise', 'Set', 'Weight', 'Unit', 'Reps', 'Seconds', 'Distance', 'Distance unit', 'Calories',
+                                         'Average heart rate', 'Floors']], rows[:1])
+    blank = ['', '', '', '', '']
+    check('one row per logged set, in the time zone asked for', ["2026-03-09", "'=SUM(A1) Push", 'Bench Press', '1', '80', 'kg', '5', ''] + blank in rows
+          and ["2026-03-09", "'=SUM(A1) Push", 'Bench Press', '2', '82.5', 'kg', '5', ''] + blank in rows, rows)
+    check('a timed set under Seconds', ["2026-03-09", "'=SUM(A1) Push", 'Plank', '1', '', 'kg', '', '45'] + blank in rows, rows)
     check('no rows for a skipped exercise', not any(row[2] == 'Dips' for row in rows[1:]), rows)
-    check('an exercise saved without sets as one row', ['2026-03-12', 'Form Workout', 'Squat', '', '100', 'lbs', '5', ''] in rows, rows)
+    check('an exercise saved without sets as one row', ['2026-03-12', 'Form Workout', 'Squat', '', '100', 'lbs', '5', ''] + blank in rows, rows)
     check("a name that looks like a formula stays text", all(row[1] != '=SUM(A1) Push' for row in rows), rows)
     status, _, _ = request('GET', '/api/export')
     check('signed out, there is nothing to export', status == 401, status)
@@ -1189,6 +1216,32 @@ def run_export(t, check, request):
     check('a whole account of several megabytes is accepted', status == 200 and result['workouts'] == 400, f'{status} {result}')
     status, _, reply = request('POST', '/api/import', None, {'Content-Length': str(50 * 1024 * 1024)}, token=target)
     check('but not an unlimited one -> 413', status == 413, f'{status} {reply!r}')
+
+    print('A35 cardio sessions are exported as rows of their own, and imported like any workout')
+    runner = register('runner')
+    run = {'kind': 'cardio', 'name': 'Run', 'notes': 'Hills', 'createdAt': utc_ms(2026, 4, 2, 2), 'clientId': 'cardio-1', 'exercises': [], 'duration': 1680,
+           'cardio': {'activity': 'run', 'distance': 3.1, 'distanceUnit': 'mi', 'calories': 310, 'heartRate': 152}}
+    stairs = {'kind': 'cardio', 'name': 'Stair climber', 'notes': '', 'createdAt': utc_ms(2026, 4, 3, 12), 'clientId': 'cardio-2', 'exercises': [],
+              'duration': 900, 'cardio': {'activity': 'stairs', 'floors': 60}}
+    for session in (run, stairs):
+        t.api('POST', '/api/workouts', session, runner)
+    status, _, body = request('GET', '/api/export.csv?offset=-300', token=runner)
+    rows = list(csv.reader(io.StringIO((body.decode('utf-8') if isinstance(body, bytes) else '').lstrip('﻿'))))
+    check('a session is one row: its time under Seconds, then its distance and unit, calories and heart rate',
+          ['2026-04-01', 'Run', 'Run', '', '', '', '', '1680', '3.1', 'mi', '310', '152', ''] in rows, rows)
+    check('and floors for the stair climber, with no distance unit where there is no distance',
+          ['2026-04-03', 'Stair climber', 'Stair climber', '', '', '', '', '900', '', '', '', '', '60'] in rows, rows)
+    _, _, export = request('GET', '/api/export', token=runner)
+    kept = {w['name']: w for w in export.get('workouts', [])} if isinstance(export, dict) else {}
+    check('the JSON export keeps each session as it was saved', kept.get('Run', {}).get('cardio') == run['cardio']
+          and kept.get('Run', {}).get('kind') == 'cardio' and kept.get('Stair climber', {}).get('duration') == 900, kept)
+    elsewhere = register('runner-elsewhere')
+    status, _, result = import_file(export, elsewhere)
+    brought = {w['name']: w for w in workouts_of(elsewhere)}
+    check('and an import brings them in, once', status == 200 and result['workouts'] == 2 and brought.get('Run', {}).get('cardio') == run['cardio'],
+          f'{status} {result}')
+    status, _, result = import_file(export, elsewhere)
+    check('a second time adding nothing', status == 200 and result['workouts'] == 0 and len(workouts_of(elsewhere)) == 2, f'{status} {result}')
 
 
 def run_account_security(t, check, request):

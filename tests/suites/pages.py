@@ -20,6 +20,7 @@ def run(t):
     # ------------------------------------------------------------------ P1 scripts load cleanly
     print('P1  every page loads its scripts without an error')
     pages = [('/index.html', "document.querySelectorAll('#savedWorkoutList .saved-workout').length >= 3"),
+             ('/cardio.html', "cardioLoaded === true"),
              ('/history.html', "document.querySelectorAll('.history-workout').length >= 3"),
              ('/progress.html', "document.querySelectorAll('#exerciseFilter option').length > 1")]
     for path, ready in pages:

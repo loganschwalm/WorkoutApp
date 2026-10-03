@@ -43,6 +43,14 @@ def run(t):
     check('the tracker: start, log a set, settings, template editor, saved workouts', violations() == [], violations())
     cdp.ev("confirm = () => true; document.getElementById('endWorkoutBtn').click()")
 
+    settle('/cardio.html', "cardioLoaded === true")
+    cdp.ev("document.querySelector('#cardioActivityGrid [data-activity=run]').click()")
+    cdp.ev("document.getElementById('cardioPauseBtn').click(); document.getElementById('cardioFinishBtn').click()")
+    cdp.ev("document.getElementById('cardioFormCancel').click(); confirm = () => true; document.getElementById('cardioCancelBtn').click()")
+    cdp.ev("document.getElementById('cardioLogBtn').click(); document.getElementById('cardioFormCancel').click()")
+    cdp.pause(0.5)
+    check('the Cardio page: the timer, the form and its fields', violations() == [], violations())
+
     settle('/history.html', "document.querySelectorAll('.history-workout').length >= 3")
     check('the History page', violations() == [], violations())
 
@@ -75,9 +83,13 @@ def run(t):
              'sets': [{'weight': HOSTILE.format(n=3), 'reps': HOSTILE.format(n=4)}]},
         ],
     }
+    # And a cardio session, every field of it markup, its activity one the app does not know.
+    session = {'kind': 'cardio', 'name': 'Hostile <b id=pwn5>run</b>', 'notes': HOSTILE.format(n=6), 'createdAt': int(time.time() * 1000) - 1000,
+               'exercises': [], 'duration': 600, 'cardio': {'activity': HOSTILE.format(n=7), 'distance': HOSTILE.format(n=8), 'calories': HOSTILE.format(n=10)}}
     db = sqlite3.connect(t.db_path('test.db'))
-    db.execute('INSERT INTO workouts (user_id, name, notes, created_at, payload) VALUES (?, ?, ?, ?, ?)',
-               (user_id, payload['name'], payload['notes'], payload['createdAt'], json.dumps(payload)))
+    for stored in (payload, session):
+        db.execute('INSERT INTO workouts (user_id, name, notes, created_at, payload) VALUES (?, ?, ?, ?, ?)',
+                   (user_id, stored['name'], stored['notes'], stored['createdAt'], json.dumps(stored)))
     db.commit()
     db.close()
     injected = "document.querySelectorAll('[id^=pwn]').length"
@@ -89,7 +101,16 @@ def run(t):
     text = cdp.ev("document.getElementById('savedWorkoutList').textContent")
     check('and shows it literally', '<img src=x id=pwn1>' in text, text[:200])
 
-    settle('/history.html', "document.querySelectorAll('.history-workout').length >= 4")
+    settle('/cardio.html', "document.querySelectorAll('#cardioList .saved-workout').length >= 1")
+    cdp.ev("document.querySelectorAll('#cardioList [data-action=view]').forEach(b => b.click())")
+    cdp.pause(0.5)
+    check('the Cardio page creates no elements from a session', cdp.ev(injected) == 0, cdp.ev(injected))
+    text = cdp.ev("document.getElementById('cardioList').textContent")
+    check('and shows it literally', 'Hostile <b id=pwn5>run</b>' in text and '<img src=x id=pwn6>' in text, text[:300])
+
+    settle('/history.html', "document.querySelectorAll('.history-workout').length >= 5")
+    cdp.ev("document.querySelectorAll('#historyList [data-action=view]').forEach(b => b.click())")
+    cdp.pause(0.5)
     check('the History page creates no elements from it', cdp.ev(injected) == 0, cdp.ev(injected))
     text = cdp.ev("document.getElementById('historyList').textContent")
     check('and shows it literally', '<img src=x id=pwn3>' in text and '<img src=x id=pwn4>' in text, text[:300])

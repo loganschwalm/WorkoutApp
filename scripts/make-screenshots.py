@@ -63,6 +63,21 @@ def demo_workouts():
     return workouts
 
 
+# Cardio on the days between: runs that get a little longer and quicker, and a row now and then, as the Cardio page saves
+# them. (days ago, activity, name, distance, unit, seconds)
+CARDIO = [(31, 'run', 'Run', 3.0, 'mi', 1680), (27, 'run', 'Run', 3.1, 'mi', 1700), (23, 'rower', 'Rowing machine', 4800, 'm', 1200),
+          (19, 'run', 'Run', 3.2, 'mi', 1730), (15, 'run', 'Run', 3.4, 'mi', 1800), (11, 'rower', 'Rowing machine', 5000, 'm', 1200),
+          (7, 'run', 'Run', 3.5, 'mi', 1830), (3, 'walk', 'Walk', 2.0, 'mi', 2280), (1, 'run', 'Run', 3.8, 'mi', 1940)]
+
+
+def demo_cardio():
+    """The sessions above, oldest first, at seven in the morning."""
+    today = time.mktime(time.localtime()[:3] + (7, 0, 0, 0, 0, -1)) * 1000
+    return [{'kind': 'cardio', 'name': name, 'notes': '', 'exercises': [], 'createdAt': int(today - days * DAY_MS), 'duration': seconds,
+             'clientId': f'demo-cardio-{index}', 'cardio': {'activity': activity, 'distance': distance, 'distanceUnit': unit}}
+            for index, (days, activity, name, distance, unit, seconds) in enumerate(CARDIO)]
+
+
 def shrink(path):
     """Recompress the PNG losslessly when Pillow is installed (it is for make-icons.py); skip it otherwise."""
     try:
@@ -129,7 +144,7 @@ def main():
         server = AppServer(os.path.join(workdir, 'demo.db'))
         _, cookie = server.api('POST', '/api/auth/register', {'username': 'alex', 'email': 'alex@example.test', 'password': 'demo-password'})
         token = cookie.split('session=')[1].split(';')[0]
-        for workout in demo_workouts():
+        for workout in demo_workouts() + demo_cardio():
             server.api('POST', '/api/workouts', workout, token)
         server.api('PUT', '/api/state', {'templates': [TEMPLATE]}, token)
 
@@ -164,6 +179,18 @@ def main():
         cdp.ev("document.getElementById('closeSettings').click()")
         cdp.ev("confirm = () => true; document.getElementById('endWorkoutBtn').click()")
         cdp.pause(0.5)
+
+        # Cardio on a phone: the page with its activities and this week, then a run being timed, with last time under it.
+        browser.viewport(PHONE, phone=True)
+        browser.open('/cardio.html', 'cardioLoaded === true')
+        browser.save('cardio.png')
+        cdp.ev("document.querySelector('#cardioActivityGrid [data-activity=run]').click()")
+        cdp.pause(0.3)
+        cdp.ev("cardioActive.startedAt -= 27 * 60000 + 14000; saveCardioActive(); tickCardio(); window.scrollTo(0, 0)")
+        cdp.pause(0.4)
+        browser.save('cardio-session.png', top=browser.edge('#cardioActive', 'top', margin=-16), bottom=browser.edge('#cardioActive', margin=16))
+        cdp.ev("confirm = () => true; document.getElementById('cardioCancelBtn').click()")
+        cdp.pause(0.3)
 
         # Progress, every workout type on one chart (it opens on the most logged exercise, so all of them are asked for).
         browser.viewport(DESKTOP)

@@ -14,6 +14,49 @@ let selectedMetric = 'weight';
 let timedExercises = new Set();
 // Where each point was drawn and what it says, so a tap on the chart can find the nearest one.
 let drawnPoints = [];
+// The cardio activities logged, by cardioKey (cardio-activities.js), each under the latest name it went by.
+let cardioLabels = new Map();
+// The distance unit the chart was last drawn in, so a change of it in Settings draws it again.
+let chartedDistanceUnit = null;
+
+// Whether the chart is of a cardio activity rather than a strength exercise.
+function chartingCardio() {
+  return isCardioKey(selectedExercise);
+}
+
+// A cardio session's value for a metric, in the units shown, or null when the session does not have it. Time is in
+// minutes, as are a pace and a split (written as a clock); a speed is distance an hour.
+function cardioValue(workout, metric) {
+  const cardio = workout.cardio || {};
+  if (metric === 'distance') return sessionDistance(workout);
+  if (metric === 'duration') return Number(workout.duration) > 0 ? Number(workout.duration) / 60 : null;
+  if (metric === 'rate') {
+    const rate = sessionRate(workout);
+    return rate ? (activityOf(workout).rate === 'speed' ? rate.value : rate.value / 60) : null;
+  }
+  return ['calories', 'heartRate', 'floors'].includes(metric) && Number(cardio[metric]) > 0 ? Number(cardio[metric]) : null;
+}
+
+// The metrics a chart can show: a strength exercise's, or an activity's (its distance or floors, time, pace, split or
+// speed, calories and heart rate).
+function metricChoices() {
+  if (!chartingCardio()) return [['weight', 'Heaviest weight'], ['oneRepMax', 'Estimated one-rep max'], ['reps', 'Best reps'], ['volume', 'Total volume']];
+  const activity = keyActivity(selectedExercise);
+  return [...(activity.distance ? [['distance', 'Distance']] : []), ...(activity.floors ? [['floors', 'Floors']] : []), ['duration', 'Time'],
+    ...(activity.rate ? [['rate', rateName(activity)]] : []), ['calories', 'Calories'], ['heartRate', 'Average heart rate']];
+}
+
+// The metric filter offers what the chosen exercise or activity has, keeping the metric chosen where it still applies.
+function syncMetricOptions() {
+  const choices = metricChoices();
+  const select = $('metricFilter');
+  const current = select.value;
+  const offered = [...select.options].map(option => `${option.value}:${option.textContent}`).join();
+  if (offered !== choices.map(([value, label]) => `${value}:${label}`).join()) {
+    select.innerHTML = choices.map(([value, label]) => `<option value="${value}">${escapeHTML(label)}</option>`).join('');
+  }
+  select.value = choices.some(([value]) => value === current) ? current : choices[0][0];
+}
 
 // Whether the chart is of a timed exercise, whose best reps are its longest hold and whose volume is its time held.
 function chartingTimed() {
@@ -29,7 +72,22 @@ function oneRepMaxOf(item) {
   }));
 }
 
+// One point a session of the chosen activity, in a line of its own; a session without the metric (no distance, say) has
+// nothing to plot rather than a zero.
+function buildCardioChartData(workouts) {
+  const points = [], values = new Map();
+  [...workouts].filter(workout => isCardio(workout) && cardioKey(workout) === selectedExercise).sort((a, b) => a.createdAt - b.createdAt).forEach((workout, index) => {
+    const value = cardioValue(workout, selectedMetric);
+    if (!(value > 0)) return;
+    const key = String(workout.id ?? `${workout.createdAt}-${index}`);
+    points.push({ key, createdAt:workout.createdAt });
+    values.set(key, value);
+  });
+  return { points, types:points.length ? [{ name:cardioLabels.get(selectedExercise) || keyActivity(selectedExercise).name, values }] : [] };
+}
+
 function buildChartData(workouts) {
+  if (chartingCardio()) return buildCardioChartData(workouts);
   const types = new Map();
   const points = [];
   const timed = chartingTimed();
@@ -73,41 +131,57 @@ function dateFilterTimestamp(value, endOfDay = false) {
 
 function populateWorkoutTypes(workouts) {
   const selected = $('workoutTypeFilter').value;
-  const names = [...new Set(workouts.map(workout => workout.name || 'Untitled workout'))].sort();
+  const names = [...new Set(workouts.filter(workout => !isCardio(workout)).map(workout => workout.name || 'Untitled workout'))].sort();
   $('workoutTypeFilter').innerHTML = '<option value="all">All workout types</option>' + names.map(name => `<option value="${escapeHTML(name)}">${escapeHTML(name)}</option>`).join('');
   $('workoutTypeFilter').value = names.includes(selected) ? selected : 'all';
 }
 
 // One option per exercise however its name was typed ("Bench press", "Bench Press "), labelled with the most recent
-// spelling. The option's value is the exerciseKey the chart matches on.
+// spelling. The option's value is the exerciseKey the chart matches on. Cardio activities follow, apart, by cardioKey.
 function populateExercises(workouts) {
   const selected = $('exerciseFilter').value;
   const labels = new Map();
+  cardioLabels = new Map();
   timedExercises = new Set();
-  [...workouts].sort((a, b) => b.createdAt - a.createdAt).forEach(workout => workout.exercises.forEach(item => {
-    const key = exerciseKey(item.name);
-    if (!key || labels.has(key)) return;
-    labels.set(key, String(item.name).trim());
-    if (isTimed(item)) timedExercises.add(key);
-  }));
-  const options = [...labels].sort(([, a], [, b]) => a.localeCompare(b, undefined, { sensitivity:'base' }));
-  $('exerciseFilter').innerHTML = '<option value="all">All exercises</option>' + options.map(([key, label]) => `<option value="${escapeHTML(key)}">${escapeHTML(label)}</option>`).join('');
-  $('exerciseFilter').value = labels.has(selected) ? selected : 'all';
+  [...workouts].sort((a, b) => b.createdAt - a.createdAt).forEach(workout => {
+    if (isCardio(workout)) {
+      if (!cardioLabels.has(cardioKey(workout))) cardioLabels.set(cardioKey(workout), workout.name);
+      return;
+    }
+    workout.exercises.forEach(item => {
+      const key = exerciseKey(item.name);
+      if (!key || labels.has(key)) return;
+      labels.set(key, String(item.name).trim());
+      if (isTimed(item)) timedExercises.add(key);
+    });
+  });
+  const byLabel = ([, a], [, b]) => a.localeCompare(b, undefined, { sensitivity:'base' });
+  const option = ([key, label]) => `<option value="${escapeHTML(key)}">${escapeHTML(label)}</option>`;
+  const strength = '<option value="all">All exercises</option>' + [...labels].sort(byLabel).map(option).join('');
+  $('exerciseFilter').innerHTML = cardioLabels.size
+    ? `<optgroup label="Strength">${strength}</optgroup><optgroup label="Cardio">${[...cardioLabels].sort(byLabel).map(option).join('')}</optgroup>` : strength;
+  $('exerciseFilter').value = labels.has(selected) || cardioLabels.has(selected) ? selected : 'all';
 }
 
 // The exercise done in the most workouts, which the page opens on: across all exercises, the heaviest lift of each
-// workout (a deadlift, usually) would drown out everything else. 'all' until anything has been logged.
+// workout (a deadlift, usually) would drown out everything else. With no strength workouts, the activity done most;
+// 'all' until anything has been logged.
 function mostLoggedExercise(workouts) {
-  const counts = new Map();
+  const counts = new Map(), sessions = new Map();
   workouts.forEach(workout => new Set(workout.exercises.filter(item => !item.sets || item.sets.length).map(item => exerciseKey(item.name)))
     .forEach(key => { if (key) counts.set(key, (counts.get(key) || 0) + 1); }));
-  return [...counts].reduce((best, entry) => !best || entry[1] > best[1] ? entry : best, null)?.[0] ?? 'all';
+  workouts.filter(isCardio).forEach(workout => sessions.set(cardioKey(workout), (sessions.get(cardioKey(workout)) || 0) + 1));
+  const most = map => [...map].reduce((best, entry) => !best || entry[1] > best[1] ? entry : best, null)?.[0];
+  return most(counts) ?? most(sessions) ?? 'all';
 }
 
 function applyFilters() {
-  const type = $('workoutTypeFilter').value;
-  selectedMetric = $('metricFilter').value;
   selectedExercise = $('exerciseFilter').value;
+  syncMetricOptions();
+  selectedMetric = $('metricFilter').value;
+  // Workout types are the names of strength workouts: an activity's chart is of every session of it.
+  $('workoutTypeFilter').disabled = chartingCardio();
+  const type = chartingCardio() ? 'all' : $('workoutTypeFilter').value;
   const start = dateFilterTimestamp($('startDateFilter').value);
   const end = dateFilterTimestamp($('endDateFilter').value, true);
   const filtered = allWorkouts.filter(workout => {
@@ -118,13 +192,59 @@ function applyFilters() {
   renderProgress(filtered);
 }
 
-// What the chart measures, for its axis and for each point: [axis label, unit after a value].
-function metricLabels() {
+// What the chart measures: its axis label, how a value is written by a point and in words, and how the axis writes one.
+// A time (a session's, a pace or split) is a clock; anything else a number and its unit.
+function chartFormat() {
+  const plain = (axis, unit = '') => ({ axis, value:value => `${Math.round(value).toLocaleString()}${unit}`, tick:value => Math.round(value).toLocaleString() });
+  if (chartingCardio()) {
+    const activity = keyActivity(selectedExercise);
+    const unit = shownDistanceUnit(activity);
+    const clock = (axis, after = '') => ({ axis, value:value => `${formatClock(value * 60)}${after}`, tick:value => formatClock(value * 60) });
+    if (selectedMetric === 'distance') {
+      return { axis:`Distance (${unit})`, value:value => formatDistance(value, unit), tick:value => unit === 'm' ? Math.round(value).toLocaleString() : String(Math.round(value * 10) / 10) };
+    }
+    if (selectedMetric === 'duration') return clock('Time');
+    if (selectedMetric === 'rate' && activity.rate === 'pace') return clock(`Pace (min/${unit})`, ` /${unit}`);
+    if (selectedMetric === 'rate' && activity.rate === 'split') return clock('Split (min/500 m)', ' /500 m');
+    if (selectedMetric === 'rate') {
+      const speed = unit === 'km' ? 'km/h' : 'mph';
+      return { axis:`Speed (${speed})`, value:value => `${Math.round(value * 10) / 10} ${speed}`, tick:value => String(Math.round(value * 10) / 10) };
+    }
+    if (selectedMetric === 'calories') return plain('Calories', ' cal');
+    if (selectedMetric === 'heartRate') return plain('Heart rate (bpm)', ' bpm');
+    return plain('Floors', ' floors');
+  }
   const unit = weightUnit();
-  if (selectedMetric === 'weight') return [`Weight (${unit})`, ` ${unit}`];
-  if (selectedMetric === 'oneRepMax') return [`Est. one-rep max (${unit})`, ` ${unit}`];
-  if (chartingTimed()) return ['Seconds', ' s'];
-  return selectedMetric === 'reps' ? ['Reps', ''] : [`Volume (${unit})`, ''];
+  if (selectedMetric === 'weight') return plain(`Weight (${unit})`, ` ${unit}`);
+  if (selectedMetric === 'oneRepMax') return plain(`Est. one-rep max (${unit})`, ` ${unit}`);
+  if (chartingTimed()) return plain('Seconds', ' s');
+  return selectedMetric === 'reps' ? plain('Reps') : plain(`Volume (${unit})`);
+}
+
+// Where the chart's axis runs. A strength chart starts at zero, as it always has. A cardio chart spans its sessions with
+// a little room either side, on round steps (a clock's for a time), since a pace that moves from 9:10 to 8:20 a mile is
+// a flat line along the top of an axis from zero. A pace or split, where less is faster, runs the other way up, so
+// getting faster climbs as getting stronger does.
+function chartScale(values) {
+  if (!chartingCardio()) {
+    const high = Math.max(...values, 1);
+    return { low:0, high, invert:false, ticks:[0, 1, 2, 3, 4].map(tick => tick * high / 4) };
+  }
+  const slower = selectedMetric === 'rate' && keyActivity(selectedExercise).rate !== 'speed';
+  const clock = slower || selectedMetric === 'duration';
+  const min = Math.min(...values), max = Math.max(...values);
+  const pad = Math.max((max - min) * 0.15, clock ? 0.25 : max * 0.05);
+  const rough = (max - min + 2 * pad) / 4;
+  const magnitude = 10 ** Math.floor(Math.log10(rough));
+  // In minutes: from 5 seconds a step to 4 hours.
+  const steps = clock ? [5, 10, 15, 20, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 14400].map(seconds => seconds / 60)
+    : [1, 2, 2.5, 5, 10].map(multiple => multiple * magnitude);
+  const step = steps.find(size => size >= rough) || steps[steps.length - 1];
+  const low = Math.max(0, Math.floor((min - pad) / step) * step);
+  const high = Math.ceil((max + pad) / step) * step;
+  const ticks = [];
+  for (let value = low; value <= high + step / 1000; value += step) ticks.push(Math.round(value * 1e6) / 1e6);
+  return { low, high, invert:slower, ticks };
 }
 
 // Labels along a line, first to last, keeping only those with room: each is written only if it clears the one before
@@ -164,31 +284,32 @@ function drawChart() {
   const chartWidth = Math.max(width - left - right, 1);
   const chartHeight = height - top - bottom;
   const values = chartData.types.flatMap(type => [...type.values.values()]);
-  const maximum = Math.max(...values, 1);
-  const tickStep = maximum / 4;
+  const scale = chartScale(values);
   // Across by date, so a month between workouts takes more room than a day, and the slope is the real rate of progress.
   const first = chartData.points[0].createdAt;
   const span = chartData.points[chartData.points.length - 1].createdAt - first;
   const across = chartData.points.map(point => span ? left + (point.createdAt - first) / span * chartWidth : left + chartWidth / 2);
-  const y = value => top + chartHeight - value / maximum * chartHeight;
-  const [metricLabel, pointUnit] = metricLabels();
+  const y = value => {
+    const share = (value - scale.low) / (scale.high - scale.low);
+    return top + (scale.invert ? share : 1 - share) * chartHeight;
+  };
+  const format = chartFormat();
 
   context.font = '12px Inter, system-ui, sans-serif';
   context.lineWidth = 1;
   context.strokeStyle = line;
   context.fillStyle = ink;
   context.textAlign = 'right';
-  for (let tick = 0; tick <= 4; tick += 1) {
-    const value = tick * tickStep;
+  scale.ticks.forEach(value => {
     const position = y(value);
     context.beginPath(); context.moveTo(left, position); context.lineTo(width - right, position); context.stroke();
-    context.fillText(Math.round(value).toLocaleString(), left - 10, position + 4);
-  }
+    context.fillText(format.tick(value), left - 10, position + 4);
+  });
   context.save();
   context.translate(15, top + chartHeight / 2);
   context.rotate(-Math.PI / 2);
   context.textAlign = 'center';
-  context.fillText(metricLabel, 0, 0);
+  context.fillText(format.axis, 0, 0);
   context.restore();
   context.textAlign = 'center';
   // A date under every point runs together once there are a few weeks of workouts, so only those with room are written,
@@ -214,8 +335,8 @@ function drawChart() {
     context.stroke();
     own.forEach(({ point, index, value }, position) => {
       context.beginPath(); context.arc(across[index], y(value), 4, 0, Math.PI * 2); context.fill();
-      drawnPoints.push({ x:across[index], y:y(value), text:`${type.name}, ${longDate(point.createdAt)}: ${Math.round(value).toLocaleString()}${pointUnit}` });
-      const text = `${Math.round(value).toLocaleString()}${pointUnit}`;
+      drawnPoints.push({ x:across[index], y:y(value), text:`${type.name}, ${longDate(point.createdAt)}: ${format.value(value)}` });
+      const text = format.value(value);
       (position === own.length - 1 ? latest : others).push({ text, colour, x:across[index], y:y(value), width:context.measureText(text).width });
     });
   });
@@ -242,8 +363,7 @@ function drawChart() {
 function describeChart() {
   if (!chartData.points.length) return 'Nothing to chart.';
   const values = chartData.types.flatMap(type => [...type.values.values()]);
-  const [, pointUnit] = metricLabels();
-  const amount = value => `${Math.round(value).toLocaleString()}${pointUnit}`;
+  const amount = chartFormat().value;
   const exercise = selectedExercise === 'all' ? 'all exercises' : $('exerciseFilter').selectedOptions[0]?.textContent || selectedExercise;
   const count = plural(chartData.points.length, 'workout');
   return `${$('progressTitle').textContent} for ${exercise}: ${count} from ${longDate(chartData.points[0].createdAt)} to ${longDate(chartData.points[chartData.points.length - 1].createdAt)}, lowest ${amount(Math.min(...values))}, highest ${amount(Math.max(...values))}.`;
@@ -253,13 +373,32 @@ function renderProgress(workouts) {
   chartData = buildChartData(workouts);
   $('chartEmpty').hidden = Boolean(chartData.points.length);
   $('progressChart').hidden = !chartData.points.length;
-  $('progressSummary').textContent = workouts.length === allWorkouts.length ? `${workouts.length} saved workout${workouts.length === 1 ? '' : 's'}` : `${workouts.length} of ${allWorkouts.length} workouts`;
-  const labels = chartingTimed()
+  // Counted among their own kind: strength workouts for an exercise's chart, sessions for an activity's.
+  const ofKind = list => list.filter(workout => isCardio(workout) === chartingCardio());
+  const shown = ofKind(workouts).length, total = ofKind(allWorkouts).length;
+  const noun = chartingCardio() ? 'session' : 'saved workout';
+  $('progressSummary').textContent = shown === total ? plural(total, noun) : `${shown} of ${total} ${chartingCardio() ? 'sessions' : 'workouts'}`;
+  const activity = chartingCardio() ? keyActivity(selectedExercise) : null;
+  const per = activity && shownDistanceUnit(activity) === 'km' ? 'kilometre' : 'mile';
+  const labels = activity ? {
+    distance:['Distance', 'How far each session went.'],
+    floors:['Floors', 'The floors climbed in each session.'],
+    duration:['Time', 'How long each session took.'],
+    rate:activity.rate === 'speed' ? ['Speed', 'The average speed of each session, from its distance and time.']
+      : activity.rate === 'split' ? ['Split', 'Time per 500 metres in each session. Faster is higher up.']
+        : ['Pace', `Time per ${per} in each session. Faster is higher up.`],
+    calories:['Calories', 'The calories of each session, where you entered them.'],
+    heartRate:['Average heart rate', 'The average heart rate of each session, where you entered it.']
+  } : chartingTimed()
     ? { weight:['Heaviest weight', 'Track the heaviest weight you have held by workout type and date.'], oneRepMax:['Estimated one-rep max', 'A timed exercise has no one-rep max. Choose Longest hold or Total time held.'], reps:['Longest hold', 'Track your longest hold, in seconds, by workout type and date.'], volume:['Total time held', 'Track the seconds held in each workout, all sets together.'] }
     : { weight:['Heaviest weight', 'Track your heaviest weight by workout type and date.'], oneRepMax:['Estimated one-rep max', 'Your best set in each workout as a one-rep max, from sets of up to 12 reps, so heavier weights and more reps both count.'], reps:['Best reps', 'Track your highest completed reps by workout type and date.'], volume:['Total volume', 'Track total weight moved by workout type and date.'] };
   $('progressTitle').textContent = labels[selectedMetric][0];
   $('progressDescription').textContent = labels[selectedMetric][1];
-  if (!chartData.points.length && allWorkouts.length) {
+  if (!chartData.points.length && allWorkouts.length && activity) {
+    const missing = { distance:'a distance', floors:'floors', rate:'a distance to work it out from', calories:'calories', heartRate:'a heart rate' }[selectedMetric];
+    $('chartEmpty').textContent = missing && ofKind(workouts).some(workout => cardioKey(workout) === selectedExercise)
+      ? `Nothing to chart: none of these sessions has ${missing} entered.` : 'Nothing to chart for these filters.';
+  } else if (!chartData.points.length && allWorkouts.length) {
     $('chartEmpty').textContent = selectedMetric === 'oneRepMax'
       ? 'Nothing to chart: a one-rep max needs a set with weight, of 12 reps or fewer.'
       : 'Nothing to chart for these filters.';
@@ -279,6 +418,15 @@ function renderSessions(workouts) {
   $('sessionsCard').hidden = !single;
   if (!single) return;
   const label = $('exerciseFilter').selectedOptions[0]?.textContent || selectedExercise;
+  if (chartingCardio()) {
+    const sessions = workouts.filter(workout => isCardio(workout) && cardioKey(workout) === selectedExercise).sort((a, b) => b.createdAt - a.createdAt);
+    $('sessionsTitle').textContent = `Every session of ${label}`;
+    $('sessionsSummary').textContent = sessions.length ? `${plural(sessions.length, 'session')}, the most recent first.` : 'None for these filters.';
+    $('sessionsNote').hidden = true;
+    $('sessionList').innerHTML = sessions.map(workout => `<li><div><strong>${escapeHTML(longDate(workout.createdAt))}</strong><span>${escapeHTML(workout.name)}</span></div>`
+      + `<span>${escapeHTML(describeCardio(workout))}</span></li>`).join('');
+    return;
+  }
   const sessions = [...workouts].sort((a, b) => b.createdAt - a.createdAt).map(workout => ({
     workout, items:workout.exercises.filter(item => exerciseKey(item.name) === selectedExercise && (!item.sets || item.sets.length))
   })).filter(session => session.items.length);
@@ -330,18 +478,36 @@ function recordsOf(workouts) {
     .sort((a, b) => b.latest - a.latest);
 }
 
+// Each cardio activity's records, as the strength ones are listed: the longest distance, the fastest pace, split or speed
+// (and over how far), the longest time and the most floors, each with the day it was set.
+function cardioRecordsOf(workouts) {
+  return [...cardioBests(workouts).values()].map(best => {
+    const unit = shownDistanceUnit(best.activity);
+    const lines = [];
+    if (best.distance) lines.push(['Longest', formatDistance(best.distance.value, unit), best.distance.at]);
+    if (best.rate) lines.push(['Fastest', `${best.rate.text}, over ${formatDistance(best.rate.distance, unit)}`, best.rate.at]);
+    if (best.duration) lines.push(['Longest time', formatClock(best.duration.value), best.duration.at]);
+    if (best.floors) lines.push(['Most floors', String(best.floors.value), best.floors.at]);
+    return { key:best.key, name:best.name, lines, latest:Math.max(0, ...lines.map(line => line[2])) };
+  });
+}
+
 function renderRecords() {
   const unit = weightUnit();
-  const records = recordsOf(allWorkouts);
-  $('recordsList').innerHTML = records.length ? records.map(record => {
+  const strength = recordsOf(allWorkouts).map(record => {
     const lines = [];
     if (record.heaviest) lines.push(['Heaviest', `${formatWeight(record.heaviest.value)} ${unit} × ${record.heaviest.reps}`, record.heaviest.date]);
     if (record.oneRepMax) lines.push(['Est. one-rep max', `${Math.round(record.oneRepMax.value)} ${unit}, from ${formatWeight(record.oneRepMax.weight)} × ${record.oneRepMax.reps}`, record.oneRepMax.date]);
     if (record.reps) lines.push(['Most reps', plural(record.reps.value, 'rep'), record.reps.date]);
     if (record.hold) lines.push(['Longest hold', `${record.hold.value} s`, record.hold.date]);
-    return `<li><button class="record" type="button" data-exercise="${escapeHTML(record.key)}"><strong>${escapeHTML(record.name)}</strong>${lines.map(([label, value, date]) =>
-      `<span><span class="record-label">${label}</span> ${escapeHTML(value)} <span class="record-date">· ${escapeHTML(longDate(date))}</span></span>`).join('')}</button></li>`;
-  }).join('') : '<li class="empty">Your records appear once you have saved a workout.</li>';
+    return { key:record.key, name:record.name, lines, latest:record.latest };
+  });
+  // The most recent record first, whichever kind it is.
+  const records = [...strength, ...cardioRecordsOf(allWorkouts)].filter(record => record.lines.length).sort((a, b) => b.latest - a.latest);
+  $('recordsList').innerHTML = records.length ? records.map(record => `<li><button class="record" type="button" data-exercise="${escapeHTML(record.key)}">`
+    + `<strong>${escapeHTML(record.name)}</strong>${record.lines.map(([label, value, date]) =>
+      `<span><span class="record-label">${label}</span> ${escapeHTML(value)} <span class="record-date">· ${escapeHTML(longDate(date))}</span></span>`).join('')}</button></li>`).join('')
+    : '<li class="empty">Your records appear once you have saved a workout.</li>';
 }
 
 // ---- Goals ------------------------------------------------------------------
@@ -445,8 +611,11 @@ async function loadProgress() {
     // A link from another page (History, a workout's past sessions) can name the exercise to open on.
     const asked = new URLSearchParams(location.search).get('exercise');
     $('exerciseFilter').value = asked && [...$('exerciseFilter').options].some(option => option.value === asked) ? asked : mostLoggedExercise(allWorkouts);
-    selectedMetric = $('metricFilter').value;
     selectedExercise = $('exerciseFilter').value;
+    syncMetricOptions();
+    selectedMetric = $('metricFilter').value;
+    $('workoutTypeFilter').disabled = chartingCardio();
+    chartedDistanceUnit = distanceUnitOf();
     renderProgress(allWorkouts);
     renderRecords();
     loadGoals();
@@ -467,7 +636,11 @@ let selectedExercise = 'all';
 ['metricFilter', 'exerciseFilter', 'workoutTypeFilter', 'startDateFilter', 'endDateFilter'].forEach(id => { $(id).onchange = applyFilters; });
 // Back to how the page opens: heaviest weight of the exercise done most, over every workout.
 $('clearFilters').onclick = () => {
-  $('metricFilter').value = 'weight'; $('exerciseFilter').value = mostLoggedExercise(allWorkouts); $('workoutTypeFilter').value = 'all';
+  $('exerciseFilter').value = mostLoggedExercise(allWorkouts);
+  selectedExercise = $('exerciseFilter').value;
+  syncMetricOptions();
+  $('metricFilter').value = metricChoices()[0][0];
+  $('workoutTypeFilter').value = 'all';
   $('startDateFilter').value = ''; $('endDateFilter').value = '';
   applyFilters();
 };
@@ -494,7 +667,8 @@ window.serverStateReady.then(() => {
   loadGoals();
   if (allWorkouts.length) { renderSessions(allWorkouts); renderGoals(); }
 });
-// The theme changes the chart's colours; the unit changes its numbers.
+// The theme changes the chart's colours; the weight unit changes its numbers, and the distance unit a cardio chart's and
+// the cardio records.
 window.addEventListener('settingschange', () => {
   const converted = loadedWorkouts.map(workout => inUnit(workout));
   if (converted.some((workout, index) => workout !== allWorkouts[index])) {
@@ -502,6 +676,10 @@ window.addEventListener('settingschange', () => {
     applyFilters();
     renderRecords();
     renderGoals();
+  } else if (chartedDistanceUnit !== null && chartedDistanceUnit !== distanceUnitOf()) {
+    chartedDistanceUnit = distanceUnitOf();
+    applyFilters();
+    renderRecords();
   } else drawChart();
 });
 loadProgress();

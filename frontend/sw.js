@@ -6,7 +6,7 @@
 //
 // Every request goes to the network first, so a deploy reaches the next load without
 // bumping anything (unless that load's network is too slow; see NETWORK_WAIT). Bump VERSION only to drop old caches, e.g. when PRECACHE changes.
-const VERSION = 'v17';
+const VERSION = 'v18';
 const CACHE = `workout-tracker-${VERSION}`;
 
 // Files that are the same for everyone, so they are safe to fetch at install time.
@@ -33,6 +33,8 @@ const PRECACHE = [
   '/exercise-library.js',
   '/training-tools.js',
   '/script.js',
+  '/cardio-activities.js',
+  '/cardio.js',
   '/history.js',
   '/progress.js',
   '/bodyweight.js',
@@ -47,7 +49,7 @@ const PRECACHE = [
 ];
 
 // Pages worth having offline, warmed after activation while the session cookie is live.
-const PAGES = ['/index.html', '/history.html', '/progress.html'];
+const PAGES = ['/index.html', '/cardio.html', '/history.html', '/progress.html'];
 
 // One cache entry per page, so /index.html?start=12 does not pile up copies of the shell,
 // and / shares the entry of /index.html, which is the page it serves.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Serve the app locally with three weeks of Wendler 5/3/1 already logged, to try it on realistic data:
+"""Serve the app locally with three weeks of Wendler 5/3/1 already logged, and cardio between, to try it on realistic data:
 
     python scripts/demo-server.py             this checkout, until Ctrl+C
     python scripts/demo-server.py --follow    whatever CI last passed, rebuilt each time it passes again
@@ -92,6 +92,23 @@ def demo_training():
     return workouts, program
 
 
+# ---- Cardio between the lifting days ------------------------------------------------------------------------------
+# Runs that get a little longer and quicker, some rowing and a couple of walks, on the days between the 5/3/1 sessions,
+# as the Cardio page saves them. (days ago, activity, name, distance, unit, seconds)
+CARDIO = [(23, 'run', 'Run', 3.0, 'mi', 1680), (21, 'rower', 'Rowing machine', 4800, 'm', 1200), (19, 'run', 'Run', 3.1, 'mi', 1710),
+          (17, 'walk', 'Walk', 2.0, 'mi', 2280), (15, 'run', 'Run', 3.2, 'mi', 1740), (13, 'rower', 'Rowing machine', 4900, 'm', 1200),
+          (11, 'run', 'Run', 3.4, 'mi', 1820), (9, 'walk', 'Walk', 2.2, 'mi', 2460), (7, 'run', 'Run', 3.5, 'mi', 1850),
+          (5, 'rower', 'Rowing machine', 5000, 'm', 1200), (3, 'run', 'Run', 3.8, 'mi', 1960), (1, 'rower', 'Rowing machine', 5100, 'm', 1200)]
+
+
+def demo_cardio():
+    """The sessions above, oldest first, at seven in the morning."""
+    today = time.mktime(time.localtime()[:3] + (7, 0, 0, 0, 0, -1)) * 1000
+    return [{'kind': 'cardio', 'name': name, 'notes': '', 'exercises': [], 'createdAt': int(today - days * DAY_MS), 'duration': seconds,
+             'clientId': f'demo-cardio-{index}', 'cardio': {'activity': activity, 'distance': distance, 'distanceUnit': unit}}
+            for index, (days, activity, name, distance, unit, seconds) in enumerate(CARDIO)]
+
+
 # ---- The server ---------------------------------------------------------------------------------------------------
 
 class DemoServer:
@@ -145,7 +162,7 @@ class DemoServer:
         _, cookie = self.api('POST', '/api/auth/register', {'username': USERNAME, 'email': EMAIL, 'password': PASSWORD})
         token = cookie.split('session=')[1].split(';')[0]
         workouts, program = demo_training()
-        for workout in workouts:
+        for workout in workouts + demo_cardio():
             self.api('POST', '/api/workouts', workout, token)
         self.api('PUT', '/api/state', {'program': program}, token)
 

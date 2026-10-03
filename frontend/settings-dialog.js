@@ -31,6 +31,8 @@ document.body.insertAdjacentHTML('beforeend', `
       <fieldset class="theme-picker" id="themeSetting"><legend>Appearance</legend>${themeSwatches}</fieldset>
       <label for="unitSetting">Weight unit</label>
       <select id="unitSetting"><option value="lbs">Pounds (lbs)</option><option value="kg">Kilograms (kg)</option></select>
+      <label for="distanceUnitSetting">Distance unit, for cardio</label>
+      <select id="distanceUnitSetting"><option value="mi">Miles (mi)</option><option value="km">Kilometres (km)</option></select>
       <label for="weeklyGoalSetting">Weekly goal</label>
       <select id="weeklyGoalSetting">${weeklyGoals}</select>
       <h3 class="settings-section">During a workout</h3>

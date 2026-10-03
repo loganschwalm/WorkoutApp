@@ -356,6 +356,8 @@ button.calendar-day:hover { transform:none; }
 .calendar-day:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .calendar-day.trained { background:var(--accent); opacity:.7; }
 .calendar-day.many { opacity:1; }
+/* A day of cardio only is a ring, so it is told from a day of lifting without its colour. */
+.calendar-day.trained.cardio { background:transparent; box-shadow:inset 0 0 0 3px var(--accent); }
 .calendar-day.future { background:transparent; border:1px dashed var(--line); }
 .calendar-day.today { outline:2px solid var(--ink); outline-offset:1px; }
 .calendar-streak { color:var(--accent); font-weight:800; }
@@ -600,7 +602,7 @@ html[data-theme="dark"] .goal.reached .goal-foot span { color:#a5e5c2; }
    any box with smaller text when it is tapped. */
 .set-edit { min-height:44px; font-size:16px; }
 .set-list .remove { width:44px; height:44px; }
-#endWorkoutBtn, #activeWorkoutProgress, #completeSetBtn, #activeAddBtn, #nextExerciseBtn, .active-workout .effort-choices button, .active-workout .rest-adjust button, .active-workout .rest-actions button { min-height:44px; }
+#endWorkoutBtn, #cardioCancelBtn, #activeWorkoutProgress, #completeSetBtn, #activeAddBtn, #nextExerciseBtn, .active-workout .effort-choices button, .active-workout .rest-adjust button, .active-workout .rest-actions button { min-height:44px; }
 .active-workout .effort-choices button { min-width:44px; }
 /* The × brings its own space, so a logged set's row gives its boxes the room back. */
 @media (max-width:620px) { .set-list li { gap:4px; padding-right:0; } }
@@ -671,3 +673,22 @@ html[data-theme="dark"] .goal.reached .goal-foot span { color:#a5e5c2; }
   .builder-day { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
   .builder-day .template-row-actions { grid-column:1 / -1; justify-self:end; }
 }
+
+/* The Cardio page: the clock of the session being timed, its buttons, the activities to start, and the form. */
+.cardio-clock { margin:18px 0 4px; color:var(--ink); font-size:clamp(3rem, 14vw, 4.6rem); font-weight:800; letter-spacing:-.03em; line-height:1; font-variant-numeric:tabular-nums; }
+.cardio-active.paused .cardio-clock { color:var(--muted); }
+.cardio-last { margin-top:8px; }
+.cardio-controls { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:18px; }
+.cardio-controls button { min-height:52px; font-size:1rem; }
+.cardio-note { margin:14px 0 0; font-size:.82rem; }
+.cardio-activity-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:10px; margin-top:16px; }
+.cardio-activity { display:grid; align-content:start; gap:4px; min-height:76px; padding:14px 16px; color:var(--ink); background:var(--card); border:1px solid var(--line); border-radius:12px; font-weight:400; text-align:left; }
+.cardio-activity:hover { border-color:var(--accent); transform:none; }
+.cardio-activity strong { font-size:1rem; }
+.cardio-activity span { color:var(--muted); font-size:.82rem; line-height:1.35; }
+.cardio-fields { display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:12px; margin-top:16px; }
+.cardio-fields input, .cardio-fields select, .cardio-time input { min-height:48px; }
+.cardio-time { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px; margin:16px 0 0; padding:0; border:0; }
+.cardio-time legend { padding:0; margin:0 0 8px; color:var(--ink); font-size:.9rem; font-weight:700; }
+.cardio-rate { min-height:1.3em; margin:12px 0 0; color:var(--ink); font-weight:600; }
+#cardioFormCard .notes-field { margin-top:12px; }

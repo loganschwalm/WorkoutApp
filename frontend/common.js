@@ -24,6 +24,76 @@ function escapeHTML(value) {
   return String(value).replace(/[&<>'"]/g, character => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[character]));
 }
 
+// The banner on the Strength and Cardio pages (#formFeedback) sticks to the top of the screen, so a message is seen
+// wherever the page is scrolled. Errors stay until dismissed; successes and notes ('info') dismiss themselves. An action
+// ({ label, run }), such as Undo, adds a button that lasts as long as the banner does, so the banner then stays up a
+// little longer. Its timer is kept on the function rather than in a variable, which a script.js from before this moved
+// here, served from the cache for one load, declares for itself (see the note on $ above).
+function showFeedback(message, type = 'error', action = null) {
+  const feedback = $('formFeedback');
+  feedback.textContent = message;
+  if (action) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'feedback-action';
+    button.textContent = action.label;
+    // Kept from reaching the banner, whose own click dismisses it; running the action decides what shows next.
+    button.onclick = event => { event.stopPropagation(); clearFeedback(); action.run(); };
+    feedback.append(' ', button);
+  }
+  feedback.className = `form-feedback ${type}`;
+  feedback.hidden = false;
+  clearTimeout(showFeedback.timer);
+  if (type !== 'error') showFeedback.timer = setTimeout(clearFeedback, action ? 10000 : 6000);
+}
+
+function clearFeedback() {
+  clearTimeout(showFeedback.timer);
+  $('formFeedback').hidden = true;
+  $('formFeedback').textContent = '';
+}
+
+// A day as a date field takes it ("2026-09-30"), where this device is; and the time a date field's day means, at noon.
+function dateInputValue(timestamp) {
+  const date = new Date(timestamp);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function timestampFromDateInput(value) {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, month - 1, day, 12).getTime();
+}
+
+// A small firework: sparks flying out of an element, gone after a second, for a record. Skipped for anyone who asks for
+// less motion. Its colours are inside it: records.js, before this moved here, kept them in a const of its own.
+function celebrate(origin, sparks = 28, reach = 1) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const colours = ['#f5b83d', '#ff6b6b', '#5bd6a4', '#8183f4', '#4cc3ff'];
+  const box = origin.getBoundingClientRect();
+  const burst = document.createElement('div');
+  burst.className = 'firework';
+  burst.setAttribute('aria-hidden', 'true');
+  burst.style.left = `${box.left + box.width / 2}px`;
+  burst.style.top = `${box.top + box.height / 2}px`;
+  for (let i = 0; i < sparks; i++) {
+    const angle = (i / sparks) * 2 * Math.PI + Math.random() * 0.3;
+    const distance = (60 + Math.random() * 70) * reach;
+    const spark = document.createElement('i');
+    spark.style.setProperty('--dx', `${Math.cos(angle) * distance}px`);
+    spark.style.setProperty('--dy', `${Math.sin(angle) * distance}px`);
+    spark.style.background = colours[i % colours.length];
+    burst.appendChild(spark);
+  }
+  document.body.appendChild(burst);
+  setTimeout(() => burst.remove(), 1200);
+}
+
+// A cardio session (the Cardio page) is saved as a workout with kind 'cardio' and no exercises; anything else is a strength
+// workout, which is everything saved before cardio existed.
+function isCardio(workout) {
+  return Boolean(workout) && workout.kind === 'cardio';
+}
+
 // Through offline.js's syncFetch, so a connection that stalls rather than fails gives up instead of holding the page.
 // Longer than its default, since years of workouts are a bigger download than anything else the pages ask for.
 function getSavedWorkouts() {

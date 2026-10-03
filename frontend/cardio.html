@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cardio | Workout Tracker</title>
+  <link rel="preload" href="fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="styles.css" />
+  <script src="theme.js"></script>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#f4f7fb" />
+  <link rel="icon" href="/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Workouts" />
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div><h1>Cardio</h1><p class="subtitle">Walks, runs and the machines: time a session, or log one you did.</p></div>
+      <nav class="site-nav" aria-label="Primary navigation"><a href="index.html">Strength</a><a class="active" href="cardio.html" aria-current="page">Cardio</a><a href="progress.html">Progress</a><a href="history.html">History</a></nav>
+      <div class="header-actions"><div class="date" id="today"></div><button class="secondary settings-button" id="settingsButton" type="button" aria-label="Settings" title="Settings">&#9881;</button></div>
+    </header>
+
+    <div class="form-feedback" id="formFeedback" role="status" aria-live="polite" hidden></div>
+
+    <section class="card cardio-active" id="cardioActive" aria-labelledby="cardioActiveTitle" hidden>
+      <div class="section-heading"><div><h2 id="cardioActiveTitle">Session</h2><p class="subtitle" id="cardioActiveStarted"></p></div><button class="secondary" id="cardioCancelBtn" type="button">Cancel session</button></div>
+      <p class="cardio-clock" id="cardioClock" role="timer" aria-label="Time so far">0:00</p>
+      <p class="subtitle cardio-last" id="cardioLast" hidden></p>
+      <div class="cardio-controls"><button class="secondary" id="cardioPauseBtn" type="button">Pause</button><button class="primary" id="cardioFinishBtn" type="button">Finish</button></div>
+      <p class="subtitle cardio-note">The timer keeps going with the screen off or the app closed. Finish when you are done to enter the distance and the rest.</p>
+    </section>
+
+    <section class="card" id="cardioFormCard" aria-labelledby="cardioFormTitle" hidden>
+      <div class="section-heading"><div><h2 id="cardioFormTitle">Log a session</h2><p class="subtitle" id="cardioFormIntro"></p></div></div>
+      <form id="cardioForm" novalidate>
+        <div class="cardio-fields">
+          <div><label for="cardioActivity">Activity</label><select id="cardioActivity"></select></div>
+          <div id="cardioNameField" hidden><label for="cardioName">Name</label><input id="cardioName" type="text" maxlength="60" autocomplete="off" placeholder="e.g. Jump rope" /></div>
+          <div><label for="cardioDate">Date</label><input id="cardioDate" type="date" /></div>
+        </div>
+        <fieldset class="cardio-time"><legend>Time</legend>
+          <div><label for="cardioHours">Hours</label><input id="cardioHours" type="number" inputmode="numeric" min="0" max="99" step="1" placeholder="0" /></div>
+          <div><label for="cardioMinutes">Minutes</label><input id="cardioMinutes" type="number" inputmode="numeric" min="0" step="1" placeholder="0" /></div>
+          <div><label for="cardioSeconds">Seconds</label><input id="cardioSeconds" type="number" inputmode="numeric" min="0" max="59" step="1" placeholder="0" /></div>
+        </fieldset>
+        <div class="cardio-fields">
+          <div id="cardioDistanceField"><label for="cardioDistance">Distance (<span id="cardioDistanceUnit">mi</span>)</label><input id="cardioDistance" type="number" inputmode="decimal" min="0" step="any" placeholder="Optional" /></div>
+          <div id="cardioFloorsField" hidden><label for="cardioFloors">Floors</label><input id="cardioFloors" type="number" inputmode="numeric" min="0" step="1" placeholder="Optional" /></div>
+          <div><label for="cardioCalories">Calories</label><input id="cardioCalories" type="number" inputmode="numeric" min="0" step="1" placeholder="Optional" /></div>
+          <div><label for="cardioHeartRate">Average heart rate</label><input id="cardioHeartRate" type="number" inputmode="numeric" min="0" step="1" placeholder="bpm, optional" /></div>
+        </div>
+        <p class="cardio-rate" id="cardioRate" role="status"></p>
+        <div class="notes-field"><label for="cardioNotes">Notes</label><textarea class="notes-input" id="cardioNotes" rows="2" maxlength="2000" placeholder="How did it feel? The route, or the machine's level."></textarea></div>
+        <div class="footer-actions"><button class="secondary" id="cardioFormCancel" type="button">Cancel</button><button class="primary" id="cardioSave" type="submit">Save session</button></div>
+      </form>
+    </section>
+
+    <section class="card workout-summary" id="cardioSummary" aria-labelledby="cardioSummaryTitle" hidden>
+      <div class="section-heading"><div><h2 id="cardioSummaryTitle">Session saved</h2><p class="subtitle" id="cardioSummaryName"></p></div><button class="secondary" id="cardioSummaryDone" type="button">Done</button></div>
+      <ul class="summary-stats" id="cardioSummaryStats"></ul>
+      <div class="summary-records" id="cardioSummaryRecords" hidden><h3>New personal records</h3><ul id="cardioSummaryRecordList"></ul></div>
+      <a class="past-sessions-link" id="cardioSummaryProgress" href="progress.html">Every session, charted on Progress</a>
+    </section>
+
+    <section class="card" id="cardioStartCard" aria-labelledby="cardioStartTitle">
+      <div class="section-heading"><div><h2 id="cardioStartTitle">Start a session</h2><p class="subtitle">Tap what you are doing and the timer starts.</p></div><div class="section-heading-actions"><button class="secondary" id="cardioLogBtn" type="button">Log a session</button></div></div>
+      <div class="cardio-activity-grid" id="cardioActivityGrid"></div>
+    </section>
+
+    <section class="card" id="cardioListCard" aria-labelledby="cardioListTitle">
+      <div class="section-heading"><div><h2 id="cardioListTitle">Your sessions</h2><p class="subtitle" id="cardioWeek"></p></div><span class="subtitle" id="cardioStatus"></span></div>
+      <ul class="saved-workout-list" id="cardioList"><li class="empty">Your sessions appear once they load.</li></ul>
+    </section>
+  </main>
+  <script src="common.js"></script>
+  <script src="offline.js"></script>
+  <!-- The Settings dialog is added by settings-dialog.js, one copy for every page. -->
+  <script src="account-rules.js"></script>
+  <script src="settings-dialog.js"></script>
+  <script src="settings.js"></script>
+  <script src="cardio-activities.js"></script>
+  <script src="cardio.js"></script>
+  <script src="pwa.js"></script>
+</body>
+</html>
