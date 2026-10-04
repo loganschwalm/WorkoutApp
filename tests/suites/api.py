@@ -180,6 +180,7 @@ def run(t):
               f'{status} {location}')
 
     run_security(t, check, request)
+    run_limits(t, check)
     run_structure(t, check, request)
     run_accounts(t, check, request)
     run_admin(t, check, request)
@@ -440,6 +441,125 @@ def schema_of(path):
         }
     finally:
         db.close()
+
+
+def run_limits(t, check):
+    """What one address, or one account, can ask of a server that is open to anyone."""
+    json_headers = {'Content-Type': 'application/json'}
+
+    def post(server, path, body, token=None):
+        headers = {**json_headers, **({'Cookie': f'session={token}'} if token else {})}
+        return server.request('POST', path, json.dumps(body).encode(), headers)
+
+    def make(server, name):
+        return post(server, '/api/auth/register', {'username': name, 'email': f'{name}@example.test', 'password': 'chalk-and-plates-42'})
+
+    def session_of(headers):
+        return headers['set-cookie'].split('session=')[1].split(';')[0]
+
+    # ------------------------------------------------------------------ A40 new accounts from one address
+    print('A40 one address can only make so many accounts in an hour')
+    open_door = t.start_server('registrations.db', {'REGISTRATIONS_PER_HOUR': '3'})
+    statuses = [make(open_door, f'newcomer{n}')[0] for n in range(3)]
+    check('three accounts are made', statuses == [200] * 3, statuses)
+    status, headers, reply = make(open_door, 'newcomer3')
+    check('the fourth is told to wait, saying why, with Retry-After', status == 429 and 'from this address' in reply.get('error', '')
+          and int(headers.get('retry-after', 0)) > 3000, f"{status} {headers.get('retry-after')} {reply}")
+    check('and no account was made', post(open_door, '/api/auth/login', {'login': 'newcomer3', 'password': 'chalk-and-plates-42'})[0] == 401)
+    check('signing in to one already made is not held up', post(open_door, '/api/auth/login', {'login': 'newcomer0', 'password': 'chalk-and-plates-42'})[0] == 200)
+    open_door.stop()
+    crowd = t.start_server('registrations-unlimited.db', {'REGISTRATIONS_PER_HOUR': '0'})
+    check('REGISTRATIONS_PER_HOUR=0 turns it off', [make(crowd, f'crowd{n}')[0] for n in range(8)] == [200] * 8)
+    crowd.stop()
+    behind = t.start_server('registrations-proxied.db', {'REGISTRATIONS_PER_HOUR': '1', 'TRUSTED_PROXIES': '127.0.0.1'})
+    statuses = []
+    for n, person in enumerate(('203.0.113.1', '203.0.113.2', '203.0.113.1')):
+        status, _, _ = behind.request('POST', '/api/auth/register', json.dumps({'username': f'proxied{n}', 'email': f'proxied{n}@example.test', 'password': 'chalk-and-plates-42'}).encode(),
+                                      {**json_headers, 'X-Forwarded-For': person})
+        statuses.append(status)
+    check('behind a trusted proxy each person has a limit of their own', statuses == [200, 200, 429], statuses)
+    behind.stop()
+
+    # ------------------------------------------------------------------ A41 reset emails
+    print('A41 reset emails are limited per address that asks, and per email in a day, whether or not an account uses it')
+    mailed = t.start_server('reset-limits.db', {**t.mail.env, 'RESET_ADDRESS_EMAILS': '4'})
+    make(mailed, 'resetter')
+    statuses = [post(mailed, '/api/auth/forgot-password', {'email': f'person{n}@example.test'})[0] for n in range(4)]
+    check('four emails to four addresses are accepted', statuses == [200] * 4, statuses)
+    status, headers, reply = post(mailed, '/api/auth/forgot-password', {'email': 'resetter@example.test'})
+    check('a fifth, to whichever address, is told to wait, saying why, with Retry-After', status == 429 and 'from this address' in reply.get('error', '')
+          and int(headers.get('retry-after', 0)) > 3000, f"{status} {headers.get('retry-after')} {reply}")
+    check('and nothing was sent to it', not t.mail.to('resetter@example.test'))
+    mailed.stop()
+    # The hour's limit stops a sixth ask in the hour; what a day adds is its own count, which a clock a day wide can only show here.
+    server = load_server()
+    now = time.monotonic()
+    server.reset_daily_throttle.events['ghost@example.test'] = [now - n * 3600 for n in range(10)]
+    check('a daily limit holds after ten asks spread over the day, though no one hour held more than one',
+          server.reset_daily_throttle.retry_after('ghost@example.test') > 0 and server.reset_throttle.retry_after('ghost@example.test') == 0)
+
+    # ------------------------------------------------------------------ A42 what an account may keep
+    print('A42 an account keeps only so many workouts, each only so large, and one import runs at a time')
+    small = t.start_server('workout-limits.db', {'MAX_WORKOUTS': '5'})
+    token = session_of(make(small, 'keeper')[1])
+
+    def save(body):
+        return post(small, '/api/workouts', body, token)
+
+    def kept():
+        return small.api('GET', '/api/workouts', token=token)[0]['workouts']
+    statuses = [save({'name': f'Day {n}', 'clientId': f'keep-{n}', 'exercises': []})[0] for n in range(5)]
+    check('five workouts are kept', statuses == [201] * 5, statuses)
+    status, _, reply = save({'name': 'One too many', 'clientId': 'keep-5', 'exercises': []})
+    check('the sixth is refused with 400, which a phone takes to mean it is kept on the device', status == 400 and 'at most 5' in reply.get('error', ''), f'{status} {reply}')
+    status, _, reply = save({'name': 'Day 0', 'clientId': 'keep-0', 'exercises': []})
+    check('a retry of one already kept is still answered, with its id', status == 200 and reply.get('id'), f'{status} {reply}')
+    check('and the account holds five', len(kept()) == 5, len(kept()))
+    status, _, _ = small.request('DELETE', f"/api/workouts/{kept()[0]['id']}", headers={'Cookie': f'session={token}'})
+    check('deleting one makes room for another', status == 200 and save({'name': 'Room again', 'clientId': 'keep-6', 'exercises': []})[0] == 201)
+    new_ones = [{'name': f'Imported {n}', 'createdAt': 1_700_000_000_000 + n, 'exercises': []} for n in range(2)]
+    status, _, reply = post(small, '/api/import', {'format': 'workout-tracker-export', 'workouts': new_ones}, token)
+    check('an import that would pass the limit is refused whole', status == 400 and 'at most 5' in reply.get('error', ''), f'{status} {reply}')
+    check('and added none of its workouts', len(kept()) == 5, len(kept()))
+    small.stop()
+
+    big = t.start_server('workout-size.db')
+    token = session_of(make(big, 'heavy')[1])
+    bulky = {'name': 'Bulky', 'exercises': [], 'padding': 'x' * (300 * 1024)}
+    status, _, reply = post(big, '/api/workouts', bulky, token)
+    check('a workout over 256 KB is refused with 413', status == 413 and '256 KB' in reply.get('error', ''), f'{status} {reply}')
+    status, _, reply = post(big, '/api/import', {'format': 'workout-tracker-export', 'workouts': [bulky]}, token)
+    check('and so is an import holding one, naming which', status == 400 and 'Workout 1' in reply.get('error', ''), f'{status} {reply}')
+    status, _, reply = post(big, '/api/workouts', {'name': 'Fine', 'notes': 'n' * 100_000, 'exercises': []}, token)
+    check('a workout with the longest notes allowed is far under it', status == 201, f'{status} {reply}')
+
+    # While one import is being read another is told to come back. The first sends its headers and then nothing, so the
+    # server waits on it as it would on a slow upload.
+    host, port = big.base_url.replace('http://', '').split(':')
+    slow = socket.create_connection((host, int(port)), timeout=10)
+    slow.sendall((f'POST /api/import HTTP/1.1\r\nHost: x\r\nCookie: session={token}\r\nContent-Type: application/json\r\n'
+                  f'Content-Length: 1000\r\n\r\n').encode())
+    time.sleep(0.5)
+    status, headers, reply = post(big, '/api/import', {'format': 'workout-tracker-export', 'workouts': []}, token)
+    check('a second import meanwhile is told to try again, with Retry-After', status == 503 and int(headers.get('retry-after', 0)) > 0, f'{status} {reply}')
+    slow.close()
+    deadline = time.time() + 15
+    while time.time() < deadline:
+        status = post(big, '/api/import', {'format': 'workout-tracker-export', 'workouts': []}, token)[0]
+        if status == 200:
+            break
+        time.sleep(0.3)
+    check('and once the first has gone, imports are taken again', status == 200, status)
+    big.stop()
+
+    # ------------------------------------------------------------------ A43 the address it listens on
+    print('A43 HOST says which address the server listens on')
+    local = t.start_server('local-only.db', {'HOST': '127.0.0.1'})
+    check('with HOST=127.0.0.1 it answers on that address', local.api('GET', '/api/auth/me')[0].get('registrationOpen') is True)
+    local.stop()
+    refused = subprocess.run([sys.executable, os.path.join(REPO_ROOT, 'backend', 'server.py')], env={**os.environ, 'HOST': 'no.such.host.invalid',
+                             'WORKOUT_DB': t.db_path('bad-host.db'), 'PORT': '0'}, capture_output=True, text=True, timeout=60)
+    check('a HOST that is not an address of this machine stops it from starting, rather than listening somewhere else', refused.returncode != 0, refused.returncode)
 
 
 def run_structure(t, check, request):

@@ -197,6 +197,9 @@ restart the app), or under `environment:` in `docker-compose.yml`.
 |---|---|---|
 | `ALLOW_REGISTRATION` | `1` | `0` stops new accounts being created; existing ones still sign in |
 | `SECURE_COOKIES` | `0` | `1` if the app is **only** ever reached over HTTPS |
+| `HOST` | `0.0.0.0` | `127.0.0.1` if a reverse proxy on the same machine is the only way in (not under Docker: publish the port as `127.0.0.1:6769:6769`) |
+| `MAX_WORKOUTS` | `50000` | The most workouts one account can keep |
+| `REGISTRATIONS_PER_HOUR` | `5` | New accounts one address can make in an hour (`0`: no limit) |
 | `TRUSTED_PROXIES` | none | Your reverse proxy's address, if you use one, so wrong-password limits apply to each person rather than to everyone at once |
 | `SMTP_HOST`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` | none | A mail server, for "Forgot password?" emails |
 
@@ -228,7 +231,8 @@ SMTP_FROM=Workout Tracker <you@gmail.com>
 
 The app is built for a home network:
 
-- Close registration once your accounts exist.
+- Close registration once your accounts exist. Until then, one address can only make a few accounts an hour, and
+  an account can only keep so many workouts, so a stranger cannot fill the disk.
 - Don't forward its port straight to the internet. To reach it from outside, use Tailscale or a reverse
   proxy with HTTPS (and ideally its own login).
 - Passwords are stored as strong one-way hashes, repeated wrong passwords are slowed down, and sessions

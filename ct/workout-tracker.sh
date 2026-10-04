@@ -244,6 +244,16 @@ if [[ ! -f /etc/workout-tracker/workout-tracker.env ]]; then
 # count each person behind them apart. Name only your own proxies:
 #TRUSTED_PROXIES=192.168.1.20
 #
+# The address to listen on. Everything that can reach the container by default; 127.0.0.1 if a reverse proxy in the same
+# container is the only way in (to be reached from another machine's proxy, leave it, and let the firewall decide):
+#HOST=127.0.0.1
+#
+# Workouts one account may keep (0 for no limit), accounts one address may make in an hour (0 for no limit), and reset emails
+# one address may ask for in an hour (0 for no limit):
+#MAX_WORKOUTS=50000
+#REGISTRATIONS_PER_HOUR=5
+#RESET_ADDRESS_EMAILS=10
+#
 # Passwords hashed at once, so a flood of sign-ins cannot take every core, and how long (seconds) one waits its turn:
 #PASSWORD_HASHERS=2
 #PASSWORD_HASH_WAIT=5

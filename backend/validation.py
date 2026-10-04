@@ -1,9 +1,12 @@
 """What a request may say: BadRequest, which the server answers with its message, and the checks of a workout (and its cardio), which stop
 anything but the shape the pages expect from being stored."""
 
+import json
 import math
 import time
 from http import HTTPStatus
+
+from config import MAX_WORKOUTS, MAX_WORKOUT_BYTES
 
 
 class BadRequest(Exception):
@@ -87,6 +90,24 @@ def weight_unit(value, field='unit'):
     """A record's weight unit: 'lbs' or 'kg', or missing (meaning lbs, for everything saved before kilograms)."""
     if value is not None and value not in ('lbs', 'kg'):
         raise BadRequest(f'{field} must be lbs or kg.')
+
+
+def workout_payload(data):
+    """The JSON a workout is stored as, if it is a size a workout can be (413 otherwise)."""
+    payload = json.dumps(data)
+    if len(payload) > MAX_WORKOUT_BYTES:
+        raise BadRequest(f'A workout can be at most {MAX_WORKOUT_BYTES // 1024} KB.', HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
+    return payload
+
+
+def workouts_held(database, user_id):
+    return database.execute('SELECT COUNT(*) FROM workouts WHERE user_id = ?', (user_id,)).fetchone()[0]
+
+
+def check_workout_room(held, adding=1):
+    """Raises if an account holding `held` workouts cannot take `adding` more (MAX_WORKOUTS)."""
+    if MAX_WORKOUTS and held + adding > MAX_WORKOUTS:
+        raise BadRequest(f'An account can keep at most {MAX_WORKOUTS:,} workouts. Export and delete some before adding more.')
 
 
 def validate_workout(data):

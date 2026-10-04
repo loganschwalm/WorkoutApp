@@ -1085,10 +1085,28 @@ What is already in place:
   address in front. It is believed only from the addresses named: from anywhere else it is ignored, so someone who
   reaches the port directly cannot use it either. Name only your proxies, never a range other machines share with them.
 - A password reset code works once, for 15 minutes, and stops working after 5 wrong tries. Each email
-  address is sent at most 5 codes an hour, and after 10 wrong codes for an address in a day, however
+  address is sent at most 5 codes an hour and 10 a day, and one client address can ask for at most 10 in an hour
+  whichever addresses it names (`RESET_ADDRESS_EMAILS`), so the form cannot be used to send a stream of emails to
+  someone else. After 10 wrong codes for an address in a day, however
   many codes were sent, none is tried until the oldest of those is a day old. The replies and limits
   are the same whether or not an account uses the address, so the reset form cannot be used to find
   out who has an account. A successful reset signs the account out everywhere else.
+- One client address can make 5 accounts an hour (`REGISTRATIONS_PER_HOUR`), counted when one is made, so a refused
+  sign-up (a name taken, a weak password) costs nothing, and a script cannot fill the database with accounts. A limit
+  per address needs the real address: behind a reverse proxy, see `TRUSTED_PROXIES` above, or everyone behind it shares
+  one limit, and `REGISTRATIONS_PER_HOUR=0` and `RESET_ADDRESS_EMAILS=0` turn them off.
+- An account keeps at most 50,000 workouts (`MAX_WORKOUTS`, 0 for no limit), and a workout is at most 256 KB as stored (a
+  real one is a few KB; the longest notes allowed are 100 KB). One over either is refused: with 400 for the count and
+  413 for the size, both of which the phone takes to mean the server will never accept it, so it stays on the device
+  rather than being sent again. A retry of a workout already kept is still answered. An import that would pass the count
+  is refused whole, with nothing stored. Only one import runs at a time, since each reads and parses a body of up to
+  32 MB; a second is answered 503 with `Retry-After`. The other synced data has limits of its own (templates, goals,
+  weigh-ins, notes and the exercise library each have a count).
+- **Who can reach the port.** The server listens on every interface (`0.0.0.0`) unless `HOST` names one. With a reverse
+  proxy on the same machine, publish the app to the proxy alone, so nothing goes around it: `HOST=127.0.0.1` (a
+  Proxmox install, in `workout-tracker.env`), or under Docker the published port, `"127.0.0.1:6769:6769"` in
+  `docker-compose.yml` (inside a container the app must keep listening on every interface, or Docker cannot reach it,
+  so `HOST` is not set there). A proxy on another machine needs the app reachable from it: then the firewall decides.
 - Sessions are stored as a SHA-256 hash of their token, so a copy of the database (a backup, say)
   cannot be used to sign in. Upgrading rehashed the existing sessions, so nobody was signed out.
 - Emails are checked for their form, not verified: the app takes any real-looking address you type,
@@ -1127,6 +1145,10 @@ The server reads these environment variables:
 | `LOGIN_ATTEMPTS` | `5` | Failed sign-ins per username and address before a wait |
 | `LOGIN_ADDRESS_ATTEMPTS` | `20` | Failed sign-ins from one address, whatever the username, before a wait; `0` turns it off |
 | `LOGIN_WINDOW` | `900` | Seconds a failed sign-in is remembered |
+| `HOST` | `0.0.0.0` | The address to listen on; `127.0.0.1` for a reverse proxy on the same machine (not under Docker: publish the port to `127.0.0.1` instead, see [Before you expose it](#before-you-expose-it)) |
+| `MAX_WORKOUTS` | `50000` | Workouts one account may keep; `0` takes the limit off |
+| `REGISTRATIONS_PER_HOUR` | `5` | Accounts one client address may make in an hour; `0` turns it off |
+| `RESET_ADDRESS_EMAILS` | `10` | Reset emails one client address may ask for in an hour, whichever addresses it names; `0` turns it off |
 | `TRUSTED_PROXIES` | *(none)* | Reverse proxies whose `X-Forwarded-For` is believed, as addresses or networks separated by commas (`127.0.0.1, 172.16.0.0/12`), so the sign-in limits count each person behind them apart. See [Before you expose it](#before-you-expose-it) |
 | `REQUEST_TIMEOUT` | `30` | Seconds a connection may send nothing before it is closed |
 | `PASSWORD_HASHERS` | `2` | Passwords hashed at once (signing in, signing up, resets), so a flood of them takes this many cores at most |

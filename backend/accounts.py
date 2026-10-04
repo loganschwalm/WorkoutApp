@@ -14,8 +14,8 @@ from http import HTTPStatus
 
 from config import (
     LEGACY_ITERATIONS, LOGIN_ADDRESS_ATTEMPTS, LOGIN_ATTEMPTS, LOGIN_WINDOW, PASSWORD_HASHERS, PASSWORD_HASH_WAIT,
-    PBKDF2_ITERATIONS, RESET_CODE_TTL, RESET_EMAILS, RESET_GUESSES, SMTP_FROM, SMTP_HOST, SMTP_PASSWORD, SMTP_PORT,
-    SMTP_SECURITY, SMTP_TIMEOUT, SMTP_USERNAME
+    PBKDF2_ITERATIONS, REGISTRATIONS_PER_HOUR, RESET_ADDRESS_EMAILS, RESET_CODE_TTL, RESET_EMAILS, RESET_EMAILS_DAILY,
+    RESET_GUESSES, SMTP_FROM, SMTP_HOST, SMTP_PASSWORD, SMTP_PORT, SMTP_SECURITY, SMTP_TIMEOUT, SMTP_USERNAME
 )
 from validation import BadRequest, text
 
@@ -199,6 +199,11 @@ login_throttle = Throttle(LOGIN_ATTEMPTS, LOGIN_WINDOW)
 address_throttle = Throttle(LOGIN_ADDRESS_ATTEMPTS, LOGIN_WINDOW) if LOGIN_ADDRESS_ATTEMPTS > 0 else None
 # Reset codes asked for per email address, whether or not an account uses it, so the limit never says which do.
 reset_throttle = Throttle(RESET_EMAILS, 60 * 60)
+reset_daily_throttle = Throttle(RESET_EMAILS_DAILY, 24 * 60 * 60)
+# Reset codes asked for from one client address, whichever email it names (RESET_ADDRESS_EMAILS; off at 0).
+reset_address_throttle = Throttle(RESET_ADDRESS_EMAILS, 60 * 60) if RESET_ADDRESS_EMAILS > 0 else None
+# Accounts made from one client address (REGISTRATIONS_PER_HOUR; off at 0).
+register_throttle = Throttle(REGISTRATIONS_PER_HOUR, 60 * 60) if REGISTRATIONS_PER_HOUR > 0 else None
 # Wrong reset codes per email address, whether or not an account uses it, so this limit never says which do either.
 reset_guess_throttle = Throttle(RESET_GUESSES, 24 * 60 * 60)
 

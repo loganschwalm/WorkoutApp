@@ -28,6 +28,9 @@ class AppServer:
             # Every suite signs in from 127.0.0.1, wrong passwords and all, so one address's limit across usernames would
             # end up deciding checks about something else. The checks of that limit give their server a low one.
             'LOGIN_ADDRESS_ATTEMPTS': '10000',
+            # The same goes for accounts made, and reset emails asked for, from that one address.
+            'REGISTRATIONS_PER_HOUR': '10000',
+            'RESET_ADDRESS_EMAILS': '10000',
             **(env or {}),
         }
         self.process = subprocess.Popen(

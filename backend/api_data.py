@@ -2,15 +2,20 @@
 
 import datetime
 import json
+import threading
 import time
 from http import HTTPStatus
 from urllib.parse import urlparse
 
-from config import EXPORT_FORMAT, MAX_IMPORT, MAX_STATE_CHANGE
+from config import EXPORT_FORMAT, MAX_IMPORT, MAX_IMPORTS_AT_ONCE, MAX_STATE_CHANGE
 from database import connection, workout_tag
 from state import STATE_PARTS, load_state, merge_part, store_state, validate_state
-from validation import BadRequest, listed, validate_workout, weight_unit
+from validation import BadRequest, check_workout_room, listed, validate_workout, weight_unit, workout_payload, workouts_held
 from workouts import etag_matches, export_zone, exported_workouts, workout_id, workout_stored, workouts_csv
+
+
+# One import at a time (see MAX_IMPORTS_AT_ONCE): each reads and parses a body of up to MAX_IMPORT bytes.
+import_slots = threading.BoundedSemaphore(MAX_IMPORTS_AT_ONCE)
 
 
 class DataApi:
@@ -42,24 +47,31 @@ class DataApi:
         data = self.read_json()
         name, notes, created_at = validate_workout(data)
         client_id = data.get('clientId') or None
+        payload = workout_payload(data)
         with connection() as database:
-            # Clients retry uploads after network failures, so a repeated clientId must not create a second workout.
-            # The unique index decides, so two retries arriving at the same moment cannot both get in.
-            cursor = database.execute('INSERT INTO workouts (user_id, name, notes, created_at, payload, client_id) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(user_id, client_id) DO NOTHING', (user['id'], name, notes, created_at, json.dumps(data), client_id))
-            if cursor.rowcount:
-                status, stored_id = HTTPStatus.CREATED, cursor.lastrowid
+            # Held for writing from here, so two requests cannot both take the account's last place.
+            database.execute('BEGIN IMMEDIATE')
+            # Clients retry uploads after network failures, so a repeated clientId must not create a second workout, and is
+            # answered even by an account that has since reached its limit.
+            stored = client_id and database.execute('SELECT id FROM workouts WHERE user_id = ? AND client_id = ?', (user['id'], client_id)).fetchone()
+            if stored:
+                status, stored_id = HTTPStatus.OK, stored['id']
             else:
-                status, stored_id = HTTPStatus.OK, database.execute('SELECT id FROM workouts WHERE user_id = ? AND client_id = ?', (user['id'], client_id)).fetchone()['id']
+                check_workout_room(workouts_held(database, user['id']))
+                status = HTTPStatus.CREATED
+                stored_id = database.execute('INSERT INTO workouts (user_id, name, notes, created_at, payload, client_id) VALUES (?, ?, ?, ?, ?, ?)',
+                                             (user['id'], name, notes, created_at, payload, client_id)).lastrowid
         self.send_json(status, {'id': stored_id})
 
     def update_workout(self, user):
         target = workout_id(self.api_path)
         data = self.read_json()
         name, notes, created_at = validate_workout(data)
+        payload = workout_payload(data)
         updated = 0
         if target is not None:
             with connection() as database:
-                updated = database.execute('UPDATE workouts SET name=?, notes=?, created_at=?, payload=? WHERE id=? AND user_id=?', (name, notes, created_at, json.dumps(data), target, user['id'])).rowcount
+                updated = database.execute('UPDATE workouts SET name=?, notes=?, created_at=?, payload=? WHERE id=? AND user_id=?', (name, notes, created_at, payload, target, user['id'])).rowcount
         if not updated:
             self.send_json(HTTPStatus.NOT_FOUND, {'error': 'Workout not found.'})
             return
@@ -180,7 +192,15 @@ class DataApi:
         self.send_download(json.dumps(export, indent=1), 'application/json; charset=utf-8', f'workout-tracker-{today}.json')
 
     def import_account(self, user):
-        data = self.read_json(MAX_IMPORT)
+        # Not waited for: a second import while one is being read is told to come back, rather than held with its body in memory too.
+        if not import_slots.acquire(blocking=False):
+            raise BadRequest('Another import is running. Try again in a moment.', HTTPStatus.SERVICE_UNAVAILABLE, {'Retry-After': '5'})
+        try:
+            self.import_from(user, self.read_json(MAX_IMPORT))
+        finally:
+            import_slots.release()
+
+    def import_from(self, user, data):
         if data.get('format', EXPORT_FORMAT) != EXPORT_FORMAT or not isinstance(data.get('workouts'), list):
             raise BadRequest('That file is not a Workout Tracker export.')
         # Everything is checked before anything is stored, so a file with one bad workout imports nothing.
@@ -189,20 +209,24 @@ class DataApi:
             # An id belongs to the server the workout came from; this one gives it its own.
             workout = {key: value for key, value in workout.items() if key != 'id'}
             try:
-                prepared.append((workout, *validate_workout(workout)))
+                prepared.append((workout, workout_payload(workout), *validate_workout(workout)))
             except BadRequest as error:
                 raise BadRequest(f'Workout {index + 1} in the file cannot be imported: {error}')
         state = {name: data[name] for name in STATE_PARTS if name in data}
         validate_state(state)
         added = 0
         with connection() as database:
-            for workout, name, notes, created_at in prepared:
+            database.execute('BEGIN IMMEDIATE')
+            held = workouts_held(database, user['id'])
+            for workout, payload, name, notes, created_at in prepared:
                 client_id = workout.get('clientId') or None
                 if client_id is None and workout_stored(database, user['id'], name, created_at, workout):
                     continue
+                # Past the account's limit, the whole file is refused and nothing is stored (the block raises, and is rolled back).
+                check_workout_room(held + added)
                 added += database.execute('INSERT INTO workouts (user_id, name, notes, created_at, payload, client_id) VALUES (?, ?, ?, ?, ?, ?) '
                                           'ON CONFLICT(user_id, client_id) DO NOTHING',
-                                          (user['id'], name, notes, created_at, json.dumps(workout), client_id)).rowcount
+                                          (user['id'], name, notes, created_at, payload, client_id)).rowcount
             have = load_state(database, user['id'])
             # Each part takes what it will of the file's (and refuses the file, with nothing stored, if that would take it past its limit).
             taken = {name: part.take(have[name], state.get(name)) for name, part in STATE_PARTS.items()}

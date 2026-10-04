@@ -25,6 +25,13 @@ MAX_IMPORT = 32 * 1024 * 1024
 MAX_STATE_CHANGE = 4 * MAX_BODY
 # What an export file says it is, so an import can tell one from any other JSON.
 EXPORT_FORMAT = 'workout-tracker-export'
+# What one account may keep, so no one account (or a flood of them) can fill the disk. A workout is a few kilobytes: ten years of
+# training six days a week is about 3,000 of them. MAX_WORKOUTS=0 takes the limit off, for a server only its owner uses.
+MAX_WORKOUTS = int(os.environ.get('MAX_WORKOUTS', '50000'))
+# The most one stored workout may be (as the JSON the server keeps), in bytes.
+MAX_WORKOUT_BYTES = 256 * 1024
+# Imports read up to MAX_IMPORT bytes into memory and parse them, so only this many run at once; another is told to try again.
+MAX_IMPORTS_AT_ONCE = 1
 
 
 def env_flag(name, default):
@@ -80,6 +87,13 @@ RESET_EMAILS = 5
 # is even compared until the oldest wrong one is a day old. Without this, asking for a new code started the tries over,
 # which allowed 25 guesses an hour. With it, a six-digit code holds out against guessing for centuries.
 RESET_GUESSES = int(os.environ.get('RESET_GUESSES', '10'))
+# Reset emails are also limited per address that asks, whichever email it names, so one person cannot use the form to send
+# a stream of emails to anyone (an address's own limit, RESET_EMAILS, would allow 120 a day to each), and per email a day.
+# Behind a reverse proxy that TRUSTED_PROXIES does not name, everyone shares one address: 0 turns the per-address limit off.
+RESET_ADDRESS_EMAILS = int(os.environ.get('RESET_ADDRESS_EMAILS', '10'))
+RESET_EMAILS_DAILY = 10
+# New accounts per address in an hour, so a script cannot fill the database with them. 0 turns it off.
+REGISTRATIONS_PER_HOUR = int(os.environ.get('REGISTRATIONS_PER_HOUR', '5'))
 
 # OWASP's recommendation for PBKDF2-HMAC-SHA256. Hashes record their own count, so raising it later only
 # needs this number changed: each account is rehashed the next time it signs in.

@@ -4,6 +4,9 @@ services:
     container_name: workout-tracker
     restart: unless-stopped
     ports:
+      # Open to everything that can reach this machine. With a reverse proxy on this same machine, publish the port to it alone,
+      # so nothing can go around the proxy (and its HTTPS, limits and login) to the app: "127.0.0.1:6769:6769". With one on
+      # another machine, name this machine's address on the network it uses, such as "192.168.1.50:6769:6769".
       - "6769:6769"
     volumes:
       - workout_data:/app/data

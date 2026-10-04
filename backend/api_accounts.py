@@ -8,8 +8,8 @@ from http import HTTPStatus
 
 from accounts import (
     DUMMY_HASH, address_throttle, email_address, email_reset_code, find_account, login_throttle, needs_rehash, new_password,
-    new_username, password_hash, password_matches, public_user, reset_code_hash, reset_guess_throttle, reset_throttle,
-    wait_words
+    new_username, password_hash, password_matches, public_user, register_throttle, reset_address_throttle, reset_code_hash,
+    reset_daily_throttle, reset_guess_throttle, reset_throttle, wait_words
 )
 from config import ALLOW_REGISTRATION, RESET_CODE_ATTEMPTS, RESET_CODE_TTL, SESSION_TTL, SHORT_SESSION_TTL, SMTP_HOST
 from database import connection, delete_account_rows, session_hash
@@ -61,6 +61,12 @@ class AccountApi:
         username = new_username(data.get('username'))
         password = new_password(str(data.get('password', '')), username, email)
         remember = self.wants_remembering(data)
+        address = self.client_ip()
+        # Asked before anything is looked up or hashed, so a script gets nothing for its tries, and counted when an account is made.
+        wait = register_throttle.retry_after(address) if register_throttle else 0
+        if wait:
+            self.send_wait(wait, 'Too many accounts have been made from this address.')
+            return
         with connection() as database:
             if database.execute('SELECT 1 FROM users WHERE username = ?', (username,)).fetchone():
                 raise BadRequest('That username is already registered.', HTTPStatus.CONFLICT)
@@ -71,6 +77,8 @@ class AccountApi:
             user_id = database.execute('INSERT INTO users (username, email, password_hash, created_at) VALUES (?, ?, ?, ?)',
                                        (username, email, stored_hash, int(time.time() * 1000))).lastrowid
             cookie = self.start_session(database, user_id, remember)
+        if register_throttle:
+            register_throttle.record(address)
         self.send_json(HTTPStatus.OK, {'user': {'id': user_id, 'username': username, 'email': email}}, [cookie])
 
     def sign_in(self):
@@ -114,11 +122,21 @@ class AccountApi:
             raise BadRequest('Password reset by email is not set up on this server.', HTTPStatus.NOT_FOUND)
         # Loosely: an account's email from before the rules were strict must still get its code.
         email = email_address(self.read_json().get('email'), strict=False)
-        wait = reset_throttle.retry_after(email)
+        # Each limit counts every request, whether or not an account uses the address, so none of them says which do. The one
+        # for this client address comes first: it is the one a person spraying addresses meets, and says so.
+        address = self.client_ip()
+        wait = reset_address_throttle.retry_after(address) if reset_address_throttle else 0
+        if wait:
+            self.send_wait(wait, 'Too many codes asked for from this address.')
+            return
+        wait = max(reset_throttle.retry_after(email), reset_daily_throttle.retry_after(email))
         if wait:
             self.send_wait(wait, 'Too many codes asked for.')
             return
         reset_throttle.record(email)
+        reset_daily_throttle.record(email)
+        if reset_address_throttle:
+            reset_address_throttle.record(address)
         code = f'{secrets.randbelow(10 ** 6):06d}'
         with connection() as database:
             user = database.execute('SELECT id, username FROM users WHERE email = ?', (email,)).fetchone()

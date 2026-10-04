@@ -428,8 +428,10 @@ def serve():
     check_mail_settings()
     init_database()
     port = int(os.environ.get('PORT', '6769'))
-    server = AppServer(('0.0.0.0', port), AppHandler)
-    print(f'Workout Tracker listening on http://0.0.0.0:{port}')
+    # Every interface unless HOST says one: with a reverse proxy on this machine, HOST=127.0.0.1 leaves no way around it.
+    host = os.environ.get('HOST', '').strip() or '0.0.0.0'
+    server = AppServer((host, port), AppHandler)
+    print(f'Workout Tracker listening on http://{host}:{port}')
     print(f'Password reset codes are emailed through {SMTP_HOST}:{SMTP_PORT} ({SMTP_SECURITY}).' if SMTP_HOST else
           'Password reset by email is off: set SMTP_HOST to turn it on, or reset passwords with the reset-password command.')
     # `docker stop` and `systemctl stop` ask with SIGTERM. In a container the server is process 1, which the kernel
