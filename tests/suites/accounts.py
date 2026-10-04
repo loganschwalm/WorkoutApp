@@ -1,13 +1,11 @@
 """Accounts in the browser: creating one with an email, signing in with it, resetting a forgotten password with an
 emailed code, and adding an email in Settings."""
 
-import importlib.util
 import json
-import os
 import sqlite3
 import time
 
-from ..harness import REPO_ROOT
+from ..harness import load_server
 
 INTERCEPT = False
 MAIL = True
@@ -272,10 +270,8 @@ def run(t):
 
     # ------------------------------------------------------------------ C9 what a new account's details must be
     print("C9  the forms check a new username, email and password as the server does, before sending")
-    # The server's own rules, loaded from its file, to hold the page's copy of them to.
-    spec = importlib.util.spec_from_file_location('rules_server', os.path.join(REPO_ROOT, 'backend', 'server.py'))
-    server = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(server)
+    # The server's own rules, loaded from its modules, to hold the page's copy of them to.
+    server = load_server()
 
     def server_says(rule, *values):
         try:

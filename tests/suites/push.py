@@ -4,15 +4,13 @@ against a push service of the suite's own, and the reminders the server sends on
 import datetime
 import hashlib
 import http.server
-import importlib.util
 import json
-import os
 import secrets
 import sqlite3
 import threading
 import time
 
-from ..harness import REPO_ROOT, free_port
+from ..harness import free_port, load_server
 
 INTERCEPT = False
 BROWSER = False
@@ -36,14 +34,6 @@ class PushService(http.server.ThreadingHTTPServer):
     def to(self, name):
         with self.lock:
             return [item for item in self.received if item['path'] == f'/push/{name}']
-
-
-def load_server():
-    """backend/server.py as a module, for the functions that check what it sends."""
-    spec = importlib.util.spec_from_file_location('push_server', os.path.join(REPO_ROOT, 'backend', 'server.py'))
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 def decrypt_message(server, body, receiver_private, receiver_public, auth):

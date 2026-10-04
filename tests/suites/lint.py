@@ -98,13 +98,13 @@ def run(t):
             check('and one the pages sync and the server does not keep', says(['measurements', 'does not keep']), found())
 
         # -- defaults
-        with changed('backend/server.py', replaced("DEFAULT_REMINDER_TIME = '17:00'", "DEFAULT_REMINDER_TIME = '18:30'")):
+        with changed('backend/config.py', replaced("DEFAULT_REMINDER_TIME = '17:00'", "DEFAULT_REMINDER_TIME = '18:30'")):
             check('a default reminder time that differs between the server and the page is named', says(['18:30', '17:00']), found())
 
         # -- environment
-        with changed('backend/server.py', lambda text: text + "\nNEW_SETTING = os.environ.get('SOMETHING_NEW_AND_UNDOCUMENTED', '')\n"):
-            check('an environment variable the reference does not mention is named', says(['SOMETHING_NEW_AND_UNDOCUMENTED']), found())
-        with changed('backend/server.py', lambda text: text + "\nNEW_FLAG = env_flag('ANOTHER_UNDOCUMENTED_FLAG', False)\n"):
+        with changed('backend/webpush.py', lambda text: text + "\nNEW_SETTING = os.environ.get('SOMETHING_NEW_AND_UNDOCUMENTED', '')\n"):
+            check('an environment variable the reference does not mention is named, in whichever module reads it', says(['backend/webpush.py', 'SOMETHING_NEW_AND_UNDOCUMENTED']), found())
+        with changed('backend/config.py', lambda text: text + "\nNEW_FLAG = env_flag('ANOTHER_UNDOCUMENTED_FLAG', False)\n"):
             check('and so is a flag', says(['ANOTHER_UNDOCUMENTED_FLAG']), found())
 
         # -- suites

@@ -15,8 +15,7 @@ import subprocess
 import threading
 import time
 
-from ..harness import REPO_ROOT
-from .push import load_server
+from ..harness import REPO_ROOT, load_server
 
 INTERCEPT = False
 BROWSER = False
@@ -188,6 +187,7 @@ def run(t):
     run_compression(t, check, request)
     run_deletion(t, check, request)
     run_state_merge(t, check, request)
+    run_routes(t, check, request)
     run_bursts(t, check)
 
 
@@ -1815,3 +1815,67 @@ def run_bursts(t, check):
         burst(80)
     check('five bursts of 80 simultaneous requests are all answered', outcomes == {'ok': 400, 'failed': 0}, outcomes)
     check('and the server goes on answering', t.raw('GET', '/login.html')[0] == 200)
+
+
+def run_routes(t, check, request):
+    """The route table (api_routes.py): what answers each request, who may ask, and what is said to a request nothing answers."""
+    server = load_server()
+    json_headers = {'Content-Type': 'application/json'}
+    with_body = ('POST', 'PUT', 'PATCH')
+
+    def ask(method, path, token=None, headers=None):
+        send = method in with_body
+        return request(method, path, b'{}' if send else None, {**json_headers, **(headers or {})} if send else headers, token=token)
+
+    # ------------------------------------------------------------------ R the table
+    print('R   the route table')
+    routes, prefixed = server.ROUTES, server.PREFIXED
+    handlers = [handler for handler, _ in routes.values()] + [handler for _, _, handler in prefixed]
+    check('every route names a method the handler has', all(callable(getattr(server.AppHandler, handler, None)) for handler in handlers), [h for h in handlers if not hasattr(server.AppHandler, h)])
+    check('and no two routes share one', len(handlers) == len(set(handlers)), sorted({h for h in handlers if handlers.count(h) > 1}))
+    check('every path is under /api/, and a prefix ends in a slash', all(path.startswith('/api/') for _, path in routes) and all(prefix.startswith('/api/') and prefix.endswith('/') for _, prefix, _ in prefixed))
+    open_to_anyone = sorted(key for key, (_, public) in routes.items() if public)
+    check('exactly these are open to anyone: who is signed in, and the ways of signing in, up, out and back in', open_to_anyone == sorted([
+        ('GET', '/api/auth/me'), ('POST', '/api/auth/register'), ('POST', '/api/auth/login'), ('POST', '/api/auth/forgot-password'), ('POST', '/api/auth/reset-password'),
+        ('POST', '/api/auth/logout')]), open_to_anyone)
+    check('and a route with an id is never one of them', all(not server.find_route(method, prefix + '12')[1] for method, prefix, _ in prefixed))
+    check('find_route finds a route, a route with an id, and nothing', server.find_route('GET', '/api/workouts') == ('list_workouts', False)
+          and server.find_route('PUT', '/api/workouts/12') == ('update_workout', False) and server.find_route('GET', '/api/workouts/12') == (None, False)
+          and server.find_route('GET', '/api/nothing') == (None, False) and server.find_route('POST', '/api/state') == (None, False))
+
+    # ------------------------------------------------------------------ A who may ask
+    print('A   who may ask')
+    token = api_token(t, 'router')
+    closed = [(key, handler) for key, (handler, public) in sorted(routes.items()) if not public] + [((method, prefix + '12'), handler) for method, prefix, handler in prefixed]
+    signed_out = {key: ask(*key)[0] for key, _ in closed}
+    check('every route that is not open to anyone answers 401 to someone signed out, before it looks at what was sent', set(signed_out.values()) == {401}, {k: v for k, v in signed_out.items() if v != 401})
+    # (What changes the account itself asks for its password, and a wrong one counts against it: those are checked in their own sections.)
+    answered = {key: ask(*key, token=token)[0] for key, _ in closed if not key[1].startswith('/api/account/')}
+    check('and to someone signed in, every one is answered: what is wrong with a request is a 4xx, never a path that is not there',
+          all(status != 404 or key[1].startswith('/api/workouts/') for key, status in answered.items()), {k: v for k, v in answered.items() if v == 404})
+    check('none of them is a server error', all(status < 500 for status in answered.values()), {k: v for k, v in answered.items() if v >= 500})
+
+    # ------------------------------------------------------------------ U what nothing answers
+    print('U   what nothing answers')
+    nothing = [('GET', '/api/nothing'), ('POST', '/api/nothing'), ('PUT', '/api/nothing'), ('PATCH', '/api/nothing'), ('DELETE', '/api/nothing'), ('POST', '/api/state'),
+               ('DELETE', '/api/workouts'), ('GET', '/api/workouts/12'), ('POST', '/api/workouts/12'), ('PATCH', '/api/workouts/12'), ('GET', '/api/auth/login'),
+               ('DELETE', '/api/auth/me'), ('GET', '/api/push/test'), ('PUT', '/api/export'), ('GET', '/api/'), ('GET', '/api/workouts/')]
+    signed_out = {key: ask(*key)[0] for key in nothing}
+    check('a request nothing answers is 401 to someone signed out, which says nothing of what is and is not there', set(signed_out.values()) == {401}, {k: v for k, v in signed_out.items() if v != 401})
+    signed_in = {key: ask(*key, token=token) for key in nothing}
+    check('and 404, with a message, to someone signed in', all((status, reply) == (404, {'error': 'Endpoint not found.'}) for status, _, reply in signed_in.values()),
+          {k: (v[0], v[2]) for k, v in signed_in.items() if v[0] != 404})
+    status, _, reply = request('PUT', '/api/workouts/not-a-number', json.dumps({'name': 'x', 'exercises': [{'name': 'a', 'reps': 1}]}).encode(), json_headers, token=token)
+    check('an id that is not a number is a workout that is not found, not an endpoint that is not', (status, reply) == (404, {'error': 'Workout not found.'}), (status, reply))
+    status, _, reply = request('PUT', '/api/workouts/12', b'not json', json_headers, token=token)
+    check('but what was sent is still checked first', status == 400, (status, reply))
+    status, _, reply = request('DELETE', '/api/workouts/not-a-number', None, None, token=token)
+    check('and a delete of one is the same', (status, reply) == (404, {'error': 'Workout not found.'}), (status, reply))
+    check('a change from another page of the site is refused before the route is looked at, whether the route exists or not',
+          ask('POST', '/api/nothing', token=token, headers={'Sec-Fetch-Site': 'same-site'})[0] == 403 and ask('POST', '/api/workouts', token=token, headers={'Sec-Fetch-Site': 'cross-site'})[0] == 403)
+
+
+def api_token(t, name):
+    """A new account's session, for a check that may do things that count against an account."""
+    cookie = t.api('POST', '/api/auth/register', {'username': name, 'email': f'{name}@example.test', 'password': 'chalk-and-plates-42'})[1]
+    return cookie.split('session=')[1].split(';')[0]

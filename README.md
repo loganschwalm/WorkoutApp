@@ -8,7 +8,7 @@ progress.
 It runs on your own server, supports several accounts, and works on a phone at the gym, even when the
 connection drops.
 
-The frontend is plain HTML, CSS and JavaScript. The backend is one Python file using only the standard
+The frontend is plain HTML, CSS and JavaScript. The backend is a few Python files using only the standard
 library, with SQLite for storage, so there is no build step, no package manager and no separate database.
 
 **[Install it on Proxmox with one command.](#install-on-proxmox)**
@@ -246,7 +246,7 @@ network drop, and it uploads when the server is reachable again. Each account se
 
 ```text
 frontend/        Pages, scripts, styles, icons, service worker
-backend/         server.py: the API, sign-in, and static files
+backend/         The server: server.py starts it; the rest is its API, sign-in, push and static files
 ct/              The Proxmox installer and updater
 scripts/         Demo server, screenshots, icons, Docker backups
 tests/           End-to-end browser tests and API tests

@@ -13,10 +13,10 @@ What each one guards is a list kept by hand in two places, where leaving one out
                shared scope, so two with a name would stop whichever loads second (or quietly replace the first)
   python       every Python file parses as Python 3.9, the oldest the README claims (Python newer than that, written
                by habit, is caught here and not on someone's server); pyflakes runs beside this in CI, for the rest
-  state        the parts of the account's state the server keeps (STATE_PARTS in backend/server.py) and the parts the pages sync
+  state        the parts of the account's state the server keeps (STATE_PARTS in backend/state.py) and the parts the pages sync
                (accountStateParts in frontend/offline.js) are the same
   defaults     the time of day to remind at, until one is chosen, is the same on the server and on the page
-  environment  every environment variable the server reads is in the reference's table of server settings
+  environment  every environment variable the server reads (in any of backend/*.py) is in the reference's table of server settings
   suites       every test suite is registered in tests/suites/__init__.py and has a row in tests/README.md
 """
 
@@ -99,34 +99,38 @@ def check_python(root):
 
 
 def check_state(root):
-    tree = ast.parse(read(root, 'backend', 'server.py'))
+    tree = ast.parse(read(root, 'backend', 'state.py'))
     on_server = None
     for node in tree.body:
         if isinstance(node, ast.Assign) and any(getattr(target, 'id', None) == 'STATE_PARTS' for target in node.targets) and isinstance(node.value, ast.Dict):
             on_server = [key.value for key in node.value.keys if isinstance(key, ast.Constant)]
     listed = re.search(r'const accountStateParts = \[(.*?)\];', read(root, 'frontend', 'offline.js'), re.S)
     if on_server is None or not listed:
-        return ['backend/server.py has no STATE_PARTS dict, or frontend/offline.js no accountStateParts list.']
+        return ['backend/state.py has no STATE_PARTS dict, or frontend/offline.js no accountStateParts list.']
     on_pages = re.findall(r"'([^']+)'", listed.group(1))
-    return ([f'backend/server.py keeps the state part {name}, which accountStateParts in frontend/offline.js does not sync.' for name in on_server if name not in on_pages]
-            + [f'accountStateParts in frontend/offline.js syncs {name}, which STATE_PARTS in backend/server.py does not keep.' for name in on_pages if name not in on_server])
+    return ([f'backend/state.py keeps the state part {name}, which accountStateParts in frontend/offline.js does not sync.' for name in on_server if name not in on_pages]
+            + [f'accountStateParts in frontend/offline.js syncs {name}, which STATE_PARTS in backend/state.py does not keep.' for name in on_pages if name not in on_server])
 
 
 def check_defaults(root):
-    server = re.search(r"DEFAULT_REMINDER_TIME = '([^']*)'", read(root, 'backend', 'server.py'))
+    server = re.search(r"DEFAULT_REMINDER_TIME = '([^']*)'", read(root, 'backend', 'config.py'))
     page = re.search(r"schedule:\{ days:\[\], time:'([^']*)' \}", read(root, 'frontend', 'settings-fields.js'))
     if not server or not page:
-        return ['DEFAULT_REMINDER_TIME in backend/server.py, or the schedule default in frontend/settings-fields.js, was not found.']
+        return ['DEFAULT_REMINDER_TIME in backend/config.py, or the schedule default in frontend/settings-fields.js, was not found.']
     if server.group(1) != page.group(1):
         return [f'The default reminder time is {server.group(1)} on the server (DEFAULT_REMINDER_TIME) and {page.group(1)} on the page (settings-fields.js).']
     return []
 
 
 def check_environment(root):
-    server = read(root, 'backend', 'server.py')
     reference = read(root, 'readme-for-llm.md')
-    names = set(re.findall(r"os\.environ\.get\('([A-Z][A-Z0-9_]*)'", server)) | set(re.findall(r"env_flag\('([A-Z][A-Z0-9_]*)'", server))
-    return [f'backend/server.py reads {name}, which readme-for-llm.md does not mention.' for name in sorted(names) if name not in reference]
+    found = {}
+    for path in sorted(glob.glob(os.path.join(root, 'backend', '*.py'))):
+        module = os.path.basename(path)
+        source = read(root, 'backend', module)
+        for name in set(re.findall(r"os\.environ\.get\('([A-Z][A-Z0-9_]*)'", source)) | set(re.findall(r"env_flag\('([A-Z][A-Z0-9_]*)'", source)):
+            found.setdefault(name, module)
+    return [f'backend/{module} reads {name}, which readme-for-llm.md does not mention.' for name, module in sorted(found.items()) if name not in reference]
 
 
 def check_suites(root):

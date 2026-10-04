@@ -7,8 +7,8 @@ import secrets
 import sqlite3
 import time
 
-from ..harness import ACTIVE, PLAIN_HTTP_HOST, REPO_ROOT
-from .push import PushService, decrypt_message, load_server
+from ..harness import ACTIVE, PLAIN_HTTP_HOST, REPO_ROOT, load_server
+from .push import PushService, decrypt_message
 
 INTERCEPT = False
 

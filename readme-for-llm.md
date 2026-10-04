@@ -7,7 +7,7 @@ people, and is where to start otherwise. When the app changes, both are kept up 
 
 A workout tracker for creating, completing, reviewing, and analyzing workouts.
 
-The frontend is plain HTML, CSS, and JavaScript. The backend is a single Python file that uses
+The frontend is plain HTML, CSS, and JavaScript. The backend is a few Python files (in `backend/`, started by `server.py`) that use
 nothing outside the standard library and stores data in SQLite, so self-hosting needs no package
 manager, no build step, and no external database. Multiple accounts are supported, each with its
 own workouts, templates, and settings.
@@ -464,7 +464,7 @@ A day with no program is just "a training day". The pieces:
   `fcm.googleapis.com`, Mozilla's, Apple's, Microsoft's), and on an iPhone or iPad the app added to the Home Screen
   (Safari 16.4 or later). Settings says what is missing.
 
-How push works here, for whoever maintains it. The standard library has no elliptic curves or AES, so `server.py` carries
+How push works here, for whoever maintains it. The standard library has no elliptic curves or AES, so `webpush_crypto.py` carries
 the little of them that web push needs: P-256 (ECDH and ECDSA), AES-128-GCM and HKDF, in pure Python (about 2 ms a message). The message
 is encrypted for the browser with `aes128gcm` (RFC 8188 and 8291) and the request is signed as the server with VAPID (RFC
 8292). The server's signing key is made the first time it is needed and kept in the `server_keys` table, so a subscription
@@ -474,7 +474,7 @@ them, may refuse a sender with no contact: set it to `mailto:you@example.com`). 
 (NIST's AES-GCM cases, RFC 5869 and RFC 8291's example) and against the `cryptography` library while it was written.
 
 A subscription is an address the server posts to, so it is not taken from just anyone: only `https` addresses on the browser
-makers' push services are accepted (`PUSH_SERVICES` in `server.py`), no redirect is followed, and the keys it carries must be
+makers' push services are accepted (`PUSH_SERVICES` in `webpush.py`), no redirect is followed, and the keys it carries must be
 a point on the curve. `PUSH_ALLOWED_HOSTS` adds hosts, which may then be plain `http`, for a push service of one's own (the
 tests give the server one). An account has at most 10 subscriptions (the newest are kept). The API:
 
@@ -691,7 +691,7 @@ control is a line, made by `checkSetting` (a tick box, on by default), `choiceSe
 turns anything else into one of them) or `rangeSetting` (a number kept between two limits); anything more, such as the theme
 picker, the training days or the bar and plates, is an entry of its own. To add a setting, add its entry to a section, then
 use `getWorkoutSettings().yourKey` where it matters; if it is shown by the server (a reminder time, say), also check it in
-`validate_settings` in `server.py`. The `settings_table` suite shows that a setting added to the table is shown, read and
+`validate_settings` in `state.py`. The `settings_table` suite shows that a setting added to the table is shown, read and
 defaulted with nothing else changed, and that a form showing the defaults reads back as them.
 
 ### Exporting and importing
@@ -762,7 +762,19 @@ which has every account.
 
 ```text
 frontend/               Browser pages, scripts, styles, icons, service worker, manifest
-backend/server.py       API, authentication, and static file server
+backend/server.py       Starts the server (or runs an account command: users, reset-password, set-email, delete-user)
+backend/config.py       Every setting the environment gives, and the fixed limits
+backend/database.py     The SQLite schema as numbered migrations, and the connection a request uses
+backend/validation.py   BadRequest, and the checks of a workout and its cardio
+backend/state.py        The account's synced state: STATE_PARTS, its checks, its import rules, and merging devices' changes
+backend/workouts.py     The workouts' ETag, CSV export, and the check for one already stored
+backend/accounts.py     Account rules, password hashing, sign-in limits, finding an account, and the reset-code email
+backend/webpush_crypto.py  P-256, AES-GCM and HKDF in pure Python, and the encryption of a push message
+backend/webpush.py      Push subscriptions, the signing key, sending, and the reminder loop
+backend/webserver.py    The handler every request goes through (static files, JSON, sessions) and serve()
+backend/api_routes.py   The route table: which method answers each API request, and who may ask
+backend/api_accounts.py, api_data.py, api_push.py   What each API request does, by topic
+backend/admin.py        The account commands run from the server's own command line
 data/                   SQLite database when run from a git checkout (gitignored)
 ct/workout-tracker.sh   Proxmox VE one-line installer and updater
 scripts/make-icons.py   Regenerates the app icons in frontend/icons/
@@ -775,6 +787,14 @@ docker-compose.yml      Docker deployment with a persistent volume
 tests/                  End-to-end browser tests and API tests (see tests/README.md)
 .github/workflows/      Runs the tests on every push, and moves the stable branch when they pass on main
 ```
+
+To add an API endpoint, write its method in the `api_*.py` file for its topic (`def name(self, user)`, or `def name(self)` for one
+open to anyone) and add its line to `ROUTES` in `api_routes.py`: `('POST', '/api/thing'): ('name', False)`, where the `False` is
+"not open to anyone". A route that is not open to anyone needs a signed-in account, and a request that no route has is answered 401 to
+someone signed out and 404 ("Endpoint not found.") to someone signed in, so nothing is reachable by being forgotten. A path that
+carries an id (`PUT /api/workouts/12`) is in `PREFIXED`, and the handler reads it from `self.api_path`. The `api` suite checks the
+table: each route's method exists, exactly the sign-in routes are open to anyone, and every other route says 401 to someone
+signed out.
 
 ## Self-hosting
 
@@ -1458,11 +1478,11 @@ loaded or uploaded, kept beside the change in `localStorage` until it is uploade
 uploaded since whose answer never came back (the page closed, or the connection dropped on the way back), which the server
 may have stored: a value that differs from any of them is this device's change, so a setting changed and changed back
 before an answer arrived still goes up. The server merges the change into
-its own copy in one locked transaction (`merge_part` in `server.py`), so two devices sending at once both keep their
+its own copy in one locked transaction (`merge_part` in `state.py`), so two devices sending at once both keep their
 changes, and answers with the merged state. A part sent without `base` replaces the stored one whole, as `PUT
 /api/state` does for pages from before.
 
-The parts of the state are listed once, in `STATE_PARTS` in `server.py`: `settings`, `templates`, `program`, `exerciseNotes`,
+The parts of the state are listed once, in `STATE_PARTS` in `state.py`: `settings`, `templates`, `program`, `exerciseNotes`,
 `goals`, `bodyweight` and `exerciseLibrary`. Each entry says its `column` in `user_state`, what it is when `empty` (also the
 column's `DEFAULT`), how it is `merge`d, how a value is `validate`d, what an import `take`s of it and what it `report`s
 under. Loading, storing, validating, merging, exporting and importing all read from that table. To add a part:

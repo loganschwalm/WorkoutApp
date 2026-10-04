@@ -3,7 +3,7 @@ FROM python:3.12-slim
 RUN useradd --system --user-group --no-create-home --shell /usr/sbin/nologin workout
 WORKDIR /app
 COPY frontend /app/frontend
-COPY backend/server.py /app/server.py
+COPY backend/*.py /app/
 COPY docker-entrypoint.py /app/docker-entrypoint.py
 RUN mkdir -p /app/data && chown workout:workout /app/data
 ENV PORT=6769
