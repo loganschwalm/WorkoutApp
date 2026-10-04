@@ -43,6 +43,17 @@ def run_suite(name, frontend=None):
     return passed, len(results)
 
 
+def annotate(name, log):
+    """On GitHub Actions, each failed check (or, for a suite that stopped, its last line) as an error annotation: shown on
+    the run's page, and readable through the API by anyone, where the log itself needs the repository's admin."""
+    lines = [line.strip() for line in log.splitlines() if line.strip()]
+    failures = [line for line in lines if line.startswith('[FAIL]')] or lines[-1:]
+    for line in failures[:10]:
+        # The workflow-command escapes for a message: %, then the line breaks.
+        message = line[:500].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+        print(f'::error title={name}::{message}')
+
+
 def run_in_parallel(names, jobs, frontend):
     """Run each suite in its own process, at most `jobs` at a time.
 
@@ -83,10 +94,13 @@ def run_in_parallel(names, jobs, frontend):
         for name in names:
             path, code = finished[name]
             with open(path, encoding='utf-8', errors='replace') as handle:
-                print(handle.read().rstrip('\n'))
+                log = handle.read().rstrip('\n')
+            print(log)
             print()
             if code != 0:
                 failed.append(name)
+                if os.environ.get('GITHUB_ACTIONS') == 'true':
+                    annotate(name, log)
         return failed
     finally:
         shutil.rmtree(logdir, ignore_errors=True)
