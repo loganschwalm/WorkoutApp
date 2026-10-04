@@ -29,6 +29,7 @@ class PushService(http.server.ThreadingHTTPServer):
         super().__init__(('127.0.0.1', free_port()), PushHandler)
         self.received = []
         self.answers = {}
+        self.delays = {}
         self.lock = threading.Lock()
         threading.Thread(target=self.serve_forever, daemon=True).start()
 
@@ -67,6 +68,9 @@ class PushHandler(http.server.BaseHTTPRequestHandler):
             self.server.received.append({'path': self.path, 'headers': {k.lower(): v for k, v in self.headers.items()}, 'body': body})
             answers = self.server.answers.get(self.path, [])
             status = answers.pop(0) if answers else 201
+            delay = self.server.delays.get(self.path, 0)
+        # A push service that is slow to answer: the request is kept above, and the answer comes after this.
+        time.sleep(delay)
         self.send_response(status)
         self.send_header('Content-Length', '0')
         self.end_headers()
@@ -405,3 +409,36 @@ def run(t):
     time.sleep(1.5)
     check('and with them put back, it carries on', len(ready.messages()) == 3, len(ready.messages()))
     check('no page of the app sees any of it: the server stays up throughout', app.api('GET', '/api/auth/me')[0] is not None)
+
+    # ------------------------------------------------------------------ P the messages go at once
+    print('P   a push service that is slow holds up only itself')
+    token_many = signed_up('manyphones')
+    slow_phones = [Phone(f'slow{index}', offset) for index in range(6)]
+    for phone in slow_phones:
+        phone.subscribe(token_many)
+        service.delays[f'/push/{phone.name}'] = 2.0
+    started = time.time()
+    status, reply = post('/api/push/test', {}, token_many)
+    took = time.time() - started
+    check('a test to six phones that each take two seconds to answer is sent to all', status == 200 and reply['devices'] == 6 and reply['sent'] == 6, f'{status} {reply}')
+    check('in about the time of one, not the sum of them', 1.8 < took < 6, took)
+    check('each of them was sent its own', all(len(phone.messages()) == 1 for phone in slow_phones), [len(phone.messages()) for phone in slow_phones])
+
+    time.sleep(3.1)
+    unreachable = Phone('nowhere', offset)
+    unreachable.endpoint = 'http://127.0.0.1:1/push/nowhere'
+    unreachable.subscribe(token_many)
+    status, reply = post('/api/push/test', {}, token_many)
+    check('one that cannot be reached at all fails alone: the others are sent, and it is kept', status == 200 and reply == {'devices': 7, 'sent': 6, 'forgotten': 0, 'failed': 1}
+          and database("SELECT COUNT(*) FROM push_subscriptions WHERE endpoint LIKE '%nowhere'")[0][0] == 1, f'{status} {reply}')
+    for phone in [*slow_phones, unreachable]:
+        post('/api/push/unsubscribe', {'endpoint': phone.endpoint}, token_many)
+
+    # A push service that has stopped answering must not hold up reminders to phones on others. The slow one is asked first.
+    service.delays['/push/hung'] = 4.0
+    _, hung = account('hung', [today], now_minutes - 1)
+    _, brisk = account('brisk', [today], now_minutes - 1)
+    check('a reminder to a phone whose push service is taking its time does not wait for it', wait_until(lambda: len(brisk.messages()) == 1, 3), len(brisk.messages()))
+    check('though the slow one has been asked', len(service.to('hung')) >= 1)
+    check('and gets its own when its push service gets round to it, once', wait_until(lambda: len(service.to('hung')) >= 1 and database("SELECT last_sent FROM push_subscriptions WHERE endpoint LIKE '%/hung'")[0][0] == device_now(offset).date().isoformat(), 8)
+          and len(hung.messages()) == 1, len(hung.messages()))

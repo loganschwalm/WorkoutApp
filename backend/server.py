@@ -1,5 +1,6 @@
 import argparse
 import base64
+import concurrent.futures
 import contextlib
 import csv
 import datetime
@@ -297,9 +298,27 @@ def migration_11_push(database):
     database.execute('CREATE TABLE server_keys (name TEXT PRIMARY KEY, value TEXT NOT NULL)')
 
 
+def migration_12_workout_cache(database):
+    # Two things for reading an account's workouts, which every page does on every load. An index in the order they are read.
+    # And a tag per account that changes whenever one of its workouts is added, changed or deleted, which is the ETag of
+    # GET /api/workouts, so a page that already has the history is told it is current instead of being sent it again
+    # (workout_tag). The triggers keep it, so no way of writing a workout can forget to: an upload, an edit, a delete,
+    # an import. The tag is random each time rather than a count, so a database restored from a backup cannot give a tag
+    # that a browser has seen before for different workouts.
+    database.execute('CREATE INDEX workouts_user_created ON workouts(user_id, created_at)')
+    database.execute('CREATE TABLE workout_versions (user_id INTEGER PRIMARY KEY, tag TEXT NOT NULL)')
+    for name, event, row in (('inserted', 'INSERT', 'NEW'), ('updated', 'UPDATE', 'NEW'), ('deleted', 'DELETE', 'OLD')):
+        database.execute(f'''
+            CREATE TRIGGER workouts_{name} AFTER {event} ON workouts
+            BEGIN
+                INSERT INTO workout_versions (user_id, tag) VALUES ({row}.user_id, lower(hex(randomblob(8))))
+                ON CONFLICT(user_id) DO UPDATE SET tag = excluded.tag;
+            END''')
+
+
 MIGRATIONS = [migration_1_tables, migration_2_client_ids, migration_3_programs, migration_4_emails, migration_5_exercise_notes,
               migration_6_hashed_sessions, migration_7_goals, migration_8_bodyweight, migration_9_remembered_sessions,
-              migration_10_exercise_library, migration_11_push]
+              migration_10_exercise_library, migration_11_push, migration_12_workout_cache]
 
 
 def init_database():
@@ -780,9 +799,27 @@ def merge_part(part, bases, mine, theirs):
 def delete_account_rows(database, user_id):
     """Everything an account has, then the account. The tables would cascade, but only with foreign keys on and on
     databases made since those references existed, so each is emptied by name."""
-    for table in ('sessions', 'workouts', 'active_sessions', 'user_state', 'password_resets', 'push_subscriptions'):
+    for table in ('sessions', 'workouts', 'workout_versions', 'active_sessions', 'user_state', 'password_resets', 'push_subscriptions'):
         database.execute(f'DELETE FROM {table} WHERE user_id = ?', (user_id,))
     database.execute('DELETE FROM users WHERE id = ?', (user_id,))
+
+
+def workout_tag(database, user_id):
+    """The tag that changes with the account's workouts (see migration_12_workout_cache). An account with workouts from before
+    the tags has none until now, and is given one."""
+    row = database.execute('SELECT tag FROM workout_versions WHERE user_id = ?', (user_id,)).fetchone()
+    if not row:
+        database.execute('INSERT OR IGNORE INTO workout_versions (user_id, tag) VALUES (?, ?)', (user_id, secrets.token_hex(8)))
+        row = database.execute('SELECT tag FROM workout_versions WHERE user_id = ?', (user_id,)).fetchone()
+    return row['tag']
+
+
+def etag_matches(header, etag):
+    """Whether an If-None-Match header names this ETag (or anything: *). Compared weakly, as it is for a GET, so W/"x" is "x"."""
+    if not header:
+        return False
+    plain = lambda tag: tag.strip().removeprefix('W/')
+    return header.strip() == '*' or plain(etag) in {plain(tag) for tag in header.split(',')}
 
 
 def exported_workouts(database, user_id):
@@ -1048,6 +1085,10 @@ REMINDER_GRACE_MINUTES = 3 * 60
 PUSH_SERVICES = ('fcm.googleapis.com', 'push.services.mozilla.com', 'push.apple.com', 'notify.windows.com')
 PUSH_ALLOWED_HOSTS = tuple(host.strip().lower() for host in os.environ.get('PUSH_ALLOWED_HOSTS', '').split(',') if host.strip())
 MAX_SUBSCRIPTIONS = 10
+# How many messages go at once (see send_all). Threads only wait on the network, so a few is plenty for one household's phones,
+# and not so many that one push service that has stopped answering could take them all.
+PUSH_WORKERS = 8
+push_pool = concurrent.futures.ThreadPoolExecutor(max_workers=PUSH_WORKERS, thread_name_prefix='push')
 # The least time between one test notification and the next, per account, in seconds.
 TEST_PUSH_WAIT = 3
 push_test_times = {}
@@ -1349,12 +1390,27 @@ def send_push(subscription, message):
         return None
 
 
-def send_to_subscriptions(database, subscriptions, message):
-    """Sends to each, forgetting the ones the push service says are gone (404 and 410, a phone that cleared its site data or
-    turned notifications off). Returns how many were sent, how many were forgotten, and how many failed some other way."""
-    sent = forgotten = failed = 0
-    for subscription in subscriptions:
-        status = send_push(subscription, message)
+def send_safely(subscription, message):
+    """send_push, with anything it did not expect kept from stopping the rest: a message that goes astray is no worse than one lost."""
+    try:
+        return send_push(subscription, message)
+    except Exception:
+        traceback.print_exc()
+        return None
+
+
+def send_all(subscriptions, message):
+    """The message sent to every subscription at once, up to PUSH_WORKERS at a time, so a push service that is slow, or
+    does not answer, holds up only its own. The statuses, in the order of the subscriptions."""
+    return list(push_pool.map(lambda subscription: send_safely(subscription, message), subscriptions))
+
+
+def settle_pushes(database, subscriptions, statuses):
+    """What the statuses of the sends mean: forgets the subscriptions the push service says are gone (404 and 410, a phone
+    that cleared its site data or turned notifications off). Returns how many were sent, how many were forgotten, and the
+    subscriptions that failed some other way."""
+    sent, forgotten, failed = 0, 0, []
+    for subscription, status in zip(subscriptions, statuses):
         if status is not None and 200 <= status < 300:
             sent += 1
         elif status in (404, 410):
@@ -1362,7 +1418,7 @@ def send_to_subscriptions(database, subscriptions, message):
             forgotten += 1
         else:
             print(f"Could not push to {urlparse(subscription['endpoint']).netloc}: {'no answer' if status is None else status}.", flush=True)
-            failed += 1
+            failed.append(subscription)
     return sent, forgotten, failed
 
 
@@ -1419,12 +1475,21 @@ def send_due_reminders():
     now = datetime.datetime.now(datetime.timezone.utc)
     with connection() as database:
         due = due_reminders(database, now)
+    # Each is sent by the pool, and settled as its answer comes, so this returns at once: the next look at the time is not kept
+    # waiting for a push service that has stopped answering. No connection is held while a message goes either.
     for subscription in due:
+        push_pool.submit(send_safely, subscription, REMINDER_MESSAGE).add_done_callback(lambda future, subscription=subscription: reminder_answered(subscription, future))
+
+
+def reminder_answered(subscription, future):
+    """What came of one reminder: a phone the push service says is gone is forgotten, and one that could not be reached is tried
+    again on the next look, while it is still worth it (its day is not counted as reminded)."""
+    try:
         with connection() as database:
-            sent, forgotten, failed = send_to_subscriptions(database, [subscription], REMINDER_MESSAGE)
-            if failed:
-                # Not delivered, and not for want of a phone to deliver it to: tried again on the next look, while it is still worth it.
+            if settle_pushes(database, [subscription], [future.result()])[2]:
                 database.execute('UPDATE push_subscriptions SET last_sent = ? WHERE id = ?', (subscription['last_sent'], subscription['id']))
+    except Exception:
+        traceback.print_exc()
 
 
 def reminder_loop():
@@ -1454,6 +1519,11 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
 
     # Applied to every read and write on the connection (see REQUEST_TIMEOUT).
     timeout = REQUEST_TIMEOUT
+
+    # Answers say HTTP/1.1, because a browser takes an ETag, and so the workouts' 304, only from a server that does: the standard
+    # library's HTTP/1.0 makes it ask for everything again. Every connection is still closed after its answer, as it always
+    # was (keep-alive would hold a thread for each idle one, and a stop would wait for them), which Connection: close says.
+    protocol_version = 'HTTP/1.1'
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=ROOT, **kwargs)
@@ -1575,15 +1645,20 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
     def parse_request(self):
         # One handler answers every request on a keep-alive connection, so nothing is carried over from the last one.
         self.renewed_cookie = None
-        return super().parse_request()
+        understood = super().parse_request()
+        self.close_connection = True
+        return understood
 
     def send_response(self, *args, **kwargs):
         self.cache_control_sent = False
+        self.connection_sent = False
         super().send_response(*args, **kwargs)
 
     def send_header(self, keyword, value):
         if keyword.lower() == 'cache-control':
             self.cache_control_sent = True
+        elif keyword.lower() == 'connection':
+            self.connection_sent = True
         super().send_header(keyword, value)
 
     def end_headers(self):
@@ -1594,6 +1669,8 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
         # that never asks again. Revalidating every time costs a 304 and avoids both.
         if not getattr(self, 'cache_control_sent', False):
             self.send_header('Cache-Control', 'no-cache')
+        if not getattr(self, 'connection_sent', False):
+            self.send_header('Connection', 'close')
         # A session renewed while answering this request (see session_user) goes out on whatever the answer is.
         if getattr(self, 'renewed_cookie', None):
             self.send_header('Set-Cookie', self.renewed_cookie)
@@ -1616,8 +1693,7 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
         self.send_response(status)
         self.send_header('Content-Type', 'application/json; charset=utf-8')
         self.send_header('Content-Length', str(len(body)))
-        self.send_header('Cache-Control', 'no-store')
-        for name, value in {**encoding, **(headers or {})}.items():
+        for name, value in {'Cache-Control': 'no-store', **encoding, **(headers or {})}.items():
             self.send_header(name, value)
         if cookies:
             for cookie in cookies:
@@ -1755,13 +1831,25 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             return
         with connection() as database:
             if path == '/api/workouts':
+                # A page already holding the history is told so, rather than sent it again: every page asks on every load,
+                # and the history only grows. Cached by the browser, which checks with the server each time (no-cache), under a
+                # tag that changes whenever a workout does. The tag is read first, so workouts changing meanwhile can only
+                # leave the browser with newer ones than the tag says, which it then asks for again.
+                etag = f'W/"{workout_tag(database, user["id"])}"'
+                caching = {'ETag': etag, 'Cache-Control': 'private, no-cache'}
+                if etag_matches(self.headers.get('If-None-Match'), etag):
+                    self.send_response(HTTPStatus.NOT_MODIFIED)
+                    for name, value in caching.items():
+                        self.send_header(name, value)
+                    self.end_headers()
+                    return
                 rows = database.execute('SELECT id, name, notes, created_at, payload FROM workouts WHERE user_id = ? ORDER BY created_at DESC', (user['id'],)).fetchall()
                 workouts = []
                 for row in rows:
                     item = json.loads(row['payload'])
                     item.update(id=row['id'], name=row['name'], notes=row['notes'], createdAt=row['created_at'])
                     workouts.append(item)
-                self.send_json(HTTPStatus.OK, {'workouts': workouts})
+                self.send_json(HTTPStatus.OK, {'workouts': workouts}, headers=caching)
             elif path == '/api/active-session':
                 row = database.execute('SELECT payload FROM active_sessions WHERE user_id = ?', (user['id'],)).fetchone()
                 self.send_json(HTTPStatus.OK, {'session': json.loads(row['payload']) if row else None})
@@ -2098,9 +2186,10 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             push_test_times[user['id']] = now
         with connection() as database:
             subscriptions = [dict(row) for row in database.execute('SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?', (user['id'],))]
-            sent, forgotten, failed = send_to_subscriptions(database, subscriptions, {
-                'title': 'Workout Tracker', 'body': 'Reminders work on this device.', 'url': '/index.html', 'tag': 'test'})
-        self.send_json(HTTPStatus.OK, {'devices': len(subscriptions), 'sent': sent, 'forgotten': forgotten, 'failed': failed})
+        statuses = send_all(subscriptions, {'title': 'Workout Tracker', 'body': 'Reminders work on this device.', 'url': '/index.html', 'tag': 'test'})
+        with connection() as database:
+            sent, forgotten, failed = settle_pushes(database, subscriptions, statuses)
+        self.send_json(HTTPStatus.OK, {'devices': len(subscriptions), 'sent': sent, 'forgotten': forgotten, 'failed': len(failed)})
 
     def api_post(self, path):
         if path == '/api/auth/register':
@@ -2120,7 +2209,9 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             if token:
                 with connection() as database:
                     database.execute('DELETE FROM sessions WHERE token = ?', (session_hash(token),))
-            self.send_json(HTTPStatus.OK, {'ok': True}, [self.session_cookie('', 0)])
+            # The workouts are kept by the browser between visits (see GET /api/workouts), so signing out clears them, on a
+            # browser that understands this (Safari does not) and over HTTPS or localhost, the only places it is honoured.
+            self.send_json(HTTPStatus.OK, {'ok': True}, [self.session_cookie('', 0)], headers={'Clear-Site-Data': '"cache"'})
             return
         user = self.require_user()
         if not user:

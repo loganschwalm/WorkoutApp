@@ -453,7 +453,10 @@ A day with no program is just "a training day". The pieces:
   `REMINDER_TICK_SECONDS`, 60 by default) sends a notification to each subscribed device on each training day, once, from the
   time chosen until three hours later (a server that was down, or a phone that was off, still sends it), by that phone's own
   clock, and not on a day a workout has been saved. A push service that cannot be reached is tried again on the next look.
-  One that says the phone is gone (404 or 410) has its subscription forgotten. The message opens the app. Whether reminders
+  One that says the phone is gone (404 or 410) has its subscription forgotten. The messages go at once, up to 8 at a time
+  (`PUSH_WORKERS`), and the loop does not wait for them: a push service that has stopped answering holds up only its own
+  phones, for the 10 seconds it is waited for, and not the reminders that fall due meanwhile. The same goes for the
+  test notification, which takes as long as the slowest of an account's phones and not the sum. The message opens the app. Whether reminders
   are on belongs to the browser, not the account: a phone can have them and a laptop not. Signing out takes the browser off
   the account's reminders, and a subscription is told to the server again once a day and when the phone's clock changes.
 - **Needs**: HTTPS (service workers and push need a secure context, see [Offline support needs
@@ -1451,6 +1454,23 @@ The training schedule is part of the settings. Phones that have reminders on are
 post to, its keys, the phone's clock and the day it was last reminded), and the key that signs the server's push messages is
 in `server_keys`. They are not exported, and deleting the account deletes them. A backup holds that signing key: anyone with
 the database could also read the subscriptions and send those phones notifications, so treat backups as private.
+
+Every page asks for the account's workouts on every load, and the history only grows, so `GET /api/workouts` is answered
+with an `ETag` and `Cache-Control: private, no-cache`: the browser keeps the answer, asks the server each time, and is told
+`304 Not Modified`, with no body, while no workout has changed. A page that has the history costs a few hundred bytes
+instead of all of it, and a second page (History after the Tracker) shares the first's copy. The tag is `workout_versions.tag`,
+a random value that SQLite triggers on `workouts` replace whenever a row is inserted, updated or deleted for the account
+(migration 12), so no way of writing a workout can forget to: an upload, an edit, a delete, an import, or a change made to the
+database by hand. It is random rather than a count, so a restored backup cannot give a tag a browser has seen for different
+workouts. A retried upload (the same `clientId`) inserts nothing and changes nothing, nor do settings or the workout in progress.
+The same migration adds an index on `workouts(user_id, created_at)`, the order they are read in. A browser keeps the history
+on disk between visits, so signing out answers with `Clear-Site-Data: "cache"` (Chrome and Firefox, over HTTPS or localhost;
+Safari ignores it). Every other API answer is `no-store`.
+
+For a browser to use an ETag the server has to say HTTP/1.1 (Chrome sends no `If-None-Match` to an HTTP/1.0 server, which is
+what Python's standard library says by default), so `AppHandler.protocol_version` is `HTTP/1.1`. Every connection is still
+closed after its answer, with `Connection: close`, as it always was: keep-alive would hold a thread for each idle
+connection, and stopping the server would wait for them.
 
 Include the SQLite file in your backup plan: it is at `/var/lib/workout-tracker/workouts.db` in an
 LXC install, and in the `workout_data` volume under Docker. The database runs in write-ahead-log mode,
