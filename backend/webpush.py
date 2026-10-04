@@ -26,8 +26,8 @@ from webpush_crypto import P256_N, b64url, b64url_decode, ec_multiply, ecdsa_sig
 # The standard library has no elliptic curves or AES, so the little of them that this needs is here: P-256 (ECDH and ECDSA),
 # AES-128 in GCM, and HKDF. They are checked against known answers in tests/suites/push.py. Pure Python is not constant-time,
 # which would matter if someone could make the server use a long-lived key over and over and time the answers. Here the
-# only long-lived key signs tokens that go to the push service, never back to whoever caused them, and every message's
-# encryption key is made fresh.
+# only long-lived key signs tokens that go to the push service, never back to whoever caused them, every multiplication
+# takes the same number of steps whatever its scalar (see ec_multiply), and every message's encryption key is made fresh.
 
 PUSH_TIMEOUT = 10
 # What the push service is told to do with a message it cannot deliver yet (a phone that is off), in seconds.

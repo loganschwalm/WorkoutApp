@@ -65,10 +65,17 @@ def ec_add(first, second):
 
 def ec_multiply(scalar, point=P256_G):
     """scalar × point as an (x, y) pair, or None for the point at infinity. A Montgomery ladder: every bit does the same two
-    operations, whichever it is."""
+    operations, whichever it is.
+
+    The scalar is first made exactly 257 bits long by adding the group order once or twice, which changes nothing (the order
+    times any point is the point at infinity). Every multiplication then takes the same number of steps, so how long a
+    signature took cannot tell anyone how many bits its random nonce had: enough of those lengths give away the signing key."""
+    scalar = scalar % P256_N + P256_N
+    if scalar.bit_length() <= 256:
+        scalar += P256_N
     base = (point[0], point[1], 1)
     low, high = EC_INFINITY, base
-    for bit in bin(scalar % P256_N)[2:]:
+    for bit in bin(scalar)[2:]:
         if bit == '1':
             low, high = ec_add(low, high), ec_double(high)
         else:

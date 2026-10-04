@@ -7,6 +7,7 @@ import http.server
 import json
 import secrets
 import sqlite3
+import sys
 import threading
 import time
 
@@ -83,6 +84,25 @@ def run(t):
     check('and the group has the order it should', server.ec_multiply(server.P256_N) is None)
     check('twice the generator is the point NIST lists', server.ec_multiply(2) == (
         0x7CF27B188D034F7E8A52380304B51AC3C08969E277F21B35A60B48FC47669978, 0x07775510DB8ED040293D9AC69F7430DBBA7DADE63CE982299E04B79D227873D1))
+    check('one times the generator is the generator, and minus one its mirror', server.ec_multiply(1) == server.P256_G
+          and server.ec_multiply(server.P256_N - 1) == (server.P256_G[0], server.P256_P - server.P256_G[1]))
+    crypto = sys.modules['webpush_crypto']
+
+    def doublings(scalar):
+        """How many doublings a multiplication by this scalar takes: the length of the ladder."""
+        original, count = crypto.ec_double, [0]
+
+        def counted(point):
+            count[0] += 1
+            return original(point)
+        crypto.ec_double = counted
+        try:
+            crypto.ec_multiply(scalar)
+        finally:
+            crypto.ec_double = original
+        return count[0]
+    steps = {doublings(k) for k in (1, 2, 3, 2 ** 64 + 1, 2 ** 128 - 1, server.P256_N - 1, secrets.randbelow(server.P256_N - 1) + 1)}
+    check('a multiplication takes as many steps whatever its scalar, so a nonce’s length cannot be timed', steps == {257}, steps)
     check('a point not on the curve is refused', not server.ec_on_curve(1, 1) and server.ec_on_curve(server.P256_G[0] + 1, server.P256_G[1]) is False)
     a, b = secrets.randbelow(server.P256_N - 1) + 1, secrets.randbelow(server.P256_N - 1) + 1
     check('two keys reach the same shared secret from each other’s public key',
