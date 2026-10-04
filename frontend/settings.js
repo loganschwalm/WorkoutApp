@@ -1,20 +1,9 @@
-let legacyTheme = null;
-try { legacyTheme = localStorage.getItem('workout-tracker-theme'); } catch (error) { /* no storage: follow the device */ }
-// Appearance: 'system' follows the device's light or dark mode; 'light' and 'dark' fix it.
-// Match system, or one of the themes theme.js knows. A page without theme.js (an old one, from the cache) has light and dark.
-const themeChoices = ['system', ...Object.keys(window.colorThemes || { light:'light', dark:'dark' })];
-const defaultSettings = { theme:themeChoices.includes(legacyTheme) ? legacyTheme : 'system', restDuration:90, weeklyGoal:3, unit:'lbs', autoRest:true, confirmEnd:true, soundEnabled:true, soundVolume:40, alertSound:'beep', vibrate:true, playThroughSilent:true, trackEffort:true, warmupSets:true, keepAwakeVideo:true,
-  schedule:{ days:[], time:'17:00' }, barLbs:45, barKg:20, platesLbs:[45, 35, 25, 10, 5, 2.5, 1.25], platesKg:[25, 20, 15, 10, 5, 2.5, 1.25], stepLbs:5, stepKg:2.5 };
-// Settings never chosen are the defaults, on every page; the server is told so (see accountStateFill in offline.js), or
-// saving the form, which writes every setting, would look like choosing each default over another device's choice.
-// Guarded: for one load after an update, this file can run beside an older offline.js from the cache.
+// What the settings are, their defaults, and how each is shown and read back are in settings-fields.js (loaded before this file).
+// The state the server keeps is told the defaults, so a default filled in on a page is not mistaken for a change made there
+// (see accountStateFill in offline.js). Guarded: for one load after an update, this file can run beside an older offline.js from the cache.
 if (typeof accountStateFill !== 'undefined') {
   accountStateFill.settings = value => ({ ...defaultSettings, ...(value && typeof value === 'object' && !Array.isArray(value) ? value : {}) });
 }
-const getSettingElement = id => document.getElementById(id);
-const canVibrate = typeof navigator.vibrate === 'function';
-// Safari (iOS 16.4 and later) lets a page choose how the phone treats its sound; see playRestAlert.
-const canPlayThroughSilent = 'audioSession' in navigator;
 const alertTones = {
   beep:[{ at:0, freq:880, length:0.18 }, { at:0.25, freq:880, length:0.18 }],
   chime:[{ at:0, freq:659, length:0.22 }, { at:0.2, freq:784, length:0.22 }, { at:0.4, freq:988, length:0.4 }],
@@ -131,102 +120,10 @@ function scheduleTones(tones, level) {
   }
 }
 
-// Miles or kilometres, for cardio: the one chosen in Settings, or until one is, the one that goes with the weight unit.
-function distanceUnitOf(settings = getWorkoutSettings()) {
-  if (settings.distanceUnit === 'mi' || settings.distanceUnit === 'km') return settings.distanceUnit;
-  return settings.unit === 'kg' ? 'km' : 'mi';
-}
-
-// Workouts a week the training calendar on the History page counts a week as done at: a whole number from 1 to 7.
-function weeklyGoalFrom(value) {
-  const goal = Math.round(Number(value));
-  return goal >= 1 && goal <= 7 ? goal : defaultSettings.weeklyGoal;
-}
-
-// The days of the week the lifter trains (as the browser numbers them, Sunday 0) and the time of day to remind them, from
-// the settings; a setting from before the schedule, or a hand-edited one, is no days and the default time.
-const scheduleTimePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
-
-function scheduleFrom(settings = getWorkoutSettings()) {
-  const stored = settings.schedule && typeof settings.schedule === 'object' ? settings.schedule : {};
-  const days = Array.isArray(stored.days) ? [...new Set(stored.days.filter(day => Number.isInteger(day) && day >= 0 && day <= 6))].sort((a, b) => a - b) : [];
-  return { days, time:scheduleTimePattern.test(stored.time) ? stored.time : defaultSettings.schedule.time };
-}
-
-// What the schedule fields say. A time cleared or half-typed keeps the one there was.
-function readScheduleFields(current) {
-  const days = [...getSettingElement('scheduleDays').querySelectorAll('input:checked')].map(input => Number(input.value)).sort((a, b) => a - b);
-  const typed = getSettingElement('reminderTimeSetting').value;
-  return { days, time:scheduleTimePattern.test(typed) ? typed : scheduleFrom(current).time };
-}
-
-// ---- Bar and plates -------------------------------------------------------
-// The bar, the plates there are to load on it, and the step the weight buttons and Go heavier go up by. Each unit keeps
-// its own, since a gym's pound plates are not its kilogram ones, and switching units never turns one into the other.
-// Plates come in quarters of a pound or kilogram at the finest, which the plate calculator (training-tools.js) relies on.
-const plateChoices = { lbs:[55, 45, 35, 25, 15, 10, 5, 2.5, 1.25, 0.5], kg:[25, 20, 15, 10, 5, 2.5, 2, 1.25, 1, 0.5] };
-const stepChoices = { lbs:[1, 2.5, 5, 10], kg:[0.5, 1, 1.25, 2.5, 5] };
-const barLimits = { lbs:[5, 100], kg:[2.5, 50] };
-const equipmentKeys = { lbs:{ bar:'barLbs', plates:'platesLbs', step:'stepLbs' }, kg:{ bar:'barKg', plates:'platesKg', step:'stepKg' } };
-
-// The bar, plates (heaviest first) and step for a unit, with anything missing or not one of the choices (a setting from
-// an older version, or a hand-edited import) taken from the defaults.
-function gymEquipment(settings = getWorkoutSettings(), unit = settings.unit === 'kg' ? 'kg' : 'lbs') {
-  const keys = equipmentKeys[unit];
-  const bar = Number(settings[keys.bar]);
-  const [lightest, heaviest] = barLimits[unit];
-  const plates = Array.isArray(settings[keys.plates]) ? plateChoices[unit].filter(plate => settings[keys.plates].includes(plate)) : [];
-  const step = Number(settings[keys.step]);
-  return {
-    unit,
-    bar:bar >= lightest && bar <= heaviest ? bar : defaultSettings[keys.bar],
-    plates:plates.length ? plates : defaultSettings[keys.plates],
-    step:stepChoices[unit].includes(step) ? step : defaultSettings[keys.step]
-  };
-}
-
-// The fields show one unit's equipment, the unit that was chosen when they were filled: see readSettingsForm.
-function renderEquipmentFields(settings) {
-  const unit = settings.unit === 'kg' ? 'kg' : 'lbs';
-  const equipment = gymEquipment(settings, unit);
-  getSettingElement('equipmentFields').dataset.unit = unit;
-  document.querySelectorAll('[data-equipment-unit]').forEach(label => { label.textContent = unit; });
-  getSettingElement('barSetting').value = formatWeight(equipment.bar);
-  [getSettingElement('barSetting').min, getSettingElement('barSetting').max] = barLimits[unit];
-  getSettingElement('plateSetting').innerHTML = plateChoices[unit].map(plate => '<label class="setting-check">'
-    + `<input type="checkbox" value="${plate}"${equipment.plates.includes(plate) ? ' checked' : ''} /> ${formatWeight(plate)}</label>`).join('');
-  getSettingElement('stepSetting').innerHTML = stepChoices[unit]
-    .map(step => `<option value="${step}"${step === equipment.step ? ' selected' : ''}>${formatWeight(step)} ${unit}</option>`).join('');
-}
-
-// What the equipment fields say, for the unit they show; the other unit's is kept as it is. A bar outside its limits (or
-// a field left empty) keeps the bar there was.
-function readEquipmentFields(current) {
-  const unit = getSettingElement('equipmentFields').dataset.unit === 'kg' ? 'kg' : 'lbs';
-  const keys = equipmentKeys[unit];
-  const had = gymEquipment(current, unit);
-  const bar = Number(getSettingElement('barSetting').value);
-  const [lightest, heaviest] = barLimits[unit];
-  const plates = [...getSettingElement('plateSetting').querySelectorAll('input:checked')].map(input => Number(input.value));
-  const other = equipmentKeys[unit === 'kg' ? 'lbs' : 'kg'];
-  return {
-    [keys.bar]:getSettingElement('barSetting').value !== '' && bar >= lightest && bar <= heaviest ? bar : had.bar,
-    [keys.plates]:plates.length ? plates : had.plates,
-    [keys.step]:Number(getSettingElement('stepSetting').value) || had.step,
-    [other.bar]:current[other.bar], [other.plates]:current[other.plates], [other.step]:current[other.step]
-  };
-}
-
+// What the controls say: every entry of settingFields reads its own (settings-fields.js), and what they say is merged.
 function readSettingsForm() {
-  const restDuration = Math.min(600, Math.max(15, Number(getSettingElement('restDurationSetting').value) || defaultSettings.restDuration));
-  const soundVolume = Math.min(100, Math.max(0, Number(getSettingElement('soundVolumeSetting').value) || 0));
-  const weeklyGoal = weeklyGoalFrom(getSettingElement('weeklyGoalSetting').value);
-  const unit = getSettingElement('unitSetting').value === 'kg' ? 'kg' : 'lbs';
-  // The distance unit is only kept once it has been chosen; until then it follows the weight unit (distanceUnitOf).
-  const distance = getSettingElement('distanceUnitSetting');
-  const distanceUnit = distance.dataset.chosen === 'true' ? { distanceUnit:distance.value === 'km' ? 'km' : 'mi' } : {};
-  return { theme:getSettingElement('themeSetting').querySelector('input[name=theme]:checked')?.value || 'system', unit, ...distanceUnit, restDuration, weeklyGoal, autoRest:getSettingElement('autoRestSetting').checked, confirmEnd:getSettingElement('confirmEndSetting').checked, trackEffort:getSettingElement('effortSetting').checked, warmupSets:getSettingElement('warmupSetting').checked, keepAwakeVideo:getSettingElement('keepAwakeSetting').checked, soundEnabled:getSettingElement('soundEnabledSetting').checked, soundVolume, alertSound:getSettingElement('alertSoundSetting').value, vibrate:getSettingElement('vibrateSetting').checked, playThroughSilent:getSettingElement('silentSetting').checked,
-    schedule:readScheduleFields(getWorkoutSettings()), ...readEquipmentFields(getWorkoutSettings()) };
+  const current = getWorkoutSettings();
+  return Object.assign({}, ...settingFields.map(field => field.read(current)));
 }
 
 // The last plate ticked cannot be unticked: with no plates there is nothing to load.
@@ -244,37 +141,9 @@ function syncSoundControls() {
   getSettingElement('testAlertButton').disabled = !soundOn && !(canVibrate && getSettingElement('vibrateSetting').checked);
 }
 
+// Puts the settings into the controls: every entry of settingFields shows its own (settings-fields.js).
 function applySettings(settings) {
-  // theme.js, in <head>, applies it and follows the device. A page from before theme.js existed (served from the
-  // cache for one load after an update) lacks it, and just gets light or dark.
-  if (window.setColorTheme) window.setColorTheme(settings.theme);
-  else document.documentElement.dataset.theme = settings.theme === 'dark' ? 'dark' : 'light';
-  const theme = themeChoices.includes(settings.theme) ? settings.theme : 'system';
-  getSettingElement('themeSetting').querySelectorAll('input[name=theme]').forEach(input => { input.checked = input.value === theme; });
-  getSettingElement('unitSetting').value = settings.unit === 'kg' ? 'kg' : 'lbs';
-  getSettingElement('distanceUnitSetting').value = distanceUnitOf(settings);
-  getSettingElement('distanceUnitSetting').dataset.chosen = String(settings.distanceUnit === 'mi' || settings.distanceUnit === 'km');
-  getSettingElement('restDurationSetting').value = settings.restDuration;
-  getSettingElement('weeklyGoalSetting').value = String(weeklyGoalFrom(settings.weeklyGoal));
-  const schedule = scheduleFrom(settings);
-  getSettingElement('scheduleDays').querySelectorAll('input').forEach(input => { input.checked = schedule.days.includes(Number(input.value)); });
-  getSettingElement('reminderTimeSetting').value = schedule.time;
-  getSettingElement('autoRestSetting').checked = settings.autoRest;
-  getSettingElement('confirmEndSetting').checked = settings.confirmEnd;
-  getSettingElement('effortSetting').checked = settings.trackEffort !== false;
-  getSettingElement('warmupSetting').checked = settings.warmupSets !== false;
-  getSettingElement('keepAwakeSetting').checked = settings.keepAwakeVideo !== false;
-  // Only where the browser has no Wake Lock of its own (a plain http:// address): elsewhere the screen stays on anyway.
-  getSettingElement('keepAwakeSettingRow').hidden = 'wakeLock' in navigator;
-  getSettingElement('soundEnabledSetting').checked = settings.soundEnabled;
-  getSettingElement('alertSoundSetting').value = alertTones[settings.alertSound] ? settings.alertSound : defaultSettings.alertSound;
-  getSettingElement('soundVolumeSetting').value = settings.soundVolume;
-  getSettingElement('vibrateSetting').checked = settings.vibrate;
-  getSettingElement('vibrateSettingRow').hidden = !canVibrate;
-  getSettingElement('silentSetting').checked = settings.playThroughSilent !== false;
-  // Only Safari on an iPhone or iPad can choose; everywhere else the alert already follows the media volume.
-  getSettingElement('silentSettingRow').hidden = !canPlayThroughSilent;
-  renderEquipmentFields(settings);
+  settingFields.forEach(field => field.show(settings));
   syncSoundControls();
   syncPlateControls();
 }

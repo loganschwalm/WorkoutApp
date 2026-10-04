@@ -21,6 +21,7 @@ const PRECACHE = [
   '/theme.js',
   '/common.js',
   '/account-rules.js',
+  '/settings-fields.js',
   '/settings-dialog.js',
   '/settings.js',
   '/offline.js',

@@ -683,6 +683,17 @@ Settings are saved to your account on the server and cached in the browser, so t
 between visits and follow you to another device. A change made offline applies straight away and
 uploads when the server is reachable again.
 
+What the settings are is written once, in `frontend/settings-fields.js`: a table of sections (General, Training schedule, During a
+workout, Bar and plates, Rest timer), each a list of entries. An entry says its `defaults`, its `html()` (the controls), how
+`show(settings)` puts the settings into them and how `read(current)` gets them back. `defaultSettings`, the markup of the dialog
+(`settings-dialog.js`), `applySettings` and `readSettingsForm` (`settings.js`) are all made from that table. A setting that is one
+control is a line, made by `checkSetting` (a tick box, on by default), `choiceSetting` (a list of values, with a `normalize` that
+turns anything else into one of them) or `rangeSetting` (a number kept between two limits); anything more, such as the theme
+picker, the training days or the bar and plates, is an entry of its own. To add a setting, add its entry to a section, then
+use `getWorkoutSettings().yourKey` where it matters; if it is shown by the server (a reminder time, say), also check it in
+`validate_settings` in `server.py`. The `settings_table` suite shows that a setting added to the table is shown, read and
+defaulted with nothing else changed, and that a form showing the defaults reads back as them.
+
 ### Exporting and importing
 
 Everything in your account can be saved to a file from Settings, and brought back in.

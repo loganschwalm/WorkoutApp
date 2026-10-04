@@ -1,5 +1,6 @@
 // The Settings dialog, one copy for every page that has the gear button. Loaded just before settings.js, which gives it
-// its behaviour, so the dialog is on the page before anything looks for it. Whitespace between these tags only ever
+// its behaviour, so the dialog is on the page before anything looks for it. The sections of settings are made from the table in
+// settings-fields.js; the rest (your data, the account) is written out here. Whitespace between these tags only ever
 // falls between items of a grid or flex box, or between a select's options, where the browser ignores it.
 
 // The account panels (email, password, deleting the account) sit inside the settings form but submit their own forms,
@@ -8,20 +9,9 @@ function accountEditor(id, fields, actions, lead = '') {
   return `<div class="account-editor" id="${id}" hidden>${lead}${fields}<div class="account-editor-actions">${actions}</div></div>`;
 }
 
-// Training days, Monday first as the calendar has them, by the number the browser gives each (Sunday is 0).
-const trainingDayChoices = [[1, 'Mon', 'Monday'], [2, 'Tue', 'Tuesday'], [3, 'Wed', 'Wednesday'], [4, 'Thu', 'Thursday'], [5, 'Fri', 'Friday'], [6, 'Sat', 'Saturday'], [0, 'Sun', 'Sunday']]
-  .map(([value, short, name]) => `<label class="weekday"><input type="checkbox" value="${value}" aria-label="${name}" /><span aria-hidden="true">${short}</span></label>`).join('');
-
-const weeklyGoals = [1, 2, 3, 4, 5, 6, 7].map(goal => `<option value="${goal}">${goal} workout${goal === 1 ? '' : 's'} a week</option>`).join('');
-
-// Appearance: Match system, then the light themes, then the dark ones (theme.js says which is which). Each preview is
-// drawn in its theme's colours; Match system shows Light and Dark side by side.
-const themeNames = { system:'Match system', light:'Light', sunrise:'Sunrise', meadow:'Meadow', blossom:'Blossom',
-  dark:'Dark', crimson:'Crimson', emerald:'Emerald', ocean:'Ocean', gold:'Gold', violet:'Violet' };
-const themeSwatches = Object.keys(themeNames).map(id => {
-  const previews = (id === 'system' ? ['light', 'dark'] : [id]).map(palette => `<span data-palette="${palette}"></span>`).join('');
-  return `<label class="theme-swatch"><input type="radio" name="theme" value="${id}" /><span class="theme-preview" aria-hidden="true">${previews}</span><span class="theme-name">${themeNames[id]}</span></label>`;
-}).join('');
+// The settings' controls, section by section, from the table of settings (settings-fields.js), which loads before this file.
+const settingsFieldsHtml = settingSections.map(section => `<h3 class="settings-section">${section.title}</h3>
+      ${section.fields.map(field => field.html()).join('\n      ')}${section.after ? `\n      ${section.after}` : ''}`).join('\n      ');
 
 document.body.insertAdjacentHTML('beforeend', `
 <div class="modal-backdrop" id="settingsModal" hidden>
@@ -31,50 +21,7 @@ document.body.insertAdjacentHTML('beforeend', `
       <button class="modal-close" id="closeSettings" type="button" aria-label="Close settings">&times;</button>
     </div>
     <form id="settingsForm">
-      <h3 class="settings-section">General</h3>
-      <fieldset class="theme-picker" id="themeSetting"><legend>Appearance</legend>${themeSwatches}</fieldset>
-      <label for="unitSetting">Weight unit</label>
-      <select id="unitSetting"><option value="lbs">Pounds (lbs)</option><option value="kg">Kilograms (kg)</option></select>
-      <label for="distanceUnitSetting">Distance unit, for cardio</label>
-      <select id="distanceUnitSetting"><option value="mi">Miles (mi)</option><option value="km">Kilometres (km)</option></select>
-      <label for="weeklyGoalSetting">Weekly goal</label>
-      <select id="weeklyGoalSetting">${weeklyGoals}</select>
-      <h3 class="settings-section">Training schedule</h3>
-      <fieldset class="weekday-choices" id="scheduleDays"><legend>Days you train</legend>${trainingDayChoices}</fieldset>
-      <span class="subtitle schedule-help">The Tracker says what is planned for today and the next training day, and History marks them on the calendar. A program moves on when you finish a workout, not when a day passes.</span>
-      <label for="reminderTimeSetting">Remind me at</label>
-      <input id="reminderTimeSetting" type="time" />
-      <label class="setting-check"><input id="remindSetting" type="checkbox" /> Remind me on training days, on this device</label>
-      <p class="subtitle" id="remindStatus" role="status"></p>
-      <button class="secondary test-alert" id="testReminderButton" type="button" hidden>Send a test notification</button>
-      <h3 class="settings-section">During a workout</h3>
-      <label class="setting-check"><input id="confirmEndSetting" type="checkbox" /> Ask before cancelling a workout with sets logged</label>
-      <label class="setting-check"><input id="effortSetting" type="checkbox" /> Ask how many reps each set had left (effort)</label>
-      <label class="setting-check"><input id="warmupSetting" type="checkbox" /> Suggest warm-up sets for barbell lifts</label>
-      <label class="setting-check" id="keepAwakeSettingRow"><input id="keepAwakeSetting" type="checkbox" /> Keep the screen on with a silent video, as this browser will not do it itself</label>
-      <h3 class="settings-section">Bar and plates</h3>
-      <div class="equipment-fields" id="equipmentFields">
-        <span class="subtitle">What your gym has, for the plates to load on a barbell lift, its warm-ups, the weight buttons and Go heavier. Each unit keeps its own.</span>
-        <label for="barSetting">Bar weight (<span data-equipment-unit>lbs</span>)</label>
-        <input id="barSetting" type="number" inputmode="decimal" step="0.5" />
-        <fieldset class="plate-choices"><legend>Plates you have (<span data-equipment-unit>lbs</span>)</legend><div id="plateSetting"></div></fieldset>
-        <label for="stepSetting">Weight step</label>
-        <select id="stepSetting"></select>
-      </div>
-      <h3 class="settings-section">Rest timer</h3>
-      <label for="restDurationSetting">Default rest duration (seconds)</label>
-      <input id="restDurationSetting" type="number" inputmode="numeric" min="15" max="600" step="15" />
-      <label class="setting-check"><input id="autoRestSetting" type="checkbox" /> Start the rest timer automatically after each set</label>
-      <label class="setting-check"><input id="soundEnabledSetting" type="checkbox" /> Play a sound when rest ends</label>
-      <label for="alertSoundSetting">Alert sound</label>
-      <select id="alertSoundSetting">
-        <option value="beep">Double beep</option><option value="chime">Chime</option><option value="long">Long tone</option>
-      </select>
-      <label for="soundVolumeSetting">Volume</label>
-      <input id="soundVolumeSetting" type="range" min="0" max="100" step="5" />
-      <label class="setting-check" id="vibrateSettingRow"><input id="vibrateSetting" type="checkbox" /> Vibrate when rest ends</label>
-      <label class="setting-check" id="silentSettingRow"><input id="silentSetting" type="checkbox" /> Play the alert when the ringer is silent, at your media volume (pauses your music while it plays)</label>
-      <button class="secondary test-alert" id="testAlertButton" type="button">Test alert</button>
+      ${settingsFieldsHtml}
       <h3 class="settings-section">Your data</h3>
       <div class="data-section">
         <div class="account-details">
