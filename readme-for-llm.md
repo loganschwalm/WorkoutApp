@@ -158,6 +158,19 @@ own workouts, templates, and settings.
 - Keep a note with an exercise ("seat on 4", "grip on the rings"): Add note, in the exercise's ⋯ menu,
   saves it to your account, and it shows under that exercise whenever it comes up, in any workout.
   Save it empty to remove it.
+- Same as last set: once a set is logged, a button under the set entry ("Same as last set: 135 lbs × 5") logs
+  it again in one tap, whatever the weight and reps fields were changed to meanwhile. Each tap is one more set, with the
+  rest timer, records and checks of Complete set. A reps-left rating is the new set's own: none is copied from the set
+  before, and one tapped first is used. A hold being timed is stopped, and the seconds of the last set logged, not those
+  held so far. Bodyweight sets repeat as reps. The button repeats the last set of the exercise on screen, and is hidden
+  until that exercise has one.
+- How to do it, in the exercise's ⋯ menu, opens a few written cues for the exercise (setup, the movement, and the usual
+  mistake) in a panel under its name, and a link to a video search for it (YouTube, in a new tab with
+  `rel="noopener noreferrer"`): the link is the only thing that leaves the app, and only when tapped. The cues
+  are in `frontend/exercise-guides.js`: about 45 entries, each matched against the exercise's name in order, a specific
+  lift before the general one it contains (a Romanian Deadlift before deadlifts, a Goblet Squat before squats, a
+  Hammer Curl before curls). An exercise of your own that no entry matches says there are no written cues and still
+  offers the link. The panel closes on moving to another exercise.
 - Past sessions, under last time's numbers, lists the last five times you did the exercise, with a link
   to every session of it on the Progress page.
 - Go heavier: when every set at last time's weight reached its target, the app says so and offers the

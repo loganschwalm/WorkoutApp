@@ -229,6 +229,9 @@ function renderActiveWorkout() {
     $('activeExerciseLast').textContent = `Last time (${when}): ${describeLoggedSets(previous.sets, timed)}`;
   }
   $('completedRepsLabel').textContent = timed ? 'Seconds' : 'Reps completed';
+  // Once a set is logged, one tap logs it again, whatever the fields were changed to since.
+  $('repeatSetBtn').hidden = !lastSet;
+  if (lastSet) $('repeatSetBtn').textContent = `Same as last set: ${describeLoggedSets([lastSet], timed)}`;
   $('holdTimer').hidden = !timed;
   $('activeNotes').value = activeSession.notes || '';
   if (planned) {
@@ -272,6 +275,7 @@ function closeExercisePanels() {
   showExerciseJump(false);
   showSwap(false);
   showNotePanel(false);
+  showGuide(false);
 }
 
 function goToExercise(index) {
@@ -671,6 +675,19 @@ function logSet() {
 }
 
 $('completeSetBtn').onclick = logSet;
+
+// Logs the set before this one again, in the fields' place: the weight, reps or seconds are as it was, and the usual checks
+// and rest follow, as for Complete set. A hold being timed is stopped first, so its seconds do not replace the set's.
+function repeatLastSet() {
+  const exercise = activeSession && activeSession.exercises[activeSession.currentIndex];
+  const last = exercise && exercise.sets && exercise.sets[exercise.sets.length - 1];
+  if (!last) return;
+  stopHold();
+  $('activeWeight').value = String(last.weight || 0);
+  $('completedReps').value = String(last.reps);
+  logSet();
+}
+$('repeatSetBtn').onclick = repeatLastSet;
 $('completedReps').oninput = () => { markInvalid($('completedReps'), false); syncHoldDisplay(); };
 $('activeWorkoutProgress').onclick = () => showExerciseJump($('exerciseJump').hidden);
 $('otherCardsToggle').onclick = () => showOtherCards(!document.body.classList.contains('showing-all'));

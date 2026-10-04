@@ -191,6 +191,26 @@ function saveExerciseNote() {
   showFeedback(note ? `Note saved for ${name}.` : `Note removed from ${name}.`, 'success');
 }
 
+// ---- How to do it --------------------------------------------------------------
+// The exercise's menu opens a few written cues for it (exercise-guides.js), and a link to a video search for a demonstration:
+// the link is the only thing here that leaves the app, and only when it is tapped.
+function showGuide(open) {
+  $('guidePanel').hidden = !open;
+  $('guideToggle').setAttribute('aria-expanded', String(open));
+  if (!open || !activeSession) return;
+  const name = activeSession.exercises[activeSession.currentIndex].name;
+  const guide = guideFor(name);
+  $('guideTitle').textContent = name;
+  $('guideSteps').innerHTML = guide ? guide.steps.map(step => `<li>${escapeHTML(step)}</li>`).join('') : '';
+  $('guideMistake').hidden = !guide;
+  $('guideMistake').textContent = guide ? `Common mistake: ${guide.mistake}` : '';
+  $('guideNone').hidden = Boolean(guide);
+  $('guideNone').textContent = guide ? '' : `There are no written cues for ${name} yet. A video search may help.`;
+  $('guideVideo').href = demoSearchUrl(name);
+  $('guideVideo').setAttribute('aria-label', `Find a video demo of ${name}, opens in a new tab`);
+  $('guidePanel').scrollIntoView({ block:'nearest' });
+}
+
 // ---- Supersets ----------------------------------------------------------------
 // Exercises next to each other with the same group are a superset: one set of each in turn, and the rest only once the
 // round is done. Next moves on past the whole superset.
@@ -406,6 +426,8 @@ function renderEffort(exercise) {
     .forEach(button => button.setAttribute('aria-pressed', String(Number(button.dataset.effort) === effortChoice)));
 }
 
+$('guideToggle').onclick = () => showGuide($('guidePanel').hidden);
+$('guideClose').onclick = () => showGuide(false);
 $('noteToggle').onclick = () => showNotePanel($('notePanel').hidden);
 $('noteCancel').onclick = () => showNotePanel(false);
 $('noteSave').onclick = saveExerciseNote;

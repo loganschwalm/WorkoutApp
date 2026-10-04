@@ -706,3 +706,12 @@ html[data-theme="dark"] .goal.reached .goal-foot span { color:#a5e5c2; }
 .cardio-mode button[aria-pressed="true"] { color:var(--accent); background:var(--card); box-shadow:0 1px 3px rgba(16,21,35,.12); }
 .cardio-mode button:hover { transform:none; }
 #cardioSettings:empty { display:none; }
+
+/* Same as last set, under the set entry, and the exercise's written cues. */
+.repeat-set { width:100%; margin-top:10px; min-height:44px; }
+.guide-panel h4 { margin:0 0 8px; font-size:1rem; }
+.guide-steps { display:grid; gap:6px; margin:0 0 10px; padding-left:22px; font-size:.92rem; line-height:1.45; }
+.guide-mistake { margin:0 0 12px; padding:8px 12px; background:#fff8e6; border-left:3px solid #d9912f; border-radius:6px; font-size:.9rem; }
+html[data-theme="dark"] .guide-mistake { background:#3a3122; }
+.guide-none { margin:0 0 12px; }
+.guide-video { display:inline-flex; align-items:center; min-height:44px; padding:0 4px; color:var(--accent); font-weight:600; }
