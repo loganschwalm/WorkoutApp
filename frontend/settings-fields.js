@@ -67,7 +67,8 @@ const themeNames = { system:'Match system', light:'Light', sunrise:'Sunrise', me
   dark:'Dark', crimson:'Crimson', emerald:'Emerald', ocean:'Ocean', gold:'Gold', violet:'Violet' };
 const themeSwatches = Object.keys(themeNames).map(id => {
   const previews = (id === 'system' ? ['light', 'dark'] : [id]).map(palette => `<span data-palette="${palette}"></span>`).join('');
-  return `<label class="theme-swatch"><input type="radio" name="theme" value="${id}" /><span class="theme-preview" aria-hidden="true">${previews}</span><span class="theme-name">${themeNames[id]}</span></label>`;
+  return `<label class="theme-swatch"><input type="radio" name="theme" value="${id}" /><span class="theme-preview" aria-hidden="true">${previews}</span>`
+    + `<span class="theme-name">${themeNames[id]}</span></label>`;
 }).join('');
 
 const themeSetting = {

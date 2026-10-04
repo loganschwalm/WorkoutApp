@@ -139,7 +139,8 @@ function renderLibrary() {
     else if (details.equipmentGuessed) notes.push('Equipment guessed from its name');
     if (!details.muscle) notes.push('Its sets are not counted until it has a muscle');
     const name = escapeHTML(exercise.name);
-    return `<li data-key="${escapeHTML(exercise.key)}" data-name="${name}"><div class="library-name"><strong>${name}</strong>${notes.length ? `<span>${escapeHTML(notes.join(' · '))}</span>` : ''}</div>`
+    return `<li data-key="${escapeHTML(exercise.key)}" data-name="${name}"><div class="library-name">`
+      + `<strong>${name}</strong>${notes.length ? `<span>${escapeHTML(notes.join(' · '))}</span>` : ''}</div>`
       + `<select data-field="muscle" aria-label="Muscle for ${name}">${libraryOptions(muscleGroups, details.muscle, details.muscle ? '' : 'Not set')}</select>`
       + `<select data-field="equipment" aria-label="Equipment for ${name}">${libraryOptions(equipmentKinds, details.equipment, details.equipment ? '' : 'Not set')}</select>`
       + (exercise.logged ? '' : `<button class="link-button" type="button" data-library-remove aria-label="Remove ${name}">Remove</button>`) + '</li>';

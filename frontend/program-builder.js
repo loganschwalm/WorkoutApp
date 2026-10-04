@@ -25,7 +25,8 @@ function renderBuilderDays() {
     const options = (template ? '' : '<option value="" selected>Choose a template</option>')
       + group('Your templates', templates.filter(item => !item.builtIn)) + group('Built-in', templates.filter(item => item.builtIn));
     return `<li class="builder-day"><div><label for="builderDayName${index}">Day ${index + 1}</label>`
-      + `<input id="builderDayName${index}" type="text" maxlength="60" autocomplete="off" value="${escapeHTML(day.name)}" placeholder="${escapeHTML(template ? template.name : 'Name')}" data-builder-field="name" data-index="${index}" /></div>`
+      + `<input id="builderDayName${index}" type="text" maxlength="60" autocomplete="off" value="${escapeHTML(day.name)}" placeholder="${escapeHTML(template ? template.name : 'Name')}" data-builder-field="name" data-index="${index}" />`
+        + `</div>`
       + `<div><label for="builderDayTemplate${index}">Template</label><select id="builderDayTemplate${index}" data-builder-field="template" data-index="${index}">${options}</select></div>`
       + `<div class="template-row-actions">${rowAction(index, 'up', 'secondary', `Move day ${index + 1} up`, '&#8593;', index === 0)}`
       + rowAction(index, 'down', 'secondary', `Move day ${index + 1} down`, '&#8595;', index === days.length - 1)

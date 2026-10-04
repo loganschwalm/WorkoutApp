@@ -37,7 +37,10 @@
 /* The hidden attribute always wins. A class that sets display (flex, grid) would otherwise override it and
    leave the element showing, as it did for the rest timer and the empty-chart message. */
 [hidden] { display:none !important; }
-body { margin:0; min-height:100vh; font-family:Inter,system-ui,-apple-system,sans-serif; color:var(--ink); background:linear-gradient(135deg,var(--glow),var(--bg) 45%); transition:background .2s,color .2s; }
+body {
+  margin:0; min-height:100vh; font-family:Inter,system-ui,-apple-system,sans-serif; color:var(--ink);
+  background:linear-gradient(135deg,var(--glow),var(--bg) 45%); transition:background .2s,color .2s;
+}
 .shell { width:min(960px,calc(100% - 32px)); margin:0 auto; padding:42px 0 60px; }
 .auth-shell { width:min(440px,calc(100% - 32px)); margin:0 auto; padding:12vh 0; }
 .auth-card h1 { font-size:2rem; margin:0; }
@@ -57,7 +60,10 @@ body { margin:0; min-height:100vh; font-family:Inter,system-ui,-apple-system,san
 .link-button:hover { text-decoration:underline; transform:none; }
 header { display:flex; justify-content:space-between; align-items:flex-end; gap:20px; margin-bottom:28px; }
 .header-actions { display:flex; align-items:center; gap:14px; margin-left:auto; }
-.form-feedback { position:sticky; top:12px; z-index:20; margin:0 0 20px; padding:12px 14px; box-shadow:0 6px 18px rgba(16,21,35,.12); color:#7e3942; background:#fff1f3; border:1px solid #f0c5cc; border-radius:10px; font-size:.9rem; }
+.form-feedback {
+  position:sticky; top:12px; z-index:20; margin:0 0 20px; padding:12px 14px; box-shadow:0 6px 18px rgba(16,21,35,.12); color:#7e3942;
+  background:#fff1f3; border:1px solid #f0c5cc; border-radius:10px; font-size:.9rem;
+}
 .form-feedback.success { color:#22634c; background:#edf9f2; border-color:#b9e3ca; }
 html[data-theme="dark"] .form-feedback { color:#ffb1ba; background:#482934; border-color:#6d3b49; }
 html[data-theme="dark"] .form-feedback.success { color:#a5e5c2; background:#193b2d; border-color:#2f654b; }
@@ -121,7 +127,10 @@ button:hover { transform:translateY(-1px); } .primary { color:var(--on-accent); 
 .row-menu { position:relative; }
 .row-menu > summary { display:grid; place-items:center; width:40px; height:34px; border-radius:10px; font-weight:800; letter-spacing:1px; list-style:none; cursor:pointer; }
 .row-menu > summary::-webkit-details-marker { display:none; }
-.row-menu-items { position:absolute; top:calc(100% + 6px); right:0; z-index:6; display:grid; min-width:170px; padding:6px; background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:0 14px 35px rgba(16,21,35,.18); }
+.row-menu-items {
+  position:absolute; top:calc(100% + 6px); right:0; z-index:6; display:grid; min-width:170px; padding:6px; background:var(--card);
+  border:1px solid var(--line); border-radius:12px; box-shadow:0 14px 35px rgba(16,21,35,.18);
+}
 .row-menu-items button { padding:10px 12px; color:var(--ink); background:none; font-size:.9rem; text-align:left; }
 .row-menu-items button:hover { background:var(--bg); transform:none; }
 .row-menu-items .danger, html[data-theme="dark"] .row-menu-items .danger { color:#c14b5a; background:none; }
@@ -158,7 +167,10 @@ html[data-theme="dark"] .danger, html[data-theme="dark"] .remove { color:#ff9eaa
 .visually-hidden { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
 .notes-input { margin-top:12px; }
 .set-list { display:grid; gap:8px; margin:18px 0 0; padding:0; list-style:none; }
-.set-list li { display:grid; grid-template-columns:3.4rem minmax(0,1fr) minmax(0,1fr) auto; align-items:center; gap:10px; padding:8px 11px; background:var(--sunk); border:1px solid var(--line); border-radius:8px; }
+.set-list li {
+  display:grid; grid-template-columns:3.4rem minmax(0,1fr) minmax(0,1fr) auto; align-items:center; gap:10px; padding:8px 11px; background:var(--sunk);
+  border:1px solid var(--line); border-radius:8px;
+}
 .set-number { color:var(--muted); font-size:.85rem; font-weight:700; }
 .set-field { display:flex; align-items:center; gap:6px; color:var(--muted); font-size:.85rem; }
 .set-edit { min-width:0; padding:8px 9px; }
@@ -167,11 +179,18 @@ html[data-theme="dark"] .danger, html[data-theme="dark"] .remove { color:#ff9eaa
 .add-exercise { margin-top:18px; }
 .add-exercise summary { color:var(--accent); font-size:.9rem; font-weight:700; cursor:pointer; }
 .add-exercise-fields { display:grid; grid-template-columns:2fr 1fr auto; gap:12px; align-items:end; margin-top:12px; }
-.session-banner { position:sticky; top:0; z-index:30; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px 16px; padding:12px 20px; color:#7e3942; background:#fff1f3; border-bottom:1px solid #f0c5cc; font-size:.9rem; }
+.session-banner {
+  position:sticky; top:0; z-index:30; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px 16px;
+  padding:12px 20px; color:#7e3942; background:#fff1f3; border-bottom:1px solid #f0c5cc; font-size:.9rem;
+}
 html[data-theme="dark"] .session-banner { color:#ffb1ba; background:#482934; border-color:#6d3b49; }
 /* The install bar pwa.js adds on phones. It sits under any open dialog, lines up with the page column, and the page
    gets room at the bottom so nothing ends up hidden behind it. */
-.install-banner { position:fixed; left:0; right:0; bottom:0; z-index:9; display:flex; align-items:center; gap:12px; padding:12px max(16px,calc((100% - 960px) / 2)) calc(12px + env(safe-area-inset-bottom)); color:var(--ink); background:var(--card); border-top:1px solid var(--line); box-shadow:0 -8px 24px rgba(16,21,35,.1); }
+.install-banner {
+  position:fixed; left:0; right:0; bottom:0; z-index:9; display:flex; align-items:center; gap:12px;
+  padding:12px max(16px,calc((100% - 960px) / 2)) calc(12px + env(safe-area-inset-bottom)); color:var(--ink); background:var(--card);
+  border-top:1px solid var(--line); box-shadow:0 -8px 24px rgba(16,21,35,.1);
+}
 .install-banner-icon { flex:none; width:40px; height:40px; border-radius:10px; }
 .install-banner-text { flex:1; min-width:0; font-size:.85rem; }
 .install-banner-title { display:block; font-size:.92rem; }
@@ -196,7 +215,10 @@ html[data-theme="dark"] .link-button.danger-link { color:#ff9eaa; }
 .data-section .subtitle, .data-section .auth-feedback { margin:0; }
 .data-actions { display:flex; flex-wrap:wrap; gap:8px; }
 .account-editor-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:6px; }
-.rest-panel { position:sticky; top:12px; bottom:calc(12px + var(--tab-bar)); z-index:4; display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:16px; padding:10px 10px 10px 16px; background:var(--accent-soft); border-radius:12px; box-shadow:0 8px 22px rgba(36,48,90,.12); }
+.rest-panel {
+  position:sticky; top:12px; bottom:calc(12px + var(--tab-bar)); z-index:4; display:flex; justify-content:space-between; align-items:center; gap:12px;
+  margin-top:16px; padding:10px 10px 10px 16px; background:var(--accent-soft); border-radius:12px; box-shadow:0 8px 22px rgba(36,48,90,.12);
+}
 .rest-time { display:flex; align-items:baseline; gap:10px; }
 .rest-time span { color:var(--accent); font-size:1.5rem; font-weight:800; font-variant-numeric:tabular-nums; }
 .rest-actions { display:flex; gap:8px; margin-left:auto; }
@@ -226,7 +248,10 @@ html[data-theme="dark"] .link-button.danger-link { color:#ff9eaa; }
 .template-exercise-row .template-row-actions { display:flex; gap:4px; }
 .template-exercise-row button { width:32px; height:42px; padding:0; }
 .template-modal { max-height:min(720px,90vh); overflow:auto; }
-.badge { display:inline-block; padding:3px 8px; color:var(--accent); background:var(--accent-soft); border-radius:999px; font-size:.7rem; font-weight:800; letter-spacing:.04em; text-transform:uppercase; white-space:nowrap; }
+.badge {
+  display:inline-block; padding:3px 8px; color:var(--accent); background:var(--accent-soft); border-radius:999px; font-size:.7rem; font-weight:800;
+  letter-spacing:.04em; text-transform:uppercase; white-space:nowrap;
+}
 .template-card-heading { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:6px; }
 .template-card-heading h3 { margin:0; }
 .program-template { border-color:var(--accent-line); }
@@ -291,7 +316,10 @@ html[data-theme="dark"] .program-status.missed { color:#ff9eaa; }
 .program-option label { margin:8px 0 0; }
 .program-modal .setting-check { margin-top:6px; }
 .progress-card h2 { margin-bottom:5px; }
-.progress-filters { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px; align-items:end; margin-top:22px; padding:16px; background:var(--sunk); border:1px solid var(--line); border-radius:12px; }
+.progress-filters {
+  display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px; align-items:end; margin-top:22px; padding:16px; background:var(--sunk);
+  border:1px solid var(--line); border-radius:12px;
+}
 .progress-filters button { justify-self:start; white-space:nowrap; }
 .chart-shell { position:relative; min-height:360px; margin-top:22px; }
 #progressChart { display:block; width:100%; height:360px; }
@@ -302,13 +330,19 @@ html[data-theme="dark"] .program-status.missed { color:#ff9eaa; }
 .chart-detail { min-height:1.4em; margin:12px 0 0; }
 .records-list { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:10px; margin:18px 0 0; padding:0; list-style:none; }
 .records-list .empty { grid-column:1/-1; }
-.record { display:grid; align-content:start; gap:5px; width:100%; height:100%; padding:14px 16px; color:var(--muted); background:none; border:1px solid var(--line); border-radius:12px; font-size:.86rem; font-weight:400; text-align:left; }
+.record {
+  display:grid; align-content:start; gap:5px; width:100%; height:100%; padding:14px 16px; color:var(--muted); background:none;
+  border:1px solid var(--line); border-radius:12px; font-size:.86rem; font-weight:400; text-align:left;
+}
 .record:hover { border-color:var(--accent); transform:none; }
 .record strong { color:var(--ink); font-size:1rem; }
 .record-label { color:var(--ink); font-weight:600; }
 .record-date { white-space:nowrap; }
 .modal-backdrop { position:fixed; inset:0; z-index:10; display:grid; place-items:center; padding:20px; background:rgba(16,21,35,.48); }
-.settings-modal { width:min(440px,100%); max-height:100%; overflow-y:auto; padding:24px; color:var(--ink); background:var(--card); border:1px solid var(--line); border-radius:16px; box-shadow:0 24px 70px rgba(16,21,35,.25); }
+.settings-modal {
+  width:min(440px,100%); max-height:100%; overflow-y:auto; padding:24px; color:var(--ink); background:var(--card); border:1px solid var(--line);
+  border-radius:16px; box-shadow:0 24px 70px rgba(16,21,35,.25);
+}
 .settings-heading { display:flex; justify-content:space-between; align-items:center; margin-bottom:22px; }
 .settings-heading h2 { margin:0; }
 .modal-close { width:34px; height:34px; padding:0; color:var(--muted); background:transparent; font-size:1.5rem; line-height:1; }
@@ -348,9 +382,48 @@ input[type="range"] { padding:0; border:0; background:transparent; accent-color:
 #plateSetting .setting-check input { margin:0; }
 /* The Tracker's saved workouts: Show more and the link to History, side by side. */
 .more-workouts { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
-@media (max-width:620px) { .shell{padding-top:25px}.date{display:none}.grid{grid-template-columns:1fr 1fr}.grid .exercise-input{grid-column:1/-1}.grid button{width:100%}.exercise{grid-template-columns:1fr 1fr}.exercise .exercise-edit[data-field=name], .exercise > .remove{grid-column:1/-1; width:100%}.exercise.has-sets{grid-template-columns:1fr 1fr}.exercise.has-sets > .remove{grid-column:auto}.exercise.has-sets > button{width:100%}.workout-name{align-items:stretch; flex-direction:column}.saved-workout-summary{align-items:flex-start; flex-direction:column}.saved-workout-summary.saved-workout-row{align-items:center; flex-direction:row; gap:10px}.workout-details li{align-items:flex-start; flex-direction:column; gap:3px}.header-actions{align-items:flex-end; flex-direction:column; gap:8px}.site-nav{order:3; width:100%; justify-content:center} header{align-items:flex-start; flex-wrap:wrap}.template-grid{grid-template-columns:1fr}.set-entry{grid-template-columns:1fr 1fr}.set-entry .weight-entry{grid-column:1/-1}.set-entry > button{width:100%}.section-heading-actions{align-items:flex-end; flex-direction:column; gap:8px}.progress-filters{grid-template-columns:repeat(2, minmax(0, 1fr))}.progress-filters > div:nth-child(1), .progress-filters > div:nth-child(2), .progress-filters button{grid-column:1/-1}.progress-filters button{width:100%} }
-@media (max-width:620px) { .set-list li{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.set-number{grid-column:1; grid-row:1}.set-list .remove{grid-column:2; grid-row:1; justify-self:end}.footer-actions{flex-direction:column}.footer-buttons button{flex:1}.add-exercise-fields{grid-template-columns:1fr 1fr}.add-exercise-fields button{grid-column:1/-1} }
-@media (max-width:620px) { .program-next{align-items:stretch; flex-direction:column}.program-next-actions button{flex:1}.program-maxes{grid-template-columns:1fr 1fr}.program-max-inputs{grid-template-columns:1fr} }
+@media (max-width:620px) {
+  .shell{padding-top:25px}
+  .date{display:none}
+  .grid{grid-template-columns:1fr 1fr}
+  .grid .exercise-input{grid-column:1/-1}
+  .grid button{width:100%}
+  .exercise{grid-template-columns:1fr 1fr}
+  .exercise .exercise-edit[data-field=name], .exercise > .remove{grid-column:1/-1; width:100%}
+  .exercise.has-sets{grid-template-columns:1fr 1fr}
+  .exercise.has-sets > .remove{grid-column:auto}
+  .exercise.has-sets > button{width:100%}
+  .workout-name{align-items:stretch; flex-direction:column}
+  .saved-workout-summary{align-items:flex-start; flex-direction:column}
+  .saved-workout-summary.saved-workout-row{align-items:center; flex-direction:row; gap:10px}
+  .workout-details li{align-items:flex-start; flex-direction:column; gap:3px}
+  .header-actions{align-items:flex-end; flex-direction:column; gap:8px}
+  .site-nav{order:3; width:100%; justify-content:center}
+  header{align-items:flex-start; flex-wrap:wrap}
+  .template-grid{grid-template-columns:1fr}
+  .set-entry{grid-template-columns:1fr 1fr}
+  .set-entry .weight-entry{grid-column:1/-1}
+  .set-entry > button{width:100%}
+  .section-heading-actions{align-items:flex-end; flex-direction:column; gap:8px}
+  .progress-filters{grid-template-columns:repeat(2, minmax(0, 1fr))}
+  .progress-filters > div:nth-child(1), .progress-filters > div:nth-child(2), .progress-filters button{grid-column:1/-1}
+  .progress-filters button{width:100%}
+}
+@media (max-width:620px) {
+  .set-list li{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  .set-number{grid-column:1; grid-row:1}
+  .set-list .remove{grid-column:2; grid-row:1; justify-self:end}
+  .footer-actions{flex-direction:column}
+  .footer-buttons button{flex:1}
+  .add-exercise-fields{grid-template-columns:1fr 1fr}
+  .add-exercise-fields button{grid-column:1/-1}
+}
+@media (max-width:620px) {
+  .program-next{align-items:stretch; flex-direction:column}
+  .program-next-actions button{flex:1}
+  .program-maxes{grid-template-columns:1fr 1fr}
+  .program-max-inputs{grid-template-columns:1fr}
+}
 /* The training calendar on the History page: a column per week, a row per weekday, squares that shrink on a phone. */
 .training-calendar { display:grid; grid-template-columns:auto repeat(12, minmax(0, 26px)); gap:4px; justify-content:start; margin-top:4px; }
 .calendar-month { font-size:.72rem; color:var(--muted); white-space:nowrap; }
@@ -378,7 +451,10 @@ body.training:not(.showing-all) .between-workouts { display:none; }
 .progress-toggle::after { content:"\25BE"; margin-left:6px; font-size:.8em; }
 .progress-toggle[aria-expanded="true"]::after { content:"\25B4"; }
 .exercise-jump { display:grid; gap:2px; margin:0 0 16px; padding:6px; list-style:none; border:1px solid var(--line); border-radius:12px; }
-.exercise-jump button { display:flex; justify-content:space-between; align-items:baseline; gap:12px; width:100%; padding:10px 12px; color:var(--ink); background:none; font-weight:600; text-align:left; }
+.exercise-jump button {
+  display:flex; justify-content:space-between; align-items:baseline; gap:12px; width:100%; padding:10px 12px; color:var(--ink); background:none;
+  font-weight:600; text-align:left;
+}
 .exercise-jump button:hover { background:var(--bg); transform:none; }
 .exercise-jump button[aria-current] { color:var(--accent); background:var(--accent-soft); }
 .exercise-jump .jump-sets { flex:none; color:var(--muted); font-size:.85rem; font-weight:400; }
@@ -409,7 +485,13 @@ html[data-theme="dark"] .exercise-jump .done .jump-sets::before { color:#a5e5c2;
 .summary-records ul { display:grid; gap:6px; margin:0; padding:0; list-style:none; }
 .summary-records li { padding:10px 12px; color:#22634c; background:#edf9f2; border:1px solid #b9e3ca; border-radius:10px; font-size:.9rem; }
 html[data-theme="dark"] .summary-records li { color:#a5e5c2; background:#193b2d; border-color:#2f654b; }
-@media (max-width:620px) { .swap-fields{grid-template-columns:1fr 1fr}.swap-fields input{grid-column:1/-1}.add-exercise-fields .add-exercise-timed{grid-row:2}.add-exercise-fields button{grid-row:3}.summary-stats{grid-template-columns:1fr 1fr} }
+@media (max-width:620px) {
+  .swap-fields{grid-template-columns:1fr 1fr}
+  .swap-fields input{grid-column:1/-1}
+  .add-exercise-fields .add-exercise-timed{grid-row:2}
+  .add-exercise-fields button{grid-row:3}
+  .summary-stats{grid-template-columns:1fr 1fr}
+}
 
 /* A note kept with an exercise, shown whenever it comes up. */
 .exercise-note { margin:4px 0 8px; padding:8px 12px; color:var(--ink); background:#fff8e6; border-left:3px solid #d9912f; border-radius:6px; font-size:.9rem; white-space:pre-line; }
@@ -558,7 +640,10 @@ header { margin-bottom:22px; }
 
 /* The rest bar drains along the bottom of the panel as the rest runs out. */
 .rest-panel { overflow:hidden; }
-.rest-panel::after { content:""; position:absolute; left:0; bottom:0; height:3px; width:calc(var(--rest-left, 1) * 100%); background:var(--accent); border-radius:0 3px 3px 0; transition:width .3s linear; }
+.rest-panel::after {
+  content:""; position:absolute; left:0; bottom:0; height:3px; width:calc(var(--rest-left, 1) * 100%); background:var(--accent);
+  border-radius:0 3px 3px 0; transition:width .3s linear;
+}
 
 /* The firework for a new personal record: sparks from the middle of a button, over everything, never in the way of a tap. */
 .firework { position:fixed; z-index:100; width:0; height:0; pointer-events:none; }
@@ -609,7 +694,9 @@ html[data-theme="dark"] .goal.reached .goal-foot span { color:#a5e5c2; }
    any box with smaller text when it is tapped. */
 .set-edit { min-height:44px; font-size:16px; }
 .set-list .remove { width:44px; height:44px; }
-#endWorkoutBtn, #cardioCancelBtn, #activeWorkoutProgress, #completeSetBtn, #activeAddBtn, #nextExerciseBtn, .active-workout .effort-choices button, .active-workout .rest-adjust button, .active-workout .rest-actions button { min-height:44px; }
+#endWorkoutBtn, #cardioCancelBtn, #activeWorkoutProgress, #completeSetBtn, #activeAddBtn, #nextExerciseBtn, .active-workout .effort-choices button, .active-workout .rest-adjust button, .active-workout .rest-actions button {
+  min-height:44px;
+}
 .active-workout .effort-choices button { min-width:44px; }
 /* The × brings its own space, so a logged set's row gives its boxes the room back. */
 @media (max-width:620px) { .set-list li { gap:4px; padding-right:0; } }
@@ -689,7 +776,10 @@ html[data-theme="dark"] .goal.reached .goal-foot span { color:#a5e5c2; }
 .cardio-controls button { min-height:52px; font-size:1rem; }
 .cardio-note { margin:14px 0 0; font-size:.82rem; }
 .cardio-activity-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:10px; margin-top:16px; }
-.cardio-activity { display:grid; align-content:start; gap:4px; min-height:76px; padding:14px 16px; color:var(--ink); background:var(--card); border:1px solid var(--line); border-radius:12px; font-weight:400; text-align:left; }
+.cardio-activity {
+  display:grid; align-content:start; gap:4px; min-height:76px; padding:14px 16px; color:var(--ink); background:var(--card);
+  border:1px solid var(--line); border-radius:12px; font-weight:400; text-align:left;
+}
 .cardio-activity:hover { border-color:var(--accent); transform:none; }
 .cardio-activity strong { font-size:1rem; }
 .cardio-activity span { color:var(--muted); font-size:.82rem; line-height:1.35; }

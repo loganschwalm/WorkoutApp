@@ -111,7 +111,8 @@ function renderBodyweight() {
   $('bodyweightDetail').textContent = entries.length > 1 ? 'Tap a point to see its value.' : '';
   $('bodyweightList').innerHTML = [...entries].reverse().slice(0, bodyweightListed).map(entry => '<li>'
     + `<span>${escapeHTML(longDate(entry.time))}</span><strong>${escapeHTML(formatBodyweight(entry.weight))} ${unit}</strong>`
-    + `<button class="link-button" type="button" data-bodyweight-remove="${escapeHTML(entry.day)}" aria-label="Remove the weight for ${escapeHTML(longDate(entry.time))}">Remove</button></li>`).join('');
+    + `<button class="link-button" type="button" data-bodyweight-remove="${escapeHTML(entry.day)}" aria-label="Remove the weight for ${escapeHTML(longDate(entry.time))}">Remove</button>`
+      + `</li>`).join('');
   $('bodyweightDate').max = calendarDayKey(new Date());
   if (!$('bodyweightDate').value) $('bodyweightDate').value = calendarDayKey(new Date());
   drawBodyweight();

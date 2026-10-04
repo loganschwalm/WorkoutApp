@@ -401,7 +401,11 @@ function programTemplateCards() {
     const setup = definition.custom ? '<button class="primary" type="button" data-program-action="build">Build program</button>'
       : `<button class="primary" type="button" data-program-action="setup" data-program-id="${escapeHTML(definition.id)}">Set up program</button>`;
     const action = following ? '<button class="primary" type="button" data-program-action="view">View program</button>' : setup;
-    return `<article class="template-card program-template" data-program-id="${escapeHTML(definition.id)}"><div><div class="template-card-heading"><h3>${escapeHTML(definition.name)}</h3><span class="badge">Program</span></div><p>${escapeHTML(typeof definition.summary === 'function' ? definition.summary(weightUnit()) : definition.summary)}</p><p class="program-schedule">${escapeHTML(definition.schedule)}${following ? ` · ${definition.block} ${currentProgram.cycle} in progress` : ''}</p></div><div class="template-actions">${action}</div></article>`;
+    return `<article class="template-card program-template" data-program-id="${escapeHTML(definition.id)}"><div><div class="template-card-heading">`
+      + `<h3>${escapeHTML(definition.name)}</h3><span class="badge">Program</span></div>`
+      + `<p>${escapeHTML(typeof definition.summary === 'function' ? definition.summary(weightUnit()) : definition.summary)}</p>`
+      + `<p class="program-schedule">${escapeHTML(definition.schedule)}${following ? ` · ${definition.block} ${currentProgram.cycle} in progress` : ''}</p>`
+      + `</div><div class="template-actions">${action}</div></article>`;
   }).join('');
 }
 
@@ -421,7 +425,8 @@ function programDayRow(program, week, day, next) {
   const description = definition.dayDescription ? definition.dayDescription(program, week, day) : main ? describeExercisePlan(main) : '';
   const label = `${entry ? 'Redo' : 'Start'} ${dayLabel(program, week, day)}`;
   const button = `<button class="${isNext ? 'primary' : 'secondary'}" type="button" data-program-action="start" data-week="${week}" data-day="${day}" aria-label="${escapeHTML(label)}">${entry ? 'Redo' : 'Start'}</button>`;
-  return `<li class="program-day${entry ? ' done' : ''}${isNext ? ' next' : ''}"><div><strong>${escapeHTML(programDays(program)[day].name)}</strong><span>${escapeHTML(description)}</span></div><div class="program-day-actions">${entry ? dayStatus(entry) : ''}${button}</div></li>`;
+  return `<li class="program-day${entry ? ' done' : ''}${isNext ? ' next' : ''}"><div><strong>${escapeHTML(programDays(program)[day].name)}</strong>`
+    + `<span>${escapeHTML(description)}</span></div><div class="program-day-actions">${entry ? dayStatus(entry) : ''}${button}</div></li>`;
 }
 
 function renderProgram() {
@@ -447,20 +452,25 @@ function renderProgram() {
     const plan = workout.exercises.length ? workout.exercises.map(exercise => `<li>${escapeHTML(describeExercisePlan(exercise))}</li>`).join('')
       : `<li>${escapeHTML(definition.dayDescription ? definition.dayDescription(program, next.week, next.day) : '')}</li>`;
     const start = workout.exercises.length ? `<button class="primary" type="button" data-program-action="start" data-week="${next.week}" data-day="${next.day}">Start workout</button>` : '';
-    $('programNext').innerHTML = `<div><span class="program-kicker">Next workout${escapeHTML(where)}</span><strong>${escapeHTML(days[next.day].name)}</strong><ul>${plan}</ul></div><div class="program-next-actions">${start}<button class="secondary" type="button" data-program-action="skip" data-week="${next.week}" data-day="${next.day}">Skip</button></div>`;
+    $('programNext').innerHTML = `<div><span class="program-kicker">Next workout${escapeHTML(where)}</span><strong>${escapeHTML(days[next.day].name)}</strong><ul>${plan}</ul></div>`
+      + `<div class="program-next-actions">${start}<button class="secondary" type="button" data-program-action="skip" data-week="${next.week}" data-day="${next.day}">Skip</button>`
+      + `</div>`;
   }
   // A built program keeps no number per lift: its templates progress on their own.
   $('programNumbersSection').hidden = !definition.lifts.length;
   $('programNumbersHeading').textContent = definition.numbersLabel;
   $('programMaxes').innerHTML = definition.lifts.map(lift => {
     const note = definition.numberNote(program, lift);
-    return `<li><span>${escapeHTML(lift.name)}</span><strong>${escapeHTML(formatWeight(program.trainingMaxes[lift.key]))} ${weightUnit()}</strong><small${note.warn ? ' class="warn"' : ''}>${escapeHTML(note.text)}</small></li>`;
+    return `<li><span>${escapeHTML(lift.name)}</span><strong>${escapeHTML(formatWeight(program.trainingMaxes[lift.key]))} ${weightUnit()}</strong>`
+      + `<small${note.warn ? ' class="warn"' : ''}>${escapeHTML(note.text)}</small></li>`;
   }).join('');
   renderProgramProgress(program);
   $('programBlockHeading').textContent = `This ${definition.block}`;
   const rows = week => days.map((entry, day) => programDayRow(program, week, day, next)).join('');
   // A block of one week is just its days; longer blocks list each week, the current one open.
-  $('programWeeks').innerHTML = weeks.length === 1 ? `<ul class="program-days">${rows(0)}</ul>` : weeks.map((week, index) => `<details class="program-week"${next && next.week === index ? ' open' : ''}><summary><strong>Week ${index + 1} · ${escapeHTML(week.name)}</strong><span>${escapeHTML(week.summary)}</span><span class="program-week-count">${doneInWeek(program, index)} of ${days.length} done</span></summary><ul>${rows(index)}</ul></details>`).join('');
+  $('programWeeks').innerHTML = weeks.length === 1 ? `<ul class="program-days">${rows(0)}</ul>` : weeks.map((week, index) => `<details class="program-week"${next && next.week === index ? ' open' : ''}><summary><strong>Week ${index + 1} · ${escapeHTML(week.name)}</strong>`
+    + `<span>${escapeHTML(week.summary)}</span><span class="program-week-count">${doneInWeek(program, index)} of ${days.length} done</span></summary>`
+    + `<ul>${rows(index)}</ul></details>`).join('');
 }
 
 // ---- Setting up and editing -----------------------------------------------
@@ -537,7 +547,9 @@ function openProgramForm(definition) {
   $('programMaxInputs').innerHTML = definition.lifts.map(lift => {
     const value = editing ? currentProgram.trainingMaxes[lift.key] : definition.setup.estimate(lift);
     if (!editing && value) estimated += 1;
-    return `<div class="program-max-row"><label for="programMax-${lift.key}">${escapeHTML(lift.name)} (${weightUnit()})</label><input id="programMax-${lift.key}" type="number" min="0" step="0.5" inputmode="decimal" value="${escapeHTML(value || '')}" /><span class="program-hint" id="programHint-${lift.key}"></span></div>`;
+    return `<div class="program-max-row"><label for="programMax-${lift.key}">${escapeHTML(lift.name)} (${weightUnit()})</label>`
+      + `<input id="programMax-${lift.key}" type="number" min="0" step="0.5" inputmode="decimal" value="${escapeHTML(value || '')}" />`
+      + `<span class="program-hint" id="programHint-${lift.key}"></span></div>`;
   }).join('');
   const current = replacing ? programDefinition(currentProgram).name : '';
   $('programIntro').textContent = [definition.setup.intro(editing), estimated ? definition.setup.estimated : '',

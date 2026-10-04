@@ -499,7 +499,8 @@ function renderStalls() {
   $('stallList').innerHTML = stalls.length ? stalls.map(({ key, name, stall }) => `<li><button class="record" type="button" data-exercise="${escapeHTML(key)}">`
     + `<strong>${escapeHTML(name)}</strong><span>${escapeHTML(describeStall(stall))}</span>`
     + `<span><span class="record-label">Best</span> est. one-rep max ${Math.round(stall.best)} ${unit} <span class="record-date">· ${escapeHTML(longDate(stall.bestAt))}</span></span>`
-    + `<span><span class="record-label">Try</span> a week at ${escapeHTML(formatWeight(stall.deload))} ${unit}, 10% off last time's ${escapeHTML(formatWeight(stall.heaviest))}</span></button></li>`).join('')
+    + `<span><span class="record-label">Try</span> a week at ${escapeHTML(formatWeight(stall.deload))} ${unit}, 10% off last time's ${escapeHTML(formatWeight(stall.heaviest))}</span>`
+      + `</button></li>`).join('')
     : '<li class="empty">Nothing has stalled: every lift you have trained lately has set a best within three weeks, or is still early on.</li>';
 }
 
