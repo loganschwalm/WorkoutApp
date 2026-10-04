@@ -263,7 +263,7 @@ def run(t):
     click('remindSetting')
     check('turning them on asks for permission and subscribes', wait_for(lambda: cdp.ev('window.__calls') == ['permission', 'subscribe']), cdp.ev('window.__calls'))
     check('and tells the server, with this phone’s clock', wait_for(lambda: len(subscriptions()) == 1) and subscriptions()[0][0] == endpoint
-          and subscriptions()[0][1] == cdp.ev('Intl.DateTimeFormat().resolvedOptions().timeZone') and subscriptions()[0][2] == cdp.ev('-new Date().getTimezoneOffset()'), subscriptions())
+          and subscriptions()[0][1] == cdp.ev('Intl.DateTimeFormat().resolvedOptions().timeZone') and subscriptions()[0][2] == cdp.ev('0 - new Date().getTimezoneOffset()'), subscriptions())
     cdp.pause(0.3)
     check('the box is ticked, and says to choose days while there are none', cdp.ev("document.getElementById('remindSetting').checked") and 'Choose the days' in text('remindStatus'), text('remindStatus'))
     tick(1)
