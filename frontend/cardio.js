@@ -306,26 +306,20 @@ function cardioTime(mode, day, workout) {
   return day === dateInputValue(Date.now()) ? Date.now() : timestampFromDateInput(day);
 }
 
-async function saveCardioForm() {
-  if (!cardioForm) return;
-  const { mode, workout:editing, distanceShown } = cardioForm;
-  const activity = cardioActivity($('cardioActivity').value);
+// What the form says for a session, as typed, in the unit shown. Machine settings are only those filled in; zero is one too
+// (a flat treadmill).
+function readCardioForm(activity) {
   const number = id => ($(id).value === '' ? 0 : Number($(id).value));
-  const values = { day:$('cardioDate').value, seconds:Math.round(formSeconds()), unit:shownDistanceUnit(activity),
+  return { day:$('cardioDate').value, seconds:Math.round(formSeconds()), unit:shownDistanceUnit(activity),
     distance:activity.distance ? number('cardioDistance') : 0, floors:activity.floors ? number('cardioFloors') : 0,
     calories:number('cardioCalories'), heartRate:number('cardioHeartRate'),
-    // Only the settings filled in; zero is a setting too (a flat treadmill).
     settings:Object.fromEntries([...$('cardioSettings').querySelectorAll('[data-setting]')].filter(input => input.value !== '')
       .map(input => [input.dataset.setting, Number(input.value)])) };
-  $('cardioForm').querySelectorAll('[aria-invalid]').forEach(field => field.removeAttribute('aria-invalid'));
-  const problem = cardioFormProblem(values);
-  if (problem) {
-    markCardioField(problem[1], true);
-    showFeedback(problem[0]);
-    problem[1].focus();
-    return;
-  }
-  clearFeedback();
+}
+
+// The session to save: what the form says (`values`) as a workout of kind cardio, a new one or an edited one. Nothing that is zero
+// is kept (no heart rate is none), and a number is rounded to as fine as it can be measured.
+function cardioSessionFrom(values, activity, { mode, workout:editing, distanceShown }) {
   const name = activity.named ? $('cardioName').value.trim() || activity.name : activity.name;
   // An edit that leaves the distance as it was shown keeps what was logged, in its own unit, rather than converted.
   const kept = mode === 'edit' && editing && $('cardioDistance').value === distanceShown && editing.cardio && editing.cardio.distance > 0
@@ -338,6 +332,40 @@ async function saveCardioForm() {
   const workout = { ...(mode === 'edit' ? editing : {}), kind:'cardio', name, notes:$('cardioNotes').value.trim(), exercises:[],
     createdAt:cardioTime(mode, values.day, editing), duration:values.seconds, cardio, clientId:mode === 'edit' ? editing.clientId : newClientId() };
   if (!workout.clientId) delete workout.clientId;
+  return workout;
+}
+
+// Sends an edited session to the server, which is where it lives. False, with the lifter told, if that failed.
+async function saveEditedCardio(editing, workout) {
+  $('cardioSave').disabled = true;
+  try {
+    const response = await syncFetch(`/api/workouts/${encodeURIComponent(editing.id)}`, { method:'PUT', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(workout) });
+    if (!response.ok) throw new Error(`Saving the session failed (${response.status}).`);
+    return true;
+  } catch (error) {
+    console.error('Unable to save the session.', error);
+    showFeedback('This session could not be saved. Check your connection and try again.');
+    return false;
+  } finally {
+    $('cardioSave').disabled = false;
+  }
+}
+
+async function saveCardioForm() {
+  if (!cardioForm) return;
+  const { mode, workout:editing } = cardioForm;
+  const activity = cardioActivity($('cardioActivity').value);
+  const values = readCardioForm(activity);
+  $('cardioForm').querySelectorAll('[aria-invalid]').forEach(field => field.removeAttribute('aria-invalid'));
+  const problem = cardioFormProblem(values);
+  if (problem) {
+    markCardioField(problem[1], true);
+    showFeedback(problem[0]);
+    problem[1].focus();
+    return;
+  }
+  clearFeedback();
+  const workout = cardioSessionFrom(values, activity, cardioForm);
   // Far faster than ever is asked about first, against every other session (an edited one is not its own best).
   const doubt = implausibleRate(workout, allCardio().filter(other => !(mode === 'edit' && editing && other.id === editing.id)));
   if (doubt && !confirm(doubt)) {
@@ -347,19 +375,9 @@ async function saveCardioForm() {
     return;
   }
   if (mode === 'edit') {
-    $('cardioSave').disabled = true;
-    try {
-      const response = await syncFetch(`/api/workouts/${encodeURIComponent(editing.id)}`, { method:'PUT', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(workout) });
-      if (!response.ok) throw new Error(`Saving the session failed (${response.status}).`);
-    } catch (error) {
-      console.error('Unable to save the session.', error);
-      showFeedback('This session could not be saved. Check your connection and try again.');
-      return;
-    } finally {
-      $('cardioSave').disabled = false;
-    }
+    if (!(await saveEditedCardio(editing, workout))) return;
     closeCardioForm();
-    showFeedback(`Saved your changes to “${name}”.`, 'success');
+    showFeedback(`Saved your changes to “${workout.name}”.`, 'success');
     await loadCardioSessions();
     return;
   }
@@ -375,7 +393,7 @@ async function saveCardioForm() {
   renderCardio();
   showCardioSummary(workout, records);
   const synced = await flushPendingWorkouts();
-  showFeedback(synced ? `“${name}” saved.` : `“${name}” is saved on this device and will sync when the server is reachable again.`, 'success');
+  showFeedback(synced ? `“${workout.name}” saved.` : `“${workout.name}” is saved on this device and will sync when the server is reachable again.`, 'success');
   if (synced) await loadCardioSessions();
 }
 

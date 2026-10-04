@@ -267,37 +267,51 @@ function chartScale(values) {
 
 // Labels along a line, first to last, keeping only those with room: each is written only if it clears the one before
 // it, and the last is always written, in place of any it would run into.
-function labelsThatFit(labels, gap) {
-  const kept = [];
-  const clears = (a, b) => b.x - a.x >= (a.width + b.width) / 2 + gap;
-  labels.forEach(label => { if (!kept.length || clears(kept[kept.length - 1], label)) kept.push(label); });
-  const last = labels[labels.length - 1];
-  if (last && kept[kept.length - 1] !== last) {
-    while (kept.length && !clears(kept[kept.length - 1], last)) kept.pop();
-    kept.push(last);
-  }
-  return kept;
+// Where the values written beside the points go. A value over every point runs together, the more so with several workout types
+// on one line. Each series' latest value is written first, the most recent of them before the rest, then the others from left
+// to right, each only where it clears every value already written. A tap on the chart shows any of them. Each label is
+// { text, colour, x, y, width }; those to write are given a place, beside the point on the right, or on the left where the
+// chart's edge would cut it off.
+function placeValueLabels(latest, others, width) {
+  const placed = label => {
+    const onRight = label.x + 7 + label.width <= width - 2;
+    return { ...label, left:onRight ? label.x + 7 : label.x - 7 - label.width, align:onRight ? 'left' : 'right', at:onRight ? label.x + 7 : label.x - 7 };
+  };
+  const clashes = (a, b) => a.left < b.left + b.width + 6 && b.left < a.left + a.width + 6 && Math.abs(a.y - b.y) < 13;
+  const written = [];
+  [...latest.sort((a, b) => b.x - a.x), ...others.sort((a, b) => a.x - b.x)].map(placed)
+    .forEach(label => { if (!written.some(other => clashes(other, label))) written.push(label); });
+  return written.sort((a, b) => a.left - b.left);
+}
+
+// Draws each workout type's line and dots, and notes where every point is (drawnPoints, for a tap on the chart). Returns the
+// value to write at each: each line's latest, and the rest.
+function drawSeries(context, { across, y, format }) {
+  context.font = '11px Inter, system-ui, sans-serif';
+  const latest = [], others = [];
+  chartData.types.forEach((type, typeIndex) => {
+    const colour = seriesColour(typeIndex);
+    const own = chartData.points.map((point, index) => ({ point, index, value:type.values.get(point.key) })).filter(entry => entry.value !== undefined);
+    const spots = own.map(entry => ({ x:across[entry.index], y:y(entry.value) }));
+    drawLine(context, spots, colour);
+    drawDots(context, spots, colour);
+    own.forEach(({ point, index, value }, position) => {
+      drawnPoints.push({ x:across[index], y:y(value), text:`${type.name}, ${longDate(point.createdAt)}: ${format.value(value)}` });
+      const text = format.value(value);
+      (position === own.length - 1 ? latest : others).push({ text, colour, x:across[index], y:y(value), width:context.measureText(text).width });
+    });
+  });
+  return { latest, others };
 }
 
 function drawChart() {
   drawnPoints = [];
   if (!chartData || !chartData.points.length) return;
-  const canvas = $('progressChart');
-  const width = canvas.clientWidth;
-  const height = 360;
-  const ratio = window.devicePixelRatio || 1;
-  canvas.width = width * ratio;
-  canvas.height = height * ratio;
-  const context = canvas.getContext('2d');
-  context.scale(ratio, ratio);
-  context.clearRect(0, 0, width, height);
-
+  const { context, width, height } = prepareChart($('progressChart'), 360);
   // Set through the DOM: the Content-Security-Policy refuses style="" attributes written into markup. Coloured with the
   // chart, so a change of theme recolours both.
   $('legend').querySelectorAll('.legend-swatch').forEach((swatch, index) => { swatch.style.background = seriesColour(index); });
-  const styles = getComputedStyle(document.documentElement);
-  const ink = styles.getPropertyValue('--muted').trim();
-  const line = styles.getPropertyValue('--line').trim();
+  const colours = chartColours();
   const left = 58, right = 24, top = 22, bottom = 52;
   const chartWidth = Math.max(width - left - right, 1);
   const chartHeight = height - top - bottom;
@@ -313,64 +327,11 @@ function drawChart() {
   };
   const format = chartFormat();
 
-  context.font = '12px Inter, system-ui, sans-serif';
-  context.lineWidth = 1;
-  context.strokeStyle = line;
-  context.fillStyle = ink;
-  context.textAlign = 'right';
-  scale.ticks.forEach(value => {
-    const position = y(value);
-    context.beginPath(); context.moveTo(left, position); context.lineTo(width - right, position); context.stroke();
-    context.fillText(format.tick(value), left - 10, position + 4);
-  });
-  context.save();
-  context.translate(15, top + chartHeight / 2);
-  context.rotate(-Math.PI / 2);
-  context.textAlign = 'center';
-  context.fillText(format.axis, 0, 0);
-  context.restore();
-  context.textAlign = 'center';
-  // A date under every point runs together once there are a few weeks of workouts, so only those with room are written,
-  // always including the most recent.
-  const dates = chartData.points.map((point, index) => {
-    const text = formatDate(point.createdAt);
-    return { text, x:across[index], width:context.measureText(text).width };
-  });
-  labelsThatFit(dates, 12).forEach(label => context.fillText(label.text, label.x, height - 20));
-
-  context.font = '11px Inter, system-ui, sans-serif';
-  const latest = [], others = [];
-  chartData.types.forEach((type, typeIndex) => {
-    const colour = seriesColour(typeIndex);
-    context.strokeStyle = colour;
-    context.fillStyle = colour;
-    context.lineWidth = 3;
-    const own = chartData.points.map((point, index) => ({ point, index, value:type.values.get(point.key) })).filter(entry => entry.value !== undefined);
-    context.beginPath();
-    own.forEach((entry, position) => {
-      if (position === 0) context.moveTo(across[entry.index], y(entry.value)); else context.lineTo(across[entry.index], y(entry.value));
-    });
-    context.stroke();
-    own.forEach(({ point, index, value }, position) => {
-      context.beginPath(); context.arc(across[index], y(value), 4, 0, Math.PI * 2); context.fill();
-      drawnPoints.push({ x:across[index], y:y(value), text:`${type.name}, ${longDate(point.createdAt)}: ${format.value(value)}` });
-      const text = format.value(value);
-      (position === own.length - 1 ? latest : others).push({ text, colour, x:across[index], y:y(value), width:context.measureText(text).width });
-    });
-  });
-  // A value over every point runs together too, the more so with several workout types on one line. Each series' latest
-  // value is written first, the most recent of them before the rest, then the others from left to right, each only where
-  // it clears every value already written. A tap on the chart shows any of them.
-  const placed = label => {
-    // Beside its point on the right, or on the left where the chart's edge would cut it off.
-    const onRight = label.x + 7 + label.width <= width - 2;
-    return { ...label, left:onRight ? label.x + 7 : label.x - 7 - label.width, align:onRight ? 'left' : 'right', at:onRight ? label.x + 7 : label.x - 7 };
-  };
-  const clashes = (a, b) => a.left < b.left + b.width + 6 && b.left < a.left + a.width + 6 && Math.abs(a.y - b.y) < 13;
-  const written = [];
-  [...latest.sort((a, b) => b.x - a.x), ...others.sort((a, b) => a.x - b.x)].map(placed)
-    .forEach(label => { if (!written.some(other => clashes(other, label))) written.push(label); });
-  written.sort((a, b) => a.left - b.left).forEach(label => {
+  drawGuides(context, { colours, ticks:scale.ticks, y, left, right, width, label:format.tick, gap:10 });
+  drawAxisTitle(context, format.axis, 15, top + chartHeight / 2);
+  drawDateLabels(context, chartData.points.map((point, index) => ({ time:point.createdAt, x:across[index] })), height - 20, colours);
+  const { latest, others } = drawSeries(context, { across, y, format });
+  placeValueLabels(latest, others, width).forEach(label => {
     context.fillStyle = label.colour;
     context.textAlign = label.align;
     context.fillText(label.text, label.at, label.y - 8);

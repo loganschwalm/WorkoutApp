@@ -202,29 +202,68 @@ function showExerciseJump(open) {
   $('activeWorkoutProgress').setAttribute('aria-expanded', String(open));
 }
 
+// The weight and reps the entry fields start the next set with. A workout from a training program plans every set, so the next
+// set is whichever planned one has not been logged yet.
+function nextSetDefaults(exercise, previous, timed) {
+  const sets = exercise.sets || [];
+  const previousFirst = previous ? { ...previous.sets[0], weight:prefillWeight(previous.sets[0].weight, previous.converted) } : null;
+  const lastSet = sets[sets.length - 1];
+  const plan = Array.isArray(exercise.plan) && exercise.plan.length ? exercise.plan : null;
+  const planned = plan ? plan[sets.length] : null;
+  if (planned) {
+    // A planned set with no weight (an assistance exercise) takes the set just logged, or last time's.
+    const plannedWeight = planned.weight === '' || planned.weight === undefined || planned.weight === null ? null : planned.weight;
+    return {
+      weight:plannedWeight ?? (lastSet ? lastSet.weight || '' : (previousFirst && previousFirst.weight) || ''),
+      // A rep range (8–12) takes the reps just done, or last time's, and starts at the bottom of the range.
+      reps:planned.repsMax ? (lastSet || previousFirst || planned).reps || '' : planned.reps || ''
+    };
+  }
+  // Next set defaults to the set just logged, or to last time's first set, so repeating a set is one tap. A timed
+  // exercise done for the first time starts from its target, so its timer is ready to start.
+  return {
+    weight:lastSet ? lastSet.weight || '' : exercise.weight || (previousFirst && previousFirst.weight) || '',
+    reps:(lastSet || previousFirst || (timed ? { reps:exercise.reps } : {})).reps || ''
+  };
+}
+
+// The planned sets as chips: done, the one to do now, and those to come. A set done shows what was lifted, which may not be
+// what was planned.
+function planChipsHtml(exercise, plan) {
+  const planState = index => index < exercise.sets.length ? 'done' : index === exercise.sets.length ? 'current' : 'upcoming';
+  const chip = (set, index) => {
+    const logged = exercise.sets[index];
+    return logged ? formatPlannedSet({ weight:isBodyweight(logged.weight) ? '' : logged.weight, reps:logged.reps }) : formatPlannedSet(set);
+  };
+  return plan.map((set, index) => `<li class="${planState(index)}">${escapeHTML(chip(set, index))}</li>`).join('');
+}
+
+// The sets logged so far, each with its weight and reps to correct in place.
+function completedSetsHtml(exercise, timed) {
+  const count = timed ? { unit:'s', label:'seconds' } : { unit:'reps', label:'reps' };
+  const effort = set => set.rir !== undefined && set.rir !== null ? `<small class="set-effort">${Number(set.rir) >= 4 ? '4+' : set.rir} left</small>` : '';
+  return exercise.sets.map((set, index) => `<li><span class="set-number">Set ${index + 1}${effort(set)}</span>`
+    + `<div class="set-field"><input class="set-edit" type="number" inputmode="decimal" min="0" step="0.5" value="${escapeHTML(set.weight || '')}"`
+    + ` data-set="${index}" data-field="weight" aria-label="Set ${index + 1} weight in ${weightUnit()}"><span>${weightUnit()}</span></div>`
+    + `<div class="set-field"><input class="set-edit" type="number" inputmode="numeric" min="1" step="1" value="${escapeHTML(set.reps)}" data-set="${index}"`
+    + ` data-field="reps" aria-label="Set ${index + 1} ${count.label}"><span>${count.unit}</span></div>`
+    + `<button class="remove" type="button" data-remove-set="${index}" aria-label="Remove set ${index + 1}" title="Remove">&times;</button></li>`).join('');
+}
+
 function renderActiveWorkout() {
   const exercise = activeSession.exercises[activeSession.currentIndex];
   exercise.sets = exercise.sets || [];
   const timed = isTimed(exercise);
   const previous = lastTime(exercise.name);
-  const previousFirst = previous ? { ...previous.sets[0], weight:prefillWeight(previous.sets[0].weight, previous.converted) } : null;
   const lastSet = exercise.sets[exercise.sets.length - 1];
-  // A workout from a training program plans every set, so the next set is whichever planned one has not been logged yet.
   const plan = Array.isArray(exercise.plan) && exercise.plan.length ? exercise.plan : null;
-  const planned = plan ? plan[exercise.sets.length] : null;
   $('activeWorkoutTitle').textContent = activeSession.name;
   renderActiveProgress();
   $('activeExerciseName').textContent = exercise.name;
   $('activeExerciseTarget').textContent = plan ? plannedTarget(exercise, previous)
     : `Target: ${exercise.reps} ${timed ? 'seconds' : 'reps'}${exercise.weight ? ` at ${formatWeight(exercise.weight)} ${weightUnit()}` : ''}`;
   $('activePlan').hidden = !plan;
-  const planState = index => index < exercise.sets.length ? 'done' : index === exercise.sets.length ? 'current' : 'upcoming';
-  // A set done shows what was lifted, which may not be what was planned.
-  const chip = (set, index) => {
-    const logged = exercise.sets[index];
-    return logged ? formatPlannedSet({ weight:isBodyweight(logged.weight) ? '' : logged.weight, reps:logged.reps }) : formatPlannedSet(set);
-  };
-  $('activePlan').innerHTML = plan ? plan.map((set, index) => `<li class="${planState(index)}">${escapeHTML(chip(set, index))}</li>`).join('') : '';
+  $('activePlan').innerHTML = plan ? planChipsHtml(exercise, plan) : '';
   $('activeExerciseLast').hidden = !previous;
   if (previous) {
     const when = new Date(previous.date).toLocaleDateString(undefined, { month:'short', day:'numeric' });
@@ -236,32 +275,16 @@ function renderActiveWorkout() {
   if (lastSet) $('repeatSetBtn').textContent = `Same as last set: ${describeLoggedSets([lastSet], timed)}`;
   $('holdTimer').hidden = !timed;
   $('activeNotes').value = activeSession.notes || '';
-  if (planned) {
-    // A planned set with no weight (an assistance exercise) takes the set just logged, or last time's.
-    const plannedWeight = planned.weight === '' || planned.weight === undefined || planned.weight === null ? null : planned.weight;
-    $('activeWeight').value = plannedWeight ?? (lastSet ? lastSet.weight || '' : (previousFirst && previousFirst.weight) || '');
-    // A rep range (8–12) takes the reps just done, or last time's, and starts at the bottom of the range.
-    $('completedReps').value = planned.repsMax ? (lastSet || previousFirst || planned).reps || '' : planned.reps || '';
-  } else {
-    // Next set defaults to the set just logged, or to last time's first set, so repeating a set is one tap. A timed
-    // exercise done for the first time starts from its target, so its timer is ready to start.
-    $('activeWeight').value = lastSet ? lastSet.weight || '' : exercise.weight || (previousFirst && previousFirst.weight) || '';
-    $('completedReps').value = (lastSet || previousFirst || (timed ? { reps:exercise.reps } : {})).reps || '';
-  }
+  const defaults = nextSetDefaults(exercise, previous, timed);
+  $('activeWeight').value = defaults.weight;
+  $('completedReps').value = defaults.reps;
   showPlates();
   renderExerciseNote();
   renderSuperset();
   renderProgression(exercise, previous);
   renderPastSessions(exercise);
   renderEffort(exercise);
-  const count = timed ? { unit:'s', label:'seconds' } : { unit:'reps', label:'reps' };
-  const effort = set => set.rir !== undefined && set.rir !== null ? `<small class="set-effort">${Number(set.rir) >= 4 ? '4+' : set.rir} left</small>` : '';
-  $('completedSets').innerHTML = exercise.sets.map((set, index) => `<li><span class="set-number">Set ${index + 1}${effort(set)}</span>`
-    + `<div class="set-field"><input class="set-edit" type="number" inputmode="decimal" min="0" step="0.5" value="${escapeHTML(set.weight || '')}"`
-    + ` data-set="${index}" data-field="weight" aria-label="Set ${index + 1} weight in ${weightUnit()}"><span>${weightUnit()}</span></div>`
-    + `<div class="set-field"><input class="set-edit" type="number" inputmode="numeric" min="1" step="1" value="${escapeHTML(set.reps)}" data-set="${index}"`
-    + ` data-field="reps" aria-label="Set ${index + 1} ${count.label}"><span>${count.unit}</span></div>`
-    + `<button class="remove" type="button" data-remove-set="${index}" aria-label="Remove set ${index + 1}" title="Remove">&times;</button></li>`).join('');
+  $('completedSets').innerHTML = completedSetsHtml(exercise, timed);
   $('completedSetsToggle').hidden = !exercise.sets.length;
   // The list is folded away, so its label says what was just logged: "Completed sets (3) · last 145 lbs × 6".
   $('completedSetsSummary').textContent = `Completed sets (${exercise.sets.length})`
@@ -606,45 +629,34 @@ $('clearBtn').onclick = () => {
 // Equipment that always carries a weight (see exerciseDetails in exercise-library.js).
 const loadedEquipment = ['barbell', 'dumbbell', 'machine', 'cable', 'kettlebell'];
 
-function logSet() {
-  const exercise = activeSession.exercises[activeSession.currentIndex];
-  const timed = isTimed(exercise);
-  // Complete set during a hold ends it there, logging the seconds held so far.
-  if (holdInterval) stopHold(true);
-  const reps = Number($('completedReps').value);
-  const weightValue = $('activeWeight').value;
-  markInvalid($('completedReps'), !reps || reps < 1);
-  markInvalid($('activeWeight'), weightValue !== '' && Number(weightValue) < 0);
-  if (!reps || reps < 1) {
-    showFeedback(timed ? 'Enter the seconds held for this set.' : 'Enter the reps completed for this set.');
-    $('completedReps').focus();
-    return;
-  }
+// What the set entry says, as typed.
+function readSetEntry() {
+  return { weightValue:$('activeWeight').value, reps:Number($('completedReps').value) };
+}
+
+// What is wrong with an entry, if anything, as [what to tell the lifter, the field to look at].
+function setEntryProblem({ weightValue, reps }, timed) {
+  if (!reps || reps < 1) return [timed ? 'Enter the seconds held for this set.' : 'Enter the reps completed for this set.', $('completedReps')];
   // A rep is done or not; a hold's seconds are left as typed.
-  if (!timed && !Number.isInteger(reps)) {
-    markInvalid($('completedReps'), true);
-    showFeedback('Reps must be a whole number.');
-    $('completedReps').focus();
-    return;
-  }
-  if (weightValue !== '' && Number(weightValue) < 0) { showFeedback('Weight cannot be negative.'); $('activeWeight').focus(); return; }
+  if (!timed && !Number.isInteger(reps)) return ['Reps must be a whole number.', $('completedReps')];
+  if (weightValue !== '' && Number(weightValue) < 0) return ['Weight cannot be negative.', $('activeWeight')];
+  return null;
+}
+
+// Asks about an entry that is likely a slip. The field to look at if the lifter says no, else null.
+function refusedSet(exercise, { weightValue, reps }, timed) {
   // No weight logs the set as bodyweight. For an exercise that is always loaded, that is more likely a weight left out
   // (a new exercise has none to start from) than meant, so it is asked first. A 0 typed in is taken as meant.
   if (weightValue === '' && !timed && loadedEquipment.includes(exerciseDetails(exercise.name).equipment)
-    && !confirm(`No weight entered for ${exercise.name}. Log ${reps} reps with no weight?`)) {
-    markInvalid($('activeWeight'), true);
-    $('activeWeight').focus();
-    return;
-  }
+    && !confirm(`No weight entered for ${exercise.name}. Log ${reps} reps with no weight?`)) return $('activeWeight');
   // A set far past anything done before is asked about too (see implausibleSet in records.js).
   const doubt = implausibleSet(exercise, { weight:Number(weightValue) || 0, reps }, exercise.sets);
-  if (doubt && !confirm(doubt.message)) {
-    const input = doubt.field === 'weight' ? $('activeWeight') : $('completedReps');
-    markInvalid(input, true);
-    input.focus();
-    return;
-  }
-  clearFeedback();
+  if (doubt && !confirm(doubt.message)) return doubt.field === 'weight' ? $('activeWeight') : $('completedReps');
+  return null;
+}
+
+// Adds the set to the exercise, shows it, and marks a record or a goal reached.
+function recordSet(exercise, { weightValue, reps }) {
   const weight = Number(weightValue) || 0;
   const effort = effortAsked(exercise) && effortChoice !== null ? { rir:effortChoice } : {};
   effortChoice = null;
@@ -662,7 +674,10 @@ function logSet() {
   unlockAudio();
   // A tap: the moment a phone that refused the keep-awake video (see syncWakeLock) is asked again.
   syncWakeLock();
-  // A superset goes straight on to its next exercise, with no rest until the round is done.
+}
+
+// What follows a set: rest, or in a superset the next exercise at once, with no rest until the round is done.
+function restAfterSet() {
   const index = activeSession.currentIndex;
   const next = nextInRound(activeSession, index);
   if (next !== null) {
@@ -679,18 +694,46 @@ function logSet() {
   if (first !== null && first !== index) moveWithinSuperset(first);
 }
 
-$('completeSetBtn').onclick = logSet;
+// Logs a set: the one in the entry fields (Complete set), or the entry given (Same as last set), after the checks and
+// questions that either gets.
+function logSet(entry = null) {
+  const exercise = activeSession.exercises[activeSession.currentIndex];
+  const timed = isTimed(exercise);
+  if (!entry) {
+    // Complete set during a hold ends it there, logging the seconds held so far.
+    if (holdInterval) stopHold(true);
+    entry = readSetEntry();
+    markInvalid($('completedReps'), !entry.reps || entry.reps < 1);
+    markInvalid($('activeWeight'), entry.weightValue !== '' && Number(entry.weightValue) < 0);
+  }
+  const problem = setEntryProblem(entry, timed);
+  if (problem) {
+    markInvalid(problem[1], true);
+    showFeedback(problem[0]);
+    problem[1].focus();
+    return;
+  }
+  const refused = refusedSet(exercise, entry, timed);
+  if (refused) {
+    markInvalid(refused, true);
+    refused.focus();
+    return;
+  }
+  clearFeedback();
+  recordSet(exercise, entry);
+  restAfterSet();
+}
 
-// Logs the set before this one again, in the fields' place: the weight, reps or seconds are as it was, and the usual checks
-// and rest follow, as for Complete set. A hold being timed is stopped first, so its seconds do not replace the set's.
+$('completeSetBtn').onclick = () => logSet();
+
+// Logs the set before this one again: the weight, reps or seconds are as it was, whatever the fields say, and the usual
+// checks and rest follow, as for Complete set. A hold being timed is stopped first, so its seconds do not replace the set's.
 function repeatLastSet() {
   const exercise = activeSession && activeSession.exercises[activeSession.currentIndex];
   const last = exercise && exercise.sets && exercise.sets[exercise.sets.length - 1];
   if (!last) return;
   stopHold();
-  $('activeWeight').value = String(last.weight || 0);
-  $('completedReps').value = String(last.reps);
-  logSet();
+  logSet({ weightValue:String(last.weight || 0), reps:Number(last.reps) });
 }
 $('repeatSetBtn').onclick = repeatLastSet;
 $('completedReps').oninput = () => { markInvalid($('completedReps'), false); syncHoldDisplay(); };

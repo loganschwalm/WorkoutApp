@@ -42,6 +42,7 @@ const PRECACHE = [
   '/cardio-activities.js',
   '/cardio.js',
   '/history.js',
+  '/chart-parts.js',
   '/progress.js',
   '/bodyweight.js',
   '/muscles.js',

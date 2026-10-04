@@ -47,30 +47,9 @@ function bodyweightTrend(entries) {
   return `${change < 0 ? 'Down' : 'Up'} ${formatBodyweight(Math.abs(change))} ${weightUnit()} ${when}`;
 }
 
-function drawBodyweight() {
-  bodyweightPoints = [];
-  const entries = bodyweightEntries();
-  const canvas = $('bodyweightChart');
-  if (!entries.length || canvas.hidden) return;
-  const width = canvas.clientWidth;
-  const height = 220;
-  const ratio = window.devicePixelRatio || 1;
-  canvas.width = width * ratio;
-  canvas.height = height * ratio;
-  const context = canvas.getContext('2d');
-  context.scale(ratio, ratio);
-  context.clearRect(0, 0, width, height);
-
-  const styles = getComputedStyle(document.documentElement);
-  const ink = styles.getPropertyValue('--muted').trim();
-  const line = styles.getPropertyValue('--line').trim();
-  const accent = styles.getPropertyValue('--accent').trim();
-  const left = 52, right = 20, top = 18, bottom = 40;
-  const chartWidth = Math.max(width - left - right, 1);
-  const chartHeight = height - top - bottom;
-  // A little room above and below, so a flat stretch is not drawn along an edge, and the scale widened to round steps
-  // (1, 2, 2.5 or 5 of a power of ten) so its lines fall on numbers a scale would show: 180, 182, 184.
-  const weights = entries.map(entry => entry.weight);
+// The scale of the chart: a little room above and below, so a flat stretch is not drawn along an edge, and widened to round
+// steps (1, 2, 2.5 or 5 of a power of ten) so its lines fall on numbers a scale would show: 180, 182, 184.
+function bodyweightScale(weights) {
   const padding = Math.max(1, (Math.max(...weights) - Math.min(...weights)) * 0.15);
   const rough = (Math.max(...weights) - Math.min(...weights) + 2 * padding) / 3;
   const magnitude = 10 ** Math.floor(Math.log10(rough));
@@ -78,34 +57,33 @@ function drawBodyweight() {
   // Never below zero, which no one weighs, however far the room below the lowest weigh-in would reach.
   const low = Math.max(0, Math.floor((Math.min(...weights) - padding) / step) * step);
   const high = Math.ceil((Math.max(...weights) + padding) / step) * step;
+  const ticks = [];
+  for (let tick = 0; low + tick * step <= high + step / 1000; tick += 1) ticks.push(low + tick * step);
+  return { low, high, step, ticks };
+}
+
+function drawBodyweight() {
+  bodyweightPoints = [];
+  const entries = bodyweightEntries();
+  const canvas = $('bodyweightChart');
+  if (!entries.length || canvas.hidden) return;
+  const { context, width, height } = prepareChart(canvas, 220);
+  const colours = chartColours();
+  const left = 52, right = 20, top = 18, bottom = 40;
+  const chartWidth = Math.max(width - left - right, 1);
+  const chartHeight = height - top - bottom;
+  const { low, high, ticks } = bodyweightScale(entries.map(entry => entry.weight));
   const first = entries[0].time, span = entries[entries.length - 1].time - first;
   const x = entry => span ? left + (entry.time - first) / span * chartWidth : left + chartWidth / 2;
   const y = weight => top + chartHeight - (weight - low) / (high - low) * chartHeight;
 
-  context.font = '12px Inter, system-ui, sans-serif';
-  context.lineWidth = 1;
-  context.strokeStyle = line;
-  context.fillStyle = ink;
-  context.textAlign = 'right';
-  for (let tick = 0; low + tick * step <= high + step / 1000; tick += 1) {
-    const weight = low + tick * step;
-    context.beginPath(); context.moveTo(left, y(weight)); context.lineTo(width - right, y(weight)); context.stroke();
-    context.fillText(formatBodyweight(weight), left - 8, y(weight) + 4);
-  }
-  context.textAlign = 'center';
-  const dates = entries.map(entry => { const text = formatDate(entry.time); return { text, x:x(entry), width:context.measureText(text).width }; });
-  labelsThatFit(dates, 12).forEach(label => context.fillText(label.text, label.x, height - 14));
-
-  context.strokeStyle = accent;
-  context.fillStyle = accent;
-  context.lineWidth = 3;
-  context.beginPath();
-  entries.forEach((entry, index) => { if (index) context.lineTo(x(entry), y(entry.weight)); else context.moveTo(x(entry), y(entry.weight)); });
-  context.stroke();
+  drawGuides(context, { colours, ticks, y, left, right, width, label:formatBodyweight, gap:8 });
+  drawDateLabels(context, entries.map(entry => ({ time:entry.time, x:x(entry) })), height - 14, colours);
+  const spots = entries.map(entry => ({ x:x(entry), y:y(entry.weight) }));
+  drawLine(context, spots, colours.accent);
   // Dots while they have room; months of daily weigh-ins read better as the line alone, with the latest marked.
-  const dots = entries.length <= chartWidth / 8 ? entries : [entries[entries.length - 1]];
-  dots.forEach(entry => { context.beginPath(); context.arc(x(entry), y(entry.weight), 4, 0, Math.PI * 2); context.fill(); });
-  entries.forEach(entry => bodyweightPoints.push({ x:x(entry), y:y(entry.weight), text:`${longDate(entry.time)}: ${formatBodyweight(entry.weight)} ${weightUnit()}` }));
+  drawDots(context, entries.length <= chartWidth / 8 ? spots : [spots[spots.length - 1]], colours.accent);
+  entries.forEach((entry, index) => bodyweightPoints.push({ ...spots[index], text:`${longDate(entry.time)}: ${formatBodyweight(entry.weight)} ${weightUnit()}` }));
   // The latest value is written on the side of its point away from the line coming into it: under it when the weight
   // came down, over it when it went up, so the line never runs through the number.
   const latest = entries[entries.length - 1];
