@@ -157,6 +157,8 @@ class CDP:
         self.dropped = 0
         self.stall_paths = []           # hold GETs whose URL contains one of these, unanswered, like a stalled connection
         self.stalled = []               # request ids held so far; release_stalled() lets them fail
+        self.hold_paths = []            # hold GETs whose URL contains one of these, to let through later (see hold)
+        self.held = []                  # request ids held so far; release_held() lets them go
         self._answer = True
         self._stub_id = None
         self._stubs_ready = False
@@ -222,6 +224,9 @@ class CDP:
                 command, extra = 'Fetch.failRequest', {'errorReason': 'ConnectionReset'}
             else:
                 command, extra = 'Fetch.continueResponse', {}
+        elif params['request']['method'] == 'GET' and any(path in params['request']['url'] for path in self.hold_paths):
+            self.held.append(request_id)
+            return
         elif params['request']['method'] == 'GET' and any(path in params['request']['url'] for path in self.stall_paths):
             # No answer at all: the page sees neither a response nor an error until release_stalled().
             self.stalled.append(request_id)
@@ -231,6 +236,23 @@ class CDP:
         else:
             command, extra = 'Fetch.continueRequest', {}
         self.ws.send(json.dumps({'id': self.n, 'method': command, 'params': {'requestId': request_id, **extra}}))
+
+    def hold(self, path):
+        """From now on a GET with `path` in its address is held, and the page waits for it, until release_held(): for making one
+        file arrive after the others. It replaces what Fetch was enabled for, so it is for a suite that does not intercept the API."""
+        self.hold_paths.append(path)
+        # The page's own requests are all that Fetch sees: one the service worker answers is not among them.
+        self.send('Network.setBypassServiceWorker', bypass=True)
+        self.send('Fetch.enable', patterns=[{'urlPattern': f'*{path}*', 'requestStage': 'Request'}])
+
+    def release_held(self):
+        """Lets what hold() kept go on to the server, and stops holding."""
+        held, self.held, self.hold_paths = self.held, [], []
+        for request_id in held:
+            self.n += 1
+            self.ws.send(json.dumps({'id': self.n, 'method': 'Fetch.continueRequest', 'params': {'requestId': request_id}}))
+        self.send('Fetch.disable')
+        self.send('Network.setBypassServiceWorker', bypass=False)
 
     def release_stalled(self):
         """Fail every held request, as a stalled connection eventually does. One the page gave up on is already gone."""

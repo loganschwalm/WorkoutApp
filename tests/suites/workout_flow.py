@@ -275,3 +275,19 @@ def run(t):
     check('even after a reload, with no record from the cancelled sets', cdp.ev(stats) == before_stats and cdp.ev(HIDDEN_ACTIVE) is True,
           [cdp.ev(stats), before_stats])
     t.set_cookie(token)
+
+    print('L   the server answering before the Tracker’s own script has run')
+    # On a slow phone, or a fast server, the account's state can arrive while the Tracker's last and biggest script is still to
+    # come: the Settings change that follows must not reach a listener that reads what that script declares.
+    cdp.console.clear()
+    cdp.hold('/script.js')
+    cdp.send('Page.navigate', url=t.base_url + '/index.html')
+    cdp.pause(2)
+    early = [line for line in cdp.console if line.startswith('exceptionThrown')]
+    check('(the script is being held, and the Settings change it follows has gone ahead of it)', len(cdp.held) == 1 and cdp.ev("typeof getWorkoutSettings") == 'function', len(cdp.held))
+    check('with the answer in and the Tracker’s script still to come, nothing throws', not early, early[:2])
+    cdp.release_held()
+    check('and the Tracker then starts as usual', cdp.wait("typeof activeSession !== 'undefined' && document.querySelectorAll('#templateList [data-template-action=start]').length >= 3", timeout=15))
+    cdp.pause(0.5)
+    late = [line for line in cdp.console if line.startswith('exceptionThrown')]
+    check('with nothing thrown once it has', not late, late[:2])

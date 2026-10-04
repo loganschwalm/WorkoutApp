@@ -47,8 +47,14 @@ function showSessionExpired() {
   document.body.prepend(banner);
 }
 
+// Every script of the page has run by DOMContentLoaded, which the server's answer need not wait for: on a slow phone, or a fast
+// server, it can come while the page's last and biggest script is still to load. The Settings change that follows it is told
+// to listeners that read what that script declares (rest-timer.js's, of the Tracker's activeSession), so it waits for them.
+const pageScriptsRun = document.readyState === 'loading' ? new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve, { once:true })) : Promise.resolve();
+
 // Settings and templates for this account, from offline.js: the server's copy unless one changed here is still uploading.
-window.serverStateReady = loadAccountState().then(state => {
+window.serverStateReady = loadAccountState().then(async state => {
+  await pageScriptsRun;
   applySettings(getWorkoutSettings());
   window.dispatchEvent(new Event('settingschange'));
   return state;
