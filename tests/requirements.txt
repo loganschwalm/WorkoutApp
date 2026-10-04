@@ -1,3 +1,5 @@
 # The tests drive a real browser over the Chrome DevTools Protocol.
 # The app itself still needs nothing beyond the Python standard library.
 websocket-client>=1.0
+# Checks the Python for slips (an unused name, a string that was meant to be an f-string); CI runs it beside the tests.
+pyflakes>=3.0

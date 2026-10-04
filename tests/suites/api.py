@@ -415,7 +415,6 @@ def schema_of(path):
 
 
 def run_structure(t, check, request):
-    main = t.server
     token = t.token
     json_headers = {'Content-Type': 'application/json'}
     tables = ['active_sessions', 'password_resets', 'push_subscriptions', 'server_keys', 'sessions', 'user_state', 'users', 'workouts']

@@ -19,7 +19,7 @@ function saveBodyweights() {
   saveLocalState('bodyweight', bodyweights);
 }
 
-function dayKey(date) {
+function bodyweightDayKey(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
@@ -144,8 +144,8 @@ function renderBodyweight() {
   $('bodyweightList').innerHTML = [...entries].reverse().slice(0, bodyweightListed).map(entry => '<li>'
     + `<span>${escapeHTML(longDate(entry.time))}</span><strong>${escapeHTML(formatBodyweight(entry.weight))} ${unit}</strong>`
     + `<button class="link-button" type="button" data-bodyweight-remove="${escapeHTML(entry.day)}" aria-label="Remove the weight for ${escapeHTML(longDate(entry.time))}">Remove</button></li>`).join('');
-  $('bodyweightDate').max = dayKey(new Date());
-  if (!$('bodyweightDate').value) $('bodyweightDate').value = dayKey(new Date());
+  $('bodyweightDate').max = bodyweightDayKey(new Date());
+  if (!$('bodyweightDate').value) $('bodyweightDate').value = bodyweightDayKey(new Date());
   drawBodyweight();
 }
 
@@ -163,7 +163,7 @@ $('bodyweightForm').onsubmit = event => {
     $('bodyweightValue').focus();
     return;
   }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day > dayKey(new Date())) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day > bodyweightDayKey(new Date())) {
     showBodyweightFeedback('Choose the day you weighed in, today or before.', true);
     $('bodyweightDate').focus();
     return;
@@ -182,9 +182,9 @@ $('bodyweightForm').onsubmit = event => {
   bodyweights = { ...bodyweights, [day]:{ weight:Math.round(weight * 100) / 100, unit:weightUnit() } };
   saveBodyweights();
   $('bodyweightValue').value = '';
-  $('bodyweightDate').value = dayKey(new Date());
+  $('bodyweightDate').value = bodyweightDayKey(new Date());
   renderBodyweight();
-  const when = day === dayKey(new Date()) ? 'today' : longDate(dayStart(day));
+  const when = day === bodyweightDayKey(new Date()) ? 'today' : longDate(dayStart(day));
   showBodyweightFeedback(`${replaced ? 'Updated' : 'Logged'} ${formatBodyweight(weight)} ${weightUnit()} for ${when}.`);
 };
 

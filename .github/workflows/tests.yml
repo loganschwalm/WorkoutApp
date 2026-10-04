@@ -1,5 +1,6 @@
-# Runs every test suite on each push and pull request. When they pass on main, the same commit moves the `stable`
-# branch, which installs and updates follow (ct/workout-tracker.sh), so a push only reaches servers once it is green.
+# Runs every test suite, on the oldest and a current Python, on each push and pull request. When they pass on main, the
+# same commit moves the `stable` branch, which installs and updates follow (ct/workout-tracker.sh), so a push only
+# reaches servers once it is green.
 name: Tests
 
 on:
@@ -9,17 +10,31 @@ on:
 
 jobs:
   test:
+    name: test (Python ${{ matrix.python }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      # Both finish, so a failure on one version shows whether the other has it too.
+      fail-fast: false
+      matrix:
+        # The oldest Python the README says the server runs on, and a current one (what a new Debian container has).
+        python: ['3.9', '3.12']
     steps:
       - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v7
         with:
-          python-version: '3.12'
+          python-version: ${{ matrix.python }}
 
       - name: Install the test requirements
         run: pip install -r tests/requirements.txt
+
+      # Cheap, so first: slips in the Python, and the lists kept by hand (what the service worker caches, names the scripts
+      # share, what the reference documents) agreeing with the files. tests/lint.py says what it checks.
+      - name: Check the code and that the project hangs together
+        run: |
+          python -m pyflakes backend tests scripts docker-entrypoint.py
+          python tests/lint.py
 
       # Ubuntu 24.04 stops unprivileged programs from making user namespaces, which Chrome's sandbox needs.
       - name: Let Chrome use its sandbox

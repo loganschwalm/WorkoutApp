@@ -14,7 +14,7 @@ def run(t):
     cdp, check, api, token = t.cdp, t.check, t.api, t.token
     seed, ex, workouts, ids, raw = t.seed, t.ex, t.workouts, t.ids, t.raw
     safe_ev, wait_for = t.safe_ev, t.wait_for
-    start, log_set, open_tracker, end_workout = t.start, t.log_set, t.open_tracker, t.end_workout
+    start, open_tracker, end_workout = t.start, t.open_tracker, t.end_workout
     server_session, set_cookie, W1 = t.active_session, t.set_cookie, t.W1
 
     # ------------------------------------------------------------------ gym usability

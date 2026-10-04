@@ -102,7 +102,7 @@ def run(t):
     cdp.answer = True
     click('#cardioCancelBtn')
     check('and goes, saving nothing', hidden('cardioActive') and text('formFeedback') == '“Walk” was cancelled. Nothing was saved. Undo'
-          and cdp.ev(f"readLocal(localKey('cardio-active'))") is None, text('formFeedback'))
+          and cdp.ev("readLocal(localKey('cardio-active'))") is None, text('formFeedback'))
     click('#formFeedback .feedback-action')
     check('Undo brings it back, its time still counting', not hidden('cardioActive') and text('cardioClock').startswith('25:'), text('cardioClock'))
     click('#cardioFinishBtn')

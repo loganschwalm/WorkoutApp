@@ -695,19 +695,19 @@ def run(t):
                                         'exercises': [ex('Bench Press', 160 + n, 5, [(5, 160 + n)])]}, lifter)
     cdp.send('Emulation.setDeviceMetricsOverride', width=375, height=800, deviceScaleFactor=1, mobile=True)
     settle('/progress.html', 'chartData && chartData.types.length >= 4')
-    mixed = cdp.ev(f"""(() => {{
+    mixed = cdp.ev("""(() => {
       const labels = [];
       const original = CanvasRenderingContext2D.prototype.fillText;
-      CanvasRenderingContext2D.prototype.fillText = function (text, x, y, ...rest) {{
-        if (this.font.startsWith('11px')) {{ const width = this.measureText(text).width; labels.push({{ left: this.textAlign === 'right' ? x - width : x, width, y }}); }}
+      CanvasRenderingContext2D.prototype.fillText = function (text, x, y, ...rest) {
+        if (this.font.startsWith('11px')) { const width = this.measureText(text).width; labels.push({ left: this.textAlign === 'right' ? x - width : x, width, y }); }
         return original.call(this, text, x, y, ...rest);
-      }};
+      };
       drawChart();
       CanvasRenderingContext2D.prototype.fillText = original;
       const box = document.getElementById('progressChart').clientWidth;
-      return {{ labels: labels.length, overlaps: labels.filter((a, i) => labels.some((b, j) => j > i && a.left < b.left + b.width && b.left < a.left + a.width && Math.abs(a.y - b.y) < 11)).length,
-               clipped: labels.filter(label => label.left < 0 || label.left + label.width > box).length }};
-    }})()""")
+      return { labels: labels.length, overlaps: labels.filter((a, i) => labels.some((b, j) => j > i && a.left < b.left + b.width && b.left < a.left + a.width && Math.abs(a.y - b.y) < 11)).length,
+               clipped: labels.filter(label => label.left < 0 || label.left + label.width > box).length };
+    })()""")
     check('with several workout types on one line, on a phone, the values still never overlap or run off the edge',
           mixed['labels'] >= 2 and mixed['overlaps'] == 0 and mixed['clipped'] == 0, mixed)
     fits = cdp.ev("document.querySelector('.progress-filters').scrollWidth <= document.querySelector('.progress-filters').clientWidth")
@@ -725,7 +725,7 @@ def run(t):
                + "document.querySelector('#bodyweightForm button[type=submit]').click()")
         cdp.pause(0.3)
 
-    today_key = cdp.ev('dayKey(new Date())')
+    today_key = cdp.ev('bodyweightDayKey(new Date())')
     check('with nothing logged it says what it is for, and draws no chart', 'Log your weight' in field('bodyweightSummary')
           and cdp.ev("document.getElementById('bodyweightChart').hidden") is True and cdp.ev(rows) == [], field('bodyweightSummary'))
     check('the day starts at today, and cannot go past it', cdp.ev("document.getElementById('bodyweightDate').value") == today_key
@@ -733,9 +733,9 @@ def run(t):
     check('the weight is asked for in the unit in use', cdp.ev("document.querySelector('#bodyweightForm .unit-label').textContent") == 'lbs')
     weigh('')
     check('no weight is refused', 'Enter your weight' in field('bodyweightFeedback') and cdp.ev(rows) == [], field('bodyweightFeedback'))
-    weigh(180, "dayKey(new Date(Date.now() + 2 * 86400000))")
+    weigh(180, "bodyweightDayKey(new Date(Date.now() + 2 * 86400000))")
     check('and a day still to come', 'today or before' in field('bodyweightFeedback') and cdp.ev(rows) == [], field('bodyweightFeedback'))
-    cdp.ev("document.getElementById('bodyweightDate').value = dayKey(new Date())")
+    cdp.ev("document.getElementById('bodyweightDate').value = bodyweightDayKey(new Date())")
     weigh(182.4)
     check('a weight is logged for today, and said so', field('bodyweightFeedback') == 'Logged 182.4 lbs for today.' and cdp.ev(rows) == ['182.4 lbs'],
           field('bodyweightFeedback'))
@@ -743,7 +743,7 @@ def run(t):
           and field('bodyweightSummary').endswith('Log it again to see how it moves'), field('bodyweightSummary'))
     check('and the chart is drawn', cdp.ev("document.getElementById('bodyweightChart').hidden") is False
           and 'Bodyweight: 1 weigh-in' in cdp.ev("document.getElementById('bodyweightChart').getAttribute('aria-label')"))
-    weigh(185, "dayKey(new Date(Date.now() - 31 * 86400000))")
+    weigh(185, "bodyweightDayKey(new Date(Date.now() - 31 * 86400000))")
     check('an earlier day goes in its place, newest first', cdp.ev(rows) == ['182.4 lbs', '185 lbs'], cdp.ev(rows))
     check('and the summary says how it has moved over the last month', field('bodyweightSummary').endswith('Down 2.6 lbs in 31 days'), field('bodyweightSummary'))
     weigh(186.6)

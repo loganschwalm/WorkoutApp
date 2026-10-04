@@ -1412,9 +1412,12 @@ They need `websocket-client` and a Chrome, Chromium or Edge install; the app its
 still needs nothing beyond the Python standard library. See `tests/README.md` for the
 suite breakdown and for how to add a test.
 
-GitHub Actions runs every suite on each push and pull request (`.github/workflows/tests.yml`). When
-they all pass on `main`, it moves the `stable` branch to that commit, and that is the branch
-installs and updates follow.
+GitHub Actions runs every suite on each push and pull request (`.github/workflows/tests.yml`), on Python 3.9 (the
+oldest this README says the server runs on) and 3.12, after pyflakes and `tests/lint.py` (which checks that the lists kept
+by hand agree with the files: what the service worker precaches, the names scripts share, the documented environment
+variables and the registered suites). When they all pass on `main`, it moves the `stable` branch to that commit, and that
+is the branch installs and updates follow. When you add a script, list it in the page that loads it and in `PRECACHE` in
+`frontend/sw.js`; `lint.py` fails until you do.
 
 ## Data storage
 

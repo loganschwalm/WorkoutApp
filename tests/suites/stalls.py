@@ -1,6 +1,5 @@
 """Stall detection: a lift whose estimated one-rep max has stopped going up, the deload offered for it, and what is not a stall."""
 
-import json
 import time
 
 DAY_MS = 86400000
