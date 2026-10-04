@@ -5,6 +5,7 @@ import email.utils
 import gzip
 import http.server
 import io
+import ipaddress
 import json
 import os
 import re
@@ -23,7 +24,7 @@ from api_push import PushApi
 from api_routes import find_route
 from config import (
     COMPRESSIBLE, MAX_BODY, MIN_COMPRESS, RANGED, REQUEST_TIMEOUT, ROOT, SECURE_COOKIES, SECURITY_HEADERS, SESSION_RENEW,
-    SESSION_TTL, SHORT_SESSION_RENEW, SHORT_SESSION_TTL, SMTP_HOST, SMTP_PORT, SMTP_SECURITY
+    SESSION_TTL, SHORT_SESSION_RENEW, SHORT_SESSION_TTL, SMTP_HOST, SMTP_PORT, SMTP_SECURITY, TRUSTED_PROXIES
 )
 from database import connection, init_database, session_hash
 from validation import BadRequest
@@ -46,6 +47,27 @@ def gzipped_file(path, stat):
     with gzipped_files_lock:
         gzipped_files[path] = (version, body)
     return body
+
+
+def forwarded_address(hop):
+    """The address in one entry of X-Forwarded-For (1.2.3.4, 1.2.3.4:5678, [2001:db8::1]:443), or None if it is not one."""
+    hop = hop.strip()
+    if hop.startswith('['):
+        hop = hop[1:].partition(']')[0]
+    elif hop.count(':') == 1:
+        hop = hop.partition(':')[0]
+    try:
+        address = ipaddress.ip_address(hop)
+    except ValueError:
+        return None
+    return getattr(address, 'ipv4_mapped', None) or address
+
+
+def trusted_proxy(address):
+    if not TRUSTED_PROXIES:
+        return False
+    address = forwarded_address(str(address))
+    return address is not None and any(address in network for network in TRUSTED_PROXIES)
 
 
 class WebHandler(http.server.SimpleHTTPRequestHandler):
@@ -228,6 +250,29 @@ class WebHandler(http.server.SimpleHTTPRequestHandler):
         for name, value in SECURITY_HEADERS.items():
             self.send_header(name, value)
         super().end_headers()
+
+    def client_ip(self):
+        """Where the request came from: the address it was sent from, or for a request from a trusted proxy (TRUSTED_PROXIES), the
+        address that proxy says it forwarded it for. X-Forwarded-For is read from the right, the end the proxy added to, back
+        past any other trusted proxy: what came before that was written by the client, and could say anything."""
+        peer = self.client_address[0]
+        if not trusted_proxy(peer):
+            return peer
+        hops = [hop for header in self.headers.get_all('X-Forwarded-For') or [] for hop in header.split(',')]
+        client = peer
+        for hop in reversed(hops):
+            address = forwarded_address(hop)
+            if address is None:
+                break
+            client = str(address)
+            if not trusted_proxy(address):
+                break
+        return client
+
+    def address_string(self):
+        # Each request logged under the address it came from, behind a trusted proxy too. A request that could not be read has
+        # no headers to say, and is logged under where it was sent from.
+        return self.client_ip() if getattr(self, 'headers', None) is not None else self.client_address[0]
 
     def secure_cookies(self):
         forwarded = self.headers.get('X-Forwarded-Proto', '').split(',')[0].strip().lower()

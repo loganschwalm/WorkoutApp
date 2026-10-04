@@ -485,6 +485,24 @@ tests give the server one). An account has at most 10 subscriptions (the newest 
 | `POST /api/push/unsubscribe` | `{endpoint}`: forgets it |
 | `POST /api/push/test` | Sends a notification to every device of the account now; at most one every `PUSH_TEST_WAIT` seconds (3) |
 
+The tests use a push service of their own, so only a real phone shows that the browser makers' services take the messages.
+After a change to push, or on a new server, check each kind of phone you use:
+
+1. Open the app over HTTPS. On an iPhone or iPad, add it to the Home Screen first and open it from there (iOS 16.4 or later).
+2. In Settings, pick today as a training day, tick *Remind me on training days, on this device*, and allow notifications
+   when asked.
+3. *Send a test notification*. It should arrive within seconds, and the server should log nothing. A failure is logged as
+   `Could not push to <push service>: <status>`. A 403 means the push service refused the server's signature or sender:
+   set `VAPID_SUBJECT` to a real `mailto:` address (Apple's is the strictest). *No answer* means the server cannot reach
+   that push service at all (a firewall, or no route to the internet).
+4. Set *Remind me at* a couple of minutes ahead, lock the phone, and wait. The reminder comes within `REMINDER_TICK_SECONDS`
+   of that time, and tapping it opens the app. It does not come on a day a workout has already been saved, so try this
+   before training, or on a fresh account.
+5. Untick the reminders (or sign out). The next test notification should then say there are no devices.
+
+Android may hold a notification back while battery saver is on, and an iPhone holds it back in a Focus mode that silences
+the app. Neither is the server's doing.
+
 ### Cardio
 
 The Cardio tab (`cardio.html`) is for walks, runs and the machines, kept apart from strength workouts but working the
@@ -1052,12 +1070,20 @@ What is already in place:
   failure is 15 minutes old, even with the right password. Signing in by email and by username count
   toward the same limit, and so do wrong passwords given in Settings to change the email or password,
   or to delete the account. Behind a reverse proxy every request comes from the proxy's address, so the
-  limit then works per account.
+  limit then works per account, unless the proxy is named in `TRUSTED_PROXIES` (below).
 - After 20 failed sign-ins from one address, whatever usernames they tried, that address waits the same way, so trying a
   common password against many usernames gets no further than many passwords against one. Signing into an account
   meanwhile does not start the count again, or an account of one's own would let the guessing go on. Behind a reverse
-  proxy every request shares the proxy's address, so one person's guessing would make everyone wait: set
-  `LOGIN_ADDRESS_ATTEMPTS=0` there to turn this limit off (the one per account stays).
+  proxy every request shares the proxy's address, so one person's guessing would make everyone wait: name the proxy in
+  `TRUSTED_PROXIES`, or set `LOGIN_ADDRESS_ATTEMPTS=0` to turn this limit off (the one per account stays).
+- **Behind a reverse proxy, set `TRUSTED_PROXIES` to the proxy's address**: `127.0.0.1` for one on the same machine, its
+  LAN address for one elsewhere, or for one in Docker the network it reaches the app over (Docker's own are within
+  `172.16.0.0/12`, which is fine as long as nothing else on that network is untrusted). A request from that address is
+  then taken to come from the address the proxy puts in `X-Forwarded-For`, which Caddy, Nginx Proxy Manager and Traefik
+  all send. The sign-in limits then count each person apart, and the log shows who asked. The header is read from the
+  right, the end the proxy wrote, past any other trusted proxy, so a client cannot dodge a limit by writing its own
+  address in front. It is believed only from the addresses named: from anywhere else it is ignored, so someone who
+  reaches the port directly cannot use it either. Name only your proxies, never a range other machines share with them.
 - A password reset code works once, for 15 minutes, and stops working after 5 wrong tries. Each email
   address is sent at most 5 codes an hour, and after 10 wrong codes for an address in a day, however
   many codes were sent, none is tried until the oldest of those is a day old. The replies and limits
@@ -1101,6 +1127,7 @@ The server reads these environment variables:
 | `LOGIN_ATTEMPTS` | `5` | Failed sign-ins per username and address before a wait |
 | `LOGIN_ADDRESS_ATTEMPTS` | `20` | Failed sign-ins from one address, whatever the username, before a wait; `0` turns it off |
 | `LOGIN_WINDOW` | `900` | Seconds a failed sign-in is remembered |
+| `TRUSTED_PROXIES` | *(none)* | Reverse proxies whose `X-Forwarded-For` is believed, as addresses or networks separated by commas (`127.0.0.1, 172.16.0.0/12`), so the sign-in limits count each person behind them apart. See [Before you expose it](#before-you-expose-it) |
 | `REQUEST_TIMEOUT` | `30` | Seconds a connection may send nothing before it is closed |
 | `PASSWORD_HASHERS` | `2` | Passwords hashed at once (signing in, signing up, resets), so a flood of them takes this many cores at most |
 | `PASSWORD_HASH_WAIT` | `5` | Seconds a request waits for its turn to hash before it is told the server is busy (503) |

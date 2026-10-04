@@ -84,7 +84,7 @@ class AccountApi:
         with connection() as database:
             row = find_account(database, login)
             # Keyed by the account rather than what was typed, so its email and its username share one limit.
-            address = self.client_address[0]
+            address = self.client_ip()
             throttle_key = (address, (row['username'] if row else login).lower())
             # Refused before the password is even checked, so guessing cannot continue during the wait.
             wait = address_throttle.retry_after(address) if address_throttle else 0
@@ -176,13 +176,13 @@ class AccountApi:
             database.execute('DELETE FROM sessions WHERE user_id = ?', (user['id'],))
             cookie = self.start_session(database, user['id'])
         reset_guess_throttle.clear(email)
-        login_throttle.clear((self.client_address[0], user['username'].lower()))
+        login_throttle.clear((self.client_ip(), user['username'].lower()))
         self.send_json(HTTPStatus.OK, {'user': public_user(user)}, [cookie])
 
     def confirm_password(self, database, user, password, wrong='That password is not right.'):
         """Check the signed-in account's password, asked again before a change only its owner should make: a signed-in
         page may not be its owner's. Wrong ones count as failed sign-ins, and the same wait applies."""
-        throttle_key = (self.client_address[0], user['username'].lower())
+        throttle_key = (self.client_ip(), user['username'].lower())
         wait = login_throttle.retry_after(throttle_key)
         if wait:
             raise BadRequest(f'Too many wrong passwords. Try again in {wait_words(wait)}.', HTTPStatus.TOO_MANY_REQUESTS, {'Retry-After': str(wait)})

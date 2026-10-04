@@ -1,6 +1,7 @@
 """What the server is told by its environment, and the fixed limits it keeps: the one place a setting is read, so the
 reference (readme-for-llm.md, Server settings) has one place to be checked against."""
 
+import ipaddress
 import os
 
 
@@ -36,14 +37,28 @@ ALLOW_REGISTRATION = env_flag('ALLOW_REGISTRATION', True)
 # The cookie is also marked Secure whenever a reverse proxy says the request arrived over HTTPS.
 SECURE_COOKIES = env_flag('SECURE_COOKIES', False)
 # After this many failed sign-ins for one username from one address, that pair waits until the oldest failure
-# is LOGIN_WINDOW seconds old. Behind a reverse proxy every request shares the proxy's address.
+# is LOGIN_WINDOW seconds old. Behind a reverse proxy every request shares the proxy's address, unless TRUSTED_PROXIES names it.
 LOGIN_ATTEMPTS = int(os.environ.get('LOGIN_ATTEMPTS', '5'))
 LOGIN_WINDOW = int(os.environ.get('LOGIN_WINDOW', str(15 * 60)))
 # Failed sign-ins from one address across every username before it waits the same way, so trying one common password
 # against many usernames gets no further than many passwords against one. Not cleared by signing in, which an account of
-# one's own could otherwise do between guesses. Behind a reverse proxy every request shares the proxy's address, and one
-# person's guessing would make everyone wait: 0 turns it off.
+# one's own could otherwise do between guesses. Behind a reverse proxy that TRUSTED_PROXIES does not name, every request
+# shares the proxy's address, and one person's guessing would make everyone wait: 0 turns it off.
 LOGIN_ADDRESS_ATTEMPTS = int(os.environ.get('LOGIN_ADDRESS_ATTEMPTS', '20'))
+
+
+def proxy_networks(value):
+    """The addresses and networks (192.168.1.10, 172.16.0.0/12) of TRUSTED_PROXIES."""
+    try:
+        return tuple(ipaddress.ip_network(part.strip(), strict=False) for part in value.split(',') if part.strip())
+    except ValueError as error:
+        raise SystemExit(f'TRUSTED_PROXIES must be addresses or networks separated by commas: {error}')
+
+
+# Reverse proxies whose X-Forwarded-For is believed: a request from one of these is taken to come from the address the proxy
+# says, so the sign-in limits above count each person behind it apart. A request from anywhere else is taken to come from
+# where it came from, whatever it says, so a header cannot be used to dodge a limit by anyone who reaches the port directly.
+TRUSTED_PROXIES = proxy_networks(os.environ.get('TRUSTED_PROXIES', ''))
 # Seconds a connection may sit without sending anything before it is closed. Every connection holds a thread, so
 # without this, anyone who can reach the port could open silent connections until the server ran out of room.
 REQUEST_TIMEOUT = int(os.environ.get('REQUEST_TIMEOUT', '30'))

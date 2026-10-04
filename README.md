@@ -197,6 +197,7 @@ restart the app), or under `environment:` in `docker-compose.yml`.
 |---|---|---|
 | `ALLOW_REGISTRATION` | `1` | `0` stops new accounts being created; existing ones still sign in |
 | `SECURE_COOKIES` | `0` | `1` if the app is **only** ever reached over HTTPS |
+| `TRUSTED_PROXIES` | none | Your reverse proxy's address, if you use one, so wrong-password limits apply to each person rather than to everyone at once |
 | `SMTP_HOST`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` | none | A mail server, for "Forgot password?" emails |
 
 The [full list](readme-for-llm.md#server-settings) also covers ports, sign-in limits and timeouts.

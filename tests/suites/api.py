@@ -12,6 +12,7 @@ import signal
 import socket
 import sqlite3
 import subprocess
+import sys
 import threading
 import time
 
@@ -279,6 +280,31 @@ def run_security(t, check, request):
     statuses = [login(unlimited, f'nobody-{n}', 'wrong-guess')[0] for n in range(8)]
     check('LOGIN_ADDRESS_ATTEMPTS=0 turns it off, for a server behind a shared reverse proxy', statuses == [401] * 8, statuses)
     unlimited.stop()
+
+    # ------------------------------------------------------------------ A39 behind a trusted reverse proxy
+    print('A39 behind a proxy TRUSTED_PROXIES names, each person is limited apart; a header from anyone else is not believed')
+
+    def guesses(server, forwarded, count):
+        return [login(server, f'nobody-{n}', 'wrong-guess', {'X-Forwarded-For': forwarded})[0] for n in range(count)]
+    # The suite's requests come from 127.0.0.1, which plays the proxy; 10.0.0.0/8 is a second proxy in front of it.
+    proxied = t.start_server('proxied.db', {'TRUSTED_PROXIES': '127.0.0.1, 10.0.0.0/8', 'LOGIN_ADDRESS_ATTEMPTS': '3', 'LOGIN_WINDOW': '600'})
+    statuses = guesses(proxied, '203.0.113.5', 4)
+    check('one person behind the proxy waits after their own failures', statuses == [401, 401, 401, 429], statuses)
+    check('and someone else behind it does not', guesses(proxied, '203.0.113.6', 1) == [401])
+    check('an address the client wrote in front of the real one is not believed',
+          guesses(proxied, '198.51.100.1, 203.0.113.5', 1) == [429])
+    check('a further trusted proxy is looked past, to the client in front of it', guesses(proxied, '203.0.113.5, 10.1.2.3', 1) == [429])
+    check('an address with a port, as some proxies write it, is the same address', guesses(proxied, '203.0.113.5:51234', 1) == [429])
+    check('nonsense in the header leaves the request to the proxy’s own address, and answers as usual', guesses(proxied, 'unknown', 1) == [401])
+    proxied.stop()
+    direct = t.start_server('direct.db', {'LOGIN_ADDRESS_ATTEMPTS': '3', 'LOGIN_WINDOW': '600'})
+    statuses = [login(direct, f'nobody-{n}', 'wrong-guess', {'X-Forwarded-For': f'203.0.113.{n}'})[0] for n in range(4)]
+    check('without TRUSTED_PROXIES, a header naming a new address each time does not escape the limit', statuses == [401, 401, 401, 429], statuses)
+    direct.stop()
+    refused = subprocess.run([sys.executable, os.path.join(REPO_ROOT, 'backend', 'server.py')], env={**os.environ, 'TRUSTED_PROXIES': 'my-proxy',
+                             'WORKOUT_DB': t.db_path('refused.db'), 'PORT': '0'}, capture_output=True, text=True, timeout=60)
+    check('a TRUSTED_PROXIES that is not addresses stops the server from starting, saying why',
+          refused.returncode != 0 and 'TRUSTED_PROXIES' in refused.stderr, f'{refused.returncode} {refused.stderr[-200:]}')
 
     # ------------------------------------------------------------------ A33 password hashing cannot take every core
     print('A33 a flood of sign-ins can only take a set number of cores, and signed-in pages stay quick')
