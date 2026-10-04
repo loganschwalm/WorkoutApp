@@ -11,16 +11,11 @@ let shownWeek = null;
 
 // Midnight on the Monday of the week a time is in, where this device is, as the History calendar counts weeks.
 function mondayOf(time) {
-  const date = new Date(time);
-  date.setHours(0, 0, 0, 0);
-  date.setDate(date.getDate() - (date.getDay() + 6) % 7);
-  return date.getTime();
+  return startOfWeek(new Date(time)).getTime();
 }
 
 function weeksAfter(monday, weeks) {
-  const date = new Date(monday);
-  date.setDate(date.getDate() + 7 * weeks);
-  return date.getTime();
+  return addDays(new Date(monday), 7 * weeks).getTime();
 }
 
 // The sets an exercise of a saved workout had: those logged, none if it was skipped, and one for an exercise saved by the

@@ -15,6 +15,7 @@ What each one guards is a list kept by hand in two places, where leaving one out
                by habit, is caught here and not on someone's server); pyflakes runs beside this in CI, for the rest
   state        the parts of the account's state the server keeps (STATE_PARTS in backend/server.py) and the parts the pages sync
                (accountStateParts in frontend/offline.js) are the same
+  defaults     the time of day to remind at, until one is chosen, is the same on the server and on the page
   environment  every environment variable the server reads is in the reference's table of server settings
   suites       every test suite is registered in tests/suites/__init__.py and has a row in tests/README.md
 """
@@ -111,6 +112,16 @@ def check_state(root):
             + [f'accountStateParts in frontend/offline.js syncs {name}, which STATE_PARTS in backend/server.py does not keep.' for name in on_pages if name not in on_server])
 
 
+def check_defaults(root):
+    server = re.search(r"DEFAULT_REMINDER_TIME = '([^']*)'", read(root, 'backend', 'server.py'))
+    page = re.search(r"schedule:\{ days:\[\], time:'([^']*)' \}", read(root, 'frontend', 'settings-fields.js'))
+    if not server or not page:
+        return ['DEFAULT_REMINDER_TIME in backend/server.py, or the schedule default in frontend/settings-fields.js, was not found.']
+    if server.group(1) != page.group(1):
+        return [f'The default reminder time is {server.group(1)} on the server (DEFAULT_REMINDER_TIME) and {page.group(1)} on the page (settings-fields.js).']
+    return []
+
+
 def check_environment(root):
     server = read(root, 'backend', 'server.py')
     reference = read(root, 'readme-for-llm.md')
@@ -134,7 +145,7 @@ def check_suites(root):
     return problems
 
 
-CHECKS = [check_offline, check_names, check_python, check_state, check_environment, check_suites]
+CHECKS = [check_offline, check_names, check_python, check_state, check_defaults, check_environment, check_suites]
 
 
 def problems(root=REPO_ROOT):

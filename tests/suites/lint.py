@@ -97,6 +97,10 @@ def run(t):
         with changed('frontend/offline.js', replaced("'goals', 'bodyweight'", "'goals', 'bodyweight', 'measurements'")):
             check('and one the pages sync and the server does not keep', says(['measurements', 'does not keep']), found())
 
+        # -- defaults
+        with changed('backend/server.py', replaced("DEFAULT_REMINDER_TIME = '17:00'", "DEFAULT_REMINDER_TIME = '18:30'")):
+            check('a default reminder time that differs between the server and the page is named', says(['18:30', '17:00']), found())
+
         # -- environment
         with changed('backend/server.py', lambda text: text + "\nNEW_SETTING = os.environ.get('SOMETHING_NEW_AND_UNDOCUMENTED', '')\n"):
             check('an environment variable the reference does not mention is named', says(['SOMETHING_NEW_AND_UNDOCUMENTED']), found())

@@ -201,6 +201,9 @@ function showGuide(open) {
   const name = activeSession.exercises[activeSession.currentIndex].name;
   const guide = guideFor(name);
   $('guideTitle').textContent = name;
+  // The cues are for a movement, which a name may only be a kind of: a Single-Arm Cable Pulldown gets a Lat Pulldown's.
+  $('guideFor').hidden = !guide || guide.title.toLowerCase() === name.trim().toLowerCase();
+  $('guideFor').textContent = guide ? `Cues for the ${guide.title}.` : '';
   $('guideSteps').innerHTML = guide ? guide.steps.map(step => `<li>${escapeHTML(step)}</li>`).join('') : '';
   $('guideMistake').hidden = !guide;
   $('guideMistake').textContent = guide ? `Common mistake: ${guide.mistake}` : '';

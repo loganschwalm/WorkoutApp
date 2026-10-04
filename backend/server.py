@@ -528,6 +528,10 @@ MUSCLES = ('chest', 'back', 'shoulders', 'biceps', 'triceps', 'forearms', 'quads
 EQUIPMENT = ('barbell', 'dumbbell', 'machine', 'cable', 'bodyweight', 'kettlebell', 'band', 'other')
 
 
+# The time of day to remind at until one is chosen: the same as the page's default (settings-fields.js; tests/lint.py checks).
+DEFAULT_REMINDER_TIME = '17:00'
+
+
 def validate_schedule(schedule):
     """The days of the week the lifter trains, as the browser numbers them (Sunday is 0), and the time of day to remind them."""
     if not isinstance(schedule, dict):
@@ -536,7 +540,7 @@ def validate_schedule(schedule):
     if (not isinstance(days, list) or not all(isinstance(day, int) and not isinstance(day, bool) and 0 <= day <= 6 for day in days)
             or len(set(days)) != len(days)):
         raise BadRequest('settings.schedule.days must be a list of different days of the week, 0 (Sunday) to 6 (Saturday).')
-    at = schedule.get('time', '17:00')
+    at = schedule.get('time', DEFAULT_REMINDER_TIME)
     if not (isinstance(at, str) and re.fullmatch(r'([01]\d|2[0-3]):[0-5]\d', at)):
         raise BadRequest('settings.schedule.time must be a time of day as HH:MM.')
 
@@ -1490,7 +1494,7 @@ def reminder_schedule(settings_json):
     try:
         schedule = json.loads(settings_json or '{}').get('schedule')
         days = {day for day in schedule['days'] if isinstance(day, int) and not isinstance(day, bool) and 0 <= day <= 6}
-        hours, minutes = schedule.get('time', '17:00').split(':')
+        hours, minutes = schedule.get('time', DEFAULT_REMINDER_TIME).split(':')
         return (days, int(hours) * 60 + int(minutes)) if days else None
     except (AttributeError, KeyError, TypeError, ValueError):
         return None

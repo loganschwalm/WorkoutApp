@@ -406,8 +406,7 @@ function showCardioSummary(workout, records) {
 
 // Midnight on this week's Monday, as the History calendar counts weeks.
 function cardioWeekStart() {
-  const today = new Date();
-  return new Date(today.getFullYear(), today.getMonth(), today.getDate() - (today.getDay() + 6) % 7).getTime();
+  return startOfWeek(new Date()).getTime();
 }
 
 // "This week: 3 sessions · 1 h 35 min · 8.3 mi": the distance is the walking, running and riding, in miles or kilometres,

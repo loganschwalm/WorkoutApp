@@ -105,6 +105,34 @@ function exerciseKey(name) {
   return String(name).trim().toLowerCase();
 }
 
+// ---- Calendar days ----------------------------------------------------------
+// Days and weeks as this device counts them, which is how a workout's day is told: a workout at 11pm counts on that day wherever
+// the server is. Weeks start on Monday, as the History calendar draws them. A day or a week is a Date at midnight; a day's key is
+// its date as year-month-day, which is what a day is called in the calendar, the bodyweight log and the schedule.
+
+function startOfDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function addDays(date, days) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
+}
+
+// Monday of the week a date is in.
+function startOfWeek(date) {
+  return addDays(startOfDay(date), -((date.getDay() + 6) % 7));
+}
+
+function calendarDayKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+// Midnight at the start of a day given by its key, as a time.
+function dayStart(key) {
+  const [year, month, day] = key.split('-').map(Number);
+  return new Date(year, month - 1, day).getTime();
+}
+
 // ---- Weight units ---------------------------------------------------------
 // Weights are stored in the unit they were entered in, and every saved workout, program and workout in progress says
 // which ('lbs' when it says nothing: everything from before kilograms existed). What is shown and typed is always the

@@ -19,16 +19,6 @@ function saveBodyweights() {
   saveLocalState('bodyweight', bodyweights);
 }
 
-function bodyweightDayKey(date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-}
-
-// Midnight at the start of a day, where this device is.
-function dayStart(key) {
-  const [year, month, day] = key.split('-').map(Number);
-  return new Date(year, month - 1, day).getTime();
-}
-
 // "181.4": bodyweight to a tenth, which is as fine as a scale shows.
 function formatBodyweight(weight) {
   return formatWeight(Math.round(weight * 10) / 10);
@@ -144,8 +134,8 @@ function renderBodyweight() {
   $('bodyweightList').innerHTML = [...entries].reverse().slice(0, bodyweightListed).map(entry => '<li>'
     + `<span>${escapeHTML(longDate(entry.time))}</span><strong>${escapeHTML(formatBodyweight(entry.weight))} ${unit}</strong>`
     + `<button class="link-button" type="button" data-bodyweight-remove="${escapeHTML(entry.day)}" aria-label="Remove the weight for ${escapeHTML(longDate(entry.time))}">Remove</button></li>`).join('');
-  $('bodyweightDate').max = bodyweightDayKey(new Date());
-  if (!$('bodyweightDate').value) $('bodyweightDate').value = bodyweightDayKey(new Date());
+  $('bodyweightDate').max = calendarDayKey(new Date());
+  if (!$('bodyweightDate').value) $('bodyweightDate').value = calendarDayKey(new Date());
   drawBodyweight();
 }
 
@@ -163,7 +153,7 @@ $('bodyweightForm').onsubmit = event => {
     $('bodyweightValue').focus();
     return;
   }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day > bodyweightDayKey(new Date())) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day > calendarDayKey(new Date())) {
     showBodyweightFeedback('Choose the day you weighed in, today or before.', true);
     $('bodyweightDate').focus();
     return;
@@ -182,9 +172,9 @@ $('bodyweightForm').onsubmit = event => {
   bodyweights = { ...bodyweights, [day]:{ weight:Math.round(weight * 100) / 100, unit:weightUnit() } };
   saveBodyweights();
   $('bodyweightValue').value = '';
-  $('bodyweightDate').value = bodyweightDayKey(new Date());
+  $('bodyweightDate').value = calendarDayKey(new Date());
   renderBodyweight();
-  const when = day === bodyweightDayKey(new Date()) ? 'today' : longDate(dayStart(day));
+  const when = day === calendarDayKey(new Date()) ? 'today' : longDate(dayStart(day));
   showBodyweightFeedback(`${replaced ? 'Updated' : 'Logged'} ${formatBodyweight(weight)} ${weightUnit()} for ${when}.`);
 };
 

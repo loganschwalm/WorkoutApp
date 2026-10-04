@@ -195,10 +195,17 @@ def run(t):
     click('guideToggle')
     check('and what it opens is that exercise’s own', text('guideTitle') == 'Overhead Press' and 'leaning back' in text('guideMistake').lower(), text('guideMistake'))
 
+    check('an exercise the guide is for by name says nothing of whose cues they are', not visible('guideFor'))
+    add_exercise('Single-Arm Cable Pulldown', 10)
+    go_to('Single-Arm Cable Pulldown')
+    click('guideToggle')
+    check('one it is for a kind of says which', visible('guideFor') and text('guideFor') == 'Cues for the Lat Pulldown.', text('guideFor'))
+
     # An exercise nothing matches still gets the video search.
     add_exercise('Sandbag Carry Thing', 10)
     go_to('Sandbag Carry Thing')
     click('guideToggle')
+    check('and none says nothing of the kind', not visible('guideFor'))
     check('an exercise with no cues says so', visible('guideNone') and 'no written cues for Sandbag Carry Thing' in text('guideNone') and not visible('guideMistake')
           and cdp.ev("document.querySelectorAll('#guideSteps li').length") == 0, text('guideNone'))
     check('and still links to a video search for it', 'search_query=Sandbag%20Carry%20Thing%20exercise%20form' in cdp.ev("document.getElementById('guideVideo').href"))

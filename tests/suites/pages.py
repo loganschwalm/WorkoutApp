@@ -725,7 +725,7 @@ def run(t):
                + "document.querySelector('#bodyweightForm button[type=submit]').click()")
         cdp.pause(0.3)
 
-    today_key = cdp.ev('bodyweightDayKey(new Date())')
+    today_key = cdp.ev('calendarDayKey(new Date())')
     check('with nothing logged it says what it is for, and draws no chart', 'Log your weight' in field('bodyweightSummary')
           and cdp.ev("document.getElementById('bodyweightChart').hidden") is True and cdp.ev(rows) == [], field('bodyweightSummary'))
     check('the day starts at today, and cannot go past it', cdp.ev("document.getElementById('bodyweightDate').value") == today_key
@@ -733,9 +733,9 @@ def run(t):
     check('the weight is asked for in the unit in use', cdp.ev("document.querySelector('#bodyweightForm .unit-label').textContent") == 'lbs')
     weigh('')
     check('no weight is refused', 'Enter your weight' in field('bodyweightFeedback') and cdp.ev(rows) == [], field('bodyweightFeedback'))
-    weigh(180, "bodyweightDayKey(new Date(Date.now() + 2 * 86400000))")
+    weigh(180, "calendarDayKey(new Date(Date.now() + 2 * 86400000))")
     check('and a day still to come', 'today or before' in field('bodyweightFeedback') and cdp.ev(rows) == [], field('bodyweightFeedback'))
-    cdp.ev("document.getElementById('bodyweightDate').value = bodyweightDayKey(new Date())")
+    cdp.ev("document.getElementById('bodyweightDate').value = calendarDayKey(new Date())")
     weigh(182.4)
     check('a weight is logged for today, and said so', field('bodyweightFeedback') == 'Logged 182.4 lbs for today.' and cdp.ev(rows) == ['182.4 lbs'],
           field('bodyweightFeedback'))
@@ -743,7 +743,7 @@ def run(t):
           and field('bodyweightSummary').endswith('Log it again to see how it moves'), field('bodyweightSummary'))
     check('and the chart is drawn', cdp.ev("document.getElementById('bodyweightChart').hidden") is False
           and 'Bodyweight: 1 weigh-in' in cdp.ev("document.getElementById('bodyweightChart').getAttribute('aria-label')"))
-    weigh(185, "bodyweightDayKey(new Date(Date.now() - 31 * 86400000))")
+    weigh(185, "calendarDayKey(new Date(Date.now() - 31 * 86400000))")
     check('an earlier day goes in its place, newest first', cdp.ev(rows) == ['182.4 lbs', '185 lbs'], cdp.ev(rows))
     check('and the summary says how it has moved over the last month', field('bodyweightSummary').endswith('Down 2.6 lbs in 31 days'), field('bodyweightSummary'))
     weigh(186.6)

@@ -138,23 +138,6 @@ $('historySearch').oninput = () => { if (historyWorkouts) renderHistory(historyW
 const calendarWeeks = 12;
 let historyWorkouts = null;  // null until they have loaded
 
-function startOfDay(date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-}
-
-function addDays(date, days) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
-}
-
-// Monday of the week a date is in.
-function startOfWeek(date) {
-  return addDays(startOfDay(date), -((date.getDay() + 6) % 7));
-}
-
-function calendarDayKey(date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-}
-
 // Workouts per day and per week (keyed by the week's Monday): strength and cardio alike, which both count toward the
 // weekly goal. The days whose workouts were all cardio are kept too, as the calendar marks them apart.
 function trainingByDate(workouts) {

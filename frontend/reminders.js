@@ -63,8 +63,14 @@ async function pushRequest(path, body) {
   return result;
 }
 
+// What the server was last told about this subscription, to tell it again when that changes: the day (once a day), the time zone
+// and the offset from UTC (a phone that travelled, or daylight saving).
+function pushClockStamp(subscription) {
+  return `${subscription.endpoint}|${new Date().toDateString()}|${pushBody(subscription).timeZone}|${-new Date().getTimezoneOffset()}`;
+}
+
 function rememberPushClock(subscription) {
-  try { localStorage.setItem(pushClockKey, `${subscription.endpoint}|${new Date().toDateString()}|${pushBody(subscription).timeZone}|${-new Date().getTimezoneOffset()}`); } catch (error) { /* told again next time */ }
+  try { localStorage.setItem(pushClockKey, pushClockStamp(subscription)); } catch (error) { /* told again next time */ }
 }
 
 async function turnOnReminders() {
@@ -107,7 +113,7 @@ async function syncPushDevice() {
   if (!subscription) return;
   let told = null;
   try { told = localStorage.getItem(pushClockKey); } catch (error) { /* no storage: told every time */ }
-  if (told === `${subscription.endpoint}|${new Date().toDateString()}|${pushBody(subscription).timeZone}|${-new Date().getTimezoneOffset()}`) return;
+  if (told === pushClockStamp(subscription)) return;
   try {
     await pushRequest('/api/push/subscribe', pushBody(subscription));
     rememberPushClock(subscription);

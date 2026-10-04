@@ -714,6 +714,7 @@ html[data-theme="dark"] .goal.reached .goal-foot span { color:#a5e5c2; }
 .guide-mistake { margin:0 0 12px; padding:8px 12px; background:#fff8e6; border-left:3px solid #d9912f; border-radius:6px; font-size:.9rem; }
 html[data-theme="dark"] .guide-mistake { background:#3a3122; }
 .guide-none { margin:0 0 12px; }
+.guide-for { margin:-4px 0 8px; font-size:.85rem; }
 .guide-video { display:inline-flex; align-items:center; min-height:44px; padding:0 4px; color:var(--accent); font-weight:600; }
 
 /* The training schedule: weekday chips in Settings, the Tracker's nudge, and planned days on the History calendar. */

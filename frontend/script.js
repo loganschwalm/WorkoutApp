@@ -5,6 +5,8 @@ const exercises = [];
 let editingWorkout = null;
 // The saved workouts as last loaded, so the list's buttons act without asking the server again.
 let savedWorkouts = [];
+// Everything saved, cardio sessions too, which is what a training day is counted from (schedule.js).
+let savedSessions = [];
 let savedWorkoutsLoaded = false;
 let activeSession = null;
 let workoutsReachable = true;
@@ -411,8 +413,10 @@ function renderStorageStatus() {
 async function loadSavedWorkouts() {
   try {
     // Strength workouts only: cardio sessions have the Cardio page, and no exercises for last time or the records.
-    const workouts = (await getSavedWorkouts()).filter(workout => !isCardio(workout));
+    const everything = await getSavedWorkouts();
+    const workouts = everything.filter(workout => !isCardio(workout));
     savedWorkouts = workouts;
+    savedSessions = everything;
     savedWorkoutsLoaded = true;
     renderSavedWorkouts(workouts);
     lastPerformance = buildLastPerformance([...workouts, ...readPendingWorkouts()]);

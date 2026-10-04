@@ -205,6 +205,18 @@ def run(t):
           and not visible('comingUpBlock') and visible('scheduleHint'))
     api('PUT', '/api/state', {'program': None}, token)
 
+    # A cardio session is a day's training as much as a lifting workout: the Tracker, which lists only the lifting, still says so.
+    cardio_token = api('POST', '/api/auth/register', {'username': 'walker', 'email': 'walker@example.test', 'password': PASSWORD})[1].split('session=')[1].split(';')[0]
+    api('PUT', '/api/state', {'settings': {'schedule': {'days': [today], 'time': '17:00'}}}, cardio_token)
+    t.set_cookie(cardio_token)
+    t.open_tracker()
+    check('with nothing logged, today is a training day', text('scheduleText') == 'Today is a training day.', text('scheduleText'))
+    api('POST', '/api/workouts', {'kind': 'cardio', 'name': 'Walk', 'notes': '', 'createdAt': int(time.time() * 1000), 'exercises': [],
+                                  'duration': 900, 'cardio': {'activity': 'walk'}}, cardio_token)
+    t.open_tracker()
+    check('a cardio session logged today makes it done', text('scheduleText').startswith('Done for today.'), text('scheduleText'))
+    t.set_cookie(t.token)
+
     # ------------------------------------------------------------------ R reminders
     print('R   reminders, from Settings to the notification')
     server = load_server()

@@ -441,8 +441,8 @@ A day with no program is just "a training day". The pieces:
   already trained: "Done for today. Next up: Thursday, Pull (Row)." A day off: "Rest day. Next up: tomorrow, Legs." A day
   missed: "You missed Friday's workout. Train today instead, or carry on Tuesday." A day counts as missed when it was a
   training day within the last seven, with no workout on it or since, for someone who trained in the two weeks before it, so
-  a schedule only just chosen, or picked up after months away, has missed nothing. The nudge asks about strength workouts. It
-  is worked out on the device from the saved workouts (`scheduleNudge` in `schedule.js`).
+  a schedule only just chosen, or picked up after months away, has missed nothing. A cardio session counts as training a day as
+  much as a lifting workout does. It is worked out on the device from the saved workouts (`scheduleNudge` in `schedule.js`).
 - **The History calendar** marks today (if not yet trained) and the rest of this week's training days with a dashed square in
   the theme's colour, a button whose label names its workout ("Sun, Oct 4: planned: Push (Bench)"), and under the calendar
   Coming up lists the next six training days with their workouts, the one already trained marked Done. History loads

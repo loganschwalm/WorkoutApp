@@ -7,22 +7,9 @@
 
 const weekdayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-function scheduleStartOfDay(date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-}
-
-function scheduleAddDays(date, days) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
-}
-
-// The day as the History calendar keys it: year-month-day by this device's calendar.
-function scheduleDayKey(date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-}
-
 // The days of the workouts, as keys, for working out which days are done.
 function trainedDayKeys(workouts) {
-  return new Set(workouts.map(workout => scheduleDayKey(new Date(workout.createdAt))));
+  return new Set(workouts.map(workout => calendarDayKey(new Date(workout.createdAt))));
 }
 
 // The workouts of the program still to do, in order, as { week, day, label }: what is left of this block, then (when
@@ -54,14 +41,14 @@ function programQueue(count) {
 // The training days from today on, for `span` days: { date, key, today, trained, entry }, where entry is the program's
 // workout planned for that day (null on a day already trained, or with no program).
 function plannedDays(trained, span, schedule = scheduleFrom(getWorkoutSettings())) {
-  const today = scheduleStartOfDay(new Date());
+  const today = startOfDay(new Date());
   const queue = programQueue(span);
   let used = 0;
   const planned = [];
   for (let index = 0; index < span; index += 1) {
-    const date = scheduleAddDays(today, index);
+    const date = addDays(today, index);
     if (!schedule.days.includes(date.getDay())) continue;
-    const key = scheduleDayKey(date);
+    const key = calendarDayKey(date);
     const done = index === 0 && trained.has(key);
     planned.push({ date, key, today:index === 0, trained:done, entry:done ? null : queue[used++] || null });
   }
@@ -70,7 +57,7 @@ function plannedDays(trained, span, schedule = scheduleFrom(getWorkoutSettings()
 
 // "Thursday", "tomorrow" or "today", for a day coming up.
 function dayWord(date) {
-  const days = Math.round((scheduleStartOfDay(date) - scheduleStartOfDay(new Date())) / 86400000);
+  const days = Math.round((startOfDay(date) - startOfDay(new Date())) / 86400000);
   return days === 0 ? 'today' : days === 1 ? 'tomorrow' : weekdayNames[date.getDay()];
 }
 
@@ -80,7 +67,7 @@ function scheduleNudge(workouts) {
   const schedule = scheduleFrom(getWorkoutSettings());
   if (!schedule.days.length) return null;
   const trained = trainedDayKeys(workouts);
-  const today = scheduleStartOfDay(new Date());
+  const today = startOfDay(new Date());
   const planned = plannedDays(trained, 14, schedule);
   const todays = planned.find(day => day.today);
   const next = planned.find(day => !day.today);
@@ -92,8 +79,8 @@ function scheduleNudge(workouts) {
   const lastTrained = workouts.reduce((latest, workout) => Math.max(latest, workout.createdAt), 0);
   const trainedBefore = date => workouts.some(workout => workout.createdAt < date.getTime() && workout.createdAt >= date.getTime() - 14 * 86400000);
   for (let back = 1; back <= 7 && !missed; back += 1) {
-    const date = scheduleAddDays(today, -back);
-    if (schedule.days.includes(date.getDay()) && !trained.has(scheduleDayKey(date)) && lastTrained < date.getTime() && trainedBefore(date)) missed = date;
+    const date = addDays(today, -back);
+    if (schedule.days.includes(date.getDay()) && !trained.has(calendarDayKey(date)) && lastTrained < date.getTime() && trainedBefore(date)) missed = date;
   }
   const ahead = day => day ? `${dayWord(day.date)}${day.entry ? `, ${day.entry.label}` : ''}` : '';
   if (todays && !todays.trained) {
@@ -117,7 +104,7 @@ function renderScheduleNudge() {
   if (!card) return;
   // Before the saved workouts have loaded there is no telling whether today has been trained.
   const loaded = typeof savedWorkoutsLoaded !== 'undefined' && savedWorkoutsLoaded;
-  const nudge = loaded ? scheduleNudge([...savedWorkouts, ...readPendingWorkouts()]) : null;
+  const nudge = loaded ? scheduleNudge([...savedSessions, ...readPendingWorkouts()]) : null;
   card.hidden = !nudge;
   if (!nudge) return;
   document.getElementById('scheduleText').textContent = nudge.text;
