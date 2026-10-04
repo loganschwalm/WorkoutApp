@@ -27,7 +27,9 @@
       <div class="section-heading"><div><h2>Training calendar</h2><p class="subtitle" id="calendarSummary">The last 12 weeks.</p></div><span class="subtitle calendar-streak" id="streakSummary"></span></div>
       <div class="training-calendar" id="trainingCalendar" role="group" aria-label="Days trained in the last 12 weeks. The arrow keys move between days, and Enter shows a day's workouts."></div>
       <p class="subtitle calendar-detail" id="calendarDetail" aria-live="polite"></p>
-      <p class="subtitle calendar-note">Each square is a day, Monday at the top. A filled one is a day you lifted, a ring a day of cardio only; both count toward the weekly goal in Settings.</p>
+      <p class="subtitle calendar-note">Each square is a day, Monday at the top. A filled one is a day you lifted, a ring a day of cardio only; both count toward the weekly goal in Settings. A dashed square in colour is a training day still to come.</p>
+      <div class="coming-up" id="comingUpBlock" hidden><h3>Coming up</h3><ul id="comingUp"></ul></div>
+      <p class="subtitle calendar-note" id="scheduleHint" hidden>Choose the days you train in Settings to see them planned here.</p>
     </section>
 
     <section class="card">
@@ -43,6 +45,10 @@
   <script src="account-rules.js"></script>
   <script src="settings-dialog.js"></script>
   <script src="settings.js"></script>
+  <script src="reminders.js"></script>
+  <script src="program-definitions.js"></script>
+  <script src="program-plan.js"></script>
+  <script src="schedule.js"></script>
   <script src="cardio-activities.js"></script>
   <script src="history.js"></script>
   <script src="pwa.js"></script>

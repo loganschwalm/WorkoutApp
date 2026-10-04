@@ -8,6 +8,10 @@ function accountEditor(id, fields, actions, lead = '') {
   return `<div class="account-editor" id="${id}" hidden>${lead}${fields}<div class="account-editor-actions">${actions}</div></div>`;
 }
 
+// Training days, Monday first as the calendar has them, by the number the browser gives each (Sunday is 0).
+const trainingDayChoices = [[1, 'Mon', 'Monday'], [2, 'Tue', 'Tuesday'], [3, 'Wed', 'Wednesday'], [4, 'Thu', 'Thursday'], [5, 'Fri', 'Friday'], [6, 'Sat', 'Saturday'], [0, 'Sun', 'Sunday']]
+  .map(([value, short, name]) => `<label class="weekday"><input type="checkbox" value="${value}" aria-label="${name}" /><span aria-hidden="true">${short}</span></label>`).join('');
+
 const weeklyGoals = [1, 2, 3, 4, 5, 6, 7].map(goal => `<option value="${goal}">${goal} workout${goal === 1 ? '' : 's'} a week</option>`).join('');
 
 // Appearance: Match system, then the light themes, then the dark ones (theme.js says which is which). Each preview is
@@ -35,6 +39,14 @@ document.body.insertAdjacentHTML('beforeend', `
       <select id="distanceUnitSetting"><option value="mi">Miles (mi)</option><option value="km">Kilometres (km)</option></select>
       <label for="weeklyGoalSetting">Weekly goal</label>
       <select id="weeklyGoalSetting">${weeklyGoals}</select>
+      <h3 class="settings-section">Training schedule</h3>
+      <fieldset class="weekday-choices" id="scheduleDays"><legend>Days you train</legend>${trainingDayChoices}</fieldset>
+      <span class="subtitle schedule-help">The Tracker says what is planned for today and the next training day, and History marks them on the calendar. A program moves on when you finish a workout, not when a day passes.</span>
+      <label for="reminderTimeSetting">Remind me at</label>
+      <input id="reminderTimeSetting" type="time" />
+      <label class="setting-check"><input id="remindSetting" type="checkbox" /> Remind me on training days, on this device</label>
+      <p class="subtitle" id="remindStatus" role="status"></p>
+      <button class="secondary test-alert" id="testReminderButton" type="button" hidden>Send a test notification</button>
       <h3 class="settings-section">During a workout</h3>
       <label class="setting-check"><input id="confirmEndSetting" type="checkbox" /> Ask before cancelling a workout with sets logged</label>
       <label class="setting-check"><input id="effortSetting" type="checkbox" /> Ask how many reps each set had left (effort)</label>

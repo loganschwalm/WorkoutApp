@@ -88,6 +88,8 @@ see a program working over the weeks.
 - Works through network drops: everything saves on the phone first and uploads when the server is back, and a change
   made on one device never undoes one made on another meanwhile.
 - Add it to your phone's home screen to open it like an app.
+- Pick the days you train: the Tracker says what is planned today (and nudges you when you missed a day), History marks
+  the planned days on the calendar, and your phone can remind you on training days, even with the app closed.
 - Pounds or kilograms, your own bar and plates, and 10 colour themes (light, dark, and colourful ones).
 - Export everything as JSON, or your sets and sessions as CSV, and import a JSON export into another account or server.
 - Accounts with email or username sign-in, "Remember me", and password reset by command or by email.

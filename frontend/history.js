@@ -200,6 +200,10 @@ function renderCalendar() {
   const thisWeek = startOfWeek(today);
   const first = addDays(thisWeek, -7 * (calendarWeeks - 1));
   const { days, weeks, cardioOnly } = trainingByDate(historyWorkouts);
+  // The training days still to come, and today's if it has not been trained: planned, with the program's workout for each.
+  const schedule = scheduleFrom(getWorkoutSettings());
+  const planned = plannedDays(trainedDayKeys(historyWorkouts), 21, schedule);
+  const plans = new Map(planned.filter(day => !day.trained).map(day => [day.key, day]));
   const thisWeekCount = weeks.get(calendarDayKey(thisWeek)) || 0;
   $('calendarSummary').textContent = thisWeekCount >= goal
     ? `This week: ${plural(thisWeekCount, 'workout')} · goal of ${goal} reached`
@@ -221,16 +225,31 @@ function renderCalendar() {
     const date = addDays(monday, weekday);
     const names = days.get(calendarDayKey(date)) || [];
     const when = date.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric' });
-    const description = names.length ? `${when}: ${names.join(', ')}` : `${when}: rest`;
     const key = calendarDayKey(date);
-    const classes = ['calendar-day', names.length ? 'trained' : '', names.length > 1 ? 'many' : '', cardioOnly.has(key) ? 'cardio' : '',
+    const plan = plans.get(key);
+    const planText = plan ? `planned${plan.entry ? `: ${plan.entry.label}` : ''}` : '';
+    const description = names.length ? `${when}: ${names.join(', ')}` : `${when}: ${planText || 'rest'}`;
+    const classes = ['calendar-day', names.length ? 'trained' : '', names.length > 1 ? 'many' : '', cardioOnly.has(key) ? 'cardio' : '', plan ? 'planned' : '',
       date > today ? 'future' : '', date.getTime() === today.getTime() ? 'today' : ''].filter(Boolean).join(' ');
-    if (date > today) return `<span class="${classes}" data-date="${calendarDayKey(date)}" aria-hidden="true"></span>`;
+    // A day to come that is planned is a button, so its workout can be read; the others are only squares.
+    if (date > today && !plan) return `<span class="${classes}" data-date="${calendarDayKey(date)}" aria-hidden="true"></span>`;
     // Today is where the keyboard comes in; the arrow keys go from there (see moveCalendarFocus).
     return `<button class="${classes}" type="button" data-date="${calendarDayKey(date)}" tabindex="${date.getTime() === today.getTime() ? 0 : -1}"`
       + ` title="${escapeHTML(description)}" aria-label="${escapeHTML(description)}"></button>`;
   }).join('')}`).join('');
   $('trainingCalendar').innerHTML = `<span class="calendar-corner"></span>${months}${rows}`;
+  renderComingUp(planned, schedule);
+}
+
+// The next few training days, written out: "Thu, Oct 9 · Pull". Nothing, and a pointer to Settings, until days are chosen.
+function renderComingUp(planned, schedule) {
+  $('comingUpBlock').hidden = !planned.length;
+  $('scheduleHint').hidden = schedule.days.length > 0;
+  $('comingUp').innerHTML = planned.slice(0, 6).map(day => {
+    const when = day.today ? 'Today' : day.date.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric' });
+    const what = day.trained ? 'Done' : day.entry ? day.entry.label : 'Training day';
+    return `<li${day.trained ? ' class="done"' : ''}><strong>${escapeHTML(when)}</strong><span>${escapeHTML(what)}</span></li>`;
+  }).join('');
 }
 
 // One day of the calendar is in the tab order at a time; the arrow keys move between them, a day up or down and a week

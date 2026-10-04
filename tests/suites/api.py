@@ -418,14 +418,14 @@ def run_structure(t, check, request):
     main = t.server
     token = t.token
     json_headers = {'Content-Type': 'application/json'}
-    tables = ['active_sessions', 'password_resets', 'sessions', 'user_state', 'users', 'workouts']
+    tables = ['active_sessions', 'password_resets', 'push_subscriptions', 'server_keys', 'sessions', 'user_state', 'users', 'workouts']
 
     # ------------------------------------------------------------------ A12 schema at startup
     print('A12 the schema is created and versioned at startup, in WAL mode')
     t.start_server('fresh.db')  # the harness only asks /api/auth/me, which never opens the database
     schema = schema_of(t.db_path('fresh.db'))
     check('a new database has every table before any request touches it', schema['tables'] == tables, schema['tables'])
-    check('it is at schema version 10', schema['version'] == 10, schema['version'])
+    check('it is at schema version 11', schema['version'] == 11, schema['version'])
     check('with the client_id column and its unique index',
           'client_id' in schema['columns'] and 'workouts_user_client' in schema['indexes'], schema)
     check('with a column for the training program', 'program_json' in schema['state_columns'], schema['state_columns'])
@@ -438,12 +438,13 @@ def run_structure(t, check, request):
     check('and whether each session was remembered', 'remember' in schema['session_columns'], schema['session_columns'])
     check('in write-ahead-log mode', schema['journal'] == 'wal', schema['journal'])
     legacy = schema_of(t.db_path('legacy.db'))
-    check('the database from before client_id (A3) is now at version 10 too', legacy['version'] == 10, legacy['version'])
+    check('the database from before client_id (A3) is now at version 11 too', legacy['version'] == 11, legacy['version'])
     check('and has the training program, exercise notes, goals, bodyweight and exercise library columns',
           {'program_json', 'notes_json', 'goals_json', 'bodyweight_json', 'library_json'} <= set(legacy['state_columns']), legacy['state_columns'])
     check('and the email column, and the table of reset codes',
           'email' in legacy['user_columns'] and 'password_resets' in legacy['tables'], legacy)
     check('and the remembered column on its sessions', 'remember' in legacy['session_columns'], legacy['session_columns'])
+    check('and the tables of push subscriptions and the server’s own keys', {'push_subscriptions', 'server_keys'} <= set(legacy['tables']), legacy['tables'])
 
     # A database written by the release before migrations were numbered: client_id already there, version 0.
     path = t.db_path('unversioned.db')
@@ -461,7 +462,7 @@ def run_structure(t, check, request):
     kept = db.execute("SELECT name, client_id FROM workouts").fetchall()
     db.close()
     check('an unversioned database that already has client_id upgrades cleanly',
-          schema['version'] == 10 and schema['columns'].count('client_id') == 1 and kept == [('Kept', 'k1')], f'{schema} {kept}')
+          schema['version'] == 11 and schema['columns'].count('client_id') == 1 and kept == [('Kept', 'k1')], f'{schema} {kept}')
 
     path = t.db_path('newer.db')
     db = sqlite3.connect(path)

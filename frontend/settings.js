@@ -4,7 +4,7 @@ try { legacyTheme = localStorage.getItem('workout-tracker-theme'); } catch (erro
 // Match system, or one of the themes theme.js knows. A page without theme.js (an old one, from the cache) has light and dark.
 const themeChoices = ['system', ...Object.keys(window.colorThemes || { light:'light', dark:'dark' })];
 const defaultSettings = { theme:themeChoices.includes(legacyTheme) ? legacyTheme : 'system', restDuration:90, weeklyGoal:3, unit:'lbs', autoRest:true, confirmEnd:true, soundEnabled:true, soundVolume:40, alertSound:'beep', vibrate:true, playThroughSilent:true, trackEffort:true, warmupSets:true, keepAwakeVideo:true,
-  barLbs:45, barKg:20, platesLbs:[45, 35, 25, 10, 5, 2.5, 1.25], platesKg:[25, 20, 15, 10, 5, 2.5, 1.25], stepLbs:5, stepKg:2.5 };
+  schedule:{ days:[], time:'17:00' }, barLbs:45, barKg:20, platesLbs:[45, 35, 25, 10, 5, 2.5, 1.25], platesKg:[25, 20, 15, 10, 5, 2.5, 1.25], stepLbs:5, stepKg:2.5 };
 // Settings never chosen are the defaults, on every page; the server is told so (see accountStateFill in offline.js), or
 // saving the form, which writes every setting, would look like choosing each default over another device's choice.
 // Guarded: for one load after an update, this file can run beside an older offline.js from the cache.
@@ -137,6 +137,23 @@ function weeklyGoalFrom(value) {
   return goal >= 1 && goal <= 7 ? goal : defaultSettings.weeklyGoal;
 }
 
+// The days of the week the lifter trains (as the browser numbers them, Sunday 0) and the time of day to remind them, from
+// the settings; a setting from before the schedule, or a hand-edited one, is no days and the default time.
+const scheduleTimePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+function scheduleFrom(settings = getWorkoutSettings()) {
+  const stored = settings.schedule && typeof settings.schedule === 'object' ? settings.schedule : {};
+  const days = Array.isArray(stored.days) ? [...new Set(stored.days.filter(day => Number.isInteger(day) && day >= 0 && day <= 6))].sort((a, b) => a - b) : [];
+  return { days, time:scheduleTimePattern.test(stored.time) ? stored.time : defaultSettings.schedule.time };
+}
+
+// What the schedule fields say. A time cleared or half-typed keeps the one there was.
+function readScheduleFields(current) {
+  const days = [...getSettingElement('scheduleDays').querySelectorAll('input:checked')].map(input => Number(input.value)).sort((a, b) => a - b);
+  const typed = getSettingElement('reminderTimeSetting').value;
+  return { days, time:scheduleTimePattern.test(typed) ? typed : scheduleFrom(current).time };
+}
+
 // ---- Bar and plates -------------------------------------------------------
 // The bar, the plates there are to load on it, and the step the weight buttons and Go heavier go up by. Each unit keeps
 // its own, since a gym's pound plates are not its kilogram ones, and switching units never turns one into the other.
@@ -203,7 +220,7 @@ function readSettingsForm() {
   const distance = getSettingElement('distanceUnitSetting');
   const distanceUnit = distance.dataset.chosen === 'true' ? { distanceUnit:distance.value === 'km' ? 'km' : 'mi' } : {};
   return { theme:getSettingElement('themeSetting').querySelector('input[name=theme]:checked')?.value || 'system', unit, ...distanceUnit, restDuration, weeklyGoal, autoRest:getSettingElement('autoRestSetting').checked, confirmEnd:getSettingElement('confirmEndSetting').checked, trackEffort:getSettingElement('effortSetting').checked, warmupSets:getSettingElement('warmupSetting').checked, keepAwakeVideo:getSettingElement('keepAwakeSetting').checked, soundEnabled:getSettingElement('soundEnabledSetting').checked, soundVolume, alertSound:getSettingElement('alertSoundSetting').value, vibrate:getSettingElement('vibrateSetting').checked, playThroughSilent:getSettingElement('silentSetting').checked,
-    ...readEquipmentFields(getWorkoutSettings()) };
+    schedule:readScheduleFields(getWorkoutSettings()), ...readEquipmentFields(getWorkoutSettings()) };
 }
 
 // The last plate ticked cannot be unticked: with no plates there is nothing to load.
@@ -233,6 +250,9 @@ function applySettings(settings) {
   getSettingElement('distanceUnitSetting').dataset.chosen = String(settings.distanceUnit === 'mi' || settings.distanceUnit === 'km');
   getSettingElement('restDurationSetting').value = settings.restDuration;
   getSettingElement('weeklyGoalSetting').value = String(weeklyGoalFrom(settings.weeklyGoal));
+  const schedule = scheduleFrom(settings);
+  getSettingElement('scheduleDays').querySelectorAll('input').forEach(input => { input.checked = schedule.days.includes(Number(input.value)); });
+  getSettingElement('reminderTimeSetting').value = schedule.time;
   getSettingElement('autoRestSetting').checked = settings.autoRest;
   getSettingElement('confirmEndSetting').checked = settings.confirmEnd;
   getSettingElement('effortSetting').checked = settings.trackEffort !== false;
@@ -386,6 +406,8 @@ function openSettings() {
   getSettingElement('dataStatus').hidden = true;
   getSettingElement('settingsModal').hidden = false;
   getSettingElement('themeSetting').querySelector('input[name=theme]:checked').focus();
+  // reminders.js looks at what this browser can do and has been told, which can have changed since.
+  window.dispatchEvent(new Event('settingsopen'));
 }
 
 window.getWorkoutSettings = getWorkoutSettings;
@@ -411,6 +433,8 @@ getSettingElement('testAlertButton').onclick = () => { unlockAudio(); playRestAl
 getSettingElement('signOutButton').onclick = async () => {
   const unsynced = typeof unsyncedWorkCount === 'function' ? unsyncedWorkCount() : 0;
   if (unsynced && !confirm('Some of your workout data has not reached the server yet. It stays on this device and uploads the next time you sign in to this account. Sign out anyway?')) return;
+  // This browser stops being sent the account's reminders (reminders.js), before the session that says whose they are goes.
+  if (typeof unsubscribePushDevice === 'function') await unsubscribePushDevice();
   try {
     const response = await fetch('/api/auth/logout', { method:'POST' });
     if (!response.ok) throw new Error('Sign out failed.');

@@ -422,6 +422,7 @@ async function loadSavedWorkouts() {
     renderExerciseSuggestions();
     // The program card's Progress is drawn from the workouts, which have only now arrived.
     renderProgram();
+    renderScheduleNudge();
     workoutsReachable = true;
     renderStorageStatus();
     return workouts;

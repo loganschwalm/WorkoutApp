@@ -1,4 +1,5 @@
 import argparse
+import base64
 import contextlib
 import csv
 import datetime
@@ -7,6 +8,7 @@ import getpass
 import gzip
 import io
 import hashlib
+import hmac
 import http.server
 import json
 import math
@@ -21,10 +23,13 @@ import sys
 import threading
 import time
 import traceback
+import urllib.error
+import urllib.request
 from email.message import EmailMessage
 from http import HTTPStatus
 from http.cookies import SimpleCookie
 from urllib.parse import parse_qs, quote, unquote, urlparse
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 SERVER_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SERVER_DIR)
@@ -271,9 +276,30 @@ def migration_10_exercise_library(database):
     database.execute("ALTER TABLE user_state ADD COLUMN library_json TEXT NOT NULL DEFAULT '{}'")
 
 
+def migration_11_push(database):
+    # Phones that have allowed reminders: the address of the browser's push service to post to, the keys to encrypt for
+    # it, the phone's own clock (its time zone, and its offset from UTC for a server that does not know that zone) and the
+    # day it was last reminded, by that clock.
+    database.execute('''
+        CREATE TABLE push_subscriptions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            endpoint TEXT NOT NULL UNIQUE,
+            p256dh TEXT NOT NULL,
+            auth TEXT NOT NULL,
+            tz TEXT NOT NULL DEFAULT '',
+            offset_minutes INTEGER NOT NULL DEFAULT 0,
+            last_sent TEXT,
+            created_at INTEGER NOT NULL
+        )''')
+    database.execute('CREATE INDEX push_subscriptions_user ON push_subscriptions(user_id)')
+    # Keys the server makes for itself: the one that signs its push messages (see vapid_key).
+    database.execute('CREATE TABLE server_keys (name TEXT PRIMARY KEY, value TEXT NOT NULL)')
+
+
 MIGRATIONS = [migration_1_tables, migration_2_client_ids, migration_3_programs, migration_4_emails, migration_5_exercise_notes,
               migration_6_hashed_sessions, migration_7_goals, migration_8_bodyweight, migration_9_remembered_sessions,
-              migration_10_exercise_library]
+              migration_10_exercise_library, migration_11_push]
 
 
 def init_database():
@@ -482,9 +508,24 @@ MUSCLES = ('chest', 'back', 'shoulders', 'biceps', 'triceps', 'forearms', 'quads
 EQUIPMENT = ('barbell', 'dumbbell', 'machine', 'cable', 'bodyweight', 'kettlebell', 'band', 'other')
 
 
+def validate_schedule(schedule):
+    """The days of the week the lifter trains, as the browser numbers them (Sunday is 0), and the time of day to remind them."""
+    if not isinstance(schedule, dict):
+        raise BadRequest('settings.schedule must be an object.')
+    days = schedule.get('days', [])
+    if (not isinstance(days, list) or not all(isinstance(day, int) and not isinstance(day, bool) and 0 <= day <= 6 for day in days)
+            or len(set(days)) != len(days)):
+        raise BadRequest('settings.schedule.days must be a list of different days of the week, 0 (Sunday) to 6 (Saturday).')
+    at = schedule.get('time', '17:00')
+    if not (isinstance(at, str) and re.fullmatch(r'([01]\d|2[0-3]):[0-5]\d', at)):
+        raise BadRequest('settings.schedule.time must be a time of day as HH:MM.')
+
+
 def validate_state(data):
     if 'settings' in data and not isinstance(data['settings'], dict):
         raise BadRequest('settings must be an object.')
+    if 'settings' in data and 'schedule' in data['settings']:
+        validate_schedule(data['settings']['schedule'])
     if 'templates' in data:
         for index, template in enumerate(listed(data['templates'], 'templates', 1000)):
             text(template.get('name'), f'templates[{index}].name', 1000)
@@ -739,7 +780,7 @@ def merge_part(part, bases, mine, theirs):
 def delete_account_rows(database, user_id):
     """Everything an account has, then the account. The tables would cascade, but only with foreign keys on and on
     databases made since those references existed, so each is emptied by name."""
-    for table in ('sessions', 'workouts', 'active_sessions', 'user_state', 'password_resets'):
+    for table in ('sessions', 'workouts', 'active_sessions', 'user_state', 'password_resets', 'push_subscriptions'):
         database.execute(f'DELETE FROM {table} WHERE user_id = ?', (user_id,))
     database.execute('DELETE FROM users WHERE id = ?', (user_id,))
 
@@ -979,6 +1020,420 @@ def email_reset_code(email, username, code):
         print(f'Could not email a password reset code to {email} through {SMTP_HOST}:{SMTP_PORT}: {error!r}', flush=True)
         return
     print(f'Emailed a password reset code to {email}.', flush=True)
+
+
+# ---- Web push: reminders on training days ------------------------------------------------------------------
+# A phone that has allowed notifications is given a push subscription by its browser: an address on the browser maker's
+# push service, and two keys. The server posts a message to that address, encrypted for that browser alone (RFC 8291,
+# aes128gcm per RFC 8188) and signed as this server (VAPID, RFC 8292), and the browser wakes its service worker to show it.
+#
+# The standard library has no elliptic curves or AES, so the little of them that this needs is here: P-256 (ECDH and ECDSA),
+# AES-128 in GCM, and HKDF. They are checked against known answers in tests/suites/push.py. Pure Python is not constant-time,
+# which would matter if someone could make the server use a long-lived key over and over and time the answers. Here the
+# only long-lived key signs tokens that go to the push service, never back to whoever caused them, and every message's
+# encryption key is made fresh.
+
+PUSH_TIMEOUT = 10
+# What the push service is told to do with a message it cannot deliver yet (a phone that is off), in seconds.
+PUSH_TTL = 3 * 60 * 60
+# Who the server says it is to the push services, which may refuse a message with no way to reach its sender (RFC 8292).
+VAPID_SUBJECT = os.environ.get('VAPID_SUBJECT', '').strip() or (f'mailto:{SMTP_FROM}' if '@' in SMTP_FROM else 'mailto:admin@example.com')
+# How often the server looks for training days to remind about, and how long after the time chosen a reminder is still
+# worth sending (the server was down at that moment, or the phone off).
+REMINDER_TICK = max(0.2, float(os.environ.get('REMINDER_TICK_SECONDS', '60')))
+REMINDER_GRACE_MINUTES = 3 * 60
+# Push services a subscription may name, as hosts or the end of one. A subscription is an address this server then posts to,
+# so it is not taken from just anyone: PUSH_ALLOWED_HOSTS adds hosts (and lets them be plain http, for a push service of one's
+# own), which is how the tests give the server a push service to talk to.
+PUSH_SERVICES = ('fcm.googleapis.com', 'push.services.mozilla.com', 'push.apple.com', 'notify.windows.com')
+PUSH_ALLOWED_HOSTS = tuple(host.strip().lower() for host in os.environ.get('PUSH_ALLOWED_HOSTS', '').split(',') if host.strip())
+MAX_SUBSCRIPTIONS = 10
+# The least time between one test notification and the next, per account, in seconds.
+TEST_PUSH_WAIT = 3
+push_test_times = {}
+push_test_lock = threading.Lock()
+
+
+def b64url(data):
+    return base64.urlsafe_b64encode(data).rstrip(b'=').decode()
+
+
+def b64url_decode(value):
+    if not isinstance(value, str) or not re.fullmatch(r'[A-Za-z0-9_-]*', value):
+        raise ValueError('not base64url')
+    return base64.urlsafe_b64decode(value + '=' * (-len(value) % 4))
+
+
+# -- P-256 --
+# Points are kept as Jacobian (x, y, z) triples while they are worked on, which needs no division until the end; z == 0 is
+# the point at infinity.
+P256_P = 0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff
+P256_B = 0x5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b
+P256_N = 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551
+P256_G = (0x6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296,
+          0x4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5)
+EC_INFINITY = (1, 1, 0)
+
+
+def ec_double(point):
+    x, y, z = point
+    if z == 0 or y == 0:
+        return EC_INFINITY
+    p = P256_P
+    delta = z * z % p
+    gamma = y * y % p
+    beta = x * gamma % p
+    alpha = 3 * (x - delta) * (x + delta) % p
+    x3 = (alpha * alpha - 8 * beta) % p
+    return x3, (alpha * (4 * beta - x3) - 8 * gamma * gamma) % p, ((y + z) ** 2 - gamma - delta) % p
+
+
+def ec_add(first, second):
+    if first[2] == 0:
+        return second
+    if second[2] == 0:
+        return first
+    p = P256_P
+    x1, y1, z1 = first
+    x2, y2, z2 = second
+    z1z1, z2z2 = z1 * z1 % p, z2 * z2 % p
+    u1, u2 = x1 * z2z2 % p, x2 * z1z1 % p
+    s1, s2 = y1 * z2 * z2z2 % p, y2 * z1 * z1z1 % p
+    if u1 == u2:
+        return ec_double(first) if s1 == s2 else EC_INFINITY
+    h, r = (u2 - u1) % p, (s2 - s1) % p
+    h2 = h * h % p
+    h3 = h * h2 % p
+    v = u1 * h2 % p
+    x3 = (r * r - h3 - 2 * v) % p
+    return x3, (r * (v - x3) - s1 * h3) % p, h * z1 * z2 % p
+
+
+def ec_multiply(scalar, point=P256_G):
+    """scalar × point as an (x, y) pair, or None for the point at infinity. A Montgomery ladder: every bit does the same two
+    operations, whichever it is."""
+    base = (point[0], point[1], 1)
+    low, high = EC_INFINITY, base
+    for bit in bin(scalar % P256_N)[2:]:
+        if bit == '1':
+            low, high = ec_add(low, high), ec_double(high)
+        else:
+            high, low = ec_add(low, high), ec_double(low)
+    if low[2] == 0:
+        return None
+    inverse = pow(low[2], -1, P256_P)
+    return low[0] * inverse * inverse % P256_P, low[1] * inverse ** 3 % P256_P
+
+
+def ec_on_curve(x, y):
+    return 0 <= x < P256_P and 0 <= y < P256_P and (y * y - (x * x * x - 3 * x + P256_B)) % P256_P == 0
+
+
+def encode_point(x, y):
+    return b'\x04' + x.to_bytes(32, 'big') + y.to_bytes(32, 'big')
+
+
+def decode_point(raw):
+    """The (x, y) of an uncompressed P-256 public key, which must be a point on the curve."""
+    if len(raw) != 65 or raw[0] != 4:
+        raise ValueError('not an uncompressed P-256 point')
+    x, y = int.from_bytes(raw[1:33], 'big'), int.from_bytes(raw[33:], 'big')
+    if not ec_on_curve(x, y):
+        raise ValueError('not on the curve')
+    return x, y
+
+
+def ecdsa_sign(private, message):
+    """An ES256 signature (r then s, 32 bytes each) of the message."""
+    z = int.from_bytes(hashlib.sha256(message).digest(), 'big')
+    while True:
+        k = secrets.randbelow(P256_N - 1) + 1
+        r = ec_multiply(k)[0] % P256_N
+        s = pow(k, -1, P256_N) * (z + r * private) % P256_N
+        if r and s:
+            return r.to_bytes(32, 'big') + s.to_bytes(32, 'big')
+
+
+def hkdf(salt, key_material, info, length):
+    """HKDF-SHA256 (RFC 5869): extract, then expand."""
+    pseudo_random_key = hmac.new(salt, key_material, hashlib.sha256).digest()
+    output = block = b''
+    while len(output) < length:
+        block = hmac.new(pseudo_random_key, block + info + bytes([len(output) // 32 + 1]), hashlib.sha256).digest()
+        output += block
+    return output[:length]
+
+
+# -- AES-128 in GCM --
+def aes_tables():
+    """The S-box and the table that doubles a byte in GF(2^8), worked out rather than typed in."""
+    sbox = [0] * 256
+    rotated = lambda value, by: ((value << by) | (value >> (8 - by))) & 0xff
+    p = q = 1
+    while True:
+        p = p ^ ((p << 1) & 0xff) ^ (0x1b if p & 0x80 else 0)       # p times 3
+        q ^= (q << 1) & 0xff                                         # q divided by 3
+        q ^= (q << 2) & 0xff
+        q ^= (q << 4) & 0xff
+        if q & 0x80:
+            q ^= 0x09
+        sbox[p] = q ^ rotated(q, 1) ^ rotated(q, 2) ^ rotated(q, 3) ^ rotated(q, 4) ^ 0x63
+        if p == 1:
+            break
+    sbox[0] = 0x63
+    return sbox, [((value << 1) ^ (0x1b if value & 0x80 else 0)) & 0xff for value in range(256)]
+
+
+AES_SBOX, AES_DOUBLE = aes_tables()
+
+
+def aes_round_keys(key):
+    words = [list(key[i:i + 4]) for i in range(0, 16, 4)]
+    rcon = 1
+    for index in range(4, 44):
+        word = words[index - 1][:]
+        if index % 4 == 0:
+            word = [AES_SBOX[byte] for byte in word[1:] + word[:1]]
+            word[0] ^= rcon
+            rcon = AES_DOUBLE[rcon]
+        words.append([a ^ b for a, b in zip(words[index - 4], word)])
+    return [sum(words[4 * round_number:4 * round_number + 4], []) for round_number in range(11)]
+
+
+def aes_encrypt_block(round_keys, block):
+    state = [a ^ b for a, b in zip(block, round_keys[0])]
+    for round_number in range(1, 11):
+        state = [AES_SBOX[byte] for byte in state]
+        state = [state[(i + 4 * (i % 4)) % 16] for i in range(16)]       # shift rows
+        if round_number < 10:
+            mixed = []
+            for column in range(0, 16, 4):
+                a0, a1, a2, a3 = state[column:column + 4]
+                mixed += [AES_DOUBLE[a0] ^ AES_DOUBLE[a1] ^ a1 ^ a2 ^ a3, a0 ^ AES_DOUBLE[a1] ^ AES_DOUBLE[a2] ^ a2 ^ a3,
+                          a0 ^ a1 ^ AES_DOUBLE[a2] ^ AES_DOUBLE[a3] ^ a3, AES_DOUBLE[a0] ^ a0 ^ a1 ^ a2 ^ AES_DOUBLE[a3]]
+            state = mixed
+        state = [a ^ b for a, b in zip(state, round_keys[round_number])]
+    return bytes(state)
+
+
+def gcm_multiply(x, y):
+    """Multiplication in GCM's field, on 128-bit integers."""
+    z, v = 0, y
+    for bit in range(127, -1, -1):
+        if (x >> bit) & 1:
+            z ^= v
+        v = (v >> 1) ^ (0xe1 << 120) if v & 1 else v >> 1
+    return z
+
+
+def gcm_ghash(hash_key, data):
+    value = 0
+    for start in range(0, len(data), 16):
+        value = gcm_multiply(value ^ int.from_bytes(data[start:start + 16].ljust(16, b'\0'), 'big'), hash_key)
+    return value
+
+
+def gcm_keystream_xor(round_keys, iv, data):
+    """The data with the counter-mode keystream from block 2 of this IV (block 1 is for the tag) mixed in: encrypts or decrypts."""
+    output = bytearray()
+    for index in range(0, len(data), 16):
+        counter = iv + (index // 16 + 2).to_bytes(4, 'big')
+        output += bytes(a ^ b for a, b in zip(data[index:index + 16], aes_encrypt_block(round_keys, counter)))
+    return bytes(output)
+
+
+def gcm_tag(round_keys, iv, ciphertext):
+    hash_key = int.from_bytes(aes_encrypt_block(round_keys, bytes(16)), 'big')
+    lengths = (0).to_bytes(8, 'big') + (len(ciphertext) * 8).to_bytes(8, 'big')
+    padded = ciphertext + bytes(-len(ciphertext) % 16)
+    digest = gcm_ghash(hash_key, padded + lengths).to_bytes(16, 'big')
+    return bytes(a ^ b for a, b in zip(digest, aes_encrypt_block(round_keys, iv + (1).to_bytes(4, 'big'))))
+
+
+def aes_gcm_seal(key, iv, plaintext):
+    """The ciphertext followed by its 16-byte tag, for a 16-byte key and a 12-byte IV, with nothing else authenticated."""
+    round_keys = aes_round_keys(key)
+    ciphertext = gcm_keystream_xor(round_keys, iv, plaintext)
+    return ciphertext + gcm_tag(round_keys, iv, ciphertext)
+
+
+# -- The message --
+def encrypt_push_payload(payload, receiver_public, auth_secret, sender_private=None, salt=None):
+    """`payload` encrypted for one browser (RFC 8291), as the body of the request to its push service: a header naming the
+    salt and this message's own public key, then one record of aes128gcm (RFC 8188). The last two arguments are for tests,
+    which need the same message twice; every real one has a key and salt of its own."""
+    sender_private = sender_private or secrets.randbelow(P256_N - 1) + 1
+    sender_public = encode_point(*ec_multiply(sender_private))
+    shared = ec_multiply(sender_private, decode_point(receiver_public))
+    if shared is None:
+        raise ValueError('no shared secret')
+    key_material = hkdf(auth_secret, shared[0].to_bytes(32, 'big'), b'WebPush: info\0' + receiver_public + sender_public, 32)
+    salt = salt or secrets.token_bytes(16)
+    key = hkdf(salt, key_material, b'Content-Encoding: aes128gcm\0', 16)
+    nonce = hkdf(salt, key_material, b'Content-Encoding: nonce\0', 12)
+    record = payload + b'\x02'
+    if len(record) > 4096 - 16:
+        raise ValueError('a push message is limited to about 4 KB')
+    return salt + (4096).to_bytes(4, 'big') + bytes([len(sender_public)]) + sender_public + aes_gcm_seal(key, nonce, record)
+
+
+# -- This server's key --
+vapid_key_cache = {}
+vapid_key_lock = threading.Lock()
+
+
+def vapid_key():
+    """(private key, public key as base64url): made the first time one is needed and kept in the database, so a subscription
+    made against it keeps working across restarts, and across an update."""
+    with vapid_key_lock:
+        if not vapid_key_cache:
+            with connection() as database:
+                row = database.execute("SELECT value FROM server_keys WHERE name = 'vapid'").fetchone()
+                if not row:
+                    database.execute("INSERT OR IGNORE INTO server_keys (name, value) VALUES ('vapid', ?)", (f'{secrets.randbelow(P256_N - 1) + 1:064x}',))
+                    row = database.execute("SELECT value FROM server_keys WHERE name = 'vapid'").fetchone()
+            private = int(row['value'], 16)
+            vapid_key_cache.update(private=private, public=b64url(encode_point(*ec_multiply(private))))
+    return vapid_key_cache['private'], vapid_key_cache['public']
+
+
+def vapid_authorization(endpoint):
+    """The Authorization header that says the message comes from this server (RFC 8292): a signed token for the push
+    service's own address, and the key that signed it."""
+    parts = urlparse(endpoint)
+    def part(value):
+        return b64url(json.dumps(value, separators=(',', ':')).encode())
+    signing = f"{part({'typ': 'JWT', 'alg': 'ES256'})}.{part({'aud': f'{parts.scheme}://{parts.netloc}', 'exp': int(time.time()) + 12 * 3600, 'sub': VAPID_SUBJECT})}"
+    private, public = vapid_key()
+    return f'vapid t={signing}.{b64url(ecdsa_sign(private, signing.encode()))}, k={public}'
+
+
+class NoRedirects(urllib.request.HTTPRedirectHandler):
+    """A push service that answers with a redirect is not followed: the address was checked, where it points is not."""
+
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+def push_endpoint_allowed(endpoint):
+    """Whether this address may be posted to: a known push service over https, or one the administrator named."""
+    try:
+        parts = urlparse(endpoint)
+        host = (parts.hostname or '').lower()
+        port = parts.port
+    except ValueError:
+        return False
+    if parts.username or parts.password or not host:
+        return False
+    matches = lambda hosts: any(host == allowed or host.endswith('.' + allowed) for allowed in hosts)
+    if matches(PUSH_ALLOWED_HOSTS):
+        return parts.scheme in ('http', 'https')
+    return parts.scheme == 'https' and port in (None, 443) and matches(PUSH_SERVICES)
+
+
+def send_push(subscription, message):
+    """Posts a message (a dict) to a subscription. Returns the push service's status, or None if it could not be reached."""
+    try:
+        body = encrypt_push_payload(json.dumps(message, separators=(',', ':')).encode(), b64url_decode(subscription['p256dh']), b64url_decode(subscription['auth']))
+    except ValueError:
+        return 400
+    request = urllib.request.Request(subscription['endpoint'], data=body, method='POST', headers={
+        'Authorization': vapid_authorization(subscription['endpoint']), 'Content-Encoding': 'aes128gcm', 'Content-Type': 'application/octet-stream',
+        'TTL': str(PUSH_TTL), 'Urgency': 'normal'})
+    try:
+        with urllib.request.build_opener(NoRedirects).open(request, timeout=PUSH_TIMEOUT) as response:
+            return response.status
+    except urllib.error.HTTPError as error:
+        return error.code
+    except (urllib.error.URLError, OSError):
+        return None
+
+
+def send_to_subscriptions(database, subscriptions, message):
+    """Sends to each, forgetting the ones the push service says are gone (404 and 410, a phone that cleared its site data or
+    turned notifications off). Returns how many were sent, how many were forgotten, and how many failed some other way."""
+    sent = forgotten = failed = 0
+    for subscription in subscriptions:
+        status = send_push(subscription, message)
+        if status is not None and 200 <= status < 300:
+            sent += 1
+        elif status in (404, 410):
+            database.execute('DELETE FROM push_subscriptions WHERE id = ?', (subscription['id'],))
+            forgotten += 1
+        else:
+            print(f"Could not push to {urlparse(subscription['endpoint']).netloc}: {'no answer' if status is None else status}.", flush=True)
+            failed += 1
+    return sent, forgotten, failed
+
+
+# -- Training days --
+def reminder_schedule(settings_json):
+    """(days as the browser numbers them, Sunday 0, and the time as minutes after midnight), or None for no reminders."""
+    try:
+        schedule = json.loads(settings_json or '{}').get('schedule')
+        days = {day for day in schedule['days'] if isinstance(day, int) and not isinstance(day, bool) and 0 <= day <= 6}
+        hours, minutes = schedule.get('time', '17:00').split(':')
+        return (days, int(hours) * 60 + int(minutes)) if days else None
+    except (AttributeError, KeyError, TypeError, ValueError):
+        return None
+
+
+def device_clock(subscription, now):
+    """The time on the phone the subscription belongs to: its time zone, or when this server does not know that one, the
+    offset it had when it last said so."""
+    try:
+        return now.astimezone(ZoneInfo(subscription['tz']))
+    except (ZoneInfoNotFoundError, ValueError, OSError, KeyError, TypeError):
+        return now.astimezone(datetime.timezone(datetime.timedelta(minutes=subscription['offset_minutes'] or 0)))
+
+
+def due_reminders(database, now):
+    """The subscriptions to remind at this moment, each marked as reminded for its day. A phone is reminded once on a
+    training day, from the time chosen until REMINDER_GRACE_MINUTES minutes after, and not when a workout has been saved that day."""
+    due = []
+    rows = database.execute('SELECT s.id, s.user_id, s.endpoint, s.p256dh, s.auth, s.tz, s.offset_minutes, s.last_sent, u.settings_json '
+                            'FROM push_subscriptions s JOIN user_state u ON u.user_id = s.user_id').fetchall()
+    for row in rows:
+        schedule = reminder_schedule(row['settings_json'])
+        if not schedule:
+            continue
+        days, at = schedule
+        clock = device_clock(row, now)
+        minute = clock.hour * 60 + clock.minute
+        today = clock.date().isoformat()
+        if (clock.weekday() + 1) % 7 not in days or not at <= minute < at + REMINDER_GRACE_MINUTES or row['last_sent'] == today:
+            continue
+        midnight = clock.replace(hour=0, minute=0, second=0, microsecond=0)
+        trained = database.execute('SELECT 1 FROM workouts WHERE user_id = ? AND created_at >= ? AND created_at < ?',
+                                   (row['user_id'], int(midnight.timestamp() * 1000), int((midnight + datetime.timedelta(days=1)).timestamp() * 1000))).fetchone()
+        claimed = database.execute('UPDATE push_subscriptions SET last_sent = ? WHERE id = ? AND (last_sent IS NULL OR last_sent != ?)', (today, row['id'], today)).rowcount
+        if claimed and not trained:
+            due.append(dict(row))
+    return due
+
+
+REMINDER_MESSAGE = {'title': 'Time to train', 'body': 'Today is a training day. Tap to open Workout Tracker.', 'url': '/index.html', 'tag': 'training-day'}
+
+
+def send_due_reminders():
+    now = datetime.datetime.now(datetime.timezone.utc)
+    with connection() as database:
+        due = due_reminders(database, now)
+    for subscription in due:
+        with connection() as database:
+            sent, forgotten, failed = send_to_subscriptions(database, [subscription], REMINDER_MESSAGE)
+            if failed:
+                # Not delivered, and not for want of a phone to deliver it to: tried again on the next look, while it is still worth it.
+                database.execute('UPDATE push_subscriptions SET last_sent = ? WHERE id = ?', (subscription['last_sent'], subscription['id']))
+
+
+def reminder_loop():
+    while True:
+        time.sleep(REMINDER_TICK)
+        try:
+            send_due_reminders()
+        except Exception:
+            traceback.print_exc()
 
 
 class AppHandler(http.server.SimpleHTTPRequestHandler):
@@ -1312,6 +1767,8 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_json(HTTPStatus.OK, {'session': json.loads(row['payload']) if row else None})
             elif path == '/api/state':
                 self.send_json(HTTPStatus.OK, load_state(database, user['id']))
+            elif path == '/api/push/key':
+                self.send_json(HTTPStatus.OK, {'publicKey': vapid_key()[1]})
             elif path in ('/api/export', '/api/export.csv'):
                 self.export_account(database, user, as_csv=path.endswith('.csv'))
             else:
@@ -1596,6 +2053,55 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
                                        'settings': take_settings, 'program': take_program, 'notes': len(new_notes), 'goals': len(new_goals),
                                        'bodyweights': len(new_weights), 'exercises': len(new_exercises)})
 
+    def push_subscribe(self, user):
+        """Remember this phone, to remind it on training days: what its browser's push service gave it (`endpoint` and `keys`)
+        and its clock. Asking again with the same endpoint updates it, which is how a change of time zone reaches the server."""
+        data = self.read_json()
+        endpoint, keys = data.get('endpoint'), data.get('keys')
+        if not isinstance(endpoint, str) or not 0 < len(endpoint) <= 1000 or not push_endpoint_allowed(endpoint):
+            raise BadRequest('endpoint must be the address of a push service this server sends to.')
+        try:
+            if not isinstance(keys, dict):
+                raise ValueError('keys')
+            decode_point(b64url_decode(keys.get('p256dh')))
+            if len(b64url_decode(keys.get('auth'))) != 16:
+                raise ValueError('auth')
+        except ValueError:
+            raise BadRequest("keys must hold the subscription's public key (p256dh) and auth secret (auth).")
+        zone = text(data.get('timeZone'), 'timeZone', 64)
+        offset = data.get('utcOffset', 0)
+        if isinstance(offset, bool) or not isinstance(offset, int) or not -840 <= offset <= 840:
+            raise BadRequest('utcOffset must be minutes from UTC, from -840 to 840.')
+        with connection() as database:
+            database.execute('INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, tz, offset_minutes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?) '
+                             'ON CONFLICT(endpoint) DO UPDATE SET user_id=excluded.user_id, p256dh=excluded.p256dh, auth=excluded.auth, '
+                             'tz=excluded.tz, offset_minutes=excluded.offset_minutes',
+                             (user['id'], endpoint, keys['p256dh'], keys['auth'], zone, offset, int(time.time() * 1000)))
+            database.execute('DELETE FROM push_subscriptions WHERE user_id = ? AND id NOT IN '
+                             '(SELECT id FROM push_subscriptions WHERE user_id = ? ORDER BY id DESC LIMIT ?)', (user['id'], user['id'], MAX_SUBSCRIPTIONS))
+        self.send_json(HTTPStatus.OK, {'ok': True})
+
+    def push_unsubscribe(self, user):
+        endpoint = self.read_json().get('endpoint')
+        if not isinstance(endpoint, str):
+            raise BadRequest('endpoint must be the address to stop sending to.')
+        with connection() as database:
+            database.execute('DELETE FROM push_subscriptions WHERE user_id = ? AND endpoint = ?', (user['id'], endpoint))
+        self.send_json(HTTPStatus.OK, {'ok': True})
+
+    def push_test(self, user):
+        """A notification to every phone of this account now, so the lifter can see that reminders will arrive."""
+        now = time.monotonic()
+        with push_test_lock:
+            if now - push_test_times.get(user['id'], -TEST_PUSH_WAIT) < TEST_PUSH_WAIT:
+                raise BadRequest('Wait a few seconds before sending another test.', HTTPStatus.TOO_MANY_REQUESTS)
+            push_test_times[user['id']] = now
+        with connection() as database:
+            subscriptions = [dict(row) for row in database.execute('SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?', (user['id'],))]
+            sent, forgotten, failed = send_to_subscriptions(database, subscriptions, {
+                'title': 'Workout Tracker', 'body': 'Reminders work on this device.', 'url': '/index.html', 'tag': 'test'})
+        self.send_json(HTTPStatus.OK, {'devices': len(subscriptions), 'sent': sent, 'forgotten': forgotten, 'failed': failed})
+
     def api_post(self, path):
         if path == '/api/auth/register':
             self.register()
@@ -1650,6 +2156,12 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             self.delete_account(user)
         elif path == '/api/import':
             self.import_account(user)
+        elif path == '/api/push/subscribe':
+            self.push_subscribe(user)
+        elif path == '/api/push/unsubscribe':
+            self.push_unsubscribe(user)
+        elif path == '/api/push/test':
+            self.push_test(user)
         else:
             self.send_json(HTTPStatus.NOT_FOUND, {'error': 'Endpoint not found.'})
 
@@ -1763,6 +2275,7 @@ def serve():
     # spares from any signal it has no handler for, so without this Docker waits 10 seconds and then kills it.
     # shutdown() waits for serve_forever to return, so it is called from another thread, not from inside the handler.
     signal.signal(signal.SIGTERM, lambda *_: threading.Thread(target=server.shutdown, daemon=True).start())
+    threading.Thread(target=reminder_loop, daemon=True).start()
     server.serve_forever()
     server.server_close()
     print('Workout Tracker stopped.', flush=True)

@@ -425,6 +425,63 @@ A weekly split you build from your templates, for training the way you already d
 - Deleting a template that a day does says so first. The day then asks for another template, and can only be skipped
   until it has one.
 
+### Training schedule and reminders
+
+Choose the days you train in Settings (Training schedule) and the app plans around them. The schedule is the account's
+`settings.schedule`, `{"days": [1, 3, 5], "time": "17:00"}`: days as the browser numbers them (Sunday is 0), checked by the
+server (`validate_schedule`), and merged between devices like any other setting. Nothing is nagging until days are chosen.
+
+A program is a queue of workouts that moves on when one is finished, not when a day passes, so the schedule only says which
+days to train. The next training day is planned the program's next workout, the one after it the workout after that
+(wrapping into the next block when a block has fewer left), and a day that goes by untrained leaves the queue where it was.
+A day with no program is just "a training day". The pieces:
+
+- **The Tracker's nudge**, a card above the program (hidden while a workout is going on, and until days are chosen). Today
+  is a training day: "Today is a training day: Push (Bench)." with a button that starts the program's next workout. A day
+  already trained: "Done for today. Next up: Thursday, Pull (Row)." A day off: "Rest day. Next up: tomorrow, Legs." A day
+  missed: "You missed Friday's workout. Train today instead, or carry on Tuesday." A day counts as missed when it was a
+  training day within the last seven, with no workout on it or since, for someone who trained in the two weeks before it, so
+  a schedule only just chosen, or picked up after months away, has missed nothing. The nudge asks about strength workouts. It
+  is worked out on the device from the saved workouts (`scheduleNudge` in `schedule.js`).
+- **The History calendar** marks today (if not yet trained) and the rest of this week's training days with a dashed square in
+  the theme's colour, a button whose label names its workout ("Sun, Oct 4: planned: Push (Bench)"), and under the calendar
+  Coming up lists the next six training days with their workouts, the one already trained marked Done. History loads
+  `program-definitions.js` and `program-plan.js` (the pieces of `program.js` that say which day is next, which the Tracker's
+  program card shares) to name them.
+- **Reminders** are web push. This browser asks for notification permission, subscribes through its service worker, and gives
+  the server its subscription and its clock (time zone and offset from UTC). The server's reminder loop (every
+  `REMINDER_TICK_SECONDS`, 60 by default) sends a notification to each subscribed device on each training day, once, from the
+  time chosen until three hours later (a server that was down, or a phone that was off, still sends it), by that phone's own
+  clock, and not on a day a workout has been saved. A push service that cannot be reached is tried again on the next look.
+  One that says the phone is gone (404 or 410) has its subscription forgotten. The message opens the app. Whether reminders
+  are on belongs to the browser, not the account: a phone can have them and a laptop not. Signing out takes the browser off
+  the account's reminders, and a subscription is told to the server again once a day and when the phone's clock changes.
+- **Needs**: HTTPS (service workers and push need a secure context, see [Offline support needs
+  HTTPS](#offline-support-needs-https)), a server that can reach the browser makers' push services over the internet (Google's
+  `fcm.googleapis.com`, Mozilla's, Apple's, Microsoft's), and on an iPhone or iPad the app added to the Home Screen
+  (Safari 16.4 or later). Settings says what is missing.
+
+How push works here, for whoever maintains it. The standard library has no elliptic curves or AES, so `server.py` carries
+the little of them that web push needs: P-256 (ECDH and ECDSA), AES-128-GCM and HKDF, in pure Python (about 2 ms a message). The message
+is encrypted for the browser with `aes128gcm` (RFC 8188 and 8291) and the request is signed as the server with VAPID (RFC
+8292). The server's signing key is made the first time it is needed and kept in the `server_keys` table, so a subscription
+keeps working across restarts and updates; losing it (a new database) makes browsers' old subscriptions unusable, which
+turning reminders off and on again fixes. `VAPID_SUBJECT` says who the server is to the push services (some, Apple's among
+them, may refuse a sender with no contact: set it to `mailto:you@example.com`). The code is checked against known answers
+(NIST's AES-GCM cases, RFC 5869 and RFC 8291's example) and against the `cryptography` library while it was written.
+
+A subscription is an address the server posts to, so it is not taken from just anyone: only `https` addresses on the browser
+makers' push services are accepted (`PUSH_SERVICES` in `server.py`), no redirect is followed, and the keys it carries must be
+a point on the curve. `PUSH_ALLOWED_HOSTS` adds hosts, which may then be plain `http`, for a push service of one's own (the
+tests give the server one). An account has at most 10 subscriptions (the newest are kept). The API:
+
+| Request | Does |
+|---|---|
+| `GET /api/push/key` | The server's VAPID public key, which a browser subscribes against |
+| `POST /api/push/subscribe` | `{endpoint, keys: {p256dh, auth}, timeZone, utcOffset}`: remembers this device (asking again updates it) |
+| `POST /api/push/unsubscribe` | `{endpoint}`: forgets it |
+| `POST /api/push/test` | Sends a notification to every device of the account now; at most one every 3 seconds |
+
 ### Cardio
 
 The Cardio tab (`cardio.html`) is for walks, runs and the machines, kept apart from strength workouts but working the
@@ -483,6 +540,9 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
   today, and the arrow keys move a day up or down and a week left or right), this week's workouts
   against your weekly goal, your current streak of weeks at the goal, and your best. A week still in progress never breaks the streak; it
   joins it once it reaches the goal. The goal is in Settings.
+- With a training schedule (Settings), the calendar also marks the training days still to come in the week, with the
+  workout planned for each, and Coming up lists the next six. See [Training schedule and
+  reminders](#training-schedule-and-reminders).
 - Review all saved workouts on the History page, a line each under a heading for its month, with that
   month's workouts and training time ("September 2026 · 14 workouts · 12 h 19 min"). Each shows its
   name and date (tap it for the sets), Start, and a ⋯ menu to copy it as a new workout, edit it (both
@@ -568,7 +628,7 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
 
 ### Settings
 
-The gear button opens a settings modal available on every page, in sections: General, During a
+The gear button opens a settings modal available on every page, in sections: General, Training schedule, During a
 workout, Bar and plates, Rest timer, Your data and Account. Each change is saved as you make it, so there is no Save
 button, just Done; closing it any other way (the ×, Escape, or a tap outside) keeps your changes too.
 Closing it puts the keyboard focus back on the gear button, as the template and program editors do on
@@ -589,6 +649,10 @@ the button that opened them. Settings include:
   converted for showing, so switching units never changes what you logged, and switching back shows
   it exactly as it was. The workout in progress and your program switch with you.
 - Weekly goal: 1 to 7 workouts a week (3 by default), which the History page's calendar counts.
+- Training schedule: the days of the week you train, a chip for each (Monday first), and the time of day to be reminded.
+  Both belong to the account and follow you between devices. "Remind me on training days, on this device" turns on web
+  push for this browser alone, and Send a test notification shows that it works. See
+  [Training schedule and reminders](#training-schedule-and-reminders).
 - Default rest duration from 15 to 600 seconds.
 - Automatic rest-timer start toggle.
 - Cancel confirmation toggle: whether Cancel workout asks first when sets have been logged.
@@ -1012,6 +1076,9 @@ The server reads these environment variables:
 | `SMTP_SECURITY` | `starttls` | `starttls`, `ssl` (TLS from the start), or `none` (a relay on a trusted network) |
 | `SMTP_USERNAME` / `SMTP_PASSWORD` | *(none)* | Login for the mail server; leave unset if it needs none |
 | `SMTP_FROM` | `SMTP_USERNAME` | Sender of the emails, e.g. `Workout Tracker <workouts@example.com>` |
+| `VAPID_SUBJECT` | `mailto:` the `SMTP_FROM` address, else `mailto:admin@example.com` | Who the server tells the push services it is, for reminders. Some push services want a real contact: `mailto:you@example.com` or an `https://` address |
+| `REMINDER_TICK_SECONDS` | `60` | How often the server looks for training days to remind about |
+| `PUSH_ALLOWED_HOSTS` | *(none)* | Extra hosts (comma-separated, each also matching its subdomains) a push subscription may name, over `http` or `https`. The browser makers' own push services are always allowed, over `https` only |
 
 Where to set them:
 
@@ -1082,6 +1149,9 @@ Accounts need an email for this to help them. New accounts give one when they ar
 accounts can add one in Settings.
 
 ### Offline support needs HTTPS
+
+(Reminders on training days need it too, since they arrive through the service worker, and the server has to be able to
+reach the browser makers' push services. See [Training schedule and reminders](#training-schedule-and-reminders).)
 
 Browsers only run a service worker in a *secure context*: `localhost`, or HTTPS. A stock
 install serves plain HTTP on a LAN address such as `http://192.168.1.50:6769`, and there the
@@ -1373,6 +1443,11 @@ before an answer arrived still goes up. The server merges the change into
 its own copy in one locked transaction (`merge_part` in `server.py`), so two devices sending at once both keep their
 changes, and answers with the merged state. A part sent without `base` replaces the stored one whole, as `PUT
 /api/state` does for pages from before.
+
+The training schedule is part of the settings. Phones that have reminders on are in the `push_subscriptions` table (where to
+post to, its keys, the phone's clock and the day it was last reminded), and the key that signs the server's push messages is
+in `server_keys`. They are not exported, and deleting the account deletes them. A backup holds that signing key: anyone with
+the database could also read the subscriptions and send those phones notifications, so treat backups as private.
 
 Include the SQLite file in your backup plan: it is at `/var/lib/workout-tracker/workouts.db` in an
 LXC install, and in the `workout_data` volume under Docker. The database runs in write-ahead-log mode,

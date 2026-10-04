@@ -6,7 +6,7 @@
 //
 // Every request goes to the network first, so a deploy reaches the next load without
 // bumping anything (unless that load's network is too slow; see NETWORK_WAIT). Bump VERSION only to drop old caches, e.g. when PRECACHE changes.
-const VERSION = 'v20';
+const VERSION = 'v21';
 const CACHE = `workout-tracker-${VERSION}`;
 
 // Files that are the same for everyone, so they are safe to fetch at install time.
@@ -32,6 +32,9 @@ const PRECACHE = [
   '/program-builder.js',
   '/exercise-library.js',
   '/exercise-guides.js',
+  '/program-plan.js',
+  '/schedule.js',
+  '/reminders.js',
   '/stalls.js',
   '/training-tools.js',
   '/script.js',
@@ -95,6 +98,60 @@ async function warmPages() {
 
 self.addEventListener('message', (event) => {
   if (event.data === 'skip-waiting') self.skipWaiting();
+});
+
+// A reminder from the server (see the reminder loop in server.py): { title, body, url, tag }. A push with nothing in it still
+// shows a notification, since a browser may refuse to show none.
+self.addEventListener('push', (event) => {
+  let message = {};
+  try {
+    message = event.data ? event.data.json() : {};
+  } catch (error) {
+    message = { body: event.data ? event.data.text() : '' };
+  }
+  const url = typeof message.url === 'string' && message.url.startsWith('/') && !message.url.startsWith('//') ? message.url : '/index.html';
+  event.waitUntil(self.registration.showNotification(message.title || 'Workout Tracker', {
+    body: message.body || '',
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    tag: message.tag || 'workout-tracker',
+    data: { url },
+  }));
+});
+
+// Tapping it brings the app forward, on the page it names, or opens it.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = new URL((event.notification.data && event.notification.data.url) || '/index.html', self.location.origin).href;
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of windows) {
+      if (!('focus' in client)) continue;
+      await client.focus();
+      if (client.url !== target && 'navigate' in client) await client.navigate(target).catch(() => {});
+      return;
+    }
+    await self.clients.openWindow(target);
+  })());
+});
+
+// The browser replaced the subscription (its push service rotated it): the new one is told to the server, which would
+// otherwise go on posting to an address that no longer reaches this phone.
+self.addEventListener('pushsubscriptionchange', (event) => {
+  event.waitUntil((async () => {
+    try {
+      const old = event.oldSubscription;
+      const subscription = event.newSubscription || await self.registration.pushManager.subscribe({
+        userVisibleOnly: true, applicationServerKey: old && old.options && old.options.applicationServerKey });
+      const { endpoint, keys } = subscription.toJSON();
+      await fetch('/api/push/subscribe', {
+        method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint, keys, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || '', utcOffset: -new Date().getTimezoneOffset() }),
+      });
+    } catch (error) {
+      // Signed out, or offline: the page tells the server again the next time it is open.
+    }
+  })());
 });
 
 self.addEventListener('fetch', (event) => {

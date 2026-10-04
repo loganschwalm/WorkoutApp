@@ -5,16 +5,6 @@
 let currentProgram = loadProgram();
 let programForm = null;
 
-function findProgramDefinition(id) {
-  return programDefinitions.find(definition => definition.id === id) || null;
-}
-
-// The definition as this program has it: a program the lifter built (Your own program) goes by its own name.
-function programDefinition(program) {
-  const definition = findProgramDefinition(program.definition);
-  return definition && definition.forProgram ? definition.forProgram(program) : definition;
-}
-
 function capitalize(text) {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
@@ -145,38 +135,13 @@ function reloadProgram() {
 }
 
 // ---- The plan -------------------------------------------------------------
-
-function programWeeks(program) {
-  return programDefinition(program).weeks(program);
-}
-
-function programDays(program) {
-  return programDefinition(program).days(program);
-}
-
-function dayKey(week, day) {
-  return `${week}-${day}`;
-}
-
-// "Deadlift Day, week 1" in a program of several weeks a block; just the day's name when a block is one week.
-function dayLabel(program, week, day) {
-  const name = programDays(program)[day].name;
-  return programWeeks(program).length > 1 ? `${name}, week ${week + 1}` : name;
-}
+// (programWeeks, programDays, dayLabel and nextProgramDay are in program-plan.js, which the History page shares.)
 
 // Where a workout sits in the program, as History shows it: "Cycle 1, week 2 · 3s week", or "Week 3".
 function blockLabel(program, week) {
   const weeks = programWeeks(program);
   const block = `${capitalize(programDefinition(program).block)} ${program.cycle}`;
   return weeks.length > 1 ? `${block}, week ${week + 1} · ${weeks[week].name}` : block;
-}
-
-function nextProgramDay(program) {
-  const weeks = programWeeks(program), days = programDays(program);
-  for (let week = 0; week < weeks.length; week += 1) {
-    for (let day = 0; day < days.length; day += 1) if (!program.done[dayKey(week, day)]) return { week, day };
-  }
-  return null;
 }
 
 function doneInWeek(program, week) {

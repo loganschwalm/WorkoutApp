@@ -457,13 +457,13 @@ def run(t):
     def shown(selector):
         return cdp.ev(f"[...document.querySelectorAll('{selector}')].map(e => getComputedStyle(e).display !== 'none')")
 
-    check('during a workout the rest of the Tracker is out of the way', shown('.between-workouts') == [False] * 4 and visible('otherCardsToggle')
+    check('during a workout the rest of the Tracker is out of the way', shown('.between-workouts') == [False] * 5 and visible('otherCardsToggle')
           and shown('#otherCardsToggle') == [True], shown('.between-workouts'))
     cdp.ev("document.getElementById('otherCardsToggle').click()")
-    check('one button under the workout brings it back', shown('.between-workouts')[2:] == [True, True]
+    check('one button under the workout brings it back', shown('.between-workouts')[3:] == [True, True]
           and text('otherCardsToggle') == 'Hide the rest of the Tracker', shown('.between-workouts'))
     cdp.ev("document.getElementById('otherCardsToggle').click()")
-    check('and puts it away again', shown('.between-workouts') == [False] * 4, shown('.between-workouts'))
+    check('and puts it away again', shown('.between-workouts') == [False] * 5, shown('.between-workouts'))
 
     # Swap, the note and the superset are in one menu beside the exercise's name.
     cdp.ev("document.getElementById('exerciseMenu').open = true")
@@ -589,7 +589,7 @@ def run(t):
     check('or scrolled above it, at the bottom of the screen over the tab bar', pinned['below'] > pinned['bar'] and 0 <= pinned['top'] and pinned['bottom'] <= pinned['bar'], pinned)
     cdp.send('Emulation.setDeviceMetricsOverride', width=375, height=740, deviceScaleFactor=1, mobile=True)
     end_workout()
-    check('once the workout ends the rest of the Tracker is back', shown('.between-workouts')[2:] == [True, True] and not cdp.ev("getComputedStyle(document.getElementById('otherCardsToggle')).display !== 'none'"),
+    check('once the workout ends the rest of the Tracker is back', shown('.between-workouts')[3:] == [True, True] and not cdp.ev("getComputedStyle(document.getElementById('otherCardsToggle')).display !== 'none'"),
           shown('.between-workouts'))
 
     noted = api('POST', '/api/workouts', {'name': 'Noted Day', 'notes': 'Pause the reps.', 'createdAt': t.t0 + 7 * 86400000,
