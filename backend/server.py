@@ -1,5 +1,6 @@
 import argparse
 import base64
+import collections
 import concurrent.futures
 import contextlib
 import csv
@@ -540,68 +541,86 @@ def validate_schedule(schedule):
         raise BadRequest('settings.schedule.time must be a time of day as HH:MM.')
 
 
-def validate_state(data):
-    if 'settings' in data and not isinstance(data['settings'], dict):
+# How many of each an account may keep, for the validators below and for what an import may add.
+MAX_TEMPLATES = 1000
+MAX_NOTES = 5000
+MAX_GOALS = 500
+MAX_WEIGH_INS = 40_000
+MAX_LIBRARY = 5000
+
+
+def validate_settings(settings):
+    if not isinstance(settings, dict):
         raise BadRequest('settings must be an object.')
-    if 'settings' in data and 'schedule' in data['settings']:
-        validate_schedule(data['settings']['schedule'])
-    if 'templates' in data:
-        for index, template in enumerate(listed(data['templates'], 'templates', 1000)):
-            text(template.get('name'), f'templates[{index}].name', 1000)
-            validate_exercises(template.get('exercises'), f'templates[{index}].exercises')
-    if 'program' in data:
-        validate_program(data['program'])
-    if 'exerciseNotes' in data:
-        notes = data['exerciseNotes']
-        if not isinstance(notes, dict) or len(notes) > 5000:
-            raise BadRequest('exerciseNotes must be an object of up to 5000 notes.')
-        for key, note in notes.items():
-            text(key, 'exerciseNotes key', 1000)
-            text(note, f'exerciseNotes[{key!r}]', 2000)
-    if 'goals' in data:
-        goals = data['goals']
-        if not isinstance(goals, dict) or len(goals) > 500:
-            raise BadRequest('goals must be an object of up to 500 goals.')
-        for key, goal in goals.items():
-            text(key, 'goals key', 1000)
-            if not isinstance(goal, dict):
-                raise BadRequest(f'goals[{key!r}] must be an object.')
-            if not text(goal.get('name'), f'goals[{key!r}].name', 1000).strip():
-                raise BadRequest(f'goals[{key!r}].name must name the exercise.')
-            if not is_number(goal.get('target')) or not 0 < goal['target'] <= 100_000:
-                raise BadRequest(f'goals[{key!r}].target must be a weight above zero.')
-            weight_unit(goal.get('unit'), f'goals[{key!r}].unit')
-            by = goal.get('by')
-            if by not in (None, '') and not (isinstance(by, str) and re.fullmatch(r'\d{4}-\d{2}-\d{2}', by)):
-                raise BadRequest(f'goals[{key!r}].by must be a date as YYYY-MM-DD, or empty.')
-    if 'bodyweight' in data:
-        # One weight a day, by the day it was weighed; a lifetime of daily weigh-ins fits.
-        entries = data['bodyweight']
-        if not isinstance(entries, dict) or len(entries) > 40_000:
-            raise BadRequest('bodyweight must be an object of up to 40000 days.')
-        for day, entry in entries.items():
-            try:
-                datetime.date.fromisoformat(day if re.fullmatch(r'\d{4}-\d{2}-\d{2}', day) else '')
-            except ValueError:
-                raise BadRequest(f'bodyweight key {day!r} must be a date as YYYY-MM-DD.')
-            if not isinstance(entry, dict) or not is_number(entry.get('weight')) or not 0 < entry['weight'] <= 2000:
-                raise BadRequest(f'bodyweight[{day!r}].weight must be a weight above zero.')
-            weight_unit(entry.get('unit'), f'bodyweight[{day!r}].unit')
-    if 'exerciseLibrary' in data:
-        library = data['exerciseLibrary']
-        if not isinstance(library, dict) or len(library) > 5000:
-            raise BadRequest('exerciseLibrary must be an object of up to 5000 exercises.')
-        for key, entry in library.items():
-            text(key, 'exerciseLibrary key', 1000)
-            if not isinstance(entry, dict):
-                raise BadRequest(f'exerciseLibrary[{key!r}] must be an object.')
-            if not text(entry.get('name'), f'exerciseLibrary[{key!r}].name', 1000).strip():
-                raise BadRequest(f'exerciseLibrary[{key!r}].name must name the exercise.')
-            # Empty, or missing, leaves it to the app's guess from the name.
-            if entry.get('muscle') not in (None, '', *MUSCLES):
-                raise BadRequest(f'exerciseLibrary[{key!r}].muscle must be one of {", ".join(MUSCLES)}, or empty.')
-            if entry.get('equipment') not in (None, '', *EQUIPMENT):
-                raise BadRequest(f'exerciseLibrary[{key!r}].equipment must be one of {", ".join(EQUIPMENT)}, or empty.')
+    if 'schedule' in settings:
+        validate_schedule(settings['schedule'])
+
+
+def validate_templates(templates):
+    for index, template in enumerate(listed(templates, 'templates', MAX_TEMPLATES)):
+        text(template.get('name'), f'templates[{index}].name', 1000)
+        validate_exercises(template.get('exercises'), f'templates[{index}].exercises')
+
+
+def keyed_collection(name, limit, things, check_entry, check_key=None):
+    """The validator of a part that is an object of up to `limit` entries by key: the keys are checked by `check_key` (by
+    default, as text) and each entry by `check_entry(key, entry)`, which raise BadRequest."""
+    def validate(entries):
+        if not isinstance(entries, dict) or len(entries) > limit:
+            raise BadRequest(f'{name} must be an object of up to {limit} {things}.')
+        for key, entry in entries.items():
+            (check_key or (lambda key: text(key, f'{name} key', 1000)))(key)
+            check_entry(key, entry)
+    return validate
+
+
+def check_note(key, note):
+    text(note, f'exerciseNotes[{key!r}]', 2000)
+
+
+def check_goal(key, goal):
+    if not isinstance(goal, dict):
+        raise BadRequest(f'goals[{key!r}] must be an object.')
+    if not text(goal.get('name'), f'goals[{key!r}].name', 1000).strip():
+        raise BadRequest(f'goals[{key!r}].name must name the exercise.')
+    if not is_number(goal.get('target')) or not 0 < goal['target'] <= 100_000:
+        raise BadRequest(f'goals[{key!r}].target must be a weight above zero.')
+    weight_unit(goal.get('unit'), f'goals[{key!r}].unit')
+    by = goal.get('by')
+    if by not in (None, '') and not (isinstance(by, str) and re.fullmatch(r'\d{4}-\d{2}-\d{2}', by)):
+        raise BadRequest(f'goals[{key!r}].by must be a date as YYYY-MM-DD, or empty.')
+
+
+def check_weigh_in_day(day):
+    try:
+        datetime.date.fromisoformat(day if re.fullmatch(r'\d{4}-\d{2}-\d{2}', day) else '')
+    except ValueError:
+        raise BadRequest(f'bodyweight key {day!r} must be a date as YYYY-MM-DD.')
+
+
+def check_weigh_in(day, entry):
+    if not isinstance(entry, dict) or not is_number(entry.get('weight')) or not 0 < entry['weight'] <= 2000:
+        raise BadRequest(f'bodyweight[{day!r}].weight must be a weight above zero.')
+    weight_unit(entry.get('unit'), f'bodyweight[{day!r}].unit')
+
+
+def check_library_entry(key, entry):
+    if not isinstance(entry, dict):
+        raise BadRequest(f'exerciseLibrary[{key!r}] must be an object.')
+    if not text(entry.get('name'), f'exerciseLibrary[{key!r}].name', 1000).strip():
+        raise BadRequest(f'exerciseLibrary[{key!r}].name must name the exercise.')
+    # Empty, or missing, leaves it to the app's guess from the name.
+    if entry.get('muscle') not in (None, '', *MUSCLES):
+        raise BadRequest(f'exerciseLibrary[{key!r}].muscle must be one of {", ".join(MUSCLES)}, or empty.')
+    if entry.get('equipment') not in (None, '', *EQUIPMENT):
+        raise BadRequest(f'exerciseLibrary[{key!r}].equipment must be one of {", ".join(EQUIPMENT)}, or empty.')
+
+
+def validate_state(data):
+    """Checks each part of the state that `data` has (see STATE_PARTS), in their order; a part it does not name is not looked at."""
+    for name, part in STATE_PARTS.items():
+        if name in data:
+            part.validate(data[name])
 
 
 # ---- Account details ----------------------------------------------------------------------------------------
@@ -702,46 +721,89 @@ def workout_id(path):
 
 
 # ---- Export and import --------------------------------------------------------------------------------------
-# An export is the whole account in one JSON file: every workout, plus the templates, program and settings. Importing
-# one only ever adds. Workouts already here (by clientId, or else by name, time and exercises) and templates already
-# here are skipped, and settings and a program are only taken by an account that has none of its own.
+# An export is the whole account in one JSON file: every workout, plus every part of its state (STATE_PARTS). Importing one only
+# ever adds. Workouts already here (by clientId, or else by name, time and exercises) are skipped, and what a part adds is its
+# `take`: templates not already here, an entry for a key that has none, and settings and a program only for an account that has
+# none of its own.
 
-# An account's state, as the pages have it: {settings, templates, program, exerciseNotes, goals, bodyweight, exerciseLibrary}.
-STATE_COLUMNS = {'settings': 'settings_json', 'templates': 'templates_json', 'program': 'program_json', 'exerciseNotes': 'notes_json',
-                 'goals': 'goals_json', 'bodyweight': 'bodyweight_json', 'exerciseLibrary': 'library_json'}
-STATE_EMPTY = {'settings': {}, 'templates': [], 'program': None, 'exerciseNotes': {}, 'goals': {}, 'bodyweight': {}, 'exerciseLibrary': {}}
+# The account's state: what the pages keep and sync with the server, which is everything an account has but its workouts. One entry
+# in STATE_PARTS says all the server needs to know about a part, so a new one is an entry here, a column (below), and its name
+# in accountStateParts in frontend/offline.js, and not a change in each place that has to know the parts. (tests/lint.py checks
+# that the server's list and the page's agree, and the api suite that every part has its column.) Each part has:
+#   column    the column of user_state that keeps it, as JSON
+#   empty     what the column holds for an account that has not set it, as JSON: also the column's DEFAULT
+#   merge     how changes to it from several devices are merged (see merge_values)
+#   validate  checks a value, raising BadRequest if it will not do
+#   take      what an import does with it: from what the account has and what the file has, what the account has after (an
+#             import only ever adds) and what that added, a count or whether the file's was taken
+#   report    the name an import's answer gives that: templates, settings, program, notes, goals, bodyweights, exercises
+StatePart = collections.namedtuple('StatePart', 'column empty merge validate take report')
+
+
+def take_whole(have, incoming):
+    """Import rule for a part that is one thing: the file's is taken only by an account that has none of its own."""
+    return (incoming, True) if incoming and not have else (have, False)
+
+
+def add_missing(noun, limit, unit='', wanted=lambda entry: True):
+    """Import rule for a part that is entries by key: the file's for a key the account has none for; one already here is the
+    account's own and stays."""
+    def take(have, incoming):
+        new = {key: entry for key, entry in (incoming or {}).items() if key not in have and wanted(entry)}
+        if len(have) + len(new) > limit:
+            raise BadRequest(f'Importing these {noun} would take the account past {limit}{unit}.')
+        return {**have, **new}, len(new)
+    return take
+
+
+def add_new_templates(have, incoming):
+    """Import rule for the templates: those the account has not already got (see same_template)."""
+    new = []
+    for template in incoming or []:
+        if not any(same_template(template, kept) for kept in have + new):
+            new.append(template)
+    if len(have) + len(new) > MAX_TEMPLATES:
+        raise BadRequest(f'Importing these templates would take the account past {MAX_TEMPLATES}.')
+    return have + new, len(new)
+
+
+STATE_PARTS = {
+    'settings': StatePart('settings_json', '{}', {'depth': 1}, validate_settings, take_whole, 'settings'),
+    'templates': StatePart('templates_json', '[]', {'depth': 1, 'by_id': True}, validate_templates, add_new_templates, 'templates'),
+    'program': StatePart('program_json', 'null', {'depth': 2, 'identity': ('definition', 'startedAt', 'cycle', 'unit')}, validate_program, take_whole, 'program'),
+    'exerciseNotes': StatePart('notes_json', '{}', {'depth': 1}, keyed_collection('exerciseNotes', MAX_NOTES, 'notes', check_note),
+                               add_missing('notes', MAX_NOTES, wanted=bool), 'notes'),
+    'goals': StatePart('goals_json', '{}', {'depth': 1}, keyed_collection('goals', MAX_GOALS, 'goals', check_goal), add_missing('goals', MAX_GOALS), 'goals'),
+    # One weight a day, by the day it was weighed; a lifetime of daily weigh-ins fits.
+    'bodyweight': StatePart('bodyweight_json', '{}', {'depth': 1}, keyed_collection('bodyweight', MAX_WEIGH_INS, 'days', check_weigh_in, check_weigh_in_day),
+                            add_missing('bodyweights', MAX_WEIGH_INS, ' days'), 'bodyweights'),
+    'exerciseLibrary': StatePart('library_json', '{}', {'depth': 1}, keyed_collection('exerciseLibrary', MAX_LIBRARY, 'exercises', check_library_entry),
+                                 add_missing('exercises', MAX_LIBRARY), 'exercises'),
+}
 
 
 def load_state(database, user_id):
-    row = database.execute(f"SELECT {', '.join(STATE_COLUMNS.values())} FROM user_state WHERE user_id = ?", (user_id,)).fetchone()
-    return {part: json.loads(row[column]) if row else STATE_EMPTY[part] for part, column in STATE_COLUMNS.items()}
+    columns = ', '.join(part.column for part in STATE_PARTS.values())
+    row = database.execute(f'SELECT {columns} FROM user_state WHERE user_id = ?', (user_id,)).fetchone()
+    return {name: json.loads(row[part.column] if row else part.empty) for name, part in STATE_PARTS.items()}
 
 
 def store_state(database, user_id, state):
-    columns = list(STATE_COLUMNS.values())
+    columns = [part.column for part in STATE_PARTS.values()]
     database.execute(f"INSERT INTO user_state (user_id, {', '.join(columns)}, updated_at) VALUES (?, {', '.join('?' for _ in columns)}, ?) "
                      f"ON CONFLICT(user_id) DO UPDATE SET {', '.join(f'{column}=excluded.{column}' for column in columns)}, updated_at=excluded.updated_at",
-                     (user_id, *(json.dumps(state[part]) for part in STATE_COLUMNS), int(time.time() * 1000)))
+                     (user_id, *(json.dumps(state[name]) for name in STATE_PARTS), int(time.time() * 1000)))
 
 
 # ---- Merging changes from several devices ---------------------------------------------------------------------
 # A device that changed part of the state sends the part as it changed it, and the copy it started from (PATCH
 # /api/state). Another device may have changed the part on the server since; merging keeps both devices' changes, and
-# where both changed the same thing, the change arriving now wins. How finely each part is merged:
+# where both changed the same thing, the change arriving now wins. How finely each part is merged is its `merge` in STATE_PARTS:
 #   depth     how many levels of objects below the part are merged key by key; a value deeper than that is one value,
 #             so a bodyweight's weight and unit, or a goal's target and unit, always travel together
 #   by_id     a list of objects told apart by their id, merged as if keyed by it (templates)
 #   identity  keys that say which run of a program the rest belongs to: its days are a cycle's, its weights a unit's,
 #             so changes to two different runs are never mixed (see merge_values)
-MERGE_SPECS = {
-    'settings': {'depth': 1},
-    'templates': {'depth': 1, 'by_id': True},
-    'program': {'depth': 2, 'identity': ('definition', 'startedAt', 'cycle', 'unit')},
-    'exerciseNotes': {'depth': 1},
-    'goals': {'depth': 1},
-    'bodyweight': {'depth': 1},
-    'exerciseLibrary': {'depth': 1},
-}
 # A key one side has and the other does not.
 MISSING = object()
 
@@ -786,7 +848,7 @@ def keyed_by_id(items):
 
 
 def merge_part(part, bases, mine, theirs):
-    spec = MERGE_SPECS[part]
+    spec = STATE_PARTS[part].merge
     if spec.get('by_id'):
         keyed = [keyed_by_id(value) for value in (*bases, mine, theirs)]
         # A list with an item that has no id (from before templates had them) cannot be told apart item by item.
@@ -2093,7 +2155,7 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
                 prepared.append((workout, *validate_workout(workout)))
             except BadRequest as error:
                 raise BadRequest(f'Workout {index + 1} in the file cannot be imported: {error}')
-        state = {part: data[part] for part in STATE_COLUMNS if part in data}
+        state = {name: data[name] for name in STATE_PARTS if name in data}
         validate_state(state)
         added = 0
         with connection() as database:
@@ -2105,41 +2167,12 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
                                           'ON CONFLICT(user_id, client_id) DO NOTHING',
                                           (user['id'], name, notes, created_at, json.dumps(workout), client_id)).rowcount
             have = load_state(database, user['id'])
-            take_settings = not have['settings'] and bool(state.get('settings'))
-            take_program = have['program'] is None and state.get('program') is not None
-            new_templates = []
-            for template in state.get('templates') or []:
-                if not any(same_template(template, kept) for kept in have['templates'] + new_templates):
-                    new_templates.append(template)
-            if len(have['templates']) + len(new_templates) > 1000:
-                raise BadRequest('Importing these templates would take the account past 1000.')
-            # A note for an exercise that has none here; a note already here is the account's own and stays.
-            new_notes = {key: note for key, note in (state.get('exerciseNotes') or {}).items() if key not in have['exerciseNotes'] and note}
-            if len(have['exerciseNotes']) + len(new_notes) > 5000:
-                raise BadRequest('Importing these notes would take the account past 5000.')
-            # Likewise a goal for an exercise that has none here.
-            new_goals = {key: goal for key, goal in (state.get('goals') or {}).items() if key not in have['goals']}
-            if len(have['goals']) + len(new_goals) > 500:
-                raise BadRequest('Importing these goals would take the account past 500.')
-            # And a bodyweight for a day that has none here.
-            new_weights = {day: entry for day, entry in (state.get('bodyweight') or {}).items() if day not in have['bodyweight']}
-            if len(have['bodyweight']) + len(new_weights) > 40_000:
-                raise BadRequest('Importing these bodyweights would take the account past 40000 days.')
-            # And the muscle and equipment of an exercise that has none here.
-            new_exercises = {key: entry for key, entry in (state.get('exerciseLibrary') or {}).items() if key not in have['exerciseLibrary']}
-            if len(have['exerciseLibrary']) + len(new_exercises) > 5000:
-                raise BadRequest('Importing these exercises would take the account past 5000.')
-            if take_settings or take_program or new_templates or new_notes or new_goals or new_weights or new_exercises:
-                store_state(database, user['id'], {'settings': state['settings'] if take_settings else have['settings'],
-                                                   'templates': have['templates'] + new_templates,
-                                                   'program': state['program'] if take_program else have['program'],
-                                                   'exerciseNotes': {**have['exerciseNotes'], **new_notes},
-                                                   'goals': {**have['goals'], **new_goals},
-                                                   'bodyweight': {**have['bodyweight'], **new_weights},
-                                                   'exerciseLibrary': {**have['exerciseLibrary'], **new_exercises}})
-        self.send_json(HTTPStatus.OK, {'workouts': added, 'alreadyHere': len(prepared) - added, 'templates': len(new_templates),
-                                       'settings': take_settings, 'program': take_program, 'notes': len(new_notes), 'goals': len(new_goals),
-                                       'bodyweights': len(new_weights), 'exercises': len(new_exercises)})
+            # Each part takes what it will of the file's (and refuses the file, with nothing stored, if that would take it past its limit).
+            taken = {name: part.take(have[name], state.get(name)) for name, part in STATE_PARTS.items()}
+            if any(count for _, count in taken.values()):
+                store_state(database, user['id'], {name: value for name, (value, _) in taken.items()})
+        self.send_json(HTTPStatus.OK, {'workouts': added, 'alreadyHere': len(prepared) - added,
+                                       **{part.report: taken[name][1] for name, part in STATE_PARTS.items()}})
 
     def push_subscribe(self, user):
         """Remember this phone, to remind it on training days: what its browser's push service gave it (`endpoint` and `keys`)
@@ -2280,7 +2313,7 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
                 # Read and written in one locked go, so another request's change cannot land in between and be lost.
                 database.execute('BEGIN IMMEDIATE')
                 # Only the parts sent change. A missing key keeps the stored part; null is a real value for the program (ended).
-                state = {**load_state(database, user['id']), **{part: data[part] for part in STATE_COLUMNS if part in data}}
+                state = {**load_state(database, user['id']), **{name: data[name] for name in STATE_PARTS if name in data}}
                 store_state(database, user['id'], state)
             self.send_json(HTTPStatus.OK, state)
         else:
@@ -2300,7 +2333,7 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
         data = self.read_json(MAX_STATE_CHANGE)
         changes = {}
         for part, change in data.items():
-            if part not in STATE_COLUMNS:
+            if part not in STATE_PARTS:
                 raise BadRequest(f'{part} is not part of the account state.')
             if not isinstance(change, dict) or 'value' not in change:
                 raise BadRequest(f'{part} must be an object with its value, and the base it was changed from.')

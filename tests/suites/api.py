@@ -7,6 +7,7 @@ import hashlib
 import io
 import json
 import os
+import shutil
 import signal
 import socket
 import sqlite3
@@ -15,6 +16,7 @@ import threading
 import time
 
 from ..harness import REPO_ROOT
+from .push import load_server
 
 INTERCEPT = False
 BROWSER = False
@@ -432,6 +434,43 @@ def run_structure(t, check, request):
     check('and one for goals', 'goals_json' in schema['state_columns'], schema['state_columns'])
     check('and one for bodyweight', 'bodyweight_json' in schema['state_columns'], schema['state_columns'])
     check('and one for the muscle and equipment of each exercise', 'library_json' in schema['state_columns'], schema['state_columns'])
+    parts = load_server().STATE_PARTS
+    db = sqlite3.connect(t.db_path('fresh.db'))
+    columns = {row[1]: row for row in db.execute('PRAGMA table_info(user_state)')}
+    db.close()
+    problems = [name for name, part in parts.items() if part.column not in columns or not columns[part.column][3] or columns[part.column][4] != f"'{part.empty}'"]
+    check('every part of the account’s state (STATE_PARTS) has its column, which cannot be null and starts as the part’s empty value', not problems, problems)
+    check('and the table has no column that is not one of them', set(columns) - {'user_id', 'updated_at'} == {part.column for part in parts.values()}, sorted(columns))
+
+    # A part added to the table is all that takes: a copy of the server with one more entry, and its column, loads, stores,
+    # checks, merges and imports it, with nothing else changed.
+    extended = load_server()
+    extended.STATE_PARTS['readings'] = extended.StatePart('readings_json', '{}', {'depth': 1}, extended.keyed_collection('readings', 3, 'readings', lambda key, entry: None),
+                                                          extended.add_missing('readings', 3), 'readings')
+    shutil.copy(t.db_path('fresh.db'), t.db_path('extended.db'))
+    db = sqlite3.connect(t.db_path('extended.db'))
+    db.row_factory = sqlite3.Row
+    db.execute("ALTER TABLE user_state ADD COLUMN readings_json TEXT NOT NULL DEFAULT '{}'")
+    loaded = extended.load_state(db, 1)
+    extended.store_state(db, 1, {**loaded, 'readings': {'a': 1}})
+    stored = extended.load_state(db, 1)
+    db.close()
+    refused = None
+    try:
+        extended.validate_state({'readings': {'a': 1, 'b': 2, 'c': 3, 'd': 4}})
+    except extended.BadRequest as error:
+        refused = str(error)
+    check('a part added to the table is loaded, empty, and stored', loaded['readings'] == {} and stored['readings'] == {'a': 1} and list(stored)[-1] == 'readings', [loaded, stored])
+    check('checked, in its own words', refused == 'readings must be an object of up to 3 readings.', refused)
+    check('merged with its own spec', extended.merge_part('readings', [{}], {'a': 1}, {'b': 2}) == {'b': 2, 'a': 1})
+    imported = extended.STATE_PARTS['readings'].take({'a': 1}, {'a': 9, 'b': 2})
+    check('and imported, adding only what the account has none of', imported == ({'a': 1, 'b': 2}, 1), imported)
+    try:
+        extended.STATE_PARTS['readings'].take({'a': 1, 'b': 2}, {'c': 3, 'd': 4})
+        over = None
+    except extended.BadRequest as error:
+        over = str(error)
+    check('or refusing what would take it past its limit', over == 'Importing these readings would take the account past 3.', over)
     check('with an email for each account, and its unique index',
           'email' in schema['user_columns'] and 'users_email' in schema['user_indexes'], schema)
     check('and whether each session was remembered', 'remember' in schema['session_columns'], schema['session_columns'])

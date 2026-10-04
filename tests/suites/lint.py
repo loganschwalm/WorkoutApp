@@ -91,6 +91,12 @@ def run(t):
         with changed('scripts/older.py', content='print("fine")\n'):
             check('and Python that is not newer is left alone', found() == [], found())
 
+        # -- state
+        with changed('frontend/offline.js', replaced("'goals', 'bodyweight'", "'bodyweight'")):
+            check('a part of the state the server keeps and the pages do not sync is named', says(['goals', 'does not sync']), found())
+        with changed('frontend/offline.js', replaced("'goals', 'bodyweight'", "'goals', 'bodyweight', 'measurements'")):
+            check('and one the pages sync and the server does not keep', says(['measurements', 'does not keep']), found())
+
         # -- environment
         with changed('backend/server.py', lambda text: text + "\nNEW_SETTING = os.environ.get('SOMETHING_NEW_AND_UNDOCUMENTED', '')\n"):
             check('an environment variable the reference does not mention is named', says(['SOMETHING_NEW_AND_UNDOCUMENTED']), found())

@@ -1450,6 +1450,21 @@ its own copy in one locked transaction (`merge_part` in `server.py`), so two dev
 changes, and answers with the merged state. A part sent without `base` replaces the stored one whole, as `PUT
 /api/state` does for pages from before.
 
+The parts of the state are listed once, in `STATE_PARTS` in `server.py`: `settings`, `templates`, `program`, `exerciseNotes`,
+`goals`, `bodyweight` and `exerciseLibrary`. Each entry says its `column` in `user_state`, what it is when `empty` (also the
+column's `DEFAULT`), how it is `merge`d, how a value is `validate`d, what an import `take`s of it and what it `report`s
+under. Loading, storing, validating, merging, exporting and importing all read from that table. To add a part:
+
+1. Write its validator, and its import rule (`take_whole`, `add_missing(...)` or one of your own), and add its entry to `STATE_PARTS`.
+2. Add a migration (at the end of `MIGRATIONS`) that adds its column: `ALTER TABLE user_state ADD COLUMN name_json TEXT NOT NULL
+   DEFAULT '<empty>'`, the same `empty` as the entry's. Never change a migration that has shipped.
+3. Add its name to `accountStateParts` in `frontend/offline.js` (and to `accountStateFill`, if the pages fill in what the stored
+   copy leaves out), and write its page code with `readLocalState` and `saveLocalState`.
+4. Say what it is in this reference.
+
+`tests/lint.py` fails until the server's list and `accountStateParts` agree, and the `api` suite fails until each entry has its
+column, `NOT NULL`, with its `empty` as the default, and the table has no column that is not an entry.
+
 The training schedule is part of the settings. Phones that have reminders on are in the `push_subscriptions` table (where to
 post to, its keys, the phone's clock and the day it was last reminded), and the key that signs the server's push messages is
 in `server_keys`. They are not exported, and deleting the account deletes them. A backup holds that signing key: anyone with
