@@ -229,6 +229,46 @@ def run(t):
     check('opening the email fields closes the notice', not shown('accountNotice') and shown('emailEditor'))
     cdp.ev("document.getElementById('closeSettings').click()")
 
+    # ------------------------------------------------------------------ C7b the devices signed in
+    print('C7b the devices signed in are listed in Settings, and signed out from there')
+    agents = {'phone': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 Version/17.5 Mobile/15E148 Safari/604.1',
+              'laptop': 'Mozilla/5.0 (X11; Linux x86_64; rv:127.0) Gecko/20100101 Firefox/127.0'}
+    devices = {}
+    # Sessions the checks above left behind (the sign-in that tried the new password) are cleared, so the list is just what is made here.
+    api('POST', '/api/account/sessions/sign-out-others', {}, t.token)
+    for name, agent in agents.items():
+        status, headers, _ = t.request('POST', '/api/auth/login', json.dumps({'login': 'tester', 'password': 'brand-new-password'}).encode(),
+                                       {'Content-Type': 'application/json', 'User-Agent': agent})
+        devices[name] = headers['set-cookie'].split('session=')[1].split(';')[0]
+
+    def device_rows():
+        return cdp.ev("[...document.querySelectorAll('#deviceList .device')].map(row => row.textContent.replace(/\\s+/g, ' ').trim())")
+
+    def signed_in(token):
+        return api('GET', '/api/auth/me', token=token)[0]['user'] is not None
+    cdp.ev("document.getElementById('settingsButton').click()")
+    check('Settings offers Signed-in devices, closed to begin with', shown('devicesButton') and not shown('devicesEditor'))
+    cdp.ev("document.getElementById('devicesButton').click()")
+    check('which lists the three devices', cdp.wait("document.querySelectorAll('#deviceList .device').length === 3"), device_rows())
+    rows = device_rows()
+    check('this one is marked, and has no button to sign it out',
+          cdp.ev("[...document.querySelectorAll('#deviceList .device')].filter(row => row.querySelector('.badge') && !row.querySelector('button')).length") == 1)
+    check('the others are named by browser and system, with when they were last used',
+          any(row.startswith('Safari on iPhone') and 'Last used just now' in row for row in rows) and any(row.startswith('Firefox on Linux') and 'Last used just now' in row for row in rows), rows)
+    check('and the panel offers to sign out all the others', shown('signOutOthers') and cdp.ev('document.activeElement.id') == 'closeDevices')
+    cdp.ev("document.querySelector('#deviceList button[aria-label^=\"Sign out Safari on iPhone\"]').click()")
+    check('Sign out on the phone ends it, and the list shows two',
+          cdp.wait("document.querySelectorAll('#deviceList .device').length === 2") and not signed_in(devices['phone']) and signed_in(devices['laptop']) and signed_in(t.token), device_rows())
+    check('and says so', 'Signed out' in text('accountNotice'), text('accountNotice'))
+    cdp.ev("document.getElementById('signOutOthers').click()")
+    check('Sign out all other devices ends the rest, leaving this one',
+          cdp.wait("document.querySelectorAll('#deviceList .device').length === 1") and not signed_in(devices['laptop']) and signed_in(t.token), device_rows())
+    check('says how many, and has no one left to offer it for', 'Signed out of 1 other device.' == text('accountNotice') and not shown('signOutOthers'), text('accountNotice'))
+    check('Close shuts the panel', cdp.ev("document.getElementById('closeDevices').click(), true") and not shown('devicesEditor'))
+    cdp.ev("document.getElementById('devicesButton').click(); document.getElementById('changeEmailButton').click()")
+    check('and opening another account panel shuts it too', shown('emailEditor') and not shown('devicesEditor'))
+    cdp.ev("document.getElementById('closeSettings').click()")
+
     # ------------------------------------------------------------------ C8 deleting the account
     print('C8  an account is deleted in Settings')
     _, cookie = api('POST', '/api/auth/register', {'username': 'goodbye', 'email': 'goodbye@example.test', 'password': 'chalk-and-plates-42'})

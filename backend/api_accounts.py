@@ -7,12 +7,12 @@ import time
 from http import HTTPStatus
 
 from accounts import (
-    DUMMY_HASH, address_throttle, email_address, email_reset_code, find_account, login_throttle, needs_rehash, new_password,
+    DUMMY_HASH, address_throttle, device_label, email_address, email_reset_code, find_account, login_throttle, needs_rehash, new_password,
     new_username, password_hash, password_matches, public_user, register_throttle, reset_address_throttle, reset_code_hash,
     reset_daily_throttle, reset_guess_throttle, reset_throttle, wait_words
 )
 from config import ALLOW_REGISTRATION, RESET_CODE_ATTEMPTS, RESET_CODE_TTL, SESSION_TTL, SHORT_SESSION_TTL, SMTP_HOST
-from database import connection, delete_account_rows, session_hash
+from database import connection, delete_account_rows, forget_reminders, session_hash
 from validation import BadRequest, text
 
 
@@ -27,7 +27,11 @@ class AccountApi:
         token = self.session_token()
         if token:
             with connection() as database:
+                user = database.execute('SELECT user_id FROM sessions WHERE token = ?', (session_hash(token),)).fetchone()
                 database.execute('DELETE FROM sessions WHERE token = ?', (session_hash(token),))
+                if user:
+                    # Reminders set up under this session go with it.
+                    forget_reminders(database, user['user_id'], session_hash(token))
         # The workouts are kept by the browser between visits (see GET /api/workouts), so signing out clears them, on a
         # browser that understands this (Safari does not) and over HTTPS or localhost, the only places it is honoured.
         self.send_json(HTTPStatus.OK, {'ok': True}, [self.session_cookie('', 0)], headers={'Clear-Site-Data': '"cache"'})
@@ -39,7 +43,8 @@ class AccountApi:
         token = secrets.token_urlsafe(32)
         lifetime = SESSION_TTL if remember else SHORT_SESSION_TTL
         database.execute('DELETE FROM sessions WHERE expires_at <= ?', (now,))
-        database.execute('INSERT INTO sessions (token, user_id, expires_at, remember) VALUES (?, ?, ?, ?)', (session_hash(token), user_id, now + lifetime, int(remember)))
+        database.execute('INSERT INTO sessions (token, user_id, expires_at, remember, created_at, last_used, label, address) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                         (session_hash(token), user_id, now + lifetime, int(remember), now, now, device_label(self.headers.get('User-Agent')), self.client_ip()))
         return self.session_cookie(token, lifetime if remember else None)
 
     def wants_remembering(self, data):
@@ -190,8 +195,9 @@ class AccountApi:
             if not database.execute('DELETE FROM password_resets WHERE user_id = ? AND code_hash = ?', (user['id'], reset['code_hash'])).rowcount:
                 raise BadRequest(wrong)
             database.execute('UPDATE users SET password_hash = ? WHERE id = ?', (stored_hash, user['id']))
-            # Whoever knew the old password is signed out everywhere.
+            # Whoever knew the old password is signed out everywhere, and no phone is left with reminders for an account it is not signed in to.
             database.execute('DELETE FROM sessions WHERE user_id = ?', (user['id'],))
+            database.execute('DELETE FROM push_subscriptions WHERE user_id = ?', (user['id'],))
             cookie = self.start_session(database, user['id'])
         reset_guess_throttle.clear(email)
         login_throttle.clear((self.client_ip(), user['username'].lower()))
@@ -231,8 +237,45 @@ class AccountApi:
             self.confirm_password(database, user, current, 'Your current password is not right.')
             database.execute('UPDATE users SET password_hash = ? WHERE id = ?', (stored_hash, user['id']))
             # Whoever knew the old password is signed out everywhere but here, and a reset code sent for it stops working.
-            signed_out = database.execute('DELETE FROM sessions WHERE user_id = ? AND token != ?', (user['id'], session_hash(self.session_token()))).rowcount
+            signed_out = self.sign_out_others_rows(database, user)
             database.execute('DELETE FROM password_resets WHERE user_id = ?', (user['id'],))
+        self.send_json(HTTPStatus.OK, {'signedOut': signed_out})
+
+    def sign_out_others_rows(self, database, user):
+        """Ends every session of the account but this one, and the reminders set up under them. How many sessions it ended."""
+        current = session_hash(self.session_token())
+        forget_reminders(database, user['id'], keep=current)
+        return database.execute('DELETE FROM sessions WHERE user_id = ? AND token != ?', (user['id'], current)).rowcount
+
+    def list_sessions(self, user):
+        """The devices signed in to this account: its sessions that have not run out, the one asking marked."""
+        current = session_hash(self.session_token())
+        with connection() as database:
+            rows = database.execute('SELECT rowid AS id, token, created_at, last_used, label, address, remember FROM sessions '
+                                    'WHERE user_id = ? AND expires_at > ? ORDER BY last_used DESC, rowid DESC', (user['id'], int(time.time()))).fetchall()
+        # Times in milliseconds, as the pages count them; none for a session from before they were kept.
+        self.send_json(HTTPStatus.OK, {'sessions': [
+            {'id': row['id'], 'label': row['label'], 'address': row['address'], 'createdAt': row['created_at'] * 1000 or None,
+             'lastUsed': row['last_used'] * 1000 or None, 'remembered': bool(row['remember']), 'current': row['token'] == current}
+            for row in rows]})
+
+    def revoke_session(self, user):
+        """Signs one of the account's other devices out. Asking again for one already gone is fine: nothing is left to do."""
+        wanted = self.read_json().get('id')
+        if isinstance(wanted, bool) or not isinstance(wanted, int):
+            raise BadRequest('id must be the id of a signed-in device.')
+        with connection() as database:
+            row = database.execute('SELECT token FROM sessions WHERE rowid = ? AND user_id = ?', (wanted, user['id'])).fetchone()
+            if row and row['token'] == session_hash(self.session_token()):
+                raise BadRequest('That is the device you are using. Use Sign out for it.')
+            if row:
+                database.execute('DELETE FROM sessions WHERE token = ?', (row['token'],))
+                forget_reminders(database, user['id'], row['token'])
+        self.send_json(HTTPStatus.OK, {'signedOut': 1 if row else 0})
+
+    def sign_out_others(self, user):
+        with connection() as database:
+            signed_out = self.sign_out_others_rows(database, user)
         self.send_json(HTTPStatus.OK, {'signedOut': signed_out})
 
     def delete_account(self, user):

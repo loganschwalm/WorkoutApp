@@ -10,6 +10,9 @@ PROJECT_ROOT = os.path.dirname(SERVER_DIR)
 ROOT = os.environ.get('APP_ROOT', os.path.join(PROJECT_ROOT, 'frontend'))
 DB_PATH = os.environ.get('WORKOUT_DB', os.path.join(PROJECT_ROOT, 'data', 'workouts.db'))
 SESSION_TTL = 60 * 60 * 24 * 30
+# The list of signed-in devices says when each was last used, to the nearest this many seconds: a write for each is only made
+# when the time shown would be that far out of date, so a page's requests do not each write.
+SESSION_USED_EVERY = 60 * 10
 # A session in use is renewed to a full SESSION_TTL once this much of it has gone by.
 SESSION_RENEW = 60 * 60 * 24
 # Signing in without "Remember me" gives a cookie the browser drops when it closes, and a session the server drops after
@@ -69,6 +72,17 @@ TRUSTED_PROXIES = proxy_networks(os.environ.get('TRUSTED_PROXIES', ''))
 # Seconds a connection may sit without sending anything before it is closed. Every connection holds a thread, so
 # without this, anyone who can reach the port could open silent connections until the server ran out of room.
 REQUEST_TIMEOUT = int(os.environ.get('REQUEST_TIMEOUT', '30'))
+# That only counts the silence between bytes, which a client sending one byte at a time never lets run out, so a request also
+# has deadlines (connections.py): its request line and headers, which a real client sends at once, within HEADER_TIMEOUT seconds
+# of connecting; and then REQUEST_BASE_TIME plus the time its body needs at MIN_UPLOAD_RATE bytes a second (an import of 32 MB is
+# given the most, REQUEST_MAX_TIME), to be read and answered.
+HEADER_TIMEOUT = float(os.environ.get('HEADER_TIMEOUT', '10'))
+REQUEST_BASE_TIME = 60
+MIN_UPLOAD_RATE = 20_000
+REQUEST_MAX_TIME = 15 * 60
+# Connections open at once, each a thread: past this many, a new one is answered 503 and closed, so a flood of them cannot run
+# the server out of threads and memory for the ones already being served. 0 takes the limit off.
+MAX_CONNECTIONS = int(os.environ.get('MAX_CONNECTIONS', '512'))
 
 # Password reset codes are emailed through this SMTP server. With SMTP_HOST unset there is no reset by email: the
 # sign-in page says to ask whoever runs the server, who resets it with the reset-password command.

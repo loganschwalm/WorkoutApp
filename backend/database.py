@@ -172,9 +172,22 @@ def migration_12_workout_cache(database):
             END''')
 
 
+def migration_13_session_details(database):
+    # What the list of signed-in devices shows of a session (when it began, when it was last used, the browser and system it
+    # is, and the address it came from), and which session a phone's reminders were set up under, so signing that session out
+    # (here, from another device, or by a password change) also stops them. Sessions and subscriptions from before have none
+    # of it: they show as "Signed in earlier", and a subscription is given its session the next time its phone tells the server
+    # about itself, which it does once a day.
+    for column in ('created_at INTEGER NOT NULL DEFAULT 0', 'last_used INTEGER NOT NULL DEFAULT 0',
+                   "label TEXT NOT NULL DEFAULT ''", "address TEXT NOT NULL DEFAULT ''"):
+        database.execute(f'ALTER TABLE sessions ADD COLUMN {column}')
+    database.execute('CREATE INDEX sessions_user ON sessions(user_id)')
+    database.execute("ALTER TABLE push_subscriptions ADD COLUMN session_hash TEXT NOT NULL DEFAULT ''")
+
+
 MIGRATIONS = [migration_1_tables, migration_2_client_ids, migration_3_programs, migration_4_emails, migration_5_exercise_notes,
               migration_6_hashed_sessions, migration_7_goals, migration_8_bodyweight, migration_9_remembered_sessions,
-              migration_10_exercise_library, migration_11_push, migration_12_workout_cache]
+              migration_10_exercise_library, migration_11_push, migration_12_workout_cache, migration_13_session_details]
 
 
 def init_database():
@@ -225,6 +238,16 @@ def delete_account_rows(database, user_id):
     for table in ('sessions', 'workouts', 'workout_versions', 'active_sessions', 'user_state', 'password_resets', 'push_subscriptions'):
         database.execute(f'DELETE FROM {table} WHERE user_id = ?', (user_id,))
     database.execute('DELETE FROM users WHERE id = ?', (user_id,))
+
+
+def forget_reminders(database, user_id, session=None, keep=None):
+    """Stops the reminders that were set up under a session (its token's hash), or under every session but `keep`: the phone they
+    were for is no longer signed in to the account, and must not go on being told when it trains. Reminders from before they
+    were tied to a session (none recorded) are left alone, and tie themselves to one the next time their phone says hello."""
+    if session is not None:
+        database.execute('DELETE FROM push_subscriptions WHERE user_id = ? AND session_hash = ?', (user_id, session))
+    else:
+        database.execute("DELETE FROM push_subscriptions WHERE user_id = ? AND session_hash NOT IN ('', ?)", (user_id, keep))
 
 
 def workout_tag(database, user_id):

@@ -228,6 +228,17 @@ def find_account(database, login):
     return database.execute(f'SELECT {columns} FROM users WHERE username = ?', (login,)).fetchone()
 
 
+def device_label(user_agent):
+    """The browser and system a User-Agent header names, as a person would say it: "Safari on iPhone", "Chrome on Windows". What
+    it is told is the client's own say-so, and only ever shown to the account it belongs to, to tell its devices apart."""
+    agent = str(user_agent or '')
+    browser = next((name for marker, name in (('Edg/', 'Edge'), ('EdgA/', 'Edge'), ('OPR/', 'Opera'), ('FxiOS', 'Firefox'), ('Firefox/', 'Firefox'),
+                                              ('CriOS', 'Chrome'), ('Chrome/', 'Chrome'), ('Safari/', 'Safari')) if marker in agent), 'Browser')
+    system = next((name for marker, name in (('iPhone', 'iPhone'), ('iPad', 'iPad'), ('Android', 'Android'), ('CrOS', 'ChromeOS'), ('Windows', 'Windows'),
+                                             ('Macintosh', 'Mac'), ('Mac OS X', 'Mac'), ('Linux', 'Linux')) if marker in agent), '')
+    return f'{browser} on {system}' if system else browser
+
+
 def public_user(row):
     """What the pages are told about an account."""
     return {'id': row['id'], 'username': row['username'], 'email': row['email']}

@@ -31,6 +31,8 @@ class AppServer:
             # The same goes for accounts made, and reset emails asked for, from that one address.
             'REGISTRATIONS_PER_HOUR': '10000',
             'RESET_ADDRESS_EMAILS': '10000',
+            # And a suite that opens many connections at once (a burst of 80, five times over) must not meet the ceiling on them.
+            'MAX_CONNECTIONS': '10000',
             **(env or {}),
         }
         self.process = subprocess.Popen(

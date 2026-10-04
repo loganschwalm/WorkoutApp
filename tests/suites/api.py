@@ -7,6 +7,7 @@ import hashlib
 import io
 import json
 import os
+import secrets
 import shutil
 import signal
 import socket
@@ -21,6 +22,9 @@ from ..harness import REPO_ROOT, load_server
 INTERCEPT = False
 BROWSER = False
 MAIL = True
+
+# The schema version a database ends up at once every migration has run.
+LATEST_SCHEMA = len(load_server().MIGRATIONS)
 
 # The schema as it was before workouts had a client_id column, for the upgrade check.
 OLD_SCHEMA = '''
@@ -181,6 +185,8 @@ def run(t):
 
     run_security(t, check, request)
     run_limits(t, check)
+    run_sessions(t, check)
+    run_connections(t, check)
     run_structure(t, check, request)
     run_accounts(t, check, request)
     run_admin(t, check, request)
@@ -562,6 +568,239 @@ def run_limits(t, check):
     check('a HOST that is not an address of this machine stops it from starting, rather than listening somewhere else', refused.returncode != 0, refused.returncode)
 
 
+def run_sessions(t, check):
+    """The devices signed in to an account: listed, signed out one at a time or all but this one, and their reminders with them."""
+    json_headers = {'Content-Type': 'application/json'}
+    desktop = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
+    phone = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'
+    laptop = 'Mozilla/5.0 (X11; Linux x86_64; rv:127.0) Gecko/20100101 Firefox/127.0'
+    server = t.start_server('devices.db', {'PUSH_ALLOWED_HOSTS': 'push.example.test'})
+
+    def call(method, path, body=None, token=None):
+        headers = {**json_headers, **({'Cookie': f'session={token}'} if token else {})}
+        return server.request(method, path, json.dumps(body).encode() if body is not None else None, headers)
+
+    def sign_in(login, agent, password='chalk-and-plates-42'):
+        status, headers, _ = server.request('POST', '/api/auth/login', json.dumps({'login': login, 'password': password}).encode(),
+                                            {**json_headers, 'User-Agent': agent})
+        assert status == 200, status
+        return headers['set-cookie'].split('session=')[1].split(';')[0]
+
+    def register(name, agent):
+        status, headers, _ = server.request('POST', '/api/auth/register', json.dumps({'username': name, 'email': f'{name}@example.test', 'password': 'chalk-and-plates-42'}).encode(),
+                                            {**json_headers, 'User-Agent': agent})
+        assert status == 200, status
+        return headers['set-cookie'].split('session=')[1].split(';')[0]
+
+    def signed_in(token):
+        return call('GET', '/api/auth/me', token=token)[2].get('user') is not None
+
+    # ------------------------------------------------------------------ A44 devices signed in
+    print('A44 the devices signed in to an account are listed, and signed out one at a time, or all but this one')
+    here = register('walker', desktop)
+    other = register('bystander', desktop)
+    phone_token, laptop_token = sign_in('walker', phone), sign_in('walker@example.test', laptop)
+    status, _, reply = call('GET', '/api/account/sessions', token=here)
+    devices = reply['sessions'] if isinstance(reply, dict) else []
+    check('the account lists its three devices', status == 200 and len(devices) == 3, f'{status} {reply}')
+    check('each is named by its browser and system, as a person would say it',
+          sorted(device['label'] for device in devices) == ['Chrome on Windows', 'Firefox on Linux', 'Safari on iPhone'], [device['label'] for device in devices])
+    check('and says where from and when', all(device['address'] == '127.0.0.1' and abs(device['createdAt'] - time.time() * 1000) < 60_000
+                                              and abs(device['lastUsed'] - time.time() * 1000) < 60_000 for device in devices), devices)
+    check('the one asking is marked, and only that one', [device['label'] for device in devices if device['current']] == ['Chrome on Windows'], devices)
+    check('the newest is first', [device['label'] for device in devices][0] == 'Firefox on Linux', devices)
+    check('none of it holds anything that could sign in as the device', all(set(device) == {'id', 'label', 'address', 'createdAt', 'lastUsed', 'remembered', 'current'} for device in devices))
+    check('another account lists only its own', [device['label'] for device in call('GET', '/api/account/sessions', token=other)[2]['sessions']] == ['Chrome on Windows'])
+    ids = {device['label']: device['id'] for device in devices}
+
+    status, _, reply = call('POST', '/api/account/sessions/revoke', {'id': ids['Chrome on Windows']}, here)
+    check('signing out the device in use is refused, pointing to Sign out', status == 400 and 'Sign out' in reply.get('error', '') and signed_in(here), f'{status} {reply}')
+    for label, body in (('a name', {'id': 'phone'}), ('no id', {}), ('a truth', {'id': True})):
+        check(f'{label} instead of an id is a 400', call('POST', '/api/account/sessions/revoke', body, here)[0] == 400)
+    other_id = call('GET', '/api/account/sessions', token=other)[2]['sessions'][0]['id']
+    status, _, reply = call('POST', '/api/account/sessions/revoke', {'id': other_id}, here)
+    check('a device of another account is not here to sign out, and is left signed in', status == 200 and reply == {'signedOut': 0} and signed_in(other), f'{status} {reply}')
+
+    status, _, reply = call('POST', '/api/account/sessions/revoke', {'id': ids['Safari on iPhone']}, here)
+    check('signing out the phone ends its session and no other', status == 200 and reply == {'signedOut': 1} and not signed_in(phone_token) and signed_in(laptop_token) and signed_in(here), f'{status} {reply}')
+    check('asking again for it is not an error, and has nothing to do', call('POST', '/api/account/sessions/revoke', {'id': ids['Safari on iPhone']}, here)[2] == {'signedOut': 0})
+    check('the list shows two', len(call('GET', '/api/account/sessions', token=here)[2]['sessions']) == 2)
+    status, _, reply = call('POST', '/api/account/sessions/sign-out-others', {}, here)
+    check('Sign out everywhere else ends the others, and says how many', status == 200 and reply == {'signedOut': 1} and not signed_in(laptop_token) and signed_in(here), f'{status} {reply}')
+    check('and it is the only device left', [device['current'] for device in call('GET', '/api/account/sessions', token=here)[2]['sessions']] == [True])
+    check('with nothing to sign out it says so', call('POST', '/api/account/sessions/sign-out-others', {}, here)[2] == {'signedOut': 0})
+
+    db = sqlite3.connect(t.db_path('devices.db'))
+    db.execute('UPDATE sessions SET last_used = 1000 WHERE token = ?', (hashlib.sha256(here.encode()).hexdigest(),))
+    db.commit()
+    call('GET', '/api/auth/me', token=here)
+    used = db.execute('SELECT last_used FROM sessions WHERE token = ?', (hashlib.sha256(here.encode()).hexdigest(),)).fetchone()[0]
+    db.close()
+    check('using a device brings its last-used time up to date', abs(used - time.time()) < 60, used)
+    recent = int(time.time()) - 30
+    db = sqlite3.connect(t.db_path('devices.db'))
+    db.execute('UPDATE sessions SET last_used = ? WHERE token = ?', (recent, hashlib.sha256(here.encode()).hexdigest()))
+    db.commit()
+    db.close()
+    call('GET', '/api/auth/me', token=here)
+    check('but not on every request, which would write each time', call('GET', '/api/account/sessions', token=here)[2]['sessions'][0]['lastUsed'] == recent * 1000)
+
+    # ------------------------------------------------------------------ A44b reminders go with the session
+    print('A44b reminders set up on a device stop when it is signed out')
+    module = load_server()
+
+    def subscribe(token, name):
+        private = secrets.randbelow(module.P256_N - 1) + 1
+        body = {'endpoint': f'https://push.example.test/{name}', 'keys': {'p256dh': module.b64url(module.encode_point(*module.ec_multiply(private))),
+                                                                          'auth': module.b64url(secrets.token_bytes(16))}, 'timeZone': 'UTC', 'utcOffset': 0}
+        return call('POST', '/api/push/subscribe', body, token)[0]
+
+    def reminders():
+        db = sqlite3.connect(t.db_path('devices.db'))
+        rows = sorted(row[0].rsplit('/', 1)[1] for row in db.execute('SELECT endpoint FROM push_subscriptions'))
+        db.close()
+        return rows
+    first, second, third = sign_in('walker', desktop), sign_in('walker', phone), sign_in('walker', laptop)
+    check('three devices set up reminders', [subscribe(first, 'one'), subscribe(second, 'two'), subscribe(third, 'three')] == [200] * 3 and reminders() == ['one', 'three', 'two'], reminders())
+    listed = {device['label']: device['id'] for device in call('GET', '/api/account/sessions', token=first)[2]['sessions'] if not device['current']}
+    call('POST', '/api/account/sessions/revoke', {'id': listed['Safari on iPhone']}, first)
+    check('signing one device out stops its reminders only', reminders() == ['one', 'three'], reminders())
+    call('POST', '/api/account/sessions/sign-out-others', {}, first)
+    check('signing out the others stops theirs, and keeps this device’s', reminders() == ['one'], reminders())
+    second, third = sign_in('walker', phone), sign_in('walker', laptop)
+    subscribe(second, 'two')
+    subscribe(third, 'three')
+    status, _, _ = call('POST', '/api/account/password', {'currentPassword': 'chalk-and-plates-42', 'newPassword': 'rowing-machine-17'}, first)
+    check('changing the password signs the others out, and their reminders with them', status == 200 and reminders() == ['one'], f'{status} {reminders()}')
+    call('POST', '/api/auth/logout', {}, first)
+    check('signing out stops this device’s own', reminders() == [])
+    # A subscription from before it was tied to a session has none recorded: it is left alone, and tied the next time its phone says hello.
+    again = sign_in('walker', desktop, 'rowing-machine-17')
+    subscribe(again, 'old')
+    db = sqlite3.connect(t.db_path('devices.db'))
+    db.execute("UPDATE push_subscriptions SET session_hash = ''")
+    db.commit()
+    db.close()
+    call('POST', '/api/account/sessions/sign-out-others', {}, again)
+    check('a reminder from before sessions were recorded is not guessed at', reminders() == ['old'], reminders())
+    subscribe(again, 'old')
+    check('and is tied to the session that says hello', sqlite3.connect(t.db_path('devices.db')).execute('SELECT session_hash FROM push_subscriptions').fetchone()[0]
+          == hashlib.sha256(again.encode()).hexdigest())
+
+    print('A44c what a browser is called')
+    label = module.device_label
+    for agent, expected in ((desktop, 'Chrome on Windows'), (phone, 'Safari on iPhone'), (laptop, 'Firefox on Linux'),
+                            ('Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 Chrome/126.0 Safari/537.36 Edg/126.0', 'Edge on Windows'),
+                            ('Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 CriOS/126.0 Mobile/15E148 Safari/604.1', 'Chrome on iPhone'),
+                            ('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/126.0 Mobile Safari/537.36', 'Chrome on Android'),
+                            ('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/17.5 Safari/605.1.15', 'Safari on Mac'),
+                            ('curl/8.4.0', 'Browser'), ('', 'Browser'), (None, 'Browser')):
+        check(f'{(agent or "no User-Agent")[:48]!r} is {expected}', label(agent) == expected, label(agent))
+    check('whatever the header says, the name stays short and from a fixed set', len(label('x' * 100_000 + 'Firefox/ Windows')) < 40)
+    server.stop()
+
+
+def run_connections(t, check):
+    """What the server says about itself, and how many connections it takes and for how long."""
+    module = load_server()
+
+    # ------------------------------------------------------------------ A45 what the server tells everyone
+    print('A45 the server does not say which Python it runs')
+    for method, path in (('GET', '/api/auth/me'), ('GET', '/login.html'), ('GET', '/no-such-file'), ('POST', '/api/auth/login')):
+        _, headers, _ = t.server.request(method, path, b'{}' if method == 'POST' else None, {'Content-Type': 'application/json'})
+        check(f'{method} {path} says what it is, and no version', headers.get('server') == 'workout-tracker', headers.get('server'))
+
+    # ------------------------------------------------------------------ A46 open connections
+    print('A46 only so many connections are open at once, and a request has only so long to arrive')
+
+    def connect(server):
+        return socket.create_connection(('127.0.0.1', server.port), timeout=10)
+
+    def read_all(sock, wait=10):
+        sock.settimeout(wait)
+        data = b''
+        try:
+            while True:
+                chunk = sock.recv(4096)
+                if not chunk:
+                    return data
+                data += chunk
+        except OSError:
+            return data
+
+    def answers(server):
+        sock = connect(server)
+        sock.sendall(b'GET /login.html HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n')
+        head = read_all(sock)
+        sock.close()
+        return head
+
+    crowded = t.start_server('crowded.db', {'MAX_CONNECTIONS': '3', 'HEADER_TIMEOUT': '60'})
+    held = [connect(crowded) for _ in range(3)]
+    time.sleep(0.5)
+    refused = answers(crowded)
+    check('past the ceiling a connection is told 503, with Retry-After, and closed', refused.startswith(b'HTTP/1.1 503 ') and b'Retry-After: 5' in refused and refused.endswith(b'The server is busy. Try again.'), refused[:120])
+    held.pop().close()
+    deadline = time.time() + 5
+    served = b''
+    while time.time() < deadline and not served.startswith(b'HTTP/1.1 200 '):
+        served = answers(crowded)
+        time.sleep(0.2)
+    check('and one that closes makes room for the next', served.startswith(b'HTTP/1.1 200 '), served[:60])
+    for sock in held:
+        sock.close()
+    deadline = time.time() + 5
+    while time.time() < deadline and not all(answers(crowded).startswith(b'HTTP/1.1 200 ') for _ in range(3)):
+        time.sleep(0.2)
+    check('once they all go the server answers as ever', all(answers(crowded).startswith(b'HTTP/1.1 200 ') for _ in range(3)))
+    crowded.stop()
+
+    hurried = t.start_server('hurried.db', {'HEADER_TIMEOUT': '2'})
+    sock = connect(hurried)
+    started = time.monotonic()
+    data = read_all(sock)
+    check('a connection that sends nothing is closed when its headers are due, not at the 30 seconds of silence', data == b'' and 1.5 < time.monotonic() - started < 6, f'{data!r} {time.monotonic() - started:.1f}s')
+    sock.close()
+
+    sock = connect(hurried)
+    started = time.monotonic()
+    closed_after = None
+    try:
+        sock.sendall(b'GET /login.html HTTP/1.1\r\nHost: x\r\n')
+        # One byte every half second: never silent for long, but never done either.
+        for byte in b'X-Slow: ' + b'a' * 40:
+            time.sleep(0.5)
+            sock.sendall(bytes([byte]))
+            if time.monotonic() - started > 12:
+                break
+    except OSError:
+        closed_after = time.monotonic() - started
+    check('and so is one that dribbles them in, which the silence timeout never catches', closed_after is not None and closed_after < 8, closed_after)
+    sock.close()
+
+    sock = connect(hurried)
+    sock.sendall(b'GET /login.html HTTP/1.1\r\nHost: x\r\n')
+    time.sleep(1)
+    sock.sendall(b'Connection: close\r\n\r\n')
+    check('while a request whose headers arrive in two parts, in time, is answered', read_all(sock).startswith(b'HTTP/1.1 200 '))
+    sock.close()
+
+    sock = connect(hurried)
+    # A sign-in, which reads its body before it says anything: a request answered without reading it would not show the wait.
+    body = b'{"login":"nobody","password":"wrong-password"}'
+    sock.sendall(b'POST /api/auth/login HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\nContent-Length: %d\r\nConnection: close\r\n\r\n' % len(body) + body[:8])
+    time.sleep(3)
+    sock.sendall(body[8:])
+    check('and once the headers are in, the body is not held to the headers’ deadline', b'HTTP/1.1 401' in read_all(sock))
+    sock.close()
+    hurried.stop()
+
+    check('a request with no body has a minute from its headers to its answer', module.request_allowance(None) == 60 and module.request_allowance('0') == 60)
+    check('a body adds the time it needs at 20 KB a second', module.request_allowance('1000000') == 60 + 50)
+    check('up to a fifteen minute most, which a 32 MB import reaches', module.request_allowance(str(32 * 1024 * 1024)) == 900)
+    check('and a length that is not a number counts as none', module.request_allowance('lots') == 60 and module.request_allowance('-5') == 60)
+
+
 def run_structure(t, check, request):
     token = t.token
     json_headers = {'Content-Type': 'application/json'}
@@ -572,7 +811,7 @@ def run_structure(t, check, request):
     t.start_server('fresh.db')  # the harness only asks /api/auth/me, which never opens the database
     schema = schema_of(t.db_path('fresh.db'))
     check('a new database has every table before any request touches it', schema['tables'] == tables, schema['tables'])
-    check('it is at schema version 12', schema['version'] == 12, schema['version'])
+    check('it is at the latest schema version', schema['version'] == LATEST_SCHEMA, schema['version'])
     check('with the client_id column and its unique index',
           'client_id' in schema['columns'] and 'workouts_user_client' in schema['indexes'], schema)
     check('with a column for the training program', 'program_json' in schema['state_columns'], schema['state_columns'])
@@ -622,7 +861,7 @@ def run_structure(t, check, request):
     check('and whether each session was remembered', 'remember' in schema['session_columns'], schema['session_columns'])
     check('in write-ahead-log mode', schema['journal'] == 'wal', schema['journal'])
     legacy = schema_of(t.db_path('legacy.db'))
-    check('the database from before client_id (A3) is now at version 12 too', legacy['version'] == 12, legacy['version'])
+    check('the database from before client_id (A3) is at the latest version too', legacy['version'] == LATEST_SCHEMA, legacy['version'])
     check('and has the training program, exercise notes, goals, bodyweight and exercise library columns',
           {'program_json', 'notes_json', 'goals_json', 'bodyweight_json', 'library_json'} <= set(legacy['state_columns']), legacy['state_columns'])
     check('and the email column, and the table of reset codes',
@@ -647,7 +886,7 @@ def run_structure(t, check, request):
     kept = db.execute("SELECT name, client_id FROM workouts").fetchall()
     db.close()
     check('an unversioned database that already has client_id upgrades cleanly',
-          schema['version'] == 12 and schema['columns'].count('client_id') == 1 and kept == [('Kept', 'k1')], f'{schema} {kept}')
+          schema['version'] == LATEST_SCHEMA and schema['columns'].count('client_id') == 1 and kept == [('Kept', 'k1')], f'{schema} {kept}')
 
     path = t.db_path('newer.db')
     db = sqlite3.connect(path)

@@ -694,6 +694,18 @@ the button that opened them. Settings include:
 - The account's email, with a button to add or change it. Changing it asks for your password.
 - Change password: asks for the current password and a new one of 8+ characters, keeps this device signed in, and
   signs the account out everywhere else.
+- Signed-in devices (`devices.js`): lists the browsers and phones signed in to the account, each named by its browser and system
+  ("Safari on iPhone", from its User-Agent, as a fixed set of words and never the header itself), with when it was last used (to
+  the nearest ten minutes), when it signed in, and the address it signed in from. This device is marked. Each other one has a
+  Sign out button, and *Sign out all other devices* ends them all, with no password asked: it only ever makes the account
+  safer, and the devices sign in again. Signing a device out deletes nothing on it; what it had not uploaded stays there until
+  it is signed in. The API (`api_accounts.py`): `GET /api/account/sessions` lists them (`id`, `label`, `address`, `createdAt`,
+  `lastUsed`, `remembered`, `current`), `POST /api/account/sessions/revoke` `{id}` signs one other device out (the one asking is
+  refused with 400; one already gone, or another account's, is `{signedOut: 0}`), and `POST /api/account/sessions/sign-out-others`
+  ends the rest. The `id` is the row's number in the account's own list, not anything that could sign in. A session's reminders
+  (web push) are tied to it, so signing it out, or the password changing, also stops its reminders: a phone that is lost stops
+  being told when you train. Reminders from before this (migration 13) have no session recorded and are left alone until their
+  phone says hello again, which it does once a day.
 - Delete account: asks for your password, and once more to be sure, then deletes the account and
   everything in it from the server, and this device's copy of it. Export first to keep a copy.
 
@@ -790,6 +802,7 @@ backend/accounts.py     Account rules, password hashing, sign-in limits, finding
 backend/webpush_crypto.py  P-256, AES-GCM and HKDF in pure Python, and the encryption of a push message
 backend/webpush.py      Push subscriptions, the signing key, sending, and the reminder loop
 backend/webserver.py    The handler every request goes through (static files, JSON, sessions) and serve()
+backend/connections.py  The ceiling on open connections, and the deadlines on a request
 backend/api_routes.py   The route table: which method answers each API request, and who may ask
 backend/api_accounts.py, api_data.py, api_push.py   What each API request does, by topic
 backend/admin.py        The account commands run from the server's own command line
@@ -1124,9 +1137,15 @@ What is already in place:
   behind the same proxy) could otherwise send a form or plain text with it. The server refuses any
   change whose browser says it came from another page (`Sec-Fetch-Site`), and any request body that is
   not JSON, which a page elsewhere cannot send without a check this server never passes.
-- A connection that sends nothing for 30 seconds is closed, so idle connections cannot pile up until
-  the server runs out of room. A client that keeps sending a byte at a time can still hold one open;
-  a reverse proxy in front stops that too.
+- Every connection holds a thread, so they are limited three ways (`connections.py`). A connection that sends nothing for
+  30 seconds is closed (`REQUEST_TIMEOUT`). The request line and headers, which a real client sends at once, are due within 10
+  seconds of connecting (`HEADER_TIMEOUT`), so one that dribbles them in a byte at a time, never silent for 30 seconds, holds a
+  thread for 10 and no more. And once the headers are in the request has a minute plus the time its body needs at 20 KB a second
+  to be read and answered, up to 15 minutes (an import of 32 MB gets them all), after which the connection is shut. At most 512
+  connections are open at once (`MAX_CONNECTIONS`, 0 for no limit): the next is answered `503` with `Retry-After`, and closed,
+  so a flood cannot run the server out of threads and memory for the connections already being served. A reverse proxy in
+  front is still the better defence against a determined flood; this is what the server does alone.
+- The `Server` header says only `workout-tracker`, not which Python this is, so a scanner is not told which of its flaws apply.
 
 Keep it on a trusted LAN, or put it behind a reverse proxy such as Caddy, Nginx Proxy Manager, or
 Traefik that terminates TLS and adds authentication. Do not forward the port straight to the internet.
@@ -1151,6 +1170,8 @@ The server reads these environment variables:
 | `RESET_ADDRESS_EMAILS` | `10` | Reset emails one client address may ask for in an hour, whichever addresses it names; `0` turns it off |
 | `TRUSTED_PROXIES` | *(none)* | Reverse proxies whose `X-Forwarded-For` is believed, as addresses or networks separated by commas (`127.0.0.1, 172.16.0.0/12`), so the sign-in limits count each person behind them apart. See [Before you expose it](#before-you-expose-it) |
 | `REQUEST_TIMEOUT` | `30` | Seconds a connection may send nothing before it is closed |
+| `HEADER_TIMEOUT` | `10` | Seconds a new connection has to send its request line and headers, however it sends them |
+| `MAX_CONNECTIONS` | `512` | Connections open at once; the next is told `503` and closed. `0` takes the limit off |
 | `PASSWORD_HASHERS` | `2` | Passwords hashed at once (signing in, signing up, resets), so a flood of them takes this many cores at most |
 | `PASSWORD_HASH_WAIT` | `5` | Seconds a request waits for its turn to hash before it is told the server is busy (503) |
 | `RESET_GUESSES` | `10` | Wrong reset codes per email address in a day before its codes stop being tried |

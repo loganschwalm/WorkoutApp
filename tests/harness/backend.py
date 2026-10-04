@@ -9,7 +9,7 @@ import types
 BACKEND = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'backend')
 # In the order they depend on one another.
 MODULES = ['config', 'validation', 'database', 'state', 'workouts', 'accounts', 'webpush_crypto', 'webpush', 'admin', 'api_routes', 'api_accounts', 'api_data',
-           'api_push', 'webserver']
+           'api_push', 'connections', 'webserver']
 
 
 def load_server():

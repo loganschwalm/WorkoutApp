@@ -214,6 +214,12 @@ html[data-theme="dark"] .link-button.danger-link { color:#ff9eaa; }
 .data-section { display:grid; gap:10px; margin-top:16px; padding-top:16px; border-top:1px solid var(--line); }
 .data-section .subtitle, .data-section .auth-feedback { margin:0; }
 .data-actions { display:flex; flex-wrap:wrap; gap:8px; }
+.device-list { display:grid; gap:10px; margin:0; padding:0; list-style:none; }
+.device { display:flex; justify-content:space-between; align-items:center; gap:12px; padding-top:10px; border-top:1px solid var(--line); }
+.device:first-child { padding-top:0; border-top:0; }
+.device > div { display:grid; justify-items:start; gap:2px; min-width:0; }
+.device .subtitle { margin:0; overflow-wrap:anywhere; }
+.device button { flex:none; }
 .account-editor-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:6px; }
 .rest-panel {
   position:sticky; top:12px; bottom:calc(12px + var(--tab-bar)); z-index:4; display:flex; justify-content:space-between; align-items:center; gap:12px;

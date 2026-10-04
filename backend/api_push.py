@@ -3,7 +3,7 @@
 import time
 from http import HTTPStatus
 
-from database import connection
+from database import connection, session_hash
 from validation import BadRequest, text
 from webpush import (
     MAX_SUBSCRIPTIONS, TEST_PUSH_WAIT, push_endpoint_allowed, push_test_lock, push_test_times, send_all, settle_pushes,
@@ -38,10 +38,11 @@ class PushApi:
         if isinstance(offset, bool) or not isinstance(offset, int) or not -840 <= offset <= 840:
             raise BadRequest('utcOffset must be minutes from UTC, from -840 to 840.')
         with connection() as database:
-            database.execute('INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, tz, offset_minutes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?) '
+            # Tied to the session it is set up under, so signing that session out stops the reminders too (see forget_reminders).
+            database.execute('INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, tz, offset_minutes, created_at, session_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?) '
                              'ON CONFLICT(endpoint) DO UPDATE SET user_id=excluded.user_id, p256dh=excluded.p256dh, auth=excluded.auth, '
-                             'tz=excluded.tz, offset_minutes=excluded.offset_minutes',
-                             (user['id'], endpoint, keys['p256dh'], keys['auth'], zone, offset, int(time.time() * 1000)))
+                             'tz=excluded.tz, offset_minutes=excluded.offset_minutes, session_hash=excluded.session_hash',
+                             (user['id'], endpoint, keys['p256dh'], keys['auth'], zone, offset, int(time.time() * 1000), session_hash(self.session_token())))
             database.execute('DELETE FROM push_subscriptions WHERE user_id = ? AND id NOT IN '
                              '(SELECT id FROM push_subscriptions WHERE user_id = ? ORDER BY id DESC LIMIT ?)', (user['id'], user['id'], MAX_SUBSCRIPTIONS))
         self.send_json(HTTPStatus.OK, {'ok': True})

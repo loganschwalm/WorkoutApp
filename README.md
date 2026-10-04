@@ -236,7 +236,8 @@ The app is built for a home network:
 - Don't forward its port straight to the internet. To reach it from outside, use Tailscale or a reverse
   proxy with HTTPS (and ideally its own login).
 - Passwords are stored as strong one-way hashes, repeated wrong passwords are slowed down, and sessions
-  can't be stolen from a copy of the database.
+  can't be stolen from a copy of the database. Settings, Account, *Signed-in devices* lists every browser and
+  phone signed in, and signs any of them out (a lost phone, say), or all but the one you are using.
 - Back up the database, not just the container: Proxmox installs do this daily on their own.
 
 The details are under [Before you expose it](readme-for-llm.md#before-you-expose-it).

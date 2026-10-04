@@ -43,6 +43,7 @@ document.body.insertAdjacentHTML('beforeend', `
           <span class="subtitle" id="accountNotice" role="status" hidden></span>
           <button class="link-button" id="changeEmailButton" type="button">Change email</button>
           <button class="link-button" id="changePasswordButton" type="button">Change password</button>
+          <button class="link-button" id="devicesButton" type="button" hidden>Signed-in devices</button>
           <button class="link-button danger-link" id="deleteAccountButton" type="button">Delete account</button>
         </div>
         <button class="secondary" id="signOutButton" type="button">Sign out</button>
@@ -61,6 +62,12 @@ document.body.insertAdjacentHTML('beforeend', `
         + '<p class="auth-feedback" id="passwordFeedback" role="alert" hidden></p>',
         '<button class="secondary" id="cancelPassword" type="button">Cancel</button>'
         + '<button class="primary" id="savePassword" type="submit" form="passwordForm">Save password</button>')}
+      ${accountEditor('devicesEditor',
+        '<p class="subtitle">The browsers and phones signed in to this account. Signing one out deletes nothing on it: what it has not uploaded stays there until you sign in again.</p>'
+        + '<ul class="device-list" id="deviceList"></ul>'
+        + '<p class="auth-feedback" id="devicesFeedback" role="alert" hidden></p>',
+        '<button class="secondary" id="closeDevices" type="button">Close</button>'
+        + '<button class="danger" id="signOutOthers" type="button" hidden>Sign out all other devices</button>')}
       ${accountEditor('deleteEditor',
         '<label for="deletePassword">Current password</label>'
         + '<input id="deletePassword" type="password" form="deleteForm" autocomplete="current-password" required />'

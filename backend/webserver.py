@@ -24,8 +24,9 @@ from api_push import PushApi
 from api_routes import find_route
 from config import (
     COMPRESSIBLE, MAX_BODY, MIN_COMPRESS, RANGED, REQUEST_TIMEOUT, ROOT, SECURE_COOKIES, SECURITY_HEADERS, SESSION_RENEW,
-    SESSION_TTL, SHORT_SESSION_RENEW, SHORT_SESSION_TTL, SMTP_HOST, SMTP_PORT, SMTP_SECURITY, TRUSTED_PROXIES
+    SESSION_TTL, SESSION_USED_EVERY, SHORT_SESSION_RENEW, SHORT_SESSION_TTL, SMTP_HOST, SMTP_PORT, SMTP_SECURITY, TRUSTED_PROXIES
 )
+from connections import Connections, request_allowance, turn_away
 from database import connection, init_database, session_hash
 from validation import BadRequest
 from webpush import reminder_loop
@@ -99,6 +100,11 @@ class WebHandler(http.server.SimpleHTTPRequestHandler):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=ROOT, **kwargs)
+
+    def version_string(self):
+        # The Server header is sent with every answer, so a scanner would otherwise be told the Python version (and with it
+        # which of its known flaws apply). Nothing the pages do reads it.
+        return 'workout-tracker'
 
     def log_error(self, format, *args):
         # Browsers leave keep-alive connections idle, so closing one at the timeout is routine rather than an error.
@@ -219,6 +225,9 @@ class WebHandler(http.server.SimpleHTTPRequestHandler):
         self.renewed_cookie = None
         understood = super().parse_request()
         self.close_connection = True
+        if understood:
+            # The headers are in, so the deadline for them is replaced by one for the rest: the body, and the answer.
+            self.server.connections.extend(self.request, request_allowance(self.headers.get('Content-Length')))
         return understood
 
     def send_response(self, *args, **kwargs):
@@ -358,12 +367,14 @@ class WebHandler(http.server.SimpleHTTPRequestHandler):
             return None
         now = int(time.time())
         with connection() as database:
-            row = database.execute('SELECT users.id, users.username, users.email, sessions.expires_at, sessions.remember FROM sessions JOIN users ON users.id = sessions.user_id WHERE sessions.token = ? AND sessions.expires_at > ?', (session_hash(token), now)).fetchone()
+            row = database.execute('SELECT users.id, users.username, users.email, sessions.expires_at, sessions.remember, sessions.last_used FROM sessions JOIN users ON users.id = sessions.user_id WHERE sessions.token = ? AND sessions.expires_at > ?', (session_hash(token), now)).fetchone()
             # A session lasts SESSION_TTL from when it was last used, not from signing in, so someone who trains every week
             # stays signed in. Renewed at most once a day, and the cookie with it, or the browser would drop it on time anyway.
             # One started without "Remember me" is renewed the same way on its shorter clock, and its cookie stays one
             # that goes when the browser does.
             if row:
+                if row['last_used'] < now - SESSION_USED_EVERY:
+                    database.execute('UPDATE sessions SET last_used = ? WHERE token = ?', (now, session_hash(token)))
                 remembered = bool(row['remember'])
                 lifetime, renew = (SESSION_TTL, SESSION_RENEW) if remembered else (SHORT_SESSION_TTL, SHORT_SESSION_RENEW)
                 if row['expires_at'] < now + lifetime - renew:
@@ -422,6 +433,29 @@ class AppServer(http.server.ThreadingHTTPServer):
     # once while the service worker fetches its whole cache list, and past the limit a connection is refused or reset:
     # the page then runs without one of its scripts. Five bursts of 80 requests lost 90 of 400 at the default.
     request_queue_size = 128
+
+    def __init__(self, *args, **kwargs):
+        self.connections = Connections()
+        super().__init__(*args, **kwargs)
+
+    def process_request(self, request, client_address):
+        # Past the ceiling a connection is told so, and closed, without a worker thread of its own (see connections.py).
+        if not self.connections.admit(request):
+            turn_away(request, self.shutdown_request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            # No thread could be started for it (the machine is out of them): it is dropped, and the server carries on.
+            traceback.print_exc()
+            self.connections.release(request)
+            self.shutdown_request(request)
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self.connections.release(request)
 
 
 def serve():
