@@ -942,6 +942,11 @@ What is already in place:
   toward the same limit, and so do wrong passwords given in Settings to change the email or password,
   or to delete the account. Behind a reverse proxy every request comes from the proxy's address, so the
   limit then works per account.
+- After 20 failed sign-ins from one address, whatever usernames they tried, that address waits the same way, so trying a
+  common password against many usernames gets no further than many passwords against one. Signing into an account
+  meanwhile does not start the count again, or an account of one's own would let the guessing go on. Behind a reverse
+  proxy every request shares the proxy's address, so one person's guessing would make everyone wait: set
+  `LOGIN_ADDRESS_ATTEMPTS=0` there to turn this limit off (the one per account stays).
 - A password reset code works once, for 15 minutes, and stops working after 5 wrong tries. Each email
   address is sent at most 5 codes an hour, and after 10 wrong codes for an address in a day, however
   many codes were sent, none is tried until the oldest of those is a day old. The replies and limits
@@ -983,6 +988,7 @@ The server reads these environment variables:
 | `ALLOW_REGISTRATION` | `1` | `0` refuses new accounts; existing accounts still sign in |
 | `SECURE_COOKIES` | `0` | `1` always marks the session cookie `Secure`; only for a site reached exclusively over HTTPS |
 | `LOGIN_ATTEMPTS` | `5` | Failed sign-ins per username and address before a wait |
+| `LOGIN_ADDRESS_ATTEMPTS` | `20` | Failed sign-ins from one address, whatever the username, before a wait; `0` turns it off |
 | `LOGIN_WINDOW` | `900` | Seconds a failed sign-in is remembered |
 | `REQUEST_TIMEOUT` | `30` | Seconds a connection may send nothing before it is closed |
 | `PASSWORD_HASHERS` | `2` | Passwords hashed at once (signing in, signing up, resets), so a flood of them takes this many cores at most |

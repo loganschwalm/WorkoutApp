@@ -61,6 +61,11 @@ SECURE_COOKIES = env_flag('SECURE_COOKIES', False)
 # is LOGIN_WINDOW seconds old. Behind a reverse proxy every request shares the proxy's address.
 LOGIN_ATTEMPTS = int(os.environ.get('LOGIN_ATTEMPTS', '5'))
 LOGIN_WINDOW = int(os.environ.get('LOGIN_WINDOW', str(15 * 60)))
+# Failed sign-ins from one address across every username before it waits the same way, so trying one common password
+# against many usernames gets no further than many passwords against one. Not cleared by signing in, which an account of
+# one's own could otherwise do between guesses. Behind a reverse proxy every request shares the proxy's address, and one
+# person's guessing would make everyone wait: 0 turns it off.
+LOGIN_ADDRESS_ATTEMPTS = int(os.environ.get('LOGIN_ADDRESS_ATTEMPTS', '20'))
 # Seconds a connection may sit without sending anything before it is closed. Every connection holds a thread, so
 # without this, anyone who can reach the port could open silent connections until the server ran out of room.
 REQUEST_TIMEOUT = int(os.environ.get('REQUEST_TIMEOUT', '30'))
@@ -903,6 +908,8 @@ class Throttle:
 
 # Failed sign-ins per (client address, username).
 login_throttle = Throttle(LOGIN_ATTEMPTS, LOGIN_WINDOW)
+# Failed sign-ins per client address, whatever the username (LOGIN_ADDRESS_ATTEMPTS; off at 0).
+address_throttle = Throttle(LOGIN_ADDRESS_ATTEMPTS, LOGIN_WINDOW) if LOGIN_ADDRESS_ATTEMPTS > 0 else None
 # Reset codes asked for per email address, whether or not an account uses it, so the limit never says which do.
 reset_throttle = Throttle(RESET_EMAILS, 60 * 60)
 # Wrong reset codes per email address, whether or not an account uses it, so this limit never says which do either.
@@ -1361,15 +1368,22 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
         with connection() as database:
             row = find_account(database, login)
             # Keyed by the account rather than what was typed, so its email and its username share one limit.
-            throttle_key = (self.client_address[0], (row['username'] if row else login).lower())
+            address = self.client_address[0]
+            throttle_key = (address, (row['username'] if row else login).lower())
+            # Refused before the password is even checked, so guessing cannot continue during the wait.
+            wait = address_throttle.retry_after(address) if address_throttle else 0
+            if wait:
+                self.send_wait(wait, 'Too many failed sign-ins from this address.')
+                return
             wait = login_throttle.retry_after(throttle_key)
             if wait:
-                # Refused before the password is even checked, so guessing cannot continue during the wait.
                 self.send_wait(wait, 'Too many failed sign-ins.')
                 return
             matches = password_matches(password, row['password_hash'] if row else DUMMY_HASH)
             if not row or not matches:
                 login_throttle.record(throttle_key)
+                if address_throttle:
+                    address_throttle.record(address)
                 self.send_json(HTTPStatus.UNAUTHORIZED, {'error': 'Wrong email, username or password.'})
                 return
             login_throttle.clear(throttle_key)

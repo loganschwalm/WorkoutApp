@@ -254,6 +254,30 @@ def run_security(t, check, request):
     after = [login(quick, 'target', f'after-password-{n}')[0] for n in range(5)]
     check('that success forgot the four, so five more tries are each just refused', after == [401] * 5, after)
 
+    # ------------------------------------------------------------------ A38 one address, many usernames
+    print('A38 one address trying many usernames waits too, and signing in does not end that')
+    spread = t.start_server('spread.db', {'LOGIN_ADDRESS_ATTEMPTS': '4', 'LOGIN_WINDOW': str(window)})
+    for name in ('target', 'second'):
+        spread.api('POST', '/api/auth/register', {'username': name, 'email': f'{name}@example.test', 'password': 'right-password'})
+    statuses = [login(spread, 'target', 'wrong-guess')[0]]
+    first_failure = time.monotonic()
+    statuses += [login(spread, name, 'wrong-guess')[0] for name in ('second', 'nobody-1', 'nobody-2')]
+    check('four wrong sign-ins, each a different username, are each just refused', statuses == [401] * 4, statuses)
+    status, headers, reply = login(spread, 'nobody-3', 'wrong-guess')
+    check('the fifth, under yet another username, is told to wait, saying why, with Retry-After', status == 429
+          and 'from this address' in (reply or {}).get('error', '') and 0 < int(headers.get('retry-after', 0)) <= window + 1, f"{status} {headers.get('retry-after')} {reply}")
+    check('and so is the right password for a real account', login(spread, 'second', 'right-password')[0] == 429)
+    time.sleep(max(0, first_failure + window + 0.5 - time.monotonic()))
+    check('it lifts once the failures are older than the window', login(spread, 'second', 'right-password')[0] == 200)
+    statuses = [login(spread, f'nobody-{n}', 'wrong-guess')[0] for n in range(2)] + [login(spread, 'target', 'right-password')[0]]
+    statuses += [login(spread, f'nobody-{n}', 'wrong-guess')[0] for n in range(2, 5)]
+    check('signing into an account between guesses does not start the count again', statuses == [401, 401, 200, 401, 401, 429], statuses)
+    spread.stop()
+    unlimited = t.start_server('unlimited.db', {'LOGIN_ADDRESS_ATTEMPTS': '0'})
+    statuses = [login(unlimited, f'nobody-{n}', 'wrong-guess')[0] for n in range(8)]
+    check('LOGIN_ADDRESS_ATTEMPTS=0 turns it off, for a server behind a shared reverse proxy', statuses == [401] * 8, statuses)
+    unlimited.stop()
+
     # ------------------------------------------------------------------ A33 password hashing cannot take every core
     print('A33 a flood of sign-ins can only take a set number of cores, and signed-in pages stay quick')
     capped = t.start_server('capped.db', {'PASSWORD_HASHERS': '1', 'PASSWORD_HASH_WAIT': '0.3'})

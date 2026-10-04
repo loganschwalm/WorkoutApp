@@ -20,13 +20,16 @@ class AppServer:
         self.base_url = f'http://127.0.0.1:{self.port}'
         # Mail settings from the shell are left out, so a test server can only email the sink a suite gives it.
         inherited = {name: value for name, value in os.environ.items() if not name.startswith('SMTP_')}
-        self.env = dict(
-            inherited,
-            PORT=str(self.port),
-            WORKOUT_DB=db_path,
-            APP_ROOT=frontend_dir or os.path.join(REPO_ROOT, 'frontend'),
+        self.env = {
+            **inherited,
+            'PORT': str(self.port),
+            'WORKOUT_DB': db_path,
+            'APP_ROOT': frontend_dir or os.path.join(REPO_ROOT, 'frontend'),
+            # Every suite signs in from 127.0.0.1, wrong passwords and all, so one address's limit across usernames would
+            # end up deciding checks about something else. The checks of that limit give their server a low one.
+            'LOGIN_ADDRESS_ATTEMPTS': '10000',
             **(env or {}),
-        )
+        }
         self.process = subprocess.Popen(
             [sys.executable, os.path.join(REPO_ROOT, 'backend', 'server.py')],
             env=self.env,

@@ -236,6 +236,10 @@ if [[ ! -f /etc/workout-tracker/workout-tracker.env ]]; then
 #LOGIN_ATTEMPTS=5
 #LOGIN_WINDOW=900
 #
+# Failed sign-ins from one address, whatever the username, before it waits too. 0 turns this off, for a server behind a
+# reverse proxy, where every request comes from the proxy's address:
+#LOGIN_ADDRESS_ATTEMPTS=20
+#
 # Passwords hashed at once, so a flood of sign-ins cannot take every core, and how long (seconds) one waits its turn:
 #PASSWORD_HASHERS=2
 #PASSWORD_HASH_WAIT=5
