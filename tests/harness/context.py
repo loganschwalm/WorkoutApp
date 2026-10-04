@@ -114,6 +114,7 @@ class AppTest:
             self.cdp.send('Fetch.enable', patterns=[
                 {'urlPattern': '*/api/*', 'requestStage': 'Request'},
                 {'urlPattern': '*/api/workouts', 'requestStage': 'Response'},
+                {'urlPattern': '*/api/state', 'requestStage': 'Response'},
             ])
         self.set_cookie(self.token)
 

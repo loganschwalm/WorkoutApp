@@ -245,9 +245,11 @@ function readLocalState(part) {
 
 function saveLocalState(part, value) {
   const record = readLocalState(part);
-  // The copy this change starts from: the one last loaded or uploaded, kept while changes wait to go up. A part never
-  // loaded here, or changed by a version from before bases, has none, and its change replaces the server's whole.
-  const base = !record ? {} : !record.dirty ? { base:record.value } : 'base' in record ? { base:record.base } : {};
+  // The copy this change starts from: the one last loaded or uploaded, kept while changes wait to go up, with any copies
+  // sent meanwhile that have had no answer yet. A part never loaded here, or changed by a version from before bases, has
+  // none, and its change replaces the server's whole.
+  const base = !record ? {} : !record.dirty ? { base:record.value }
+    : { ...('base' in record ? { base:record.base } : {}), ...(Array.isArray(record.sent) ? { sent:record.sent } : {}) };
   writeLocal(localKey(part), { value, dirty:true, stamp:`${Date.now()}-${++changeCounter}`, ...base });
   scheduleStateSync(0);
 }
@@ -270,8 +272,15 @@ async function syncAccountState() {
   try {
     const body = Object.fromEntries(dirty.map(([part, record]) => {
       const fill = accountStateFill[part] || (value => value);
-      return [part, { value:fill(record.value), ...('base' in record ? { base:fill(record.base) } : {}) }];
+      // Copies sent before without an answer go too: the server may have stored them (see merge_values in server.py).
+      const unanswered = 'base' in record && Array.isArray(record.sent) && record.sent.length ? { sent:record.sent.map(fill) } : {};
+      return [part, { value:fill(record.value), ...('base' in record ? { base:fill(record.base) } : {}), ...unanswered }];
     }));
+    // Noted before it goes, since its answer may never come (the page closed, the connection dropped) though the server
+    // stored it: a change made after it, even one back to how things were, is then still told apart from the base.
+    dirty.forEach(([part, record]) => {
+      if ('base' in record) writeLocal(localKey(part), { ...record, sent:[...(Array.isArray(record.sent) ? record.sent : []), record.value].slice(-5) });
+    });
     const response = await syncFetch('/api/state', { method:'PATCH', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(body) });
     if (!response.ok) throw new Error(`Settings sync failed (${response.status}).`);
     merged = await response.json().catch(() => null);
@@ -282,7 +291,10 @@ async function syncAccountState() {
       // it, rather than taking the server's merged one under it; the next page load brings that.
       if (latest.stamp === record.stamp) writeLocal(localKey(part), { value:latest.value, dirty:false, stamp:latest.stamp });
       // Changed while it went up: still to go, now from what just went, so the next upload carries only what came after.
-      else writeLocal(localKey(part), { ...latest, base:record.value });
+      else {
+        const { sent, ...waiting } = latest;
+        writeLocal(localKey(part), { ...waiting, base:record.value });
+      }
     });
     stateRetryCount = 0;
   } catch (error) {

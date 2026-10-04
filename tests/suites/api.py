@@ -1683,6 +1683,20 @@ def run_state_merge(t, check, request):
     merged = patch({'program': {'base': base, 'value': None}})
     check('ending the program on one device ends it, whatever the other did meanwhile', merged['program'] is None, merged['program'])
 
+    base = start_from('settings', {'soundEnabled': True, 'weeklyGoal': 3, 'unit': 'lbs'})
+    patch({'settings': {'base': base, 'value': {**base, 'soundEnabled': False}}})
+    api('PATCH', '/api/state', {'settings': {'base': base, 'value': {**base, 'unit': 'kg'}}}, me)
+    merged = patch({'settings': {'base': base, 'sent': [{**base, 'soundEnabled': False}], 'value': base}})
+    check('a change stored though its answer never came, then changed back: the change back counts, sent with the copy that went',
+          merged['settings']['soundEnabled'] is True, merged['settings'])
+    check("and another device's change meanwhile stays", merged['settings']['unit'] == 'kg', merged['settings'])
+    merged = patch({'settings': {'base': base, 'value': {**base, 'soundEnabled': False}}})
+    merged = patch({'settings': {'base': base, 'value': base}})
+    check('without it, the change back would look like no change at all, and the lost one would stand', merged['settings']['soundEnabled'] is False, merged['settings'])
+    base = start_from('settings', {'weeklyGoal': 3})
+    merged = patch({'settings': {'base': base, 'sent': [{'weeklyGoal': 4}], 'value': {'weeklyGoal': 4}}})
+    check('a copy sent before that never arrived at all still goes up with the next', merged['settings'] == {'weeklyGoal': 4}, merged['settings'])
+
     merged = patch({'goals': {'value': {'deadlift': goal('Deadlift', 405)}}})
     check('a part sent without the copy it came from replaces the stored one whole, as before', merged['goals'] == {'deadlift': goal('Deadlift', 405)}, merged['goals'])
     merged = api('PUT', '/api/state', {'goals': {}}, me)[0]
@@ -1717,7 +1731,9 @@ def run_state_merge(t, check, request):
           size > 1024 * 1024 and status_of(body) == 200 and len(stored()['bodyweight']) == 30000, size)
 
     refused = [('a part that is not one', {'diary': {'value': {}}}), ('a part that is not an object', {'settings': 5}),
-               ('a part without its value', {'settings': {'base': {}}}), ('a value that is not valid', {'settings': {'base': {}, 'value': []}})]
+               ('a part without its value', {'settings': {'base': {}}}), ('a value that is not valid', {'settings': {'base': {}, 'value': []}}),
+               ('copies sent that are not a list', {'settings': {'base': {}, 'sent': {}, 'value': {}}}),
+               ('copies sent without the base they followed', {'settings': {'sent': [{}], 'value': {}}})]
     for label, body in refused:
         check(f'PATCH refuses {label}', status_of(body) == 400, status_of(body))
     check('and a change sent from another site', status_of({'settings': {'value': {}}}, {'Sec-Fetch-Site': 'cross-site'}) == 403)

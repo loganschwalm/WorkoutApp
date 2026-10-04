@@ -152,7 +152,8 @@ class CDP:
         self.console = []
         self.block_api = False          # fail every intercepted API request
         self.block_paths = []           # fail only requests whose URL contains one of these
-        self.drop_responses = 0         # discard this many successful POST responses
+        self.drop_responses = 0         # discard this many successful responses to requests of drop_method
+        self.drop_method = 'POST'
         self.dropped = 0
         self.stall_paths = []           # hold GETs whose URL contains one of these, unanswered, like a stalled connection
         self.stalled = []               # request ids held so far; release_stalled() lets them fail
@@ -215,7 +216,7 @@ class CDP:
         self.n += 1
         request_id = params['requestId']
         if 'responseStatusCode' in params:
-            if self.drop_responses and params['request']['method'] == 'POST':
+            if self.drop_responses and params['request']['method'] == self.drop_method:
                 self.drop_responses -= 1
                 self.dropped += 1
                 command, extra = 'Fetch.failRequest', {'errorReason': 'ConnectionReset'}

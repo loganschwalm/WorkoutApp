@@ -240,9 +240,24 @@ def run(t):
     check('once it is up, the change made meanwhile starts from it', cdp.wait("readLocalState('settings').dirty && readLocalState('settings').base.restDuration === 105"),
           cdp.ev("JSON.stringify(readLocalState('settings'))"))
     check('the server has the first', server_state()['settings'].get('restDuration') == 105, server_state()['settings'])
-    other_device(restDuration=100)
+    other_device(restDuration=120)
     cdp.wait('window.__held.length === 1')
     cdp.ev('window.__held.shift()()')
     check("the second goes up without putting back the first over the other device's later change",
-          wait_for(lambda: server_state()['settings'].get('weeklyGoal') == 6) and server_state()['settings'].get('restDuration') == 100, server_state()['settings'])
+          wait_for(lambda: server_state()['settings'].get('weeklyGoal') == 6) and server_state()['settings'].get('restDuration') == 120, server_state()['settings'])
     check('and nothing is left waiting here', cdp.wait("!readLocalState('settings').dirty"), cdp.ev("JSON.stringify(readLocalState('settings'))"))
+
+    # ------------------------------------------------------------------ S10 an upload whose answer never came
+    print('S10 a change stored though its answer never came, then changed back: the change back still reaches the server')
+    loaded()
+    before = cdp.ev('getWorkoutSettings().weeklyGoal')
+    cdp.drop_method, cdp.drop_responses, dropped = 'PATCH', 1, cdp.dropped
+    save_settings(weeklyGoalSetting=2)
+    check('the server stores the change, and its answer is lost on the way back',
+          wait_for(lambda: server_state()['settings'].get('weeklyGoal') == 2 and cdp.dropped == dropped + 1), server_state()['settings'].get('weeklyGoal'))
+    save_settings(weeklyGoalSetting=before)
+    loaded()  # the page is closed and opened again before anything else is heard
+    check('the change back, to the very value it started from, reaches the server and shows',
+          wait_for(lambda: server_state()['settings'].get('weeklyGoal') == before) and cdp.ev('getWorkoutSettings().weeklyGoal') == before,
+          f"{server_state()['settings'].get('weeklyGoal')} {cdp.ev('getWorkoutSettings().weeklyGoal')}")
+    cdp.drop_method = 'POST'

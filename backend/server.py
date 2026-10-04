@@ -686,27 +686,28 @@ MERGE_SPECS = {
 MISSING = object()
 
 
-def merge_values(base, mine, theirs, depth, identity=()):
-    """`mine` (this device's copy, changed from `base`) merged with `theirs` (the server's, which may also have changed
-    from `base`). What only one side changed is kept; where both changed the same thing, `mine` wins, as the later.
-    Objects are merged key by key `depth` levels down. When `identity` keys differ, the two are different runs of a
-    program, which are not mixed: this device's own new run wins whole, and edits it made to a run the server has since
-    moved on from are dropped."""
-    if mine == base:
+def merge_values(bases, mine, theirs, depth, identity=()):
+    """`mine` (this device's copy) merged with `theirs` (the server's). `bases` are the copies this device's change may
+    have started from: the one the server last confirmed having, and any sent since whose answer never came back (the
+    page closed, the connection dropped), which the server may have stored. What only one side changed is kept; where
+    both changed the same thing, `mine` wins, as the later. A value is this device's change if it differs from any base,
+    so a value changed and then changed back, before an answer that never came, still counts; and the server's is
+    unchanged if it matches any. Objects are merged key by key `depth` levels down. Copies whose `identity` keys differ
+    are different runs of a program, which are not mixed: the side that moved to another run wins whole."""
+    if all(mine == base for base in bases):
         return theirs
-    if theirs == base or mine == theirs:
+    if mine == theirs or any(theirs == base for base in bases):
         return mine
     if depth <= 0 or not isinstance(mine, dict) or not isinstance(theirs, dict):
         return mine
-    base = base if isinstance(base, dict) else {}
-    if any(mine.get(key, MISSING) != base.get(key, MISSING) for key in identity):
-        return mine
-    if any(theirs.get(key, MISSING) != base.get(key, MISSING) for key in identity):
-        return theirs
+    bases = [base if isinstance(base, dict) else {} for base in bases]
+    if any(mine.get(key, MISSING) != theirs.get(key, MISSING) for key in identity):
+        moved = any(mine.get(key, MISSING) != base.get(key, MISSING) for base in bases for key in identity)
+        return mine if moved else theirs
     merged = {}
     # The server's order, then what this device added.
     for key in [*theirs, *(key for key in mine if key not in theirs)]:
-        value = merge_values(base.get(key, MISSING), mine.get(key, MISSING), theirs.get(key, MISSING), depth - 1)
+        value = merge_values([base.get(key, MISSING) for base in bases], mine.get(key, MISSING), theirs.get(key, MISSING), depth - 1)
         if value is not MISSING:
             merged[key] = value
     return merged
@@ -724,15 +725,15 @@ def keyed_by_id(items):
     return keyed
 
 
-def merge_part(part, base, mine, theirs):
+def merge_part(part, bases, mine, theirs):
     spec = MERGE_SPECS[part]
     if spec.get('by_id'):
-        keyed = [keyed_by_id(value) for value in (base, mine, theirs)]
+        keyed = [keyed_by_id(value) for value in (*bases, mine, theirs)]
         # A list with an item that has no id (from before templates had them) cannot be told apart item by item.
         if None in keyed:
-            return merge_values(base, mine, theirs, 0)
-        return list(merge_values(*keyed, spec['depth']).values())
-    return merge_values(base, mine, theirs, spec['depth'], spec.get('identity', ()))
+            return merge_values(bases, mine, theirs, 0)
+        return list(merge_values(keyed[:-2], keyed[-2], keyed[-1], spec['depth']).values())
+    return merge_values(bases, mine, theirs, spec['depth'], spec.get('identity', ()))
 
 
 def delete_account_rows(database, user_id):
@@ -1689,9 +1690,10 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
         if path != '/api/state':
             self.send_json(HTTPStatus.NOT_FOUND, {'error': 'Endpoint not found.'})
             return
-        # {part: {value, base}}: each part as this device changed it, and the copy it started from, so the change can be
-        # merged with any made on another device since (see merge_part). A part sent without its base (a change made
-        # before this device had loaded the server's copy) replaces the stored one, as PUT does.
+        # {part: {value, base, sent}}: each part as this device changed it, the copy it started from, and any copies sent
+        # since without an answer, so the change can be merged with any made on another device (see merge_values). A part
+        # sent without its base (a change made before this device had loaded the server's copy) replaces the stored one,
+        # as PUT does.
         data = self.read_json(MAX_STATE_CHANGE)
         changes = {}
         for part, change in data.items():
@@ -1699,6 +1701,8 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
                 raise BadRequest(f'{part} is not part of the account state.')
             if not isinstance(change, dict) or 'value' not in change:
                 raise BadRequest(f'{part} must be an object with its value, and the base it was changed from.')
+            if not isinstance(change.get('sent', []), list) or ('sent' in change and 'base' not in change):
+                raise BadRequest(f'{part}.sent must be a list of copies sent since its base.')
             changes[part] = change
         validate_state({part: change['value'] for part, change in changes.items()})
         with connection() as database:
@@ -1707,7 +1711,7 @@ class AppHandler(http.server.SimpleHTTPRequestHandler):
             state = load_state(database, user['id'])
             for part, change in changes.items():
                 mine = change['value']
-                merged = merge_part(part, change['base'], mine, state[part]) if 'base' in change else mine
+                merged = merge_part(part, [change['base'], *change.get('sent', [])], mine, state[part]) if 'base' in change else mine
                 if merged is not mine:
                     # A merge of two valid copies can still break a limit (more goals than are allowed, say); this
                     # device's own copy, already checked, is kept then, as it would have been without merging.

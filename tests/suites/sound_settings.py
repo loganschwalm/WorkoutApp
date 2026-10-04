@@ -25,8 +25,10 @@ def run(t):
 
     def open_settings(page='/index.html'):
         cdp.goto(page)
-        cdp.wait("typeof getWorkoutSettings === 'function'")
-        cdp.pause(0.5)
+        cdp.wait("typeof getWorkoutSettings === 'function' && !!window.serverStateReady")
+        # Opened once the account's settings have loaded, so the form shows them rather than this device's older copy.
+        cdp.ev('window.serverStateReady.then(() => true)')
+        cdp.pause(0.3)
         cdp.ev("document.getElementById('settingsButton').click()")
 
     def form():

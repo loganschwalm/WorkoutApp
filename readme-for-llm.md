@@ -1353,7 +1353,10 @@ browser's site data only loses whatever had not uploaded yet.
 
 Settings, templates, the program, notes, goals, bodyweight and the exercise library go up with `PATCH /api/state`: each
 changed part as `{"value": ..., "base": ...}`, the part as changed and the copy the change started from (the one last
-loaded or uploaded, kept beside the change in `localStorage` until it is uploaded). The server merges the change into
+loaded or uploaded, kept beside the change in `localStorage` until it is uploaded), with `"sent": [...]`, any copies
+uploaded since whose answer never came back (the page closed, or the connection dropped on the way back), which the server
+may have stored: a value that differs from any of them is this device's change, so a setting changed and changed back
+before an answer arrived still goes up. The server merges the change into
 its own copy in one locked transaction (`merge_part` in `server.py`), so two devices sending at once both keep their
 changes, and answers with the merged state. A part sent without `base` replaces the stored one whole, as `PUT
 /api/state` does for pages from before.
