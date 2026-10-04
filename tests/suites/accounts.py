@@ -16,8 +16,7 @@ MAIL = True
 def run(t):
     cdp, check, api, mail = t.cdp, t.check, t.api, t.mail
 
-    def text(element):
-        return cdp.ev(f"document.getElementById('{element}').textContent")
+    text = t.text
 
     def shown(element):
         return cdp.ev(f"getComputedStyle(document.getElementById('{element}')).display !== 'none'")

@@ -27,14 +27,7 @@ def run(t):
     def edit_set(index, field, value):
         cdp.ev(f"(() => {{ const i = document.querySelector('#completedSets [data-set=\"{index}\"][data-field=\"{field}\"]'); i.value = '{value}'; i.dispatchEvent(new Event('change', {{ bubbles: true }})); }})()")
 
-    def field(idn):
-        return cdp.ev(f"document.getElementById('{idn}').value")
-
-    def text(idn):
-        return cdp.ev(f"document.getElementById('{idn}').textContent")
-
-    def visible(idn):
-        return cdp.ev(f"!document.getElementById('{idn}').hidden")
+    field, text, visible = t.field, t.text, t.visible
 
     def newest_workout(known):
         fresh = [w for w in workouts() if w['id'] not in known]

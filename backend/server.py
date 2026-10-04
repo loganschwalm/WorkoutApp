@@ -1156,7 +1156,7 @@ MAX_SUBSCRIPTIONS = 10
 PUSH_WORKERS = 8
 push_pool = concurrent.futures.ThreadPoolExecutor(max_workers=PUSH_WORKERS, thread_name_prefix='push')
 # The least time between one test notification and the next, per account, in seconds.
-TEST_PUSH_WAIT = 3
+TEST_PUSH_WAIT = float(os.environ.get('PUSH_TEST_WAIT', '3'))
 push_test_times = {}
 push_test_lock = threading.Lock()
 

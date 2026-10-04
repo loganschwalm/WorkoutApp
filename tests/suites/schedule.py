@@ -23,17 +23,7 @@ PPL = {'definition': 'reddit-ppl', 'startedAt': 1000, 'cycle': 1, 'lastRollover'
 def run(t):
     cdp, check, api, token, wait_for = t.cdp, t.check, t.api, t.token, t.wait_for
 
-    def text(idn):
-        return cdp.ev(f"document.getElementById('{idn}').textContent")
-
-    def visible(idn):
-        return cdp.ev(f"!document.getElementById('{idn}').hidden")
-
-    def field(idn):
-        return cdp.ev(f"document.getElementById('{idn}').value")
-
-    def click(idn):
-        cdp.ev(f"document.getElementById('{idn}').click()")
+    text, visible, field, click = t.text, t.visible, t.field, t.click
 
     def settings_open():
         return cdp.ev("!document.getElementById('settingsModal').hidden")

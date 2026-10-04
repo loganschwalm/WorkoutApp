@@ -13,20 +13,7 @@ def run(t):
     cdp, check, api, token, wait_for, safe_ev = t.cdp, t.check, t.api, t.token, t.wait_for, t.safe_ev
     open_tracker, start, seed, ex = t.open_tracker, t.start, t.seed, t.ex
 
-    def text(idn):
-        return cdp.ev(f"document.getElementById('{idn}').textContent")
-
-    def field(idn):
-        return cdp.ev(f"document.getElementById('{idn}').value")
-
-    def visible(idn):
-        return cdp.ev(f"!document.getElementById('{idn}').hidden")
-
-    def set_field(idn, value):
-        cdp.ev(f"(() => {{ const e = document.getElementById('{idn}'); e.value = {json.dumps(str(value))}; e.dispatchEvent(new Event('input', {{ bubbles: true }})); e.dispatchEvent(new Event('change', {{ bubbles: true }})); }})()")
-
-    def click(idn):
-        cdp.ev(f"document.getElementById('{idn}').click()")
+    text, field, visible, set_field, click = t.text, t.field, t.visible, t.set_field, t.click
 
     def log(weight, reps):
         cdp.ev(f"document.getElementById('activeWeight').value = '{weight}'; document.getElementById('completedReps').value = '{reps}'; document.getElementById('completeSetBtn').click();")

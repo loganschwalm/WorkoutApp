@@ -144,6 +144,19 @@ class CDP:
       window.prompt = message => { log('prompt', message); return null; };
     })();"""
 
+    # Makes Date say it is `offset` milliseconds from the real time, ticking on from there: so a page can be shown any day, and
+    # every timer and comparison in it still works. new Date() and Date.now() move; a Date made from a value is untouched.
+    PIN_CLOCK = """(() => {
+      if (window.__realDate) return;
+      const Real = Date, offset = __OFFSET__;
+      class PinnedDate extends Real {
+        constructor(...args) { if (args.length === 0) super(Real.now() + offset); else super(...args); }
+        static now() { return Real.now() + offset; }
+      }
+      window.__realDate = Real;
+      window.Date = PinnedDate;
+    })();"""
+
     def __init__(self, websocket_url, base_url):
         self.ws = websocket.create_connection(websocket_url, timeout=30, suppress_origin=True)
         self.base_url = base_url
@@ -162,6 +175,7 @@ class CDP:
         self._answer = True
         self._stub_id = None
         self._stubs_ready = False
+        self._clock_id = None
 
     # ---- dialogs ----------------------------------------------------------
 
@@ -183,6 +197,23 @@ class CDP:
         self._stub_id = self._send('Page.addScriptToEvaluateOnNewDocument', source=source)['result']['identifier']
         # addScriptToEvaluateOnNewDocument only affects future documents; update the current one too.
         self._send('Runtime.evaluate', expression='window.__answer = ' + ('true' if self._answer else 'false'))
+
+    # ---- time -------------------------------------------------------------
+
+    def pin_clock(self, milliseconds):
+        """From the next page loaded, the page's clock says it is this time (milliseconds since 1970) and goes on from there."""
+        self.unpin_clock()
+        source = self.PIN_CLOCK.replace('__OFFSET__', str(int(milliseconds - time.time() * 1000)))
+        self._clock_id = self._send('Page.addScriptToEvaluateOnNewDocument', source=source)['result']['identifier']
+
+    def unpin_clock(self):
+        if self._clock_id:
+            self._send('Page.removeScriptToEvaluateOnNewDocument', identifier=self._clock_id)
+            self._clock_id = None
+
+    def set_time_zone(self, zone):
+        """The page's time zone, by name (America/Chicago); None goes back to this machine's."""
+        self._send('Emulation.setTimezoneOverride', timezoneId=zone or '')
 
     # ---- protocol ---------------------------------------------------------
 

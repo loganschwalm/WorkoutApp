@@ -13,11 +13,7 @@ def run(t):
     cdp, check, api, token, wait_for = t.cdp, t.check, t.api, t.token, t.wait_for
     open_tracker, seed, ex = t.open_tracker, t.seed, t.ex
 
-    def text(idn):
-        return cdp.ev(f"document.getElementById('{idn}').textContent")
-
-    def visible(idn):
-        return cdp.ev(f"!document.getElementById('{idn}').hidden")
+    text, visible = t.text, t.visible
 
     def set_field(idn, value):
         cdp.ev(f"(() => {{ const e = document.getElementById('{idn}'); e.value = {json.dumps(str(value))}; e.dispatchEvent(new Event('input', {{ bubbles: true }})); }})()")

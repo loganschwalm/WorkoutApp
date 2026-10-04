@@ -483,7 +483,7 @@ tests give the server one). An account has at most 10 subscriptions (the newest 
 | `GET /api/push/key` | The server's VAPID public key, which a browser subscribes against |
 | `POST /api/push/subscribe` | `{endpoint, keys: {p256dh, auth}, timeZone, utcOffset}`: remembers this device (asking again updates it) |
 | `POST /api/push/unsubscribe` | `{endpoint}`: forgets it |
-| `POST /api/push/test` | Sends a notification to every device of the account now; at most one every 3 seconds |
+| `POST /api/push/test` | Sends a notification to every device of the account now; at most one every `PUSH_TEST_WAIT` seconds (3) |
 
 ### Cardio
 
@@ -1091,6 +1091,7 @@ The server reads these environment variables:
 | `SMTP_USERNAME` / `SMTP_PASSWORD` | *(none)* | Login for the mail server; leave unset if it needs none |
 | `SMTP_FROM` | `SMTP_USERNAME` | Sender of the emails, e.g. `Workout Tracker <workouts@example.com>` |
 | `VAPID_SUBJECT` | `mailto:` the `SMTP_FROM` address, else `mailto:admin@example.com` | Who the server tells the push services it is, for reminders. Some push services want a real contact: `mailto:you@example.com` or an `https://` address |
+| `PUSH_TEST_WAIT` | `3` | The least time, in seconds, between one test notification (Settings) and the next, per account |
 | `REMINDER_TICK_SECONDS` | `60` | How often the server looks for training days to remind about |
 | `PUSH_ALLOWED_HOSTS` | *(none)* | Extra hosts (comma-separated, each also matching its subdomains) a push subscription may name, over `http` or `https`. The browser makers' own push services are always allowed, over `https` only |
 

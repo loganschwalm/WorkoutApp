@@ -33,17 +33,7 @@ def run(t):
     cdp, check = t.cdp, t.check
     open_tracker, start = t.open_tracker, t.start
 
-    def text(idn):
-        return cdp.ev(f"document.getElementById('{idn}').textContent")
-
-    def field(idn):
-        return cdp.ev(f"document.getElementById('{idn}').value")
-
-    def visible(idn):
-        return cdp.ev(f"!document.getElementById('{idn}').hidden")
-
-    def click(idn):
-        cdp.ev(f"document.getElementById('{idn}').click()")
+    text, field, visible, click = t.text, t.field, t.visible, t.click
 
     def fill(weight, reps):
         cdp.ev(f"document.getElementById('activeWeight').value = '{weight}'; document.getElementById('completedReps').value = '{reps}';")

@@ -1,5 +1,7 @@
 """The fixture a suite runs against: a server, a browser, seed data and page helpers."""
 
+import datetime
+import json
 import os
 import shutil
 import tempfile
@@ -28,6 +30,17 @@ def exercise(name, weight, reps, sets):
             'sets': [{'reps': r, 'weight': w} for r, w in sets]}
 
 
+def wait_for_safe_day(margin=180):
+    """Waits out the last few minutes before midnight (this machine's), so that "today" does not change under a suite: the days in
+    what a suite seeds and expects are counted from now. Costs nothing at any other time."""
+    now = time.time()
+    local = time.localtime(now)
+    seconds_to_midnight = 86400 - (local.tm_hour * 3600 + local.tm_min * 60 + local.tm_sec)
+    if seconds_to_midnight < margin:
+        print(f'  ({seconds_to_midnight} s to midnight: waiting for the new day, so no suite is split by it)', flush=True)
+        time.sleep(seconds_to_midnight + 2)
+
+
 class Checker:
     def __init__(self):
         self.results = []
@@ -50,6 +63,7 @@ class AppTest:
     """
 
     def __init__(self, frontend_dir=None, intercept=False, browser=True, mail=False):
+        wait_for_safe_day()
         self.workdir = tempfile.mkdtemp(prefix='workout-tests-')
         self.frontend_dir = frontend_dir
         self.checker = Checker()
@@ -162,6 +176,32 @@ class AppTest:
                 return True
             self.cdp.pause(0.3)
         return False
+
+    # ---- elements, by id, as a suite asks of the page
+    # The same few questions of every page, which the suites used to each write out: what an element says, what is in a field,
+    # whether it is showing (not hidden), a tap on it, and typing into a field (which a page hears as both input and change).
+
+    def text(self, idn):
+        return self.cdp.ev(f"document.getElementById('{idn}').textContent")
+
+    def field(self, idn):
+        return self.cdp.ev(f"document.getElementById('{idn}').value")
+
+    def visible(self, idn):
+        return self.cdp.ev(f"!document.getElementById('{idn}').hidden")
+
+    def click(self, idn):
+        self.cdp.ev(f"document.getElementById('{idn}').click()")
+
+    def set_field(self, idn, value):
+        self.cdp.ev(f"(() => {{ const e = document.getElementById('{idn}'); e.value = {json.dumps(str(value))}; "
+                    "e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true })); })()")
+
+    def pin_clock(self, when):
+        """From the next page loaded, the page's clock says it is `when`, a datetime (UTC if it has no zone). The server's clock, and
+        what a suite seeds through the API, stay real: this is for checking how a page counts days, with nothing seeded by date."""
+        when = when if when.tzinfo else when.replace(tzinfo=datetime.timezone.utc)
+        self.cdp.pin_clock(when.timestamp() * 1000)
 
     def set_cookie(self, token):
         self.cdp.send('Network.setCookie', name='session', value=token, domain='127.0.0.1', path='/')

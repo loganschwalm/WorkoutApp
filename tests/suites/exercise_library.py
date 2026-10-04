@@ -30,9 +30,7 @@ def run(t):
         cookie = t.api('POST', '/api/auth/register', {'username': name, 'email': f'{name}@example.test', 'password': 'chalk-and-plates-42'})[1]
         return cookie.split('session=')[1].split(';')[0]
 
-    def field(idn):
-        return cdp.ev(f"document.getElementById('{idn}').textContent")
-
+    field = t.text
     # ------------------------------------------------------------------ L1 guesses from the name
     print('L1  an exercise\'s muscle and equipment are guessed from its name')
     settle('/progress.html', "typeof guessMuscle === 'function'")

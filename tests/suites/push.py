@@ -175,7 +175,7 @@ def run(t):
     print('S   subscriptions and the test notification')
     service = PushService()
     host = f'http://127.0.0.1:{service.server_address[1]}'
-    app = t.start_server('push.db', {'PUSH_ALLOWED_HOSTS': '127.0.0.1', 'REMINDER_TICK_SECONDS': '0.4'})
+    app = t.start_server('push.db', {'PUSH_ALLOWED_HOSTS': '127.0.0.1', 'REMINDER_TICK_SECONDS': '0.4', 'PUSH_TEST_WAIT': '0.5'})
     db_path = t.db_path('push.db')
 
     def signed_up(name):
@@ -268,17 +268,17 @@ def run(t):
     check('another test at once is asked to wait', status == 429 and 'Wait' in reply.get('error', ''), f'{status} {reply}')
     check('a different account is not held up by it, and has no phones to send to', post('/api/push/test', {}, other) == (200, {'devices': 0, 'sent': 0, 'forgotten': 0, 'failed': 0}))
 
-    time.sleep(3.1)
+    time.sleep(0.6)
     service.answers['/push/phone'] = [500]
     status, reply = post('/api/push/test', {}, owner)
     check('a push service that fails leaves the phone subscribed, and says so', status == 200 and reply['failed'] == 1 and reply['sent'] == 0
           and database('SELECT COUNT(*) FROM push_subscriptions')[0][0] == 1, f'{status} {reply}')
-    time.sleep(3.1)
+    time.sleep(0.6)
     service.answers['/push/phone'] = [410]
     status, reply = post('/api/push/test', {}, owner)
     check('one that says the phone is gone (410) has it forgotten', status == 200 and reply['forgotten'] == 1 and database('SELECT COUNT(*) FROM push_subscriptions')[0][0] == 0, f'{status} {reply}')
     phone.subscribe(owner)
-    time.sleep(3.1)
+    time.sleep(0.6)
     service.answers['/push/phone'] = [404]
     check('and so does a 404', post('/api/push/test', {}, owner)[1]['forgotten'] == 1 and database('SELECT COUNT(*) FROM push_subscriptions')[0][0] == 0)
 
@@ -424,7 +424,7 @@ def run(t):
     check('in about the time of one, not the sum of them', 1.8 < took < 6, took)
     check('each of them was sent its own', all(len(phone.messages()) == 1 for phone in slow_phones), [len(phone.messages()) for phone in slow_phones])
 
-    time.sleep(3.1)
+    time.sleep(0.6)
     unreachable = Phone('nowhere', offset)
     unreachable.endpoint = 'http://127.0.0.1:1/push/nowhere'
     unreachable.subscribe(token_many)

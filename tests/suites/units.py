@@ -17,14 +17,7 @@ def run(t):
     cdp, check, api, token, wait_for = t.cdp, t.check, t.api, t.token, t.wait_for
     open_tracker, safe_ev = t.open_tracker, t.safe_ev
 
-    def text(idn):
-        return cdp.ev(f"document.getElementById('{idn}').textContent")
-
-    def field(idn):
-        return cdp.ev(f"document.getElementById('{idn}').value")
-
-    def set_field(idn, value):
-        cdp.ev(f"(() => {{ const e = document.getElementById('{idn}'); e.value = {json.dumps(str(value))}; e.dispatchEvent(new Event('input', {{ bubbles: true }})); e.dispatchEvent(new Event('change', {{ bubbles: true }})); }})()")
+    text, field, set_field = t.text, t.field, t.set_field
 
     def choose_unit(unit):
         cdp.ev("document.getElementById('settingsButton').click()")

@@ -23,14 +23,7 @@ def run(t):
     open_tracker, safe_ev = t.open_tracker, t.safe_ev
     cdp.send('Page.addScriptToEvaluateOnNewDocument', source=RECORD_VIOLATIONS)
 
-    def text(idn):
-        return cdp.ev(f"document.getElementById('{idn}').textContent")
-
-    def visible(idn):
-        return cdp.ev(f"!document.getElementById('{idn}').hidden")
-
-    def field(idn):
-        return cdp.ev(f"document.getElementById('{idn}').value")
+    text, visible, field = t.text, t.visible, t.field
 
     def set_field(idn, value):
         cdp.ev(f"(() => {{ const e = document.getElementById('{idn}'); e.value = {json.dumps(str(value))}; e.dispatchEvent(new Event('change', {{ bubbles: true }})); }})()")

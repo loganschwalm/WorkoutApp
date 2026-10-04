@@ -11,8 +11,7 @@ INTERCEPT = False
 def run(t):
     cdp, check, api = t.cdp, t.check, t.api
 
-    def text(idn):
-        return cdp.ev(f"document.getElementById('{idn}').textContent")
+    text = t.text
 
     def hidden(idn):
         return cdp.ev(f"document.getElementById('{idn}').hidden")
