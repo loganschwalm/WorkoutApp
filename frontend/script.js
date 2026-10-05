@@ -407,15 +407,17 @@ async function finishWorkout() {
   // In seconds; a workout started before sessions were timed has no duration.
   if (activeSession.startedAt > 0 && finishedAt > activeSession.startedAt) workout.duration = Math.round((finishedAt - activeSession.startedAt) / 1000);
   if (activeSession.programDay) workout.program = programInfo(activeSession.programDay);
-  // Records are against everything before this workout, so they are worked out before it joins the bests.
+  // Records are against everything before this workout, so they are worked out before it joins the bests. So is whatever else
+  // the summary compares it with (its last time, the week so far).
   const records = newRecords(workout, personalBests);
+  const before = summaryBefore(workout);
   rememberLastPerformance(workout);
   rememberBests(workout);
   queuePendingWorkout(workout);
   // Marks the program's day done (and may start its next cycle); says what comes next.
   const programNote = activeSession.programDay ? completeProgramWorkout(activeSession) : '';
   closeActiveWorkout();
-  showWorkoutSummary(workout, records);
+  showWorkoutSummary(workout, records, before);
   const synced = await flushPendingWorkouts();
   const note = (skipped ? ` ${skipped} exercise${skipped === 1 ? '' : 's'} with no sets ${skipped === 1 ? 'was' : 'were'} left out.` : '')
     + (programNote ? ` ${programNote}` : '');

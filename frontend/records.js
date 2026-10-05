@@ -1,5 +1,5 @@
 // What was done before: each exercise's last performance (shown as "Last time" and used to fill in the next set), the
-// personal records a finished workout is compared with, and the summary shown when one is finished.
+// personal records a finished workout is compared with (its summary, shown when one is finished, is summary.js).
 
 let lastPerformance = {};
 let personalBests = {};
@@ -152,28 +152,6 @@ function newRecords(workout, before) {
   return records;
 }
 
-// ---- The summary of a finished workout -------------------------------------
-// How long it took, how much was done, and any new personal records; it stays until Done or the next workout starts.
-function showWorkoutSummary(workout, records) {
-  const shown = inUnit(workout);
-  const sets = shown.exercises.reduce((total, item) => total + item.sets.length, 0);
-  // Weight × reps of every set with a weight; a hold's seconds are not reps, so timed exercises are left out.
-  const setVolume = set => (Number(set.weight) || 0) * (Number(set.reps) || 0);
-  const volume = shown.exercises.filter(item => !isTimed(item)).reduce((total, item) => total + item.sets.reduce((sum, set) => sum + setVolume(set), 0), 0);
-  const stats = [
-    ...(workout.duration ? [[formatDuration(workout.duration), 'Time']] : []),
-    [String(shown.exercises.length), shown.exercises.length === 1 ? 'Exercise' : 'Exercises'],
-    [String(sets), sets === 1 ? 'Set' : 'Sets'],
-    ...(volume ? [[`${Math.round(volume).toLocaleString()} ${weightUnit()}`, 'Volume']] : [])
-  ];
-  $('summaryName').textContent = workout.name;
-  $('summaryStats').innerHTML = stats.map(([value, label]) => `<li><strong>${escapeHTML(value)}</strong><span>${escapeHTML(label)}</span></li>`).join('');
-  $('summaryRecords').hidden = !records.length;
-  $('summaryRecordList').innerHTML = records.map(record => `<li>${escapeHTML(record)}</li>`).join('');
-  $('workoutSummary').hidden = false;
-  $('workoutSummary').scrollIntoView({ behavior:'smooth', block:'start' });
-}
-
 // Last time's performance of an exercise in the unit shown, or null. `converted` says it was logged in the other unit,
 // so its weights are exact conversions (102.06 kg) rather than weights anyone loads; see prefillWeight.
 function lastTime(name) {
@@ -189,8 +167,6 @@ function prefillWeight(weight, converted) {
   const number = Number(weight);
   return converted && weight !== '' && Number.isFinite(number) ? Math.round(number * 2) / 2 : weight;
 }
-
-$('summaryDone').onclick = () => { $('workoutSummary').hidden = true; };
 
 // ---- Celebrating a record -----------------------------------------------------
 // The record an exercise has set so far in the workout in progress, as newRecords words it, or ''. It changes when a set

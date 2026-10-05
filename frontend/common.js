@@ -234,6 +234,11 @@ function plural(count, word) {
   return `${count} ${word}${count === 1 ? '' : 's'}`;
 }
 
+// How the week stands against the goal: "This week: 2 of 4 workouts", or once it is reached "This week: 4 workouts · goal of 4 reached".
+function weekGoalLine(count, goal) {
+  return count >= goal ? `This week: ${plural(count, 'workout')} · goal of ${goal} reached` : `This week: ${count} of ${plural(goal, 'workout')}`;
+}
+
 // How many reps each set had left, for sets where that was recorded: "reps left 2, 1, 0" (4 is 4 or more). '' if none.
 function describeEfforts(sets) {
   const efforts = (sets || []).filter(set => set.rir !== undefined && set.rir !== null).map(set => Number(set.rir) >= 4 ? '4+' : String(set.rir));

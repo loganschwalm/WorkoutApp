@@ -75,7 +75,11 @@
     <section class="card workout-summary" id="workoutSummary" aria-labelledby="summaryTitle" hidden>
       <div class="section-heading"><div><h2 id="summaryTitle">Workout complete</h2><p class="subtitle" id="summaryName"></p></div><button class="secondary" id="summaryDone" type="button">Done</button></div>
       <ul class="summary-stats" id="summaryStats"></ul>
+      <p class="summary-line" id="summaryCompare" hidden></p>
+      <p class="summary-line" id="summaryWeek" hidden></p>
+      <div class="summary-goals summary-records" id="summaryGoals" hidden><h3>Goals reached</h3><ul id="summaryGoalList"></ul></div>
       <div class="summary-records" id="summaryRecords" hidden><h3>New personal records</h3><ul id="summaryRecordList"></ul></div>
+      <div class="summary-exercises" id="summaryExercises" hidden><h3>By exercise</h3><ul id="summaryExerciseList"></ul></div>
     </section>
 
     <section class="card between-workouts schedule-card" id="scheduleCard" aria-label="Training schedule" hidden>
@@ -159,6 +163,7 @@
   <!-- The Tracker's own scripts, each loaded before script.js, which starts the page. -->
   <script src="rest-timer.js"></script>
   <script src="records.js"></script>
+  <script src="summary.js"></script>
   <script src="templates.js"></script>
   <script src="program-builder.js"></script>
   <script src="exercise-library.js"></script>

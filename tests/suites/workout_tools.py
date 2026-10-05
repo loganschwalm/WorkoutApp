@@ -3,6 +3,7 @@ when a workout is finished, going straight to any exercise, swapping an exercise
 program), rest per exercise, and timed exercises."""
 
 import json
+import re
 
 from ..harness import ACTIVE, HIDDEN
 
@@ -65,6 +66,12 @@ def run(t):
             stats: [...document.querySelectorAll('#summaryStats li')].map(li => [li.querySelector('strong').textContent, li.querySelector('span').textContent]),
             recordsShown: !document.getElementById('summaryRecords').hidden,
             records: [...document.querySelectorAll('#summaryRecordList li')].map(li => li.textContent) })""")
+
+    def comparison():
+        return cdp.ev("""({ volume: document.getElementById('summaryCompare').hidden ? '' : document.getElementById('summaryCompare').textContent,
+            week: document.getElementById('summaryWeek').hidden ? '' : document.getElementById('summaryWeek').textContent,
+            rows: [...document.querySelectorAll('#summaryExerciseList li')].map(li => [li.querySelector('strong').textContent, li.querySelector('div span').textContent,
+                li.querySelector('.summary-change').textContent.trim(), li.querySelector('.summary-change').className.replace('summary-change ', '')]) })""")
 
     def suggestions():
         return cdp.ev("[...document.querySelectorAll('#exerciseNames option')].map(o => o.value)")
@@ -129,6 +136,14 @@ def run(t):
         'Overhead Press: 62 lbs × 10, an estimated one-rep max of 83 lbs, your best yet (was 79 lbs)',
         'Pull-up: 10 reps in a set, your most yet (was 8)'], s['records'])
     check('an exercise done for the first time sets no record', not any('Face Pull' in r for r in s['records']), s['records'])
+    c = comparison()
+    check('its volume is compared with the last time the same workout was done', re.fullmatch(r'21% more volume than last time \(.+\)', c['volume']) is not None, c['volume'])
+    check('and the week so far with the goal', re.fullmatch(r'This week: (\d+ of \d+ workouts|\d+ workouts? · goal of \d+ reached)', c['week']) is not None, c['week'])
+    check('each exercise has its sets, its top set, and how that compares with its last time', c['rows'] == [
+        ['Bench Press', '1 set · top 110 lbs × 5', '▲ +5 lbs', 'up'],
+        ['Overhead Press', '1 set · top 62 lbs × 10', '▲ +2 reps', 'up'],
+        ['Pull-up', '1 set · top 10 reps', '▲ +2 reps', 'up'],
+        ['Face Pull', '1 set · top 30 lbs × 15', 'First time', 'first']], c['rows'])
     check('the saved-successfully message still shows', 'saved successfully' in text('formFeedback'), text('formFeedback'))
     check('a new exercise is suggested at once', 'Face Pull' in suggestions())
     check('the workout is saved with how long it took', wait_for(lambda: newest(known) is not None))
@@ -145,6 +160,9 @@ def run(t):
     finish()
     s = summary()
     check('a workout that beats nothing shows no records', s['shown'] and not s['recordsShown'] and s['records'] == [], s)
+    c = comparison()
+    check('but still says how it went against the last one: less volume, and a lighter top set',
+          re.fullmatch(r'69% less volume than last time \(.+\)', c['volume']) is not None and c['rows'] == [['Bench Press', '1 set · top 100 lbs × 5', '▼ −10 lbs', 'down']], c)
     start(0)
     cdp.pause(0.3)
     check('starting the next workout puts the summary away', not visible('workoutSummary'))

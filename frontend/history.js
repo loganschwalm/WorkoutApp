@@ -188,9 +188,7 @@ function renderCalendar() {
   const planned = plannedDays(trainedDayKeys(historyWorkouts), 21, schedule);
   const plans = new Map(planned.filter(day => !day.trained).map(day => [day.key, day]));
   const thisWeekCount = weeks.get(calendarDayKey(thisWeek)) || 0;
-  $('calendarSummary').textContent = thisWeekCount >= goal
-    ? `This week: ${plural(thisWeekCount, 'workout')} · goal of ${goal} reached`
-    : `This week: ${thisWeekCount} of ${plural(goal, 'workout')}`;
+  $('calendarSummary').textContent = weekGoalLine(thisWeekCount, goal);
   const { current, best } = weeklyStreaks(weeks, goal, thisWeek);
   $('streakSummary').textContent = current
     ? `${current}-week streak${best > current ? ` · best ${best}` : ''}`

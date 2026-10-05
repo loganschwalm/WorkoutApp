@@ -152,6 +152,14 @@ own workouts, templates, and settings.
   sets of up to 12), else more reps in a set of a bodyweight exercise, or a longer hold. An exercise
   done for the first time has nothing to beat, so it sets no record. Records are worked out on the
   device, so they show even when the workout was finished offline.
+  The summary (`summary.js`) also says how the workout went against before, all on the device, from the history and what is
+  waiting to upload: its volume against the last workout of the same name ("21% more volume than last time (Oct 1)"; names
+  match in any case); under *By exercise*, each exercise's sets and top set (the heaviest weight, then its reps; a hold's
+  seconds; with no weight, the most reps) against that exercise's last time, wherever it was done (up, down, the same, or a
+  first: the weight is compared first, then the reps at it); the goals from Progress the workout reached for the first time;
+  and the week so far against the weekly goal, cardio counted, as History's calendar says it. Everything compared with is
+  taken before the workout joins the history (`summaryBefore`), since after that "last time" would be itself. It stays until
+  Done or the next workout starts, and goes on reload.
   A set that beats your best also sets off a small firework from Complete set as you log it, and a set that reaches a goal
   from Progress a bigger one, once (not with reduced motion on).
 - Add notes while training; they fold away until you open them, unless the workout already has some.
