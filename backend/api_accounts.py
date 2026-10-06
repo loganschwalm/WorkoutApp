@@ -68,28 +68,32 @@ class AccountApi:
         password = new_password(str(data.get('password', '')), username, email)
         remember = self.wants_remembering(data)
         address = self.client_ip()
-        # Asked before anything is looked up or hashed, so a script gets nothing for its tries, and counted when an account is made.
-        wait = register_throttle.retry_after(address) if register_throttle else 0
+        # Asked before anything is looked up or hashed, so a script gets nothing for its tries. Counted at once, so sign-ups sent
+        # together cannot all pass before any is counted, and taken back if no account is made after all.
+        wait, moment = register_throttle.take(address) if register_throttle else (0, None)
         if wait:
             self.send_wait(wait, 'Too many accounts have been made from this address.')
             return
-        with connection() as database:
-            if database.execute('SELECT 1 FROM users WHERE username = ?', (username,)).fetchone():
-                raise BadRequest('That username is already registered.', HTTPStatus.CONFLICT)
-            if database.execute('SELECT 1 FROM users WHERE email = ?', (email,)).fetchone():
-                raise BadRequest('That email is already registered.', HTTPStatus.CONFLICT)
-            # Only now, so a name or email already taken costs no hash. Reading takes no lock, so none is held meanwhile.
-            stored_hash = password_hash(password)
-            try:
-                user_id = database.execute('INSERT INTO users (username, email, password_hash, created_at) VALUES (?, ?, ?, ?)',
-                                           (username, email, stored_hash, int(time.time() * 1000))).lastrowid
-            except sqlite3.IntegrityError:
-                # Another request took the name or the email between the checks above and this write; the unique indexes refused it.
-                taken = 'username' if database.execute('SELECT 1 FROM users WHERE username = ?', (username,)).fetchone() else 'email'
-                raise BadRequest(f'That {taken} is already registered.', HTTPStatus.CONFLICT)
-            cookie = self.start_session(database, user_id, remember)
-        if register_throttle:
-            register_throttle.record(address)
+        try:
+            with connection() as database:
+                if database.execute('SELECT 1 FROM users WHERE username = ?', (username,)).fetchone():
+                    raise BadRequest('That username is already registered.', HTTPStatus.CONFLICT)
+                if database.execute('SELECT 1 FROM users WHERE email = ?', (email,)).fetchone():
+                    raise BadRequest('That email is already registered.', HTTPStatus.CONFLICT)
+                # Only now, so a name or email already taken costs no hash. Reading takes no lock, so none is held meanwhile.
+                stored_hash = password_hash(password)
+                try:
+                    user_id = database.execute('INSERT INTO users (username, email, password_hash, created_at) VALUES (?, ?, ?, ?)',
+                                               (username, email, stored_hash, int(time.time() * 1000))).lastrowid
+                except sqlite3.IntegrityError:
+                    # Another request took the name or the email between the checks above and this write; the unique indexes refused it.
+                    taken = 'username' if database.execute('SELECT 1 FROM users WHERE username = ?', (username,)).fetchone() else 'email'
+                    raise BadRequest(f'That {taken} is already registered.', HTTPStatus.CONFLICT)
+                cookie = self.start_session(database, user_id, remember)
+        except BaseException:
+            if moment is not None:
+                register_throttle.release(address, moment)
+            raise
         self.send_json(HTTPStatus.OK, {'user': {'id': user_id, 'username': username, 'email': email}}, [cookie])
 
     def sign_in(self):
@@ -105,23 +109,34 @@ class AccountApi:
             # Keyed by the account rather than what was typed, so its email and its username share one limit.
             address = self.client_ip()
             throttle_key = (address, (row['username'] if row else login).lower())
-            # Refused before the password is even checked, so guessing cannot continue during the wait.
-            wait = address_throttle.retry_after(address) if address_throttle else 0
+            # Refused before the password is even checked, so guessing cannot continue during the wait. Each try is counted as a
+            # failure before its password is checked, which takes a good part of a second: counted after, tries sent at once all
+            # passed the check before any was counted. A try that signs in is then taken back.
+            wait, address_moment = address_throttle.take(address) if address_throttle else (0, None)
             if wait:
                 self.send_wait(wait, 'Too many failed sign-ins from this address.')
                 return
-            wait = login_throttle.retry_after(throttle_key)
+            wait, moment = login_throttle.take(throttle_key)
             if wait:
+                if address_moment is not None:
+                    address_throttle.release(address, address_moment)
                 self.send_wait(wait, 'Too many failed sign-ins.')
                 return
-            matches = password_matches(password, row['password_hash'] if row else DUMMY_HASH)
+            try:
+                matches = password_matches(password, row['password_hash'] if row else DUMMY_HASH)
+            except BadRequest:
+                # Too busy to check it, so nothing was tried.
+                login_throttle.release(throttle_key, moment)
+                if address_moment is not None:
+                    address_throttle.release(address, address_moment)
+                raise
             if not row or not matches:
-                login_throttle.record(throttle_key)
-                if address_throttle:
-                    address_throttle.record(address)
                 self.send_json(HTTPStatus.UNAUTHORIZED, {'error': 'Wrong email, username or password.'})
                 return
             login_throttle.clear(throttle_key)
+            # Not a failed sign-in, so not one the address is limited by; its own earlier failures still count.
+            if address_moment is not None:
+                address_throttle.release(address, address_moment)
             if needs_rehash(row['password_hash']):
                 # The password is only known now, so this is the moment to move an older hash to the current strength.
                 database.execute('UPDATE users SET password_hash = ? WHERE id = ?', (password_hash(password), row['id']))
@@ -135,19 +150,22 @@ class AccountApi:
         email = email_address(self.read_json().get('email'), strict=False)
         # Each limit counts every request, whether or not an account uses the address, so none of them says which do. The one
         # for this client address comes first: it is the one a person spraying addresses meets, and says so.
+        # Each is checked and counted in one go, so requests sent at once cannot all pass before any is counted; one that is
+        # refused takes back what the limits before it counted.
         address = self.client_ip()
-        wait = reset_address_throttle.retry_after(address) if reset_address_throttle else 0
-        if wait:
-            self.send_wait(wait, 'Too many codes asked for from this address.')
-            return
-        wait = max(reset_throttle.retry_after(email), reset_daily_throttle.retry_after(email))
-        if wait:
-            self.send_wait(wait, 'Too many codes asked for.')
-            return
-        reset_throttle.record(email)
-        reset_daily_throttle.record(email)
-        if reset_address_throttle:
-            reset_address_throttle.record(address)
+        taken = []
+        for throttle, key, message in ((reset_address_throttle, address, 'Too many codes asked for from this address.'),
+                                       (reset_throttle, email, 'Too many codes asked for.'),
+                                       (reset_daily_throttle, email, 'Too many codes asked for.')):
+            if not throttle:
+                continue
+            wait, moment = throttle.take(key)
+            if wait:
+                for earlier, earlier_key, earlier_moment in taken:
+                    earlier.release(earlier_key, earlier_moment)
+                self.send_wait(wait, message)
+                return
+            taken.append((throttle, key, moment))
         code = f'{secrets.randbelow(10 ** 6):06d}'
         with connection() as database:
             user = database.execute('SELECT id, username FROM users WHERE email = ?', (email,)).fetchone()
@@ -174,7 +192,9 @@ class AccountApi:
         # Checked before the code is, so a password that will not do costs none of its tries. The username is only
         # known once the code is right, and is checked then.
         new_password(password, email=email)
-        wait = reset_guess_throttle.retry_after(email)
+        # Counted as a wrong guess before the code is compared, and taken back if it is right, so guesses sent at once cannot
+        # all pass the check before any is counted.
+        wait, moment = reset_guess_throttle.take(email)
         if wait:
             self.send_wait(wait, 'Too many wrong codes for this address.')
             return
@@ -190,8 +210,8 @@ class AccountApi:
         # Raised only now, so the counted try is committed rather than rolled back with the refusal.
         wrong = 'That code is wrong or has expired. Check the newest email, or send a new code.'
         if not accepted:
-            reset_guess_throttle.record(email)
             raise BadRequest(wrong)
+        reset_guess_throttle.release(email, moment)
         new_password(password, user['username'], email)
         # Hashed only once the code is right, so a wrong guess costs no hash; and between the two writes, so nothing else
         # waits on the database meanwhile. Too busy to hash it, and the code still works for another go.
@@ -213,14 +233,20 @@ class AccountApi:
         """Check the signed-in account's password, asked again before a change only its owner should make: a signed-in
         page may not be its owner's. Wrong ones count as failed sign-ins, and the same wait applies."""
         throttle_key = (self.client_ip(), user['username'].lower())
-        wait = login_throttle.retry_after(throttle_key)
+        # Counted as wrong before it is checked, and taken back if it is right, as signing in does.
+        wait, moment = login_throttle.take(throttle_key)
         if wait:
             raise BadRequest(f'Too many wrong passwords. Try again in {wait_words(wait)}.', HTTPStatus.TOO_MANY_REQUESTS, {'Retry-After': str(wait)})
         stored = database.execute('SELECT password_hash FROM users WHERE id = ?', (user['id'],)).fetchone()['password_hash']
-        if not password_matches(str(password or ''), stored):
-            login_throttle.record(throttle_key)
+        try:
+            matches = password_matches(str(password or ''), stored)
+        except BadRequest:
+            login_throttle.release(throttle_key, moment)  # too busy to check it, so nothing was tried
+            raise
+        if not matches:
             # 403, not 401: the session is fine, and a 401 would tell the page it had expired.
             raise BadRequest(wrong, HTTPStatus.FORBIDDEN)
+        login_throttle.release(throttle_key, moment)
 
     def change_email(self, user):
         data = self.read_json()

@@ -181,12 +181,32 @@ class Throttle:
                 return 0
             return max(1, int(self.window - (now - recent[0])) + 1)
 
-    def record(self, key):
+    def prune(self, now):
+        if len(self.events) > 10000:  # someone cycling through usernames; drop what has expired
+            self.events = {k: v for k, v in self.events.items() if now - v[-1] < self.window}
+
+    def take(self, key):
+        """Counts an attempt before the work it guards (a password hashed, say) rather than after, so attempts sent at once
+        cannot all pass the check before any of them is counted: checked and counted under one lock. (0, moment) when it may
+        go ahead, and release(key, moment) takes it back if it should not count after all; (seconds to wait, None) if not."""
         now = time.monotonic()
         with self.lock:
-            if len(self.events) > 10000:  # someone cycling through usernames; drop what has expired
-                self.events = {k: v for k, v in self.events.items() if now - v[-1] < self.window}
-            self.events.setdefault(key, []).append(now)
+            recent = [moment for moment in self.events.get(key, []) if now - moment < self.window]
+            if len(recent) >= self.attempts:
+                self.events[key] = recent
+                return max(1, int(self.window - (now - recent[0])) + 1), None
+            self.prune(now)
+            self.events[key] = recent + [now]
+            return 0, now
+
+    def release(self, key, moment):
+        """Takes back an attempt counted by take(): it went ahead and turned out not to be one the limit is for."""
+        with self.lock:
+            moments = self.events.get(key)
+            if moments and moment in moments:
+                moments.remove(moment)
+                if not moments:
+                    del self.events[key]
 
     def clear(self, key):
         with self.lock:

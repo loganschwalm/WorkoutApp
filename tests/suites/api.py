@@ -204,6 +204,24 @@ def login(server, username, password, headers=None):
     return server.request('POST', '/api/auth/login', body, {'Content-Type': 'application/json', **(headers or {})})
 
 
+def at_once(task, count):
+    """task(n) for n in range(count), all started together on threads of their own; what each returned, sorted."""
+    barrier, results, lock = threading.Barrier(count), [], threading.Lock()
+
+    def run(n):
+        barrier.wait()
+        result = task(n)
+        with lock:
+            results.append(result)
+
+    threads = [threading.Thread(target=run, args=(n,)) for n in range(count)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    return sorted(results)
+
+
 def run_security(t, check, request):
     main = t.server
     db_path = t.db_path('test.db')
@@ -244,10 +262,9 @@ def run_security(t, check, request):
     check('a different case of the same username shares the limit', login(main, 'TARGET', 'wrong-guess-7')[0] == 429)
 
     # Each failed sign-in costs a full-strength hash (0.15 s here, more under load), so the window must
-    # comfortably outlast five of them; the wait is then measured from the first failure. The server notes a
-    # failure after hashing, just before it answers, so the clock starts once the first answer is back: timed
-    # from before the request, a hash slowed by the other suites made the wait end with that failure still
-    # inside the window.
+    # comfortably outlast five of them; the wait is then measured from the first failure. The server counts a
+    # try before hashing it, so timing from once the first answer is back waits a little longer than needed,
+    # never too little.
     window = 8
     quick = t.start_server('quick.db', {'LOGIN_WINDOW': str(window)})
     quick.api('POST', '/api/auth/register', {'username': 'target', 'email': 'target@example.test', 'password': 'right-password'})
@@ -287,6 +304,18 @@ def run_security(t, check, request):
     statuses = [login(unlimited, f'nobody-{n}', 'wrong-guess')[0] for n in range(8)]
     check('LOGIN_ADDRESS_ATTEMPTS=0 turns it off, for a server behind a shared reverse proxy', statuses == [401] * 8, statuses)
     unlimited.stop()
+
+    # A try was once counted only after its password was hashed, which is slow, so tries sent together were all checked
+    # against the limit before any of them was counted: thirty at once got thirty guesses rather than five.
+    burst = t.start_server('burst.db')
+    burst.api('POST', '/api/auth/register', {'username': 'target', 'email': 'target@example.test', 'password': 'right-password'})
+    statuses = at_once(lambda n: login(burst, 'target', f'wrong-guess-{n}')[0], 30)
+    check('thirty wrong passwords sent at once: five are checked, and the rest told to wait', statuses == [401] * 5 + [429] * 25, statuses)
+    check('and the right password then waits too', login(burst, 'target', 'right-password')[0] == 429)
+    # The address's own limit (20) would be used up had the 25 told to wait been counted against it.
+    statuses = [login(burst, f'nobody-{n}', 'wrong-guess')[0] for n in range(3)]
+    check('the tries told to wait are not counted against the address', statuses == [401] * 3, statuses)
+    burst.stop()
 
     # ------------------------------------------------------------------ A39 behind a trusted reverse proxy
     print('A39 behind a proxy TRUSTED_PROXIES names, each person is limited apart; a header from anyone else is not believed')
@@ -474,6 +503,16 @@ def run_limits(t, check):
     check('and no account was made', post(open_door, '/api/auth/login', {'login': 'newcomer3', 'password': 'chalk-and-plates-42'})[0] == 401)
     check('signing in to one already made is not held up', post(open_door, '/api/auth/login', {'login': 'newcomer0', 'password': 'chalk-and-plates-42'})[0] == 200)
     open_door.stop()
+    # Counted once the account was made, after its password was hashed, sign-ups sent together all passed the check first.
+    rush = t.start_server('registrations-rush.db', {'REGISTRATIONS_PER_HOUR': '3'})
+    statuses = at_once(lambda n: make(rush, f'rusher{n}')[0], 12)
+    check('twelve sign-ups sent at once from one address make three accounts, and the rest are told to wait',
+          statuses == [200] * 3 + [429] * 9, statuses)
+    rush.stop()
+    taken = t.start_server('registrations-taken.db', {'REGISTRATIONS_PER_HOUR': '2'})
+    statuses = [make(taken, 'first')[0], make(taken, 'first')[0], make(taken, 'second')[0], make(taken, 'third')[0]]
+    check("a sign-up refused because the name is taken does not use up one of the address's accounts", statuses == [200, 409, 200, 429], statuses)
+    taken.stop()
     crowd = t.start_server('registrations-unlimited.db', {'REGISTRATIONS_PER_HOUR': '0'})
     check('REGISTRATIONS_PER_HOUR=0 turns it off', [make(crowd, f'crowd{n}')[0] for n in range(8)] == [200] * 8)
     crowd.stop()
