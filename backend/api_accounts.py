@@ -8,7 +8,7 @@ import time
 from http import HTTPStatus
 
 from accounts import (
-    DUMMY_HASH, address_throttle, device_label, email_address, email_reset_code, find_account, login_throttle, needs_rehash, new_password,
+    DUMMY_HASH, address_throttle, device_label, email_address, email_reset_code, find_account, login_key, login_throttle, needs_rehash, new_password,
     new_username, password_hash, password_matches, public_user, register_throttle, reset_address_throttle, reset_code_hash,
     reset_daily_throttle, reset_guess_throttle, reset_throttle, wait_words
 )
@@ -108,7 +108,7 @@ class AccountApi:
             row = find_account(database, login)
             # Keyed by the account rather than what was typed, so its email and its username share one limit.
             address = self.client_ip()
-            throttle_key = (address, (row['username'] if row else login).lower())
+            throttle_key = login_key(address, row['username'] if row else login)
             # Refused before the password is even checked, so guessing cannot continue during the wait. Each try is counted as a
             # failure before its password is checked, which takes a good part of a second: counted after, tries sent at once all
             # passed the check before any was counted. A try that signs in is then taken back.
@@ -226,13 +226,13 @@ class AccountApi:
             database.execute('DELETE FROM push_subscriptions WHERE user_id = ?', (user['id'],))
             cookie = self.start_session(database, user['id'])
         reset_guess_throttle.clear(email)
-        login_throttle.clear((self.client_ip(), user['username'].lower()))
+        login_throttle.clear(login_key(self.client_ip(), user['username']))
         self.send_json(HTTPStatus.OK, {'user': public_user(user)}, [cookie])
 
     def confirm_password(self, database, user, password, wrong='That password is not right.'):
         """Check the signed-in account's password, asked again before a change only its owner should make: a signed-in
         page may not be its owner's. Wrong ones count as failed sign-ins, and the same wait applies."""
-        throttle_key = (self.client_ip(), user['username'].lower())
+        throttle_key = login_key(self.client_ip(), user['username'])
         # Counted as wrong before it is checked, and taken back if it is right, as signing in does.
         wait, moment = login_throttle.take(throttle_key)
         if wait:

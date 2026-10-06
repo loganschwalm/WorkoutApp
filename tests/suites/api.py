@@ -315,6 +315,14 @@ def run_security(t, check, request):
     # The address's own limit (20) would be used up had the 25 told to wait been counted against it.
     statuses = [login(burst, f'nobody-{n}', 'wrong-guess')[0] for n in range(3)]
     check('the tries told to wait are not counted against the address', statuses == [401] * 3, statuses)
+    # A failure is held for the window under the name tried, which has no maximum (an old username may be any length): kept as
+    # typed, failures naming a megabyte each took a server past half a gigabyte in 40 seconds.
+    status = login(burst, 'x' * 500_000, 'wrong-guess')[0]
+    check('a name of half a megabyte is just refused', status == 401, status)
+    server = load_server()
+    key = server.login_key('203.0.113.1', 'A' * 1_000_000)
+    check('and a failure is kept under a key of fixed size, however long the name, and in any case',
+          len(key[1]) == 64 and key == server.login_key('203.0.113.1', 'a' * 1_000_000), len(key[1]))
     burst.stop()
 
     # ------------------------------------------------------------------ A39 behind a trusted reverse proxy

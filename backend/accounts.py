@@ -213,7 +213,7 @@ class Throttle:
             self.events.pop(key, None)
 
 
-# Failed sign-ins per (client address, username).
+# Failed sign-ins per (client address, username): see login_key.
 login_throttle = Throttle(LOGIN_ATTEMPTS, LOGIN_WINDOW)
 # Failed sign-ins per client address, whatever the username (LOGIN_ADDRESS_ATTEMPTS; off at 0).
 address_throttle = Throttle(LOGIN_ADDRESS_ATTEMPTS, LOGIN_WINDOW) if LOGIN_ADDRESS_ATTEMPTS > 0 else None
@@ -226,6 +226,13 @@ reset_address_throttle = Throttle(RESET_ADDRESS_EMAILS, 60 * 60) if RESET_ADDRES
 register_throttle = Throttle(REGISTRATIONS_PER_HOUR, 60 * 60) if REGISTRATIONS_PER_HOUR > 0 else None
 # Wrong reset codes per email address, whether or not an account uses it, so this limit never says which do either.
 reset_guess_throttle = Throttle(RESET_GUESSES, 24 * 60 * 60)
+
+
+def login_key(address, name):
+    """What login_throttle counts a failed sign-in under: the address it came from and the name tried, in any case. The name
+    is kept as a digest, a fixed 64 characters, since the field has no maximum (a username from before the rules may be any
+    length) and each failure is held for LOGIN_WINDOW: kept as typed, failures naming a megabyte each filled the memory."""
+    return address, hashlib.sha256(name.lower().encode('utf-8', 'surrogatepass')).hexdigest()
 
 
 def wait_words(seconds):
