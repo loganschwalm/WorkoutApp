@@ -1,5 +1,5 @@
 """Helpers for the workouts themselves: the tag that tells a browser it has them all (etag_matches), the export of them as CSV, and the
-check for one already stored, which an import uses."""
+workouts already stored, which an import checks against."""
 
 import csv
 import datetime
@@ -90,8 +90,17 @@ def workouts_csv(workouts, zone):
     return '﻿' + out.getvalue()
 
 
-def workout_stored(database, user_id, name, created_at, workout):
-    """Whether the account has a workout like this one, which has no clientId: the same name, time and exercises."""
-    exercises = json.dumps(workout.get('exercises'), sort_keys=True)
-    rows = database.execute('SELECT payload FROM workouts WHERE user_id = ? AND created_at = ? AND name = ?', (user_id, created_at, name))
-    return any(json.dumps(json.loads(row['payload']).get('exercises'), sort_keys=True) == exercises for row in rows)
+def workout_key(name, created_at, workout):
+    """What tells a workout with no clientId from another: its name, its time and its exercises."""
+    return created_at, name, json.dumps(workout.get('exercises'), sort_keys=True)
+
+
+def stored_workout_keys(database, user_id, wanted):
+    """The workout_key of each of the account's workouts at one of the (created_at, name) pairs in `wanted`. Read once for a whole
+    import, each workout parsed at most once: compared one row at a time instead, a file of workouts sharing a name and time
+    parsed every stored one of them for each, which held the database for minutes."""
+    keys = set()
+    for row in database.execute('SELECT name, created_at, payload FROM workouts WHERE user_id = ?', (user_id,)):
+        if (row['created_at'], row['name']) in wanted:
+            keys.add(workout_key(row['name'], row['created_at'], json.loads(row['payload'])))
+    return keys

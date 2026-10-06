@@ -180,11 +180,27 @@ def add_missing(noun, limit, unit='', wanted=lambda entry: True):
 
 
 def add_new_templates(have, incoming):
-    """Import rule for the templates: those the account has not already got (see same_template)."""
+    """Import rule for the templates: those the account has not already got. Two templates with ids are the same if their ids are;
+    otherwise if everything they say is. Looked up rather than compared with each kept one in turn, which for a thousand
+    templates without ids was a million comparisons, each writing two out."""
     new = []
+    ids, whole, whole_without_id = set(), set(), set()
+
+    def keep(template):
+        written = json.dumps(template, sort_keys=True)
+        whole.add(written)
+        if template.get('id'):
+            ids.add(template['id'])
+        else:
+            whole_without_id.add(written)
+    for kept in have:
+        keep(kept)
     for template in incoming or []:
-        if not any(same_template(template, kept) for kept in have + new):
-            new.append(template)
+        written = json.dumps(template, sort_keys=True)
+        if template.get('id') and (template['id'] in ids or written in whole_without_id) or not template.get('id') and written in whole:
+            continue
+        new.append(template)
+        keep(template)
     if len(have) + len(new) > MAX_TEMPLATES:
         raise BadRequest(f'Importing these templates would take the account past {MAX_TEMPLATES}.')
     return have + new, len(new)
@@ -279,9 +295,3 @@ def merge_part(part, bases, mine, theirs):
             return merge_values(bases, mine, theirs, 0)
         return list(merge_values(keyed[:-2], keyed[-2], keyed[-1], spec['depth']).values())
     return merge_values(bases, mine, theirs, spec['depth'], spec.get('identity', ()))
-
-
-def same_template(a, b):
-    if a.get('id') and b.get('id'):
-        return a['id'] == b['id']
-    return json.dumps(a, sort_keys=True) == json.dumps(b, sort_keys=True)

@@ -642,6 +642,28 @@ def run_limits(t, check):
     check('and added nothing', template_ids() == ['t2'] and roomy.api('GET', '/api/workouts', token=token)[0]['workouts'] == [], template_ids())
     roomy.stop()
 
+    # An import checked each workout with no clientId against every stored one with its name and time, parsing each, all while it
+    # held the database: a file of workouts sharing one name and time took minutes, and every account's saves waited.
+    crowded = t.start_server('import-dupes.db')
+    token = session_of(make(crowded, 'importer')[1])
+    alike = [{'name': 'Same', 'createdAt': 1_700_000_000_000, 'exercises': [{'name': f'Lift {n}'}]} for n in range(10_000)]
+    started = time.monotonic()
+    status, _, reply = post(crowded, '/api/import', {'format': 'workout-tracker-export', 'workouts': alike + alike[:3]}, token)
+    took = time.monotonic() - started
+    check('ten thousand workouts sharing a name and time import in seconds, each once, the copies in the file skipped',
+          status == 200 and reply.get('workouts') == 10_000 and reply.get('alreadyHere') == 3 and took < 20, f'{status} {reply} {took:.1f}s')
+    status, _, reply = post(crowded, '/api/import', {'format': 'workout-tracker-export', 'workouts': alike}, token)
+    check('and imported again, every one is found already here', status == 200 and reply.get('workouts') == 0 and reply.get('alreadyHere') == 10_000,
+          f'{status} {reply}')
+    crowded.stop()
+    server = load_server()
+    have = [{'id': 'a', 'name': 'A'}, {'name': 'Plain'}]
+    incoming = [{'id': 'a', 'name': 'A, changed'}, {'id': 'b', 'name': 'B'}, {'name': 'Plain'}, {'id': 'c', 'name': 'Plain'},
+                {'id': 'b', 'name': 'B again'}, {'name': 'New'}, {'name': 'New'}]
+    taken = server.add_new_templates(have, incoming)
+    check('an imported template is new unless one kept has its id (when both have one) or says everything it says',
+          taken == (have + [{'id': 'b', 'name': 'B'}, {'id': 'c', 'name': 'Plain'}, {'name': 'New'}], 3), taken)
+
     # ------------------------------------------------------------------ A43 the address it listens on
     print('A43 HOST says which address the server listens on')
     local = t.start_server('local-only.db', {'HOST': '127.0.0.1'})

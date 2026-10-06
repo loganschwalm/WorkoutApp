@@ -11,7 +11,7 @@ from config import EXPORT_FORMAT, MAX_IMPORT, MAX_IMPORTS_AT_ONCE, MAX_STATE_CHA
 from database import connection, workout_tag
 from state import STATE_PARTS, load_state, merge_part, store_state, validate_state
 from validation import BadRequest, check_workout_room, listed, validate_workout, weight_unit, workout_payload, workouts_held
-from workouts import etag_matches, export_zone, exported_workouts, workout_id, workout_stored, workouts_csv
+from workouts import etag_matches, export_zone, exported_workouts, stored_workout_keys, workout_id, workout_key, workouts_csv
 
 
 # One import at a time (see MAX_IMPORTS_AT_ONCE): each reads and parses a body of up to MAX_IMPORT bytes.
@@ -218,10 +218,16 @@ class DataApi:
         with connection() as database:
             database.execute('BEGIN IMMEDIATE')
             held = workouts_held(database, user['id'])
+            # A workout with no clientId is already here if one with its name, time and exercises is, from before or earlier in the file.
+            unlabelled = {(created_at, name) for workout, _, name, _, created_at in prepared if not workout.get('clientId')}
+            seen = stored_workout_keys(database, user['id'], unlabelled) if unlabelled else set()
             for workout, payload, name, notes, created_at in prepared:
                 client_id = workout.get('clientId') or None
-                if client_id is None and workout_stored(database, user['id'], name, created_at, workout):
-                    continue
+                if client_id is None:
+                    key = workout_key(name, created_at, workout)
+                    if key in seen:
+                        continue
+                    seen.add(key)
                 # Past the account's limit, the whole file is refused and nothing is stored (the block raises, and is rolled back).
                 check_workout_room(held + added)
                 added += database.execute('INSERT INTO workouts (user_id, name, notes, created_at, payload, client_id) VALUES (?, ?, ?, ?, ?, ?) '
