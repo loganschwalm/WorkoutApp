@@ -456,6 +456,17 @@ A day with no program is just "a training day". The pieces:
   Coming up lists the next six training days with their workouts, the one already trained marked Done. History loads
   `program-definitions.js` and `program-plan.js` (the pieces of `program.js` that say which day is next, which the Tracker's
   program card shares) to name them.
+- **Add to calendar**, in the program card's ⋯ menu (`program-calendar.js`), saves the program's remaining workouts as an `.ics`
+  file (RFC 5545) for any calendar app to import. It lays the queue on the schedule as it stands: the next workout on the next
+  training day, the one after it on the day after, to the end of the block in progress (nothing from the next block, whose
+  weights are not known yet), from today, or from tomorrow when today is already trained. Each is an hour-long event at the
+  schedule's time, as a "floating" time (no zone, so 5 pm is 5 pm wherever the calendar is opened), titled "Reddit PPL: Push
+  (Bench)", its description the day's exercises as the card writes them ("Bench Press 4 × 5, 1 × 5+ at 135 lbs"). The weights are
+  those of today, and the description says they move as you train: the file is a snapshot, and saving it again after training
+  gives the new plan. An event's UID is its day of this run of the program (`startedAt`, cycle, week, day), so importing the file again
+  updates the events a calendar already has rather than doubling them; a day that has since been done stays in the calendar until
+  it is deleted there. With no days chosen it saves nothing and says to choose them. It is made on the device from the plan the
+  card shows (`programCalendarEvents` and `programCalendarText`), so it works offline, and the server is not involved.
 - **Reminders** are web push. This browser asks for notification permission, subscribes through its service worker, and gives
   the server its subscription and its clock (time zone and offset from UTC). The server's reminder loop (every
   `REMINDER_TICK_SECONDS`, 60 by default) sends a notification to each subscribed device on each training day, once, from the
