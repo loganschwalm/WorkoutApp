@@ -40,8 +40,12 @@ jobs:
       - name: Let Chrome use its sandbox
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
 
-      - name: Check the shell scripts' syntax
-        run: for script in ct/workout-tracker.sh scripts/docker-backup.sh; do bash -n "$script"; done
+      # The installer runs as root on a Proxmox host, straight from a curl, so it is read by ShellCheck as well as parsed. Its
+      # settings are in .shellcheckrc. The runner has ShellCheck already.
+      - name: Check the shell scripts
+        run: |
+          for script in ct/workout-tracker.sh scripts/docker-backup.sh; do bash -n "$script"; done
+          shellcheck ct/workout-tracker.sh scripts/docker-backup.sh
 
       # Four suites at a time on the runner's four cores, so timing checks are not starved.
       - name: Run the tests

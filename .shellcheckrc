@@ -1,0 +1,3 @@
+# host_backup_dir_of in ct/workout-tracker.sh reads a container's backup settings inside a subshell on purpose, so what the file sets
+# never leaks into the installer's own HOST_BACKUP_DIR. ShellCheck notes that, wherever the variable is used.
+disable=SC2030,SC2031

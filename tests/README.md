@@ -21,7 +21,8 @@ python tests/run.py --list           # suite names
 
 GitHub Actions runs them all on every push and pull request (`.github/workflows/tests.yml`),
 four suites at a time, on Python 3.9 (the oldest the README says the server runs on) and 3.12, and moves the `stable`
-branch that installs follow once both pass on `main`. Before them it runs pyflakes and `tests/lint.py`:
+branch that installs follow once both pass on `main`. Before them it runs pyflakes, `tests/lint.py` and ShellCheck (on the two shell
+scripts, settings in `.shellcheckrc`):
 
 ```bash
 python -m pyflakes backend tests scripts docker-entrypoint.py   # slips in the Python (needs the requirements above)
