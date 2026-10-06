@@ -1205,6 +1205,22 @@ def run_accounts(t, check, request):
     status, _, _ = login(main, 'mailer@example.test', 'chalk-and-plates-42')
     check('a page from before emails, sending it as username, signs in too', status == 200, status)
     check('the email with a wrong password -> 401', sign_in('mailer@example.test', 'wrong-password') == 401)
+    # Two requests can both pass the "already taken?" look-ups before either writes; the unique indexes then refuse the second,
+    # which must be told as a 409 like the look-ups' own refusal, not as a server error.
+    outcomes = []
+
+    def register_same(n, username, email):
+        outcomes.append(post('/api/auth/register', {'username': username, 'email': email, 'password': 'chalk-and-plates-42'})[0])
+
+    for label, names in [('username', lambda n: ('dupe', f'dupe{n}@example.test')), ('email', lambda n: (f'dupe-b{n}', 'dupe-b@example.test'))]:
+        outcomes.clear()
+        racers = [threading.Thread(target=register_same, args=(n, *names(n))) for n in range(6)]
+        for racer in racers:
+            racer.start()
+        for racer in racers:
+            racer.join()
+        check(f'six accounts made at once with the same {label}: one is made, the rest are refused -> 409',
+              sorted(outcomes) == [200] + [409] * 5, outcomes)
     post('/api/auth/register', {'username': 'limited', 'email': 'limited@example.test', 'password': 'right-password'})
     for n in range(5):
         sign_in('limited@example.test', f'wrong-guess-{n}')

@@ -2,6 +2,7 @@
 
 import re
 import secrets
+import sqlite3
 import threading
 import time
 from http import HTTPStatus
@@ -79,8 +80,13 @@ class AccountApi:
                 raise BadRequest('That email is already registered.', HTTPStatus.CONFLICT)
             # Only now, so a name or email already taken costs no hash. Reading takes no lock, so none is held meanwhile.
             stored_hash = password_hash(password)
-            user_id = database.execute('INSERT INTO users (username, email, password_hash, created_at) VALUES (?, ?, ?, ?)',
-                                       (username, email, stored_hash, int(time.time() * 1000))).lastrowid
+            try:
+                user_id = database.execute('INSERT INTO users (username, email, password_hash, created_at) VALUES (?, ?, ?, ?)',
+                                           (username, email, stored_hash, int(time.time() * 1000))).lastrowid
+            except sqlite3.IntegrityError:
+                # Another request took the name or the email between the checks above and this write; the unique indexes refused it.
+                taken = 'username' if database.execute('SELECT 1 FROM users WHERE username = ?', (username,)).fetchone() else 'email'
+                raise BadRequest(f'That {taken} is already registered.', HTTPStatus.CONFLICT)
             cookie = self.start_session(database, user_id, remember)
         if register_throttle:
             register_throttle.record(address)
@@ -223,7 +229,10 @@ class AccountApi:
             self.confirm_password(database, user, data.get('password'))
             if database.execute('SELECT 1 FROM users WHERE email = ? AND id != ?', (email, user['id'])).fetchone():
                 raise BadRequest('Another account already uses that email.', HTTPStatus.CONFLICT)
-            database.execute('UPDATE users SET email = ? WHERE id = ?', (email, user['id']))
+            try:
+                database.execute('UPDATE users SET email = ? WHERE id = ?', (email, user['id']))
+            except sqlite3.IntegrityError:  # another account took it since the check above
+                raise BadRequest('Another account already uses that email.', HTTPStatus.CONFLICT)
             # A code already sent went to the old address.
             database.execute('DELETE FROM password_resets WHERE user_id = ?', (user['id'],))
         self.send_json(HTTPStatus.OK, {'user': {**user, 'email': email}})
