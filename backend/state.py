@@ -6,8 +6,9 @@ import datetime
 import json
 import re
 import time
+from http import HTTPStatus
 
-from config import DEFAULT_REMINDER_TIME
+from config import DEFAULT_REMINDER_TIME, MAX_STATE_PART_BYTES
 from validation import BadRequest, is_number, listed, text, validate_exercises, weight_unit
 
 
@@ -131,10 +132,15 @@ def check_library_entry(key, entry):
 
 
 def validate_state(data):
-    """Checks each part of the state that `data` has (see STATE_PARTS), in their order; a part it does not name is not looked at."""
+    """Checks each part of the state that `data` has (see STATE_PARTS), in their order; a part it does not name is not looked at.
+    Each must also fit in MAX_STATE_PART_BYTES as stored."""
     for name, part in STATE_PARTS.items():
         if name in data:
             part.validate(data[name])
+            size = len(json.dumps(data[name]))
+            if size > MAX_STATE_PART_BYTES:
+                raise BadRequest(f'{name} would be {size // 1024} KB, and an account keeps at most {MAX_STATE_PART_BYTES // 1024} KB of it.',
+                                 HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
 
 
 # ---- Export and import --------------------------------------------------------------------------------------

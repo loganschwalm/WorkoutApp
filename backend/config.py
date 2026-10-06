@@ -26,6 +26,12 @@ MAX_IMPORT = 32 * 1024 * 1024
 # A change to the account state carries each changed part twice (as changed, and the copy it was changed from), and a
 # lifetime of daily weigh-ins is a part on its own.
 MAX_STATE_CHANGE = 4 * MAX_BODY
+# The most one part of the account state (its templates, its settings, its weigh-ins...) may be as stored, in bytes: half a
+# change, since a change carries the part twice. The counts each part has (templates, notes...) do not limit this on their
+# own, and a part only grows by being merged with what is already there, so without it one account could grow a part
+# without end, and with it the time every change to the state spends reading and writing all of it, holding the database
+# for everyone. A lifetime of daily weigh-ins, the largest a real part comes to, is about 2 MB.
+MAX_STATE_PART_BYTES = MAX_STATE_CHANGE // 2
 # What an export file says it is, so an import can tell one from any other JSON.
 EXPORT_FORMAT = 'workout-tracker-export'
 # What one account may keep, so no one account (or a flood of them) can fill the disk. A workout is a few kilobytes: ten years of

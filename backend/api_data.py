@@ -230,6 +230,8 @@ class DataApi:
             have = load_state(database, user['id'])
             # Each part takes what it will of the file's (and refuses the file, with nothing stored, if that would take it past its limit).
             taken = {name: part.take(have[name], state.get(name)) for name, part in STATE_PARTS.items()}
+            # And the file is refused, with nothing stored, if a part would then be bigger than an account may keep.
+            validate_state({name: value for name, (value, count) in taken.items() if count})
             if any(count for _, count in taken.values()):
                 store_state(database, user['id'], {name: value for name, (value, _) in taken.items()})
         self.send_json(HTTPStatus.OK, {'workouts': added, 'alreadyHere': len(prepared) - added,

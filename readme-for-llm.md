@@ -1133,7 +1133,10 @@ What is already in place:
   rather than being sent again. A retry of a workout already kept is still answered. An import that would pass the count
   is refused whole, with nothing stored. Only one import runs at a time, since each reads and parses a body of up to
   32 MB; a second is answered 503 with `Retry-After`. The other synced data has limits of its own (templates, goals,
-  weigh-ins, notes and the exercise library each have a count).
+  weigh-ins, notes and the exercise library each have a count), and each part of it is at most 2 MB as stored (a lifetime
+  of daily weigh-ins, the largest a real one comes to, is about that). A change that would take a part past it is refused
+  with 413; one that would only get there by being merged with another device's keeps this device's own copy instead, as
+  a merge past a count does; and an import that would is refused whole.
 - **Who can reach the port.** The server listens on every interface (`0.0.0.0`) unless `HOST` names one. With a reverse
   proxy on the same machine, publish the app to the proxy alone, so nothing goes around it: `HOST=127.0.0.1` (a
   Proxmox install, in `workout-tracker.env`), or under Docker the published port, `"127.0.0.1:6769:6769"` in

@@ -605,6 +605,43 @@ def run_limits(t, check):
     check('and once the first has gone, imports are taken again', status == 200, status)
     big.stop()
 
+    # The parts of the account state have counts (templates, notes...) but had no size, and a part grows by being merged: each
+    # change sent as from a device that had none of it added to what was there, so one account could grow its templates without
+    # end, and with them the time every change to its state spends reading and writing them, holding the database for everyone.
+    roomy = t.start_server('state-size.db')
+    token = session_of(make(roomy, 'hoarder')[1])
+
+    def patch(body):
+        return roomy.request('PATCH', '/api/state', json.dumps(body).encode(), {**json_headers, 'Cookie': f'session={token}'})
+
+    def template(n):  # about 800 KB as stored
+        return {'id': f't{n}', 'name': f'Template {n}', 'exercises': [{'name': 'e' * 1000} for _ in range(780)]}
+
+    def template_ids():
+        return [kept['id'] for kept in roomy.api('GET', '/api/state', token=token)[0]['templates']]
+
+    def stored_size():
+        db = sqlite3.connect(t.db_path('state-size.db'))
+        size = db.execute("SELECT length(templates_json) FROM user_state JOIN users ON users.id = user_state.user_id WHERE username = 'hoarder'").fetchone()[0]
+        db.close()
+        return size
+    statuses = [patch({'templates': {'value': [template(n)], 'base': []}})[0] for n in range(2)]
+    check('two templates of 800 KB, each from a device that had none, are both kept', statuses == [200, 200] and template_ids() == ['t0', 't1'],
+          f'{statuses} {template_ids()}')
+    status = patch({'templates': {'value': [template(2)], 'base': []}})[0]
+    check("a third, which merged with them would take the part past 2 MB, keeps that device's own copy instead of growing it",
+          status == 200 and template_ids() == ['t2'], f'{status} {template_ids()}')
+    check('so the part as stored stays within 2 MB', stored_size() <= 2 * 1024 * 1024, stored_size())
+    status, _, reply = patch({'templates': {'value': [template(n) for n in range(3, 6)], 'base': []}})
+    check('a part sent bigger than 2 MB on its own is refused with 413, saying how big it would be',
+          status == 413 and 'KB' in reply.get('error', ''), f'{status} {reply}')
+    check('and nothing changed', template_ids() == ['t2'], template_ids())
+    status, _, reply = post(roomy, '/api/import', {'format': 'workout-tracker-export', 'templates': [template(6), template(7)],
+                                                   'workouts': [{'name': 'Imported', 'createdAt': 1_700_000_000_000, 'exercises': []}]}, token)
+    check('an import that would take a part past 2 MB is refused whole, with 413', status == 413, f'{status} {reply}')
+    check('and added nothing', template_ids() == ['t2'] and roomy.api('GET', '/api/workouts', token=token)[0]['workouts'] == [], template_ids())
+    roomy.stop()
+
     # ------------------------------------------------------------------ A43 the address it listens on
     print('A43 HOST says which address the server listens on')
     local = t.start_server('local-only.db', {'HOST': '127.0.0.1'})
