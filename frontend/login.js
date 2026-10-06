@@ -19,13 +19,15 @@ let resetEmail = '';
 
 // Only pages on this site are followed, so a crafted ?next= link cannot send someone to another site after signing in.
 // It is resolved exactly as the browser would follow it: checking the text instead misses tricks the browser undoes,
-// such as a tab or newline it strips, which turns "/\t/evil.example" into "//evil.example", another site.
+// such as a tab or newline it strips, which turns "/\t/evil.example" into "//evil.example", another site. Nor is a path
+// beginning // followed: "/.//evil.example" resolves on this site, but to the path "//evil.example", which followed on
+// its own is another site again.
 function nextDestination() {
   const next = new URLSearchParams(location.search).get('next');
   if (!next) return '/';
   try {
     const url = new URL(next, location.origin);
-    return url.origin === location.origin ? url.pathname + url.search + url.hash : '/';
+    return url.origin === location.origin && !url.pathname.startsWith('//') ? url.pathname + url.search + url.hash : '/';
   } catch (error) {
     return '/';
   }

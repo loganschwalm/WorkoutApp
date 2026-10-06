@@ -352,9 +352,10 @@ def run(t):
     check('the server sends signed-out visitors to login with a way back', status == 303 and location == '/login.html?next=%2Fhistory.html%3Fx%3D1', f'{status} {location}')
     ui_login('?next=/history.html')
     check('signing in returns to the page you were on', cdp.ev('location.pathname') == '/history.html', cdp.ev('location.pathname'))
-    # The last three look like paths, but the browser strips tabs and newlines from a URL, leaving //evil.example.
+    # The three with a tab or a newline look like paths, but the browser strips those from a URL, leaving //evil.example. The
+    # dotted ones are on this site, but their paths come out as //evil.example, another site when followed on their own.
     for bad in ('https://evil.example/', '//evil.example', '/\\evil.example', 'javascript:alert(1)',
-                '/\t/evil.example', '/\n/evil.example', '/\r/evil.example'):
+                '/\t/evil.example', '/\n/evil.example', '/\r/evil.example', '/.//evil.example/x', '/./..//evil.example/x'):
         ui_login('?next=' + urllib.parse.quote(bad, safe=''))
         where = str(cdp.ev('location.hostname + location.pathname'))
         check(f'a crafted next ({bad!r}) stays on this site', where.startswith('127.0.0.1') and 'evil' not in where, where)
