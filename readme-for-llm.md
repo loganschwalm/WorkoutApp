@@ -774,7 +774,9 @@ which has every account.
 - Each account has an email as well as a username, and signs in with either. An email belongs to one
   account only, whatever its capitals.
 - A new account's details are checked as they are typed in, and again by the server:
-  - a username of 3 to 32 characters, with no @ and nothing invisible (a tab, a zero-width space);
+  - a username of 3 to 32 characters, with no @ and nothing invisible (a tab, a zero-width space, a blank Hangul filler),
+    that is not another account's in other capitals or written another way (`Henry` when `henry` exists, or `José`
+    with its accent typed as a separate mark). A username signs in in any capitals;
   - a real email address: letters, digits and the usual symbols before the @, a domain of proper labels,
     and a top-level domain of two or more letters, so `me@example.c` or `two..dots@example.com` are
     turned back;

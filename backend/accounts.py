@@ -9,6 +9,7 @@ import smtplib
 import ssl
 import threading
 import time
+import unicodedata
 from email.message import EmailMessage
 from http import HTTPStatus
 
@@ -17,6 +18,7 @@ from config import (
     PBKDF2_ITERATIONS, REGISTRATIONS_PER_HOUR, RESET_ADDRESS_EMAILS, RESET_CODE_TTL, RESET_EMAILS, RESET_EMAILS_DAILY,
     RESET_GUESSES, SMTP_FROM, SMTP_HOST, SMTP_PASSWORD, SMTP_PORT, SMTP_SECURITY, SMTP_TIMEOUT, SMTP_USERNAME
 )
+from database import username_key
 from validation import BadRequest, text
 
 
@@ -54,9 +56,21 @@ COMMON_PASSWORDS = frozenset('''
     '''.split())
 
 
+# Characters that show as nothing but that isprintable() lets through: a combining grapheme joiner, Hangul fillers, Khmer vowels
+# that are never written, the blank braille pattern. With one, "gina" could be registered again looking just the same.
+BLANK_CHARACTERS = frozenset('\u034f\u115f\u1160\u17b4\u17b5\u2800\u3164\uffa0')
+
+
+def invisible(character):
+    """Whether a character prints as nothing: a blank one, or a variation selector."""
+    point = ord(character)
+    return character in BLANK_CHARACTERS or 0xfe00 <= point <= 0xfe0f or 0xe0100 <= point <= 0xe01ef
+
+
 def new_username(value):
-    """A username to register, checked: 3 to USERNAME_MAX characters, no @, and nothing invisible."""
-    username = str(value or '').strip()
+    """A username to register, checked: 3 to USERNAME_MAX characters, no @, and nothing invisible. Composed (NFKC) first, so
+    one name typed two ways is stored one way; that it is not another account's in other capitals is checked on registering."""
+    username = unicodedata.normalize('NFKC', str(value or '')).strip()
     if len(username) < 3:
         raise BadRequest('Username must be 3+ characters.')
     if len(username) > USERNAME_MAX:
@@ -64,7 +78,7 @@ def new_username(value):
     if '@' in username:
         # Signing in takes an email or a username in one field, and an @ is how the two are told apart.
         raise BadRequest('Username cannot contain @. Your email goes in its own field.')
-    if not username.isprintable():
+    if not username.isprintable() or any(invisible(character) for character in username):
         raise BadRequest('Username cannot contain invisible or control characters.')
     return username
 
@@ -228,11 +242,15 @@ register_throttle = Throttle(REGISTRATIONS_PER_HOUR, 60 * 60) if REGISTRATIONS_P
 reset_guess_throttle = Throttle(RESET_GUESSES, 24 * 60 * 60)
 
 
-def login_key(address, name):
-    """What login_throttle counts a failed sign-in under: the address it came from and the name tried, in any case. The name
-    is kept as a digest, a fixed 64 characters, since the field has no maximum (a username from before the rules may be any
-    length) and each failure is held for LOGIN_WINDOW: kept as typed, failures naming a megabyte each filled the memory."""
-    return address, hashlib.sha256(name.lower().encode('utf-8', 'surrogatepass')).hexdigest()
+def login_key(address, name, account_id=None):
+    """What login_throttle counts a failed sign-in under: the address it came from, and the account tried, by its id, so every
+    name it is found by (its email, its username in any capitals) shares one count and no other account's can clear it. A name
+    that is no account's is counted by its username_key, as a digest, a fixed 64 characters: the field has no maximum (a
+    username from before the rules may be any length), and each failure is held for LOGIN_WINDOW, so kept as typed, failures
+    naming a megabyte each filled the memory."""
+    if account_id is not None:
+        return address, f'account {account_id}'
+    return address, hashlib.sha256(username_key(name).encode('utf-8', 'surrogatepass')).hexdigest()
 
 
 def wait_words(seconds):
@@ -245,14 +263,17 @@ def wait_words(seconds):
 
 
 def find_account(database, login):
-    """The account signing in as `login`: an email in any case, or else a username exactly as registered."""
+    """The account signing in as `login`: an email in any case, or else a username exactly as registered, or else as written any
+    other way (its username_key: other capitals, or an accent typed as a combining one)."""
     columns = 'id, username, email, password_hash'
     if '@' in login:
         row = database.execute(f'SELECT {columns} FROM users WHERE email = ?', (login.lower(),)).fetchone()
         if row:
             return row
-    # Usernames from before accounts had emails can contain @, so an address with no account behind it may be one.
-    return database.execute(f'SELECT {columns} FROM users WHERE username = ?', (login,)).fetchone()
+    # Usernames from before accounts had emails can contain @, so an address with no account behind it may be one. Exactly as
+    # registered first: two accounts from before usernames were unique in any case may differ only in capitals.
+    row = database.execute(f'SELECT {columns} FROM users WHERE username = ?', (login,)).fetchone()
+    return row or database.execute(f'SELECT {columns} FROM users WHERE username_key = ?', (username_key(login),)).fetchone()
 
 
 def device_label(user_agent):

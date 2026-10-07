@@ -7,14 +7,17 @@ const USERNAME_MAX = 32;
 const PASSWORD_MAX = 128;
 const EMAIL_SHAPE = /^([a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*)@((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59}))$/;
 
-// Invisible and control characters: anything Python's isprintable() refuses, which is every space but the plain one.
+// Invisible and control characters: anything Python's isprintable() refuses, which is every space but the plain one, and the
+// characters that print as nothing which it lets through (BLANK_CHARACTERS and the variation selectors in accounts.py).
 function hasInvisible(value) {
-  return /[\p{C}\p{Z}]/u.test(value.replace(/ /g, ''));
+  return /[\p{C}\p{Z}]/u.test(value.replace(/ /g, ''))
+    || /[\u034f\u115f\u1160\u17b4\u17b5\u2800\u3164\uffa0\ufe00-\ufe0f\u{e0100}-\u{e01ef}]/u.test(value);
 }
 
 // Each returns what is wrong, or '' when nothing is.
 function usernameProblem(value) {
-  const username = value.trim();
+  // Composed first, as the server stores it, so one name typed two ways is one name.
+  const username = value.normalize('NFKC').trim();
   const length = [...username].length;
   if (length < 3) return 'Username must be 3+ characters.';
   if (length > USERNAME_MAX) return `Username must be ${USERNAME_MAX} characters or fewer.`;

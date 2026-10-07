@@ -6,6 +6,7 @@ import hashlib
 import os
 import secrets
 import sqlite3
+import unicodedata
 
 from config import BUSY_TIMEOUT, DB_PATH
 
@@ -202,10 +203,32 @@ def migration_14_workout_bytes(database):
             END''')
 
 
+def username_key(username):
+    """What tells one username from another: the name composed (NFKC, so "José" typed with an accent or with a combining one is
+    one name) and in one case, so "Henry" and "henry" are one name too. migration_15_username_keys gives every account its key, so
+    changing this needs a new migration that gives them all again."""
+    return unicodedata.normalize('NFKC', unicodedata.normalize('NFKC', username).casefold())
+
+
+def migration_15_username_keys(database):
+    # Usernames were unique only as typed, so "henry" and "Henry" could be two accounts, which look the same to a person and which
+    # the sign-in limits, kept per name in any case, could not tell apart: whoever had one could reset the other's count of
+    # failures by signing in. Each account is given its username_key, unique from now on. Two accounts from before that share one
+    # (rare) keep signing in by their exact names; only the older of them holds the key, which a name in other capitals finds.
+    database.execute('ALTER TABLE users ADD COLUMN username_key TEXT')
+    held = set()
+    for user_id, username in database.execute('SELECT id, username FROM users ORDER BY id').fetchall():
+        key = username_key(username)
+        if key not in held:
+            held.add(key)
+            database.execute('UPDATE users SET username_key = ? WHERE id = ?', (key, user_id))
+    database.execute('CREATE UNIQUE INDEX users_username_key ON users(username_key)')
+
+
 MIGRATIONS = [migration_1_tables, migration_2_client_ids, migration_3_programs, migration_4_emails, migration_5_exercise_notes,
               migration_6_hashed_sessions, migration_7_goals, migration_8_bodyweight, migration_9_remembered_sessions,
               migration_10_exercise_library, migration_11_push, migration_12_workout_cache, migration_13_session_details,
-              migration_14_workout_bytes]
+              migration_14_workout_bytes, migration_15_username_keys]
 
 
 def init_database():

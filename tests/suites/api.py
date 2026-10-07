@@ -1032,6 +1032,28 @@ def run_structure(t, check, request):
           schema['version'] == LATEST_SCHEMA and schema['columns'].count('client_id') == 1 and kept == [('Kept', 'k1')], f'{schema} {kept}')
     check('and an account with workouts from before is given what they take', total == (len('Kept') + len('{"exercises": []}'),), total)
 
+    # Two accounts from before usernames were unique in any capitals, differing only in them.
+    path = t.db_path('twins.db')
+    db = sqlite3.connect(path)
+    hashed = load_server().password_hash('right-password')
+    db.executescript(OLD_SCHEMA)
+    db.executemany('INSERT INTO users VALUES (?, ?, ?, 0)', [(1, 'Dup', hashed), (2, 'dup', hashed), (3, 'other', hashed)])
+    db.commit()
+    db.close()
+    twins = t.start_server('twins.db')
+    db = sqlite3.connect(path)
+    keys = db.execute('SELECT username, username_key FROM users ORDER BY id').fetchall()
+    db.close()
+    check('each account is given its username key, and of two that share one, the older holds it',
+          keys == [('Dup', 'dup'), ('dup', None), ('other', 'other')], keys)
+    signed_in = [(login(twins, name, 'right-password')[2] or {}).get('user', {}).get('username') for name in ('Dup', 'dup', 'DUP', 'OTHER')]
+    check('both still sign in by their exact names, and other capitals find the one holding the key', signed_in == ['Dup', 'dup', 'Dup', 'other'], signed_in)
+    # The limit is per account now, not per name in any case, so one of the pair signing in cannot end the other's wait.
+    statuses = [login(twins, 'Dup', f'wrong-guess-{n}')[0] for n in range(4)] + [login(twins, 'dup', 'right-password')[0]]
+    statuses += [login(twins, 'Dup', 'wrong-guess-4')[0], login(twins, 'Dup', 'right-password')[0]]
+    check("signing in to one between guesses at the other does not end the other's wait", statuses == [401] * 4 + [200, 401, 429], statuses)
+    twins.stop()
+
     path = t.db_path('newer.db')
     db = sqlite3.connect(path)
     db.execute('PRAGMA user_version = 99')
@@ -1512,14 +1534,33 @@ def run_accounts(t, check, request):
         ('33 characters', 'u' * 33, '32 characters or fewer'),
         ('a tab in it', 'tab\tbed', 'invisible or control'),
         ('a zero-width space in it', 'zero​width', 'invisible or control'),
-        ('a no-break space in it', 'no break', 'invisible or control'),
     ]:
         status, _, reply = register(username, f'user{len(label)}@example.test')
         check(f'a username with {label} is refused, saying why', status == 400 and words in reply.get('error', ''), f'{status} {reply}')
+    # Characters that print as nothing but which isprintable() lets through: with one, "gina" could be registered again looking the same.
+    for label, username in [('a combining grapheme joiner in it', 'gina͏'), ('nothing but Hangul fillers', 'ㅤㅤㅤ'),
+                            ('a blank braille pattern in it', 'gi⠀na'), ('a variation selector in it', 'gina️')]:
+        status, _, reply = register(username, f'blank{len(label)}@example.test')
+        check(f'a username with {label} is refused, saying why', status == 400 and 'invisible or control' in reply.get('error', ''), f'{status} {reply}')
     status, _, reply = register('x' * 32, 'longest@example.test')
     check('32 characters is fine', status == 200, f'{status} {reply}')
     status, _, reply = register('Jo Lifter', 'jo@example.test')
     check('and so is a space between words', status == 200, f'{status} {reply}')
+    # Stored composed (NFKC), which writes a no-break space as a plain one, so it is one more name with a space in it.
+    status, _, reply = register('no break', 'nobreak@example.test')
+    check('a no-break space is stored as a plain one', status == 200 and reply['user']['username'] == 'no break', f'{status} {reply}')
+
+    # Usernames were unique only as typed: "henry" and "Henry" could both be made, and the sign-in limit, kept for a name in any
+    # case, then let whoever held "Henry" end the wait on "henry" by signing in, as often as they liked.
+    register('henry', 'henry@example.test', 'right-password')
+    register('josé', 'jose@example.test')
+    for label, username in [('in other capitals', 'Henry'), ('in capitals', 'HENRY'), ('with its accent typed as a separate mark', 'josé')]:
+        status, _, reply = register(username, f'copy{len(label)}@example.test')
+        check(f'a username already registered, {label}, is refused -> 409', status == 409 and 'already registered' in reply.get('error', ''), f'{status} {reply}')
+    status, _, reply = post('/api/auth/login', {'login': 'HENRY', 'password': 'right-password'})
+    check('and a username signs in in any capitals', status == 200 and reply['user']['username'] == 'henry', f'{status} {reply}')
+    status, _, reply = post('/api/auth/login', {'login': 'josé', 'password': 'chalk-and-plates-42'})
+    check('or with its accent typed either way', status == 200 and reply['user']['username'] == 'josé', f'{status} {reply}')
 
     for label, email in [
         ('a one-letter top-level domain', 'short@example.c'),

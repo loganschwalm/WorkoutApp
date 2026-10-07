@@ -321,6 +321,8 @@ def run(t):
         return result if rule == 'password_problem' and result else ''
 
     usernames = ['ab', 'abc', 'u' * 32, 'u' * 33, 'new@bie', 'tab\tbed', 'zero​width', 'no break', 'Jo Lifter', '  padded  ', 'émile']
+    # Characters that print as nothing, a name typed with a combining accent, and ones NFKC changes (a ligature, a circled digit).
+    usernames += ['gina͏', 'ㅤㅤㅤ', 'gi⠀na', 'gina️', 'gina󠄀', 'josé', 'ﬁtness', 'u' * 31 + '⑴']
     emails = ['me@example.test', 'Me@Example.TEST', 'short@example.c', 'digits@example.123', 'two..dots@example.test', '.dot@example.test',
               'dot.@example.test', 'hyphen@-example.test', 'hyphen@example-.test', 'under@exa_mple.test', 'com,ma@example.test',
               'josé@example.test', 'l' * 64 + '@example.test', 'l' * 65 + '@example.test', "o'brien@example.test", 'x@xn--bcher-kva.example',
