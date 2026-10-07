@@ -605,6 +605,40 @@ def run_limits(t, check):
     check('and once the first has gone, imports are taken again', status == 200, status)
     big.stop()
 
+    # The count of workouts allows each to be 256 KB, 12 GB for 50,000, so what they take altogether is limited too.
+    full = t.start_server('workout-space.db', {'MAX_WORKOUTS_MB': '1'})
+    token = session_of(make(full, 'packer')[1])
+
+    def bulky(n, padding=200_000):
+        return {'name': f'Bulky {n}', 'clientId': f'bulky-{n}', 'exercises': [], 'padding': 'x' * padding}
+
+    def change(workout_id, body):
+        return full.request('PUT', f'/api/workouts/{workout_id}', json.dumps(body).encode(), {**json_headers, 'Cookie': f'session={token}'})
+
+    def space():
+        db = sqlite3.connect(t.db_path('workout-space.db'))
+        kept_bytes = db.execute("SELECT bytes FROM workout_bytes JOIN users ON users.id = workout_bytes.user_id WHERE username = 'packer'").fetchone()[0]
+        real = db.execute("SELECT SUM(length(CAST(name AS BLOB)) + length(CAST(notes AS BLOB)) + length(CAST(payload AS BLOB))) FROM workouts "
+                          "JOIN users ON users.id = workouts.user_id WHERE username = 'packer'").fetchone()[0]
+        db.close()
+        return kept_bytes, real
+    replies = [post(full, '/api/workouts', bulky(n), token) for n in range(5)]
+    check('five workouts of 200 KB are kept under a limit of 1 MB', [status for status, _, _ in replies] == [201] * 5, [status for status, _, _ in replies])
+    status, _, reply = post(full, '/api/workouts', bulky(5), token)
+    check('a sixth is refused with 400, which a phone takes to mean it is kept on the device', status == 400 and '1 MB' in reply.get('error', ''), f'{status} {reply}')
+    check('a retry of one already kept is still answered', post(full, '/api/workouts', bulky(0), token)[0] == 200)
+    status, _, reply = post(full, '/api/import', {'format': 'workout-tracker-export', 'workouts': [bulky(7)]}, token)
+    check('an import that would take the account past it is refused whole', status == 400 and '1 MB' in reply.get('error', ''), f'{status} {reply}')
+    first = replies[0][2]['id']
+    check('a change that makes one smaller is kept, however full the account', change(first, bulky(0, padding=10))[0] == 200)
+    status, _, reply = change(first, bulky(0, padding=250_000))
+    check('and one that would make it bigger than there is room for is refused', status == 400 and '1 MB' in reply.get('error', ''), f'{status} {reply}')
+    full.request('DELETE', f"/api/workouts/{replies[1][2]['id']}", headers={'Cookie': f'session={token}'})
+    check('deleting one makes room again', post(full, '/api/workouts', bulky(6), token)[0] == 201)
+    kept_bytes, real = space()
+    check('and through all of it, what the account is counted as taking is what its workouts take', kept_bytes == real, f'{kept_bytes} {real}')
+    full.stop()
+
     # The parts of the account state have counts (templates, notes...) but had no size, and a part grows by being merged: each
     # change sent as from a device that had none of it added to what was there, so one account could grow its templates without
     # end, and with them the time every change to its state spends reading and writing them, holding the database for everyone.
@@ -910,7 +944,8 @@ def run_connections(t, check):
 def run_structure(t, check, request):
     token = t.token
     json_headers = {'Content-Type': 'application/json'}
-    tables = ['active_sessions', 'password_resets', 'push_subscriptions', 'server_keys', 'sessions', 'user_state', 'users', 'workout_versions', 'workouts']
+    tables = ['active_sessions', 'password_resets', 'push_subscriptions', 'server_keys', 'sessions', 'user_state', 'users', 'workout_bytes',
+              'workout_versions', 'workouts']
 
     # ------------------------------------------------------------------ A12 schema at startup
     print('A12 the schema is created and versioned at startup, in WAL mode')
@@ -975,6 +1010,7 @@ def run_structure(t, check, request):
     check('and the remembered column on its sessions', 'remember' in legacy['session_columns'], legacy['session_columns'])
     check('and the tables of push subscriptions and the server’s own keys', {'push_subscriptions', 'server_keys'} <= set(legacy['tables']), legacy['tables'])
     check('and the index workouts are read in, and the table of their versions', 'workouts_user_created' in legacy['indexes'] and 'workout_versions' in legacy['tables'], legacy)
+    check('and the table of how much each account\'s workouts take', 'workout_bytes' in legacy['tables'], legacy['tables'])
 
     # A database written by the release before migrations were numbered: client_id already there, version 0.
     path = t.db_path('unversioned.db')
@@ -990,9 +1026,11 @@ def run_structure(t, check, request):
     schema = schema_of(path)
     db = sqlite3.connect(path)
     kept = db.execute("SELECT name, client_id FROM workouts").fetchall()
+    total = db.execute('SELECT bytes FROM workout_bytes WHERE user_id = 1').fetchone()
     db.close()
     check('an unversioned database that already has client_id upgrades cleanly',
           schema['version'] == LATEST_SCHEMA and schema['columns'].count('client_id') == 1 and kept == [('Kept', 'k1')], f'{schema} {kept}')
+    check('and an account with workouts from before is given what they take', total == (len('Kept') + len('{"exercises": []}'),), total)
 
     path = t.db_path('newer.db')
     db = sqlite3.connect(path)

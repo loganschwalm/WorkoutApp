@@ -6,7 +6,7 @@ import math
 import time
 from http import HTTPStatus
 
-from config import MAX_WORKOUTS, MAX_WORKOUT_BYTES
+from config import MAX_WORKOUTS, MAX_WORKOUTS_MB, MAX_WORKOUT_BYTES
 
 
 class BadRequest(Exception):
@@ -108,6 +108,24 @@ def check_workout_room(held, adding=1):
     """Raises if an account holding `held` workouts cannot take `adding` more (MAX_WORKOUTS)."""
     if MAX_WORKOUTS and held + adding > MAX_WORKOUTS:
         raise BadRequest(f'An account can keep at most {MAX_WORKOUTS:,} workouts. Export and delete some before adding more.')
+
+
+def workout_bytes_held(database, user_id):
+    """How much the account's workouts take as stored, in bytes (see migration_14_workout_bytes)."""
+    row = database.execute('SELECT bytes FROM workout_bytes WHERE user_id = ?', (user_id,)).fetchone()
+    return row[0] if row else 0
+
+
+def stored_size(name, notes, payload):
+    """What a workout takes as stored, in bytes, counted as the triggers of migration_14_workout_bytes count it."""
+    return sum(len(part.encode('utf-8', 'surrogatepass')) for part in (name, notes, payload))
+
+
+def check_workout_space(held, adding):
+    """Raises if an account whose workouts take `held` bytes cannot take `adding` more (MAX_WORKOUTS_MB). A 400, as a count past
+    MAX_WORKOUTS is, which a phone takes to mean the workout stays on the device rather than being sent again."""
+    if MAX_WORKOUTS_MB and held + adding > MAX_WORKOUTS_MB * 1024 * 1024:
+        raise BadRequest(f"An account's workouts can take at most {MAX_WORKOUTS_MB:,} MB. Export and delete some before adding more.")
 
 
 def validate_workout(data):

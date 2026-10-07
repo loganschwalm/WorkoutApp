@@ -200,6 +200,7 @@ restart the app), or under `environment:` in `docker-compose.yml`.
 | `SECURE_COOKIES` | `0` | `1` if the app is **only** ever reached over HTTPS |
 | `HOST` | `0.0.0.0` | `127.0.0.1` if a reverse proxy on the same machine is the only way in (not under Docker: publish the port as `127.0.0.1:6769:6769`) |
 | `MAX_WORKOUTS` | `50000` | The most workouts one account can keep |
+| `MAX_WORKOUTS_MB` | `100` | The most space one account's workouts can take, in MB (ten years of training is about 10) |
 | `REGISTRATIONS_PER_HOUR` | `5` | New accounts one address can make in an hour (`0`: no limit) |
 | `TRUSTED_PROXIES` | none | Your reverse proxy's address, if you use one, so wrong-password limits apply to each person rather than to everyone at once |
 | `SMTP_HOST`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` | none | A mail server, for "Forgot password?" emails |

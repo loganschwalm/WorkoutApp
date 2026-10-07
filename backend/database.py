@@ -185,9 +185,27 @@ def migration_13_session_details(database):
     database.execute("ALTER TABLE push_subscriptions ADD COLUMN session_hash TEXT NOT NULL DEFAULT ''")
 
 
+def migration_14_workout_bytes(database):
+    # How much each account's workouts take as stored (their names, notes and the rest, in bytes), for MAX_WORKOUTS_MB. Kept by
+    # triggers, as the tags of migration 12 are, so no way of writing a workout can forget to, and a new one is checked without
+    # adding up every one before it. Accounts with workouts already are given their total here.
+    size = lambda row: f'length(CAST({row}.name AS BLOB)) + length(CAST({row}.notes AS BLOB)) + length(CAST({row}.payload AS BLOB))'
+    database.execute('CREATE TABLE workout_bytes (user_id INTEGER PRIMARY KEY, bytes INTEGER NOT NULL)')
+    database.execute(f"INSERT INTO workout_bytes (user_id, bytes) SELECT user_id, SUM({size('workouts')}) FROM workouts GROUP BY user_id")
+    for name, event, row, change in (('inserted', 'INSERT', 'NEW', size('NEW')), ('updated', 'UPDATE', 'NEW', f"{size('NEW')} - ({size('OLD')})"),
+                                     ('deleted', 'DELETE', 'OLD', f"-({size('OLD')})")):
+        database.execute(f'''
+            CREATE TRIGGER workouts_bytes_{name} AFTER {event} ON workouts
+            BEGIN
+                INSERT INTO workout_bytes (user_id, bytes) VALUES ({row}.user_id, {change})
+                ON CONFLICT(user_id) DO UPDATE SET bytes = bytes + excluded.bytes;
+            END''')
+
+
 MIGRATIONS = [migration_1_tables, migration_2_client_ids, migration_3_programs, migration_4_emails, migration_5_exercise_notes,
               migration_6_hashed_sessions, migration_7_goals, migration_8_bodyweight, migration_9_remembered_sessions,
-              migration_10_exercise_library, migration_11_push, migration_12_workout_cache, migration_13_session_details]
+              migration_10_exercise_library, migration_11_push, migration_12_workout_cache, migration_13_session_details,
+              migration_14_workout_bytes]
 
 
 def init_database():
@@ -235,7 +253,8 @@ def connection():
 def delete_account_rows(database, user_id):
     """Everything an account has, then the account. The tables would cascade, but only with foreign keys on and on
     databases made since those references existed, so each is emptied by name."""
-    for table in ('sessions', 'workouts', 'workout_versions', 'active_sessions', 'user_state', 'password_resets', 'push_subscriptions'):
+    for table in ('sessions', 'workouts', 'workout_versions', 'workout_bytes', 'active_sessions', 'user_state', 'password_resets',
+                  'push_subscriptions'):
         database.execute(f'DELETE FROM {table} WHERE user_id = ?', (user_id,))
     database.execute('DELETE FROM users WHERE id = ?', (user_id,))
 

@@ -1127,11 +1127,13 @@ What is already in place:
   sign-up (a name taken, a weak password) costs nothing, and a script cannot fill the database with accounts. A limit
   per address needs the real address: behind a reverse proxy, see `TRUSTED_PROXIES` above, or everyone behind it shares
   one limit, and `REGISTRATIONS_PER_HOUR=0` and `RESET_ADDRESS_EMAILS=0` turn them off.
-- An account keeps at most 50,000 workouts (`MAX_WORKOUTS`, 0 for no limit), and a workout is at most 256 KB as stored (a
-  real one is a few KB; the longest notes allowed are 100 KB). One over either is refused: with 400 for the count and
-  413 for the size, both of which the phone takes to mean the server will never accept it, so it stays on the device
-  rather than being sent again. A retry of a workout already kept is still answered. An import that would pass the count
-  is refused whole, with nothing stored. Only one import runs at a time, since each reads and parses a body of up to
+- An account keeps at most 50,000 workouts (`MAX_WORKOUTS`, 0 for no limit), taking at most 100 MB altogether
+  (`MAX_WORKOUTS_MB`, 0 for no limit; ten years of training is about 10 MB), and a workout is at most 256 KB as stored (a
+  real one is a few KB; the longest notes allowed are 100 KB). One over any of them is refused: with 400 for the count
+  and the total, and 413 for the size, each of which the phone takes to mean the server will never accept it, so it
+  stays on the device rather than being sent again. A change to a workout that makes it bigger is refused the same way
+  when the account is full, and one that makes it smaller never is. A retry of a workout already kept is still answered.
+  An import that would pass the count or the total is refused whole, with nothing stored. Only one import runs at a time, since each reads and parses a body of up to
   32 MB; a second is answered 503 with `Retry-After`. The other synced data has limits of its own (templates, goals,
   weigh-ins, notes and the exercise library each have a count), and each part of it is at most 2 MB as stored (a lifetime
   of daily weigh-ins, the largest a real one comes to, is about that). A change that would take a part past it is refused
@@ -1188,6 +1190,7 @@ The server reads these environment variables:
 | `LOGIN_WINDOW` | `900` | Seconds a failed sign-in is remembered |
 | `HOST` | `0.0.0.0` | The address to listen on; `127.0.0.1` for a reverse proxy on the same machine (not under Docker: publish the port to `127.0.0.1` instead, see [Before you expose it](#before-you-expose-it)) |
 | `MAX_WORKOUTS` | `50000` | Workouts one account may keep; `0` takes the limit off |
+| `MAX_WORKOUTS_MB` | `100` | How much one account's workouts may take altogether, in MB as stored (ten years of training is about 10 MB); `0` takes the limit off |
 | `REGISTRATIONS_PER_HOUR` | `5` | Accounts one client address may make in an hour; `0` turns it off |
 | `RESET_ADDRESS_EMAILS` | `10` | Reset emails one client address may ask for in an hour, whichever addresses it names; `0` turns it off |
 | `TRUSTED_PROXIES` | *(none)* | Reverse proxies whose `X-Forwarded-For` is believed, as addresses or networks separated by commas (`127.0.0.1, 172.16.0.0/12`), so the sign-in limits count each person behind them apart. See [Before you expose it](#before-you-expose-it) |

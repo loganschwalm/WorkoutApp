@@ -123,7 +123,8 @@ def run(t):
     plan = ' '.join(row[3] for row in sql("EXPLAIN QUERY PLAN SELECT id, name, notes, created_at, payload FROM workouts WHERE user_id = 1 ORDER BY created_at DESC"))
     check('by an index on the account and the time, with no sorting afterwards', 'workouts_user_created' in plan and 'TEMP B-TREE' not in plan, plan)
     check('which is there in the database', sql("SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'workouts_user_created'")[0][0] == 1)
-    check('as are the three triggers that keep the tags', sorted(row[0] for row in sql("SELECT name FROM sqlite_master WHERE type = 'trigger'")) == ['workouts_deleted', 'workouts_inserted', 'workouts_updated'])
+    triggers = sorted(row[0] for row in sql("SELECT name FROM sqlite_master WHERE type = 'trigger' AND name NOT LIKE 'workouts_bytes_%'"))
+    check('as are the three triggers that keep the tags', triggers == ['workouts_deleted', 'workouts_inserted', 'workouts_updated'], triggers)
 
     # ------------------------------------------------------------------ S signing out
     print('S   signing out clears what the browser kept')

@@ -10,7 +10,10 @@ from urllib.parse import urlparse
 from config import EXPORT_FORMAT, MAX_IMPORT, MAX_IMPORTS_AT_ONCE, MAX_STATE_CHANGE
 from database import connection, workout_tag
 from state import STATE_PARTS, load_state, merge_part, store_state, validate_state
-from validation import BadRequest, check_workout_room, listed, validate_workout, weight_unit, workout_payload, workouts_held
+from validation import (
+    BadRequest, check_workout_room, check_workout_space, listed, stored_size, validate_workout, weight_unit, workout_bytes_held,
+    workout_payload, workouts_held
+)
 from workouts import etag_matches, export_zone, exported_workouts, stored_workout_keys, workout_id, workout_key, workouts_csv
 
 
@@ -58,6 +61,7 @@ class DataApi:
                 status, stored_id = HTTPStatus.OK, stored['id']
             else:
                 check_workout_room(workouts_held(database, user['id']))
+                check_workout_space(workout_bytes_held(database, user['id']), stored_size(name, notes, payload))
                 status = HTTPStatus.CREATED
                 stored_id = database.execute('INSERT INTO workouts (user_id, name, notes, created_at, payload, client_id) VALUES (?, ?, ?, ?, ?, ?)',
                                              (user['id'], name, notes, created_at, payload, client_id)).lastrowid
@@ -71,6 +75,14 @@ class DataApi:
         updated = 0
         if target is not None:
             with connection() as database:
+                # Held from here, so two changes cannot both take the account's last room.
+                database.execute('BEGIN IMMEDIATE')
+                stored = database.execute('SELECT name, notes, payload FROM workouts WHERE id=? AND user_id=?', (target, user['id'])).fetchone()
+                if stored:
+                    # Only a change that makes the workout bigger can be refused for room: one over the limit can still be cut down.
+                    was, now = stored_size(stored['name'], stored['notes'], stored['payload']), stored_size(name, notes, payload)
+                    if now > was:
+                        check_workout_space(workout_bytes_held(database, user['id']) - was, now)
                 updated = database.execute('UPDATE workouts SET name=?, notes=?, created_at=?, payload=? WHERE id=? AND user_id=?', (name, notes, created_at, payload, target, user['id'])).rowcount
         if not updated:
             self.send_json(HTTPStatus.NOT_FOUND, {'error': 'Workout not found.'})
@@ -217,7 +229,7 @@ class DataApi:
         added = 0
         with connection() as database:
             database.execute('BEGIN IMMEDIATE')
-            held = workouts_held(database, user['id'])
+            held, held_bytes, added_bytes = workouts_held(database, user['id']), workout_bytes_held(database, user['id']), 0
             # A workout with no clientId is already here if one with its name, time and exercises is, from before or earlier in the file.
             unlabelled = {(created_at, name) for workout, _, name, _, created_at in prepared if not workout.get('clientId')}
             seen = stored_workout_keys(database, user['id'], unlabelled) if unlabelled else set()
@@ -228,11 +240,15 @@ class DataApi:
                     if key in seen:
                         continue
                     seen.add(key)
-                # Past the account's limit, the whole file is refused and nothing is stored (the block raises, and is rolled back).
+                # Past the account's limits, the whole file is refused and nothing is stored (the block raises, and is rolled back).
                 check_workout_room(held + added)
-                added += database.execute('INSERT INTO workouts (user_id, name, notes, created_at, payload, client_id) VALUES (?, ?, ?, ?, ?, ?) '
-                                          'ON CONFLICT(user_id, client_id) DO NOTHING',
-                                          (user['id'], name, notes, created_at, payload, client_id)).rowcount
+                size = stored_size(name, notes, payload)
+                check_workout_space(held_bytes + added_bytes, size)
+                inserted = database.execute('INSERT INTO workouts (user_id, name, notes, created_at, payload, client_id) VALUES (?, ?, ?, ?, ?, ?) '
+                                            'ON CONFLICT(user_id, client_id) DO NOTHING',
+                                            (user['id'], name, notes, created_at, payload, client_id)).rowcount
+                added += inserted
+                added_bytes += size * inserted
             have = load_state(database, user['id'])
             # Each part takes what it will of the file's (and refuses the file, with nothing stored, if that would take it past its limit).
             taken = {name: part.take(have[name], state.get(name)) for name, part in STATE_PARTS.items()}

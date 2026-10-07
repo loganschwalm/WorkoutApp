@@ -37,6 +37,9 @@ EXPORT_FORMAT = 'workout-tracker-export'
 # What one account may keep, so no one account (or a flood of them) can fill the disk. A workout is a few kilobytes: ten years of
 # training six days a week is about 3,000 of them. MAX_WORKOUTS=0 takes the limit off, for a server only its owner uses.
 MAX_WORKOUTS = int(os.environ.get('MAX_WORKOUTS', '50000'))
+# And how much they may take altogether, in MB as stored, since the count alone allows each to be MAX_WORKOUT_BYTES: 50,000 of those
+# is over 12 GB. Ten years of real training is about 10 MB. MAX_WORKOUTS_MB=0 takes the limit off.
+MAX_WORKOUTS_MB = int(os.environ.get('MAX_WORKOUTS_MB', '100'))
 # The most one stored workout may be (as the JSON the server keeps), in bytes.
 MAX_WORKOUT_BYTES = 256 * 1024
 # Imports read up to MAX_IMPORT bytes into memory and parse them, so only this many run at once; another is told to try again.
