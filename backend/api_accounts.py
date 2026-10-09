@@ -10,7 +10,7 @@ from http import HTTPStatus
 from accounts import (
     DUMMY_HASH, address_throttle, device_label, email_address, email_reset_code, find_account, login_key, login_throttle, needs_rehash, new_password,
     new_username, password_hash, password_matches, public_user, register_throttle, reset_address_throttle, reset_code_hash,
-    reset_daily_throttle, reset_guess_throttle, reset_throttle, wait_words
+    reset_daily_throttle, reset_guess_throttle, reset_throttle, username_taken, wait_words
 )
 from config import ALLOW_REGISTRATION, RESET_CODE_ATTEMPTS, RESET_CODE_TTL, SESSION_TTL, SHORT_SESSION_TTL, SMTP_HOST
 from database import connection, delete_account_rows, forget_reminders, session_hash, username_key
@@ -74,10 +74,10 @@ class AccountApi:
         if wait:
             self.send_wait(wait, 'Too many accounts have been made from this address.')
             return
+        key = username_key(username)
         try:
             with connection() as database:
-                # As typed, or written another way: other capitals, or an accent typed as a combining one (see username_key).
-                if database.execute('SELECT 1 FROM users WHERE username = ? OR username_key = ?', (username, username_key(username))).fetchone():
+                if username_taken(database, username, key):
                     raise BadRequest('That username is already registered.', HTTPStatus.CONFLICT)
                 if database.execute('SELECT 1 FROM users WHERE email = ?', (email,)).fetchone():
                     raise BadRequest('That email is already registered.', HTTPStatus.CONFLICT)
@@ -85,11 +85,10 @@ class AccountApi:
                 stored_hash = password_hash(password)
                 try:
                     user_id = database.execute('INSERT INTO users (username, username_key, email, password_hash, created_at) VALUES (?, ?, ?, ?, ?)',
-                                               (username, username_key(username), email, stored_hash, int(time.time() * 1000))).lastrowid
+                                               (username, key, email, stored_hash, int(time.time() * 1000))).lastrowid
                 except sqlite3.IntegrityError:
                     # Another request took the name or the email between the checks above and this write; the unique indexes refused it.
-                    taken = 'username' if database.execute('SELECT 1 FROM users WHERE username = ? OR username_key = ?',
-                                                           (username, username_key(username))).fetchone() else 'email'
+                    taken = 'username' if username_taken(database, username, key) else 'email'
                     raise BadRequest(f'That {taken} is already registered.', HTTPStatus.CONFLICT)
                 cookie = self.start_session(database, user_id, remember)
         except BaseException:
@@ -106,11 +105,13 @@ class AccountApi:
         if len(login) < 3 or len(password) < 8:
             raise BadRequest('Enter your email or username, and a password of 8+ characters.')
         remember = self.wants_remembering(data)
+        # Once, for both: on a name with no maximum length it is not cheap.
+        key = username_key(login)
         with connection() as database:
-            row = find_account(database, login)
+            row = find_account(database, login, key)
             # Keyed by the account rather than what was typed, so its email and its username share one limit (see login_key).
             address = self.client_ip()
-            throttle_key = login_key(address, login, row['id'] if row else None)
+            throttle_key = login_key(address, login, row['id'] if row else None, key)
             # Refused before the password is even checked, so guessing cannot continue during the wait. Each try is counted as a
             # failure before its password is checked, which takes a good part of a second: counted after, tries sent at once all
             # passed the check before any was counted. A try that signs in is then taken back.

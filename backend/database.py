@@ -275,11 +275,20 @@ def connection():
 
 def delete_account_rows(database, user_id):
     """Everything an account has, then the account. The tables would cascade, but only with foreign keys on and on
-    databases made since those references existed, so each is emptied by name."""
+    databases made since those references existed, so each is emptied by name. If the account held a username_key that an older
+    account of the same name in other capitals went without (see migration_15_username_keys), the key goes to the oldest of
+    those, so its name does not become free to register again in other capitals."""
     for table in ('sessions', 'workouts', 'workout_versions', 'workout_bytes', 'active_sessions', 'user_state', 'password_resets',
                   'push_subscriptions'):
         database.execute(f'DELETE FROM {table} WHERE user_id = ?', (user_id,))
+    row = database.execute('SELECT username_key FROM users WHERE id = ?', (user_id,)).fetchone()
     database.execute('DELETE FROM users WHERE id = ?', (user_id,))
+    if row and row[0] is not None:
+        # Accounts with no key are only those twins, so there are none to look through on almost every server.
+        for other_id, username in database.execute('SELECT id, username FROM users WHERE username_key IS NULL ORDER BY id').fetchall():
+            if username_key(username) == row[0]:
+                database.execute('UPDATE users SET username_key = ? WHERE id = ?', (row[0], other_id))
+                break
 
 
 def forget_reminders(database, user_id, session=None, keep=None):

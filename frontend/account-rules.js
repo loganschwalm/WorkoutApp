@@ -11,7 +11,7 @@ const EMAIL_SHAPE = /^([a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}
 // characters that print as nothing which it lets through (BLANK_CHARACTERS and the variation selectors in accounts.py).
 function hasInvisible(value) {
   return /[\p{C}\p{Z}]/u.test(value.replace(/ /g, ''))
-    || /[\u034f\u115f\u1160\u17b4\u17b5\u2800\u3164\uffa0\ufe00-\ufe0f\u{e0100}-\u{e01ef}]/u.test(value);
+    || /[\u034f\u115f\u1160\u17b4\u17b5\u2800\u3164\uffa0\u180b-\u180d\u180f\ufe00-\ufe0f\u{e0100}-\u{e01ef}]/u.test(value);
 }
 
 // Each returns what is wrong, or '' when nothing is.

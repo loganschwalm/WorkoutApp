@@ -1053,6 +1053,19 @@ def run_structure(t, check, request):
     statuses += [login(twins, 'Dup', 'wrong-guess-4')[0], login(twins, 'Dup', 'right-password')[0]]
     check("signing in to one between guesses at the other does not end the other's wait", statuses == [401] * 4 + [200, 401, 429], statuses)
     twins.stop()
+    # The one holding the key goes: the other is given it, so its name is not free to register again in other capitals.
+    server = load_server()
+    db = sqlite3.connect(path)
+    server.delete_account_rows(db, 1)
+    db.commit()
+    keys = db.execute('SELECT username, username_key FROM users ORDER BY id').fetchall()
+    db.close()
+    check('when the twin holding the key is deleted, the other is given it', keys == [('dup', 'dup'), ('other', 'other')], keys)
+    twins = t.start_server('twins.db')
+    body = json.dumps({'username': 'DUP', 'email': 'dup-again@example.test', 'password': 'chalk-and-plates-42'}).encode()
+    status, _, reply = twins.request('POST', '/api/auth/register', body, {'Content-Type': 'application/json'})
+    twins.stop()
+    check('and the name cannot be registered again in other capitals', status == 409, f'{status} {reply}')
 
     path = t.db_path('newer.db')
     db = sqlite3.connect(path)
@@ -1539,7 +1552,8 @@ def run_accounts(t, check, request):
         check(f'a username with {label} is refused, saying why', status == 400 and words in reply.get('error', ''), f'{status} {reply}')
     # Characters that print as nothing but which isprintable() lets through: with one, "gina" could be registered again looking the same.
     for label, username in [('a combining grapheme joiner in it', 'gina͏'), ('nothing but Hangul fillers', 'ㅤㅤㅤ'),
-                            ('a blank braille pattern in it', 'gi⠀na'), ('a variation selector in it', 'gina️')]:
+                            ('a blank braille pattern in it', 'gi⠀na'), ('a variation selector in it', 'gina️'),
+                            ('a Mongolian variation selector in it', 'gina᠋')]:
         status, _, reply = register(username, f'blank{len(label)}@example.test')
         check(f'a username with {label} is refused, saying why', status == 400 and 'invisible or control' in reply.get('error', ''), f'{status} {reply}')
     status, _, reply = register('x' * 32, 'longest@example.test')

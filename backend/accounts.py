@@ -57,14 +57,18 @@ COMMON_PASSWORDS = frozenset('''
 
 
 # Characters that show as nothing but that isprintable() lets through: a combining grapheme joiner, Hangul fillers, Khmer vowels
-# that are never written, the blank braille pattern. With one, "gina" could be registered again looking just the same.
+# that are never written, the blank braille pattern. With one, "gina" could be registered again looking just the same. These and
+# the variation selectors below are the Unicode "default ignorable" characters that are not format characters (which
+# isprintable() already refuses), so the list is the standard's, not a guess.
 BLANK_CHARACTERS = frozenset('\u034f\u115f\u1160\u17b4\u17b5\u2800\u3164\uffa0')
 
 
 def invisible(character):
-    """Whether a character prints as nothing: a blank one, or a variation selector."""
+    """Whether a character prints as nothing: a blank one, or a variation selector (the Mongolian ones, the general ones, and the
+    supplement)."""
     point = ord(character)
-    return character in BLANK_CHARACTERS or 0xfe00 <= point <= 0xfe0f or 0xe0100 <= point <= 0xe01ef
+    return (character in BLANK_CHARACTERS or 0x180b <= point <= 0x180d or point == 0x180f or 0xfe00 <= point <= 0xfe0f
+            or 0xe0100 <= point <= 0xe01ef)
 
 
 def new_username(value):
@@ -242,15 +246,18 @@ register_throttle = Throttle(REGISTRATIONS_PER_HOUR, 60 * 60) if REGISTRATIONS_P
 reset_guess_throttle = Throttle(RESET_GUESSES, 24 * 60 * 60)
 
 
-def login_key(address, name, account_id=None):
+def login_key(address, name, account_id=None, key=None):
     """What login_throttle counts a failed sign-in under: the address it came from, and the account tried, by its id, so every
     name it is found by (its email, its username in any capitals) shares one count and no other account's can clear it. A name
     that is no account's is counted by its username_key, as a digest, a fixed 64 characters: the field has no maximum (a
     username from before the rules may be any length), and each failure is held for LOGIN_WINDOW, so kept as typed, failures
-    naming a megabyte each filled the memory."""
+    naming a megabyte each filled the memory. `key` is the name's username_key if the caller has it already: on a name that long
+    it is not cheap to make twice."""
     if account_id is not None:
         return address, f'account {account_id}'
-    return address, hashlib.sha256(username_key(name).encode('utf-8', 'surrogatepass')).hexdigest()
+    if key is None:
+        key = username_key(name)
+    return address, hashlib.sha256(key.encode('utf-8', 'surrogatepass')).hexdigest()
 
 
 def wait_words(seconds):
@@ -262,9 +269,16 @@ def wait_words(seconds):
     return f'{hours} hours'
 
 
-def find_account(database, login):
+def username_taken(database, username, key):
+    """Whether an account has this username, as typed or written another way: other capitals, or an accent typed as a combining
+    one (`key` is its username_key). Registering asks this twice, before the write and after the unique indexes refuse it, so
+    the rule is kept in one place."""
+    return database.execute('SELECT 1 FROM users WHERE username = ? OR username_key = ?', (username, key)).fetchone() is not None
+
+
+def find_account(database, login, key=None):
     """The account signing in as `login`: an email in any case, or else a username exactly as registered, or else as written any
-    other way (its username_key: other capitals, or an accent typed as a combining one)."""
+    other way (its username_key: other capitals, or an accent typed as a combining one; `key` if the caller has it already)."""
     columns = 'id, username, email, password_hash'
     if '@' in login:
         row = database.execute(f'SELECT {columns} FROM users WHERE email = ?', (login.lower(),)).fetchone()
@@ -273,7 +287,9 @@ def find_account(database, login):
     # Usernames from before accounts had emails can contain @, so an address with no account behind it may be one. Exactly as
     # registered first: two accounts from before usernames were unique in any case may differ only in capitals.
     row = database.execute(f'SELECT {columns} FROM users WHERE username = ?', (login,)).fetchone()
-    return row or database.execute(f'SELECT {columns} FROM users WHERE username_key = ?', (username_key(login),)).fetchone()
+    if row:
+        return row
+    return database.execute(f'SELECT {columns} FROM users WHERE username_key = ?', (username_key(login) if key is None else key,)).fetchone()
 
 
 def device_label(user_agent):
