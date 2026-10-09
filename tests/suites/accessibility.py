@@ -29,6 +29,26 @@ FOCUS_RINGS = """(() => {
   return result;
 })()"""
 
+# What can be pressed and is under the size of a fingertip, as "tag#id.classes WxH": buttons, links, summaries and fields, and a tick box
+# or radio by its label (that is what is pressed). The box measured is what is drawn, or for a hidden input the label around it.
+SMALL_TARGETS = """(() => {
+  const found = [];
+  for (const element of document.querySelectorAll('button, a[href], summary, select, input:not([type=hidden]), textarea, [role=button]')) {
+    if (element.disabled || getComputedStyle(element).visibility === 'hidden') continue;
+    let box = element.getBoundingClientRect();
+    const label = element.closest('label');
+    if (element.matches('input[type=checkbox], input[type=radio]') && label) box = label.getBoundingClientRect();
+    else if (getComputedStyle(element).opacity === '0') continue;
+    if (box.width === 0 || box.height === 0) continue;
+    const kind = element.closest('.calendar-day, .weekday') ? (element.closest('.calendar-day') ? 'calendar-day' : 'weekday') : 'other';
+    const least = { 'calendar-day': [24, 24], weekday: [36, 44], other: [44, 44] }[kind];
+    if (box.width < least[0] - 0.5 || box.height < least[1] - 0.5) {
+      found.push(`${element.tagName.toLowerCase()}#${element.id}.${[...element.classList].join('.')} ${Math.round(box.width)}x${Math.round(box.height)} ${(element.getAttribute('aria-label') || element.textContent || '').trim().slice(0, 24)}`);
+    }
+  }
+  return found;
+})()"""
+
 SIZES = {'normal': 16, 'large': 18.4, 'larger': 20.8, 'largest': 24}
 
 
@@ -155,3 +175,31 @@ def run(t):
         open_settings()
         check(f'{stored}: Normal', cdp.ev("document.getElementById('textSizeSetting').value") == 'normal' and root_size() == 16, root_size())
         cdp.ev("document.getElementById('closeSettings').click()")
+
+    # ------------------------------------------------------------------ F6 what is pressed is big enough to press
+    print('F6  everything pressed is the size of a fingertip, on a phone, at the usual text size and the largest')
+    cdp.send('Emulation.setDeviceMetricsOverride', width=375, height=800, deviceScaleFactor=1, mobile=True)
+
+    def small_targets_everywhere():
+        found = {}
+        for label, path, ready in PAGES + [('the sign-in page', '/login.html', "!!document.getElementById('authForm')")]:
+            settle(path, ready)
+            found[label] = cdp.ev(SMALL_TARGETS)
+        open_settings()
+        found['Settings'] = cdp.ev(SMALL_TARGETS)
+        cdp.ev("document.getElementById('closeSettings').click()")
+        open_tracker()
+        start(0)
+        cdp.pause(0.4)
+        cdp.ev("document.querySelectorAll('details').forEach(details => { details.open = true; })")
+        cdp.pause(0.3)
+        found['a workout'] = cdp.ev(SMALL_TARGETS)
+        end_workout()
+        return found
+
+    for size in ('normal', 'largest'):
+        api('PUT', '/api/state', {'settings': {'textSize': size}}, token)
+        for label, small in small_targets_everywhere().items():
+            check(f'{size}: {label}: nothing to press is smaller than 44px (a calendar day 24px, a training day 36 wide)', small == [], small)
+    api('PUT', '/api/state', {'settings': {}}, token)
+    cdp.send('Emulation.clearDeviceMetricsOverride')

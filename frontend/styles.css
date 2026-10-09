@@ -859,3 +859,21 @@ html[data-theme="dark"] .guide-mistake { background:#3a3122; }
 .coming-up li span { color:var(--muted); text-align:right; }
 .coming-up li.done { opacity:.65; }
 @media (max-width:620px) { .schedule-card { align-items:stretch; flex-direction:column; } .schedule-actions { justify-content:space-between; } .schedule-actions .primary { flex:1; min-height:44px; } }
+
+/* Tap targets: everything pressed is at least 44px tall, the size of a fingertip (and as wide where it is on its own), whatever the
+   text inside it, so it can be hit with a thumb or a shaking hand, and with the text size turned up. The rules above that set sizes
+   for the controls of a workout stay; these are the floor under all the rest. tests/suites/accessibility.py measures every control
+   on every page and says which are under. Two things cannot be that big and are held to what they can: the days of the History
+   calendar (12 weeks across a phone, 24px, the least WCAG 2.5.8 allows) and the seven training days in Settings (44px tall, as wide
+   as seven in a row allow). */
+button, summary, .site-nav a, .setting-check, .past-sessions-link, .button-link { min-height:44px; }
+.settings-button, .modal-close, .exercise-menu > summary, .row-menu > summary { min-width:44px; min-height:44px; }
+.button-link { display:inline-flex; align-items:center; justify-content:center; }
+.settings-button { width:44px; height:44px; }
+.modal-close { width:44px; height:44px; }
+.setting-check, #plateSetting .setting-check { align-items:center; }
+.setting-check input { margin:0; }
+#plateSetting .setting-check { min-width:44px; min-height:44px; }
+input[type=range] { height:44px; padding:0; }
+.weekday span { display:grid; place-items:center; min-height:44px; padding:0; }
+.calendar-day { min-height:24px; }
