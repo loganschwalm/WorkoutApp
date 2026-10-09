@@ -269,5 +269,6 @@ python tests/run.py
 ```
 
 GitHub Actions runs every test on each push. When they all pass on `main`, the `stable` branch moves to
-that commit, and that is what installs and updates use. See [tests/README.md](tests/README.md) for the
+that commit, and that is what installs and updates use. (To hold releases back, set the repository variable `HOLD_STABLE`
+to `true`; [the reference](readme-for-llm.md#tests) says how to release meanwhile.) See [tests/README.md](tests/README.md) for the
 suites, and [readme-for-llm.md](readme-for-llm.md) for how everything works.

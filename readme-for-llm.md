@@ -1548,7 +1548,10 @@ GitHub Actions runs every suite on each push and pull request (`.github/workflow
 oldest this README says the server runs on) and 3.12, after pyflakes and `tests/lint.py` (which checks that the lists kept
 by hand agree with the files: what the service worker precaches, the names scripts share, the documented environment
 variables and the registered suites). When they all pass on `main`, it moves the `stable` branch to that commit, and that
-is the branch installs and updates follow. When you add a script, list it in the page that loads it and in `PRECACHE` in
+is the branch installs and updates follow. To hold releases back for a while, set the repository variable `HOLD_STABLE` to
+`true` (Settings, Secrets and variables, Actions, Variables): pushes are still tested, but `stable` stays where it is. To
+release what is on `main` meanwhile, run the *Tests* workflow by hand on `main` with *Move stable* ticked (it tests `main`
+again first); delete the variable, or set it to anything else, to go back to every green push being released. When you add a script, list it in the page that loads it and in `PRECACHE` in
 `frontend/sw.js`; `lint.py` fails until you do.
 
 ## Data storage

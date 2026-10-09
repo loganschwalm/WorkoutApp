@@ -1,12 +1,19 @@
 # Runs every test suite, on the oldest and a current Python, on each push and pull request. When they pass on main, the
 # same commit moves the `stable` branch, which installs and updates follow (ct/workout-tracker.sh), so a push only
-# reaches servers once it is green.
+# reaches servers once it is green. To hold releases back, set the repository variable HOLD_STABLE to true (Settings, Secrets and
+# variables, Actions, Variables): pushes are still tested but stable stays where it is. To release what is on main while that is
+# set, run this workflow by hand on main with "Move stable" ticked; it tests main again first.
 name: Tests
 
 on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      promote:
+        description: Move stable to main once the tests pass, even while HOLD_STABLE is true
+        type: boolean
+        default: false
 
 jobs:
   test:
@@ -53,7 +60,10 @@ jobs:
 
   promote:
     needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >-
+      github.ref == 'refs/heads/main' && (
+        (github.event_name == 'push' && vars.HOLD_STABLE != 'true') ||
+        (github.event_name == 'workflow_dispatch' && inputs.promote))
     runs-on: ubuntu-latest
     permissions:
       contents: write
