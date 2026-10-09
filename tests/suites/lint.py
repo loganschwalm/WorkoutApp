@@ -107,6 +107,18 @@ def run(t):
         with changed('backend/config.py', lambda text: text + "\nNEW_FLAG = env_flag('ANOTHER_UNDOCUMENTED_FLAG', False)\n"):
             check('and so is a flag', says(['ANOTHER_UNDOCUMENTED_FLAG']), found())
 
+        # -- contrast
+        with changed('frontend/styles.css', replaced('--muted:#636d7f;', '--muted:#aab4c7;')):
+            check('muted text too pale for a light theme is named, with the theme and the ratio', says(['light theme', 'muted text', 'needs 4.5']), found())
+        with changed('frontend/styles.css', replaced('--on-accent:#10131f;', '--on-accent:#ffffff;')):
+            check('and text on the accent that is hard to read', says(['dark theme', 'the text on the accent']), found())
+        with changed('frontend/styles.css', replaced('--accent:#217855;', '--accent:#cfe9da;')):
+            check('and an accent too close to the page to draw the focus ring in', says(['meadow theme', 'focus ring', 'needs 3']), found())
+        with changed('frontend/styles.css', replaced('html[data-theme="dark"] .auth-feedback { color:#ff9eaa; }', '')):
+            check('a colour written out for the light themes that nothing changes in the dark ones is named, by its rule', says(['dark theme', '.auth-feedback']), found())
+        with changed('frontend/styles.css', replaced('html[data-theme="dark"] .auth-feedback { color:#ff9eaa; }', 'html[data-theme="dark"] .auth-feedback { color:#ff9eaa; background:#ffe0e5; }')):
+            check('and so is a dark theme’s own colour on a background it cannot be read on', says(['.auth-feedback', 'ff9eaa on #ffe0e5']), found())
+
         # -- suites
         with changed('tests/suites/orphan.py', content='"""A suite nobody registered."""\n'):
             check('a suite that is not registered, and has no row, is named for both', says(['orphan.py', 'NAMES']) and says(['orphan.py', 'tests/README.md']), found())

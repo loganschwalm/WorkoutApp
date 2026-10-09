@@ -10,21 +10,21 @@
    background starts from. theme.js sets data-palette on <html> to the chosen theme, and data-theme to light or dark,
    which the rules further down that differ in the dark (warnings, successes) go by. Each block also colours the
    previews in Settings, which carry a data-palette of their own. */
-:root, [data-palette="light"] { --bg:#f4f7fb; --card:#fff; --ink:#172033; --muted:#687386; --accent:#5b5ce2; --line:#e3e8f0; --on-accent:#fff;
-  --accent-soft:var(--accent-soft); --accent-line:#c9caf6; --accent-ring:#5b5ce21f; --sunk:var(--sunk); --glow:#eef1ff; }
+:root, [data-palette="light"] { --bg:#f4f7fb; --card:#fff; --ink:#172033; --muted:#636d7f; --accent:#5b5ce2; --line:#e3e8f0; --on-accent:#fff;
+  --accent-soft:#eef0ff; --accent-line:#c9caf6; --accent-ring:#5b5ce21f; --sunk:#f8f9fd; --glow:#eef1ff; }
 :root { --tab-bar:0px; }
-[data-theme="dark"], [data-palette="dark"] { color-scheme:dark; --bg:#151923; --card:#202532; --ink:#edf1fa; --muted:#aab4c7; --accent:#8183f4; --line:#353d4e; --on-accent:#fff;
-  --accent-soft:#303653; --accent-line:#4a4f86; --accent-ring:#8183f42e; --sunk:#171c27; --glow:#252b42; }
+[data-theme="dark"], [data-palette="dark"] { color-scheme:dark; --bg:#151923; --card:#202532; --ink:#edf1fa; --muted:#aab4c7; --accent:#9698f6; --line:#353d4e; --on-accent:#10131f;
+  --accent-soft:#303653; --accent-line:#4a4f86; --accent-ring:#9698f62e; --sunk:#171c27; --glow:#252b42; }
 /* Light themes. */
-[data-palette="sunrise"] { --bg:#fbf5ef; --card:#fffdfb; --ink:#2b1d16; --muted:#7d6659; --accent:#cf4f25; --line:#efe1d4; --on-accent:#fff;
-  --accent-soft:#fde8de; --accent-line:#f2c2ad; --accent-ring:#cf4f2524; --sunk:#fcf6f1; --glow:#ffe6d6; }
-[data-palette="meadow"] { --bg:#f2f7f3; --card:#fff; --ink:#15281d; --muted:#5d7266; --accent:#23805a; --line:#dde9e1; --on-accent:#fff;
-  --accent-soft:#e2f2e8; --accent-line:#b5dcc4; --accent-ring:#23805a24; --sunk:#f6faf7; --glow:#dff2e5; }
-[data-palette="blossom"] { --bg:#fbf3f6; --card:#fff; --ink:#2d1622; --muted:#7c6270; --accent:#c23a78; --line:#f0dfe7; --on-accent:#fff;
-  --accent-soft:#fbe5ef; --accent-line:#f0bcd3; --accent-ring:#c23a7824; --sunk:#fdf7fa; --glow:#fde1ed; }
+[data-palette="sunrise"] { --bg:#fbf5ef; --card:#fffdfb; --ink:#2b1d16; --muted:#7c6558; --accent:#b64621; --line:#efe1d4; --on-accent:#fff;
+  --accent-soft:#fde8de; --accent-line:#f2c2ad; --accent-ring:#b6462124; --sunk:#fcf6f1; --glow:#ffe6d6; }
+[data-palette="meadow"] { --bg:#f2f7f3; --card:#fff; --ink:#15281d; --muted:#5b7064; --accent:#217855; --line:#dde9e1; --on-accent:#fff;
+  --accent-soft:#e2f2e8; --accent-line:#b5dcc4; --accent-ring:#21785524; --sunk:#f6faf7; --glow:#dff2e5; }
+[data-palette="blossom"] { --bg:#fbf3f6; --card:#fff; --ink:#2d1622; --muted:#7c6270; --accent:#b83772; --line:#f0dfe7; --on-accent:#fff;
+  --accent-soft:#fbe5ef; --accent-line:#f0bcd3; --accent-ring:#b8377224; --sunk:#fdf7fa; --glow:#fde1ed; }
 /* Dark themes, most of them on black. A bright accent takes dark text, which white on it would be hard to read. */
-[data-palette="crimson"] { --bg:#0c0c0e; --card:#17171b; --ink:#f3f3f5; --muted:#a6a6b0; --accent:#ef4444; --line:#2a2a30; --on-accent:#fff;
-  --accent-soft:#3a1a1e; --accent-line:#6b2a31; --accent-ring:#ef444438; --sunk:#111114; --glow:#2a1316; }
+[data-palette="crimson"] { --bg:#0c0c0e; --card:#17171b; --ink:#f3f3f5; --muted:#a6a6b0; --accent:#f05555; --line:#2a2a30; --on-accent:#1a0505;
+  --accent-soft:#3a1a1e; --accent-line:#6b2a31; --accent-ring:#f0555538; --sunk:#111114; --glow:#2a1316; }
 [data-palette="emerald"] { --bg:#0b0e0c; --card:#151a17; --ink:#eef5f0; --muted:#9fb0a5; --accent:#34d399; --line:#25302a; --on-accent:#052e1f;
   --accent-soft:#12352a; --accent-line:#1f6b4f; --accent-ring:#34d39938; --sunk:#0f1311; --glow:#10261d; }
 [data-palette="ocean"] { --bg:#0a1220; --card:#101c2f; --ink:#e8f1fb; --muted:#9db0c8; --accent:#38bdf8; --line:#1f3150; --on-accent:#03243a;
@@ -33,6 +33,11 @@
   --accent-soft:#3a2f12; --accent-line:#6e5820; --accent-ring:#f5b72f38; --sunk:#13120e; --glow:#2a220e; }
 [data-palette="violet"] { --bg:#110c1c; --card:#1b1429; --ink:#f1ecfa; --muted:#ada3c2; --accent:#b98cff; --line:#2e2442; --on-accent:#1d0b3a;
   --accent-soft:#2f2150; --accent-line:#55408a; --accent-ring:#b98cff38; --sunk:#150f22; --glow:#2a1a4a; }
+/* The Text size setting (theme.js puts it on <html>): every size below is in rem, so scaling the root scales all of the text and the
+   spaces measured in it. Normal is the browser's own size, which is left alone so a larger default in the browser still counts. */
+html[data-text-size="large"] { font-size:115%; }
+html[data-text-size="larger"] { font-size:130%; }
+html[data-text-size="largest"] { font-size:150%; }
 * { box-sizing:border-box; }
 /* The hidden attribute always wins. A class that sets display (flex, grid) would otherwise override it and
    leave the element showing, as it did for the rest timer and the empty-chart message. */
@@ -52,7 +57,8 @@ body {
 .auth-card form label { margin-top:8px; }
 .auth-card form h2 { margin:24px 0 0; }
 .auth-card form .subtitle { margin:0 0 4px; line-height:1.45; }
-.auth-feedback { margin:18px 0 0; color:#c14b5a; font-size:.9rem; }
+.auth-feedback { margin:18px 0 0; color:#bb4957; font-size:.9rem; }
+html[data-theme="dark"] .auth-feedback { color:#ff9eaa; }
 /* What a new password takes, under its field. */
 .field-advice { margin:0; color:var(--muted); font-size:.8rem; line-height:1.4; }
 .auth-notice { margin:18px 0 0; color:var(--ink); font-size:.9rem; line-height:1.45; }
@@ -90,7 +96,12 @@ input, select { width:100%; border:1px solid var(--line); border-radius:10px; pa
 textarea { width:100%; resize:vertical; border:1px solid var(--line); border-radius:10px; padding:12px 13px; color:var(--ink); background:var(--card); font:inherit; outline:none; }
 input:focus, select:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-ring); }
 textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-ring); }
-input[aria-invalid="true"] { border-color:#c14b5a; box-shadow:0 0 0 3px #c14b5a1f; }
+/* Keyboard focus: whatever is reached with the keyboard (and not what is clicked or tapped) gets a ring in the accent, which tests/lint.py
+   keeps at 3 to 1 against the page and the card in every theme. Fields have no outline of their own (their border changes on focus), so
+   this is what makes their focus plain to someone who cannot see a change of border colour. Controls that are drawn by a sibling of a hidden
+   input (the theme swatches, the training days) put the ring on that sibling, below. */
+:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+input[aria-invalid="true"] { border-color:#bb4957; box-shadow:0 0 0 3px #bb49571f; }
 .grid { display:grid; grid-template-columns:2fr 1fr 1fr auto; gap:12px; align-items:end; }
 label { display:block; color:var(--muted); font-size:.78rem; font-weight:700; margin:0 0 7px; }
 /* The font shorthand cannot mix "inherit" with a size and weight (the browser drops the whole declaration, leaving
@@ -105,7 +116,7 @@ button:hover { transform:translateY(-1px); } .primary { color:var(--on-accent); 
 .exercise.has-sets .set-list { grid-column:1/-1; grid-row:2; margin:0; }
 .exercise.has-sets > button { align-self:stretch; }
 .exercise strong { font-size:.95rem; } .exercise span { color:var(--muted); font-size:.9rem; }
-.remove { color:#c14b5a; background:#fff1f3; padding:8px 10px; font-size:.8rem; }
+.remove { color:#bb4957; background:#fff1f3; padding:8px 10px; font-size:.8rem; }
 .empty { color:var(--muted); text-align:center; padding:22px 0 5px; }
 .saved-workout-list { margin:14px 0 0; padding:0; list-style:none; }
 .saved-workout { padding:14px 0; border-top:1px solid var(--line); }
@@ -133,7 +144,7 @@ button:hover { transform:translateY(-1px); } .primary { color:var(--on-accent); 
 }
 .row-menu-items button { padding:10px 12px; color:var(--ink); background:none; font-size:.9rem; text-align:left; }
 .row-menu-items button:hover { background:var(--bg); transform:none; }
-.row-menu-items .danger, html[data-theme="dark"] .row-menu-items .danger { color:#c14b5a; background:none; }
+.row-menu-items .danger, html[data-theme="dark"] .row-menu-items .danger { color:#bb4957; background:none; }
 html[data-theme="dark"] .row-menu-items .danger { color:#ff9eaa; }
 /* Start again: a few recent workouts, each a tap from starting. */
 .recent-list { margin:14px 0 0; padding:0; list-style:none; }
@@ -147,7 +158,7 @@ html[data-theme="dark"] .row-menu-items .danger { color:#ff9eaa; }
 .workout-details ul { margin:0; padding:0; list-style:none; }
 .workout-details li { display:flex; justify-content:space-between; gap:16px; padding:8px 0; border-bottom:1px solid var(--line); }
 .workout-details li:last-child { border-bottom:0; }
-.danger, .remove { color:#c14b5a; background:#fff1f3; }
+.danger, .remove { color:#bb4957; background:#fff1f3; }
 html[data-theme="dark"] .danger, html[data-theme="dark"] .remove { color:#ff9eaa; background:#482934; }
 .footer-actions { display:flex; justify-content:space-between; gap:12px; margin-top:24px; padding-top:20px; border-top:1px solid var(--line); }
 .active-exercise { padding:18px 0 8px; border-top:1px solid var(--line); }
@@ -208,7 +219,7 @@ body.has-install-banner { padding-bottom:96px; }
 .account-editor { display:grid; gap:8px; margin-top:12px; padding:4px 14px 14px; border:1px solid var(--line); border-radius:12px; }
 .account-editor label { margin-top:8px; }
 .account-editor .auth-feedback { margin:4px 0 0; }
-.link-button.danger-link { color:#c14b5a; }
+.link-button.danger-link { color:#bb4957; }
 html[data-theme="dark"] .link-button.danger-link { color:#ff9eaa; }
 .delete-warning { margin:10px 0 0; }
 .data-section { display:grid; gap:10px; margin-top:16px; padding-top:16px; border-top:1px solid var(--line); }
@@ -281,7 +292,7 @@ html[data-theme="dark"] .program-notice { color:#a5e5c2; background:#193b2d; bor
 .program-maxes li { display:grid; gap:3px; padding:12px; border:1px solid var(--line); border-radius:10px; }
 .program-maxes span, .program-maxes small { color:var(--muted); font-size:.8rem; }
 .program-maxes strong { font-size:1.1rem; }
-.program-maxes small.warn { color:#c14b5a; }
+.program-maxes small.warn { color:#bb4957; }
 html[data-theme="dark"] .program-maxes small.warn { color:#ff9eaa; }
 /* Progress on the program card: a chart a lift, the program's number as a line and estimated maxes as dots. */
 .program-progress-key { display:flex; flex-wrap:wrap; gap:6px 16px; margin:0 0 10px; color:var(--muted); font-size:.8rem; }
@@ -309,7 +320,7 @@ html[data-theme="dark"] .program-maxes small.warn { color:#ff9eaa; }
 .program-day > div:first-child span { display:block; margin-top:2px; color:var(--muted); font-size:.85rem; }
 .program-day button { padding:8px 12px; font-size:.8rem; }
 .program-status { color:#22634c; font-size:.82rem; font-weight:700; }
-.program-status.missed { color:#c14b5a; }
+.program-status.missed { color:#bb4957; }
 .program-status.skipped, html[data-theme="dark"] .program-status.skipped { color:var(--muted); }
 html[data-theme="dark"] .program-status { color:#a5e5c2; }
 html[data-theme="dark"] .program-status.missed { color:#ff9eaa; }
@@ -695,7 +706,8 @@ html[data-theme="dark"] .goal.reached .goal-foot span { color:#a5e5c2; }
 .goal-foot .link-button { padding:2px 4px; }
 .goal-form { display:grid; grid-template-columns:2fr 1fr 1fr auto; gap:12px; align-items:end; margin-top:18px; }
 .goal-feedback { min-height:1.2em; margin:10px 0 0; color:var(--muted); font-size:.9rem; }
-.goal-feedback.error { color:#c14b5a; }
+.goal-feedback.error { color:#bb4957; }
+html[data-theme="dark"] .goal-feedback.error { color:#ff9eaa; }
 @media (max-width:620px) { .goal-form { grid-template-columns:1fr; } }
 /* A date box is drawn a little taller than a number box, which put their labels out of line; one height for both. */
 .goal-form input { height:48px; }

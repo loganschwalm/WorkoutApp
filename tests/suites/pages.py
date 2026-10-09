@@ -296,9 +296,9 @@ def run(t):
     check("and Match system's halves are Light's and Dark's", previews[:2] == [previews[2], previews[6]], previews)
     check('the radios are one group the arrow keys move through', cdp.ev("new Set([...document.querySelectorAll('#themeSetting input')].map(i => i.name)).size") == 1)
     cdp.ev("document.getElementById('closeSettings').click()")
-    expected = {'crimson': ('dark', '#ef4444', '#0c0c0e'), 'emerald': ('dark', '#34d399', '#0b0e0c'), 'sunrise': ('light', '#cf4f25', '#fbf5ef'),
+    expected = {'crimson': ('dark', '#f05555', '#0c0c0e'), 'emerald': ('dark', '#34d399', '#0b0e0c'), 'sunrise': ('light', '#b64621', '#fbf5ef'),
                 'ocean': ('dark', '#38bdf8', '#0a1220'), 'gold': ('dark', '#f5b72f', '#0e0d0a'), 'violet': ('dark', '#b98cff', '#110c1c'),
-                'meadow': ('light', '#23805a', '#f2f7f3'), 'blossom': ('light', '#c23a78', '#fbf3f6')}
+                'meadow': ('light', '#217855', '#f2f7f3'), 'blossom': ('light', '#b83772', '#fbf3f6')}
     for name, (mode, accent, background) in expected.items():
         choose(name)
         got = (cdp.ev(theme), var('--accent'), var('--bg'), cdp.ev("document.querySelector('meta[name=theme-color]').content"))
@@ -323,11 +323,11 @@ def run(t):
           cdp.ev("getComputedStyle(document.querySelector('#legend .legend-swatch')).backgroundColor"))
     cdp.ev("document.getElementById('settingsButton').click(); document.querySelector('#themeSetting input[value=crimson]').click(); document.getElementById('closeSettings').click()")
     cdp.pause(0.3)
-    check('and recolours it when the theme changes', cdp.ev("getComputedStyle(document.querySelector('#legend .legend-swatch')).backgroundColor") == 'rgb(239, 68, 68)',
+    check('and recolours it when the theme changes', cdp.ev("getComputedStyle(document.querySelector('#legend .legend-swatch')).backgroundColor") == 'rgb(240, 85, 85)',
           cdp.ev("getComputedStyle(document.querySelector('#legend .legend-swatch')).backgroundColor"))
     cdp.goto('/login.html')
     cdp.wait("!!document.getElementById('authForm')")
-    check('the sign-in page is in the chosen theme too', cdp.ev('document.documentElement.dataset.palette') == 'crimson' and var('--accent') == '#ef4444')
+    check('the sign-in page is in the chosen theme too', cdp.ev('document.documentElement.dataset.palette') == 'crimson' and var('--accent') == '#f05555')
     t.open_tracker()
     choose('system')
     check('Match system goes back to the device', cdp.ev('document.documentElement.dataset.palette') == 'light' and cdp.ev(theme) == 'light')

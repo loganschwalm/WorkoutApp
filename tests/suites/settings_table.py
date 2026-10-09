@@ -33,7 +33,7 @@ def run(t):
     entry_keys = ev("settingFields.map(field => Object.keys(field.defaults))")
     flat = [key for keys in entry_keys for key in keys]
     check('every entry has a default for each setting it owns, and no two entries own the same one', len(flat) == len(set(flat)) and all(isinstance(keys, list) for keys in entry_keys), flat)
-    check('the defaults are what they were: every setting there is', sorted(flat) == sorted(ev('Object.keys(defaultSettings)')) and len(flat) == 21, sorted(flat))
+    check('the defaults are what they were: every setting there is', sorted(flat) == sorted(ev('Object.keys(defaultSettings)')) and len(flat) == 22, sorted(flat))
     check('and a form showing them reads back as them, apart from the distance unit, which follows the weight unit until it is chosen',
           ev("applySettings(defaultSettings); JSON.stringify(Object.fromEntries(Object.entries(readSettingsForm()).sort()))") == ev("JSON.stringify(Object.fromEntries(Object.entries(defaultSettings).sort()))"))
     chosen = {'unit': 'kg', 'distanceUnit': 'km', 'weeklyGoal': 5, 'restDuration': 120, 'soundVolume': 65, 'alertSound': 'chime', 'autoRest': False, 'confirmEnd': False,

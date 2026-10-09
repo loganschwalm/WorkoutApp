@@ -680,7 +680,16 @@ the button that opened them. Settings include:
   dark ones, Crimson (red on black), Emerald (green on black), Ocean (sky blue on navy), Gold (amber on black)
   and Violet (lilac on deep purple). Buttons, tints, focus rings, the browser's bar and the Progress chart's first
   line all take the theme's colours. Pages open in the right theme straight away, with no flash of another, and
-  the sign-in page follows it too.
+  the sign-in page follows it too. Every theme's text is kept readable on what it sits on (4.5 to 1 or better, WCAG AA) and its
+  accent stands out from the page (3 to 1), which `tests/lint.py` checks for every colour the stylesheet writes out, so a new
+  theme or a new colour that is too faint fails the build.
+- Text size: Normal (the browser's own size), Large (115%), Larger (130%) or Largest (150%). It scales all of the text and the
+  spaces measured in it, on every page and in Settings, and is there before the page is drawn (`theme.js` sets `data-text-size`
+  on `<html>`; `styles.css` gives each size its root font size, and every size in the stylesheet is in `rem`). It follows the account
+  like the other settings. A browser's own larger default still counts, since Normal changes nothing.
+- Keyboard focus: whatever is reached with the keyboard shows a two-pixel ring in the theme's accent, set clear of the control
+  (`:focus-visible` in `styles.css`), including fields, which otherwise only change their border. A tap or a click leaves no ring.
+  The theme swatches and training days, whose real inputs are hidden, draw it on the box beside them.
 - Distance unit, for cardio: miles or kilometres. Until one is chosen it goes with the weight unit, kilometres with
   kilograms. A rowing machine is always in metres.
 - Weight unit: pounds (the default) or kilograms. Everything follows it, from the weight fields to

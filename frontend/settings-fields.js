@@ -85,6 +85,23 @@ const themeSetting = {
   read:() => ({ theme:getSettingElement('themeSetting').querySelector('input[name=theme]:checked')?.value || 'system' })
 };
 
+// ---- Text size ------------------------------------------------------------------------------
+
+// The text size as the Text size setting offers it: one of theme.js's textSizes, or Normal for anything else (a setting from an older
+// version, or a hand-edited import). The page is scaled by styles.css, from the data-text-size theme.js puts on <html>.
+const textSizeChoices = [['normal', 'Normal'], ['large', 'Large'], ['larger', 'Larger'], ['largest', 'Largest']];
+const textSizeFrom = value => textSizeChoices.some(([size]) => size === value) ? value : 'normal';
+
+const textSizeChoice = choiceSetting('textSize', 'textSizeSetting', 'Text size', textSizeChoices, textSizeFrom, 'normal');
+const textSizeSetting = {
+  ...textSizeChoice,
+  show(settings) {
+    textSizeChoice.show(settings);
+    // theme.js, in <head>, has applied the size already on a page that has it; a page from before it existed just stays as it was.
+    if (window.setTextSize) window.setTextSize(textSizeFrom(settings.textSize));
+  }
+};
+
 // ---- Units and the weekly goal ---------------------------------------------------------
 
 // Miles or kilometres, for cardio: the one chosen in Settings, or until one is, the one that goes with the weight unit.
@@ -228,6 +245,7 @@ const alertSoundOptions = [['beep', 'Double beep'], ['chime', 'Chime'], ['long',
 const settingSections = [
   { title:'General', fields:[
     themeSetting,
+    textSizeSetting,
     choiceSetting('unit', 'unitSetting', 'Weight unit', [['lbs', 'Pounds (lbs)'], ['kg', 'Kilograms (kg)']], value => value === 'kg' ? 'kg' : 'lbs', 'lbs'),
     distanceSetting,
     choiceSetting('weeklyGoal', 'weeklyGoalSetting', 'Weekly goal', [1, 2, 3, 4, 5, 6, 7].map(goal => [goal, `${goal} workout${goal === 1 ? '' : 's'} a week`]), weeklyGoalFrom, 3)

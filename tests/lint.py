@@ -18,6 +18,8 @@ What each one guards is a list kept by hand in two places, where leaving one out
   defaults     the time of day to remind at, until one is chosen, is the same on the server and on the page
   environment  every environment variable the server reads (in any of backend/*.py) is in the reference's table of server settings
   suites       every test suite is registered in tests/suites/__init__.py and has a row in tests/README.md
+  contrast     in every colour theme the text colours the stylesheet sets are readable on what they sit on (WCAG AA, 4.5 to 1), and
+               the accent, which draws the keyboard focus ring, stands out from the page (3 to 1)
 """
 
 import argparse
@@ -149,7 +151,104 @@ def check_suites(root):
     return problems
 
 
-CHECKS = [check_offline, check_names, check_python, check_state, check_defaults, check_environment, check_suites]
+# ---- Colour contrast ------------------------------------------------------------------------------------------------------------
+# WCAG's ratio between two colours: the lighter one's relative luminance plus .05, over the darker one's. 4.5 is AA for text, 3 for
+# what is not text (a focus ring).
+TEXT_CONTRAST = 4.5
+RING_CONTRAST = 3.0
+
+
+def luminance(colour):
+    digits = colour.lstrip('#')
+    if len(digits) in (3, 4):
+        digits = ''.join(digit * 2 for digit in digits)
+    channels = [int(digits[index:index + 2], 16) / 255 for index in (0, 2, 4)]
+    red, green, blue = [channel / 12.92 if channel <= 0.03928 else ((channel + 0.055) / 1.055) ** 2.4 for channel in channels]
+    return 0.2126 * red + 0.7152 * green + 0.0722 * blue
+
+
+def contrast(one, other):
+    lighter, darker = sorted((luminance(one), luminance(other)), reverse=True)
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+def theme_palettes(root):
+    """({theme: {variable: colour}}, {theme: 'light' or 'dark'}): the colours each theme gives in styles.css, and whether theme.js
+    says it is a light or a dark one."""
+    css = read(root, 'frontend', 'styles.css')
+    palettes = {}
+    for selector, body in re.findall(r'^((?::root, )?\[data-(?:palette|theme)[^{]*)\{([^}]*)\}', css, re.M):
+        colours = re.findall(r'--([\w-]+):\s*(#[0-9a-fA-F]{3,8})', body)
+        for name in re.findall(r'data-palette="(\w+)"', selector) if colours else []:
+            palettes.setdefault(name, {}).update(colours)
+    listed = re.search(r'window\.colorThemes = \{(.*?)\};', read(root, 'frontend', 'theme.js'), re.S)
+    return palettes, dict(re.findall(r"(\w+):'(light|dark)'", listed.group(1))) if listed else {}
+
+
+def colour_rules(css):
+    """{selector: {'light': {property: value}, 'dark': {property: value}}} for every rule in styles.css that sets a text colour or a
+    background, with the dark theme's changes (a selector under html[data-theme="dark"]) in their own layer, later ones over earlier."""
+    rules = {}
+    css = re.sub(r'/\*.*?\*/', '', css, flags=re.S)
+    for selector, body in re.findall(r'([^{}]+)\{([^{}]*)\}', css):
+        if 'data-palette' in selector or ':root' in selector or '@' in selector:
+            continue
+        found = {}
+        for name, pattern in (('color', r'(?<![\w-])color:\s*([^;]+)'), ('background', r'(?<![\w-])background(?:-color)?:\s*([^;]+)')):
+            match = re.search(pattern, body)
+            if match:
+                found[name] = match.group(1).strip()
+        for part in selector.split(','):
+            part = ' '.join(part.split())
+            dark = part.startswith('html[data-theme="dark"] ')
+            layer = rules.setdefault(part[len('html[data-theme="dark"] '):] if dark else part, {'light': {}, 'dark': {}})
+            layer['dark' if dark else 'light'].update(found)
+    return rules
+
+
+def check_contrast(root):
+    palettes, kinds = theme_palettes(root)
+    if not palettes or not kinds:
+        return ['frontend/styles.css or frontend/theme.js: no colour themes found.']
+    problems = []
+
+    def fail(theme, what, one, other, wanted):
+        problems.append(f'{theme} theme: {what} is {contrast(one, other):.2f} to 1 ({one} on {other}); it needs {wanted:g}.')
+
+    for theme, colours in sorted(palettes.items()):
+        for text in ('ink', 'muted', 'accent'):
+            for ground in ('bg', 'card', 'sunk', 'accent-soft'):
+                if text in colours and ground in colours and contrast(colours[text], colours[ground]) < TEXT_CONTRAST:
+                    fail(theme, f'{text} text on {ground}', colours[text], colours[ground], TEXT_CONTRAST)
+        if contrast(colours['on-accent'], colours['accent']) < TEXT_CONTRAST:
+            fail(theme, 'the text on the accent', colours['on-accent'], colours['accent'], TEXT_CONTRAST)
+        # The focus ring is the accent, drawn against the page and the card it is on.
+        for ground in ('bg', 'card'):
+            if contrast(colours['accent'], colours[ground]) < RING_CONTRAST:
+                fail(theme, f'the accent (the focus ring) against {ground}', colours['accent'], colours[ground], RING_CONTRAST)
+
+    # Every rule that sets a colour in the stylesheet, read as the colours it gives: a colour written out, or a theme variable. Text
+    # with no background of its own is on the card or the page.
+    def resolve(value, colours):
+        match = re.fullmatch(r'var\(--([\w-]+)\)', value or '')
+        if match:
+            return colours.get(match.group(1))
+        return value if re.fullmatch(r'#[0-9a-fA-F]{3,8}', value or '') else None
+
+    for selector, layers in sorted(colour_rules(read(root, 'frontend', 'styles.css')).items()):
+        for theme, colours in sorted(palettes.items()):
+            properties = {**layers['light'], **layers['dark']} if kinds.get(theme) == 'dark' else layers['light']
+            text = resolve(properties.get('color'), colours)
+            grounds = [resolve(properties.get('background'), colours)] if resolve(properties.get('background'), colours) else [colours['card'], colours['bg']]
+            if text is None or (not properties.get('background') and properties.get('color') == 'var(--on-accent)'):
+                continue
+            for ground in grounds:
+                if len(text) in (4, 5, 7, 9) and contrast(text, ground) < TEXT_CONTRAST:
+                    problems.append(f'{theme} theme: {selector} has text of {contrast(text, ground):.2f} to 1 ({text} on {ground}); it needs {TEXT_CONTRAST:g}.')
+    return problems
+
+
+CHECKS = [check_offline, check_names, check_python, check_state, check_defaults, check_environment, check_suites, check_contrast]
 
 
 def problems(root=REPO_ROOT):

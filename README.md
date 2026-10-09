@@ -91,7 +91,8 @@ see a program working over the weeks.
 - Pick the days you train: the Tracker says what is planned today (and nudges you when you missed a day), History marks
   the planned days on the calendar, and your phone can remind you on training days, even with the app closed.
 - Add a training program's remaining workouts to your own calendar app as an .ics file, one event on each training day.
-- Pounds or kilograms, your own bar and plates, and 10 colour themes (light, dark, and colourful ones).
+- Pounds or kilograms, your own bar and plates, 10 colour themes (light, dark, and colourful ones), four text sizes, and a clear
+  focus ring for keyboard users.
 - Export everything as JSON, or your sets and sessions as CSV, and import a JSON export into another account or server.
 - Accounts with email or username sign-in (a username works in any capitals, and one that differs from another only in capitals
   is refused), "Remember me", and password reset by command or by email.
