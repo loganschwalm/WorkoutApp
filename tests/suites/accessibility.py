@@ -29,24 +29,34 @@ FOCUS_RINGS = """(() => {
   return result;
 })()"""
 
+# The least width and height of what is pressed: a fingertip, bar the two things that cannot be (see the Tap targets note in styles.css).
+LEAST = {'calendar-day': [24, 24], 'weekday': [36, 44], 'other': [44, 44]}
+
 # What can be pressed and is under the size of a fingertip, as "tag#id.classes WxH": buttons, links, summaries and fields, and a tick box
 # or radio by its label (that is what is pressed). The box measured is what is drawn, or for a hidden input the label around it.
+# Whatever is folded or hidden is laid out first (see EXPOSE), so a menu's items and a dialog's buttons are measured as they would be shown.
 SMALL_TARGETS = """(() => {
   const found = [];
-  for (const element of document.querySelectorAll('button, a[href], summary, select, input:not([type=hidden]), textarea, [role=button]')) {
+  const LEAST = %s;
+  for (const element of document.querySelector(ROOT).querySelectorAll('button, a[href], summary, select, input:not([type=hidden]), textarea, [role=button]')) {
     if (element.disabled || getComputedStyle(element).visibility === 'hidden') continue;
     let box = element.getBoundingClientRect();
     const label = element.closest('label');
     if (element.matches('input[type=checkbox], input[type=radio]') && label) box = label.getBoundingClientRect();
-    else if (getComputedStyle(element).opacity === '0') continue;
     if (box.width === 0 || box.height === 0) continue;
-    const kind = element.closest('.calendar-day, .weekday') ? (element.closest('.calendar-day') ? 'calendar-day' : 'weekday') : 'other';
-    const least = { 'calendar-day': [24, 24], weekday: [36, 44], other: [44, 44] }[kind];
+    const kind = element.closest('.calendar-day') ? 'calendar-day' : element.closest('.weekday') ? 'weekday' : 'other';
+    const least = LEAST[kind];
     if (box.width < least[0] - 0.5 || box.height < least[1] - 0.5) {
       found.push(`${element.tagName.toLowerCase()}#${element.id}.${[...element.classList].join('.')} ${Math.round(box.width)}x${Math.round(box.height)} ${(element.getAttribute('aria-label') || element.textContent || '').trim().slice(0, 24)}`);
     }
   }
   return found;
+})()""".replace('%s', json.dumps(LEAST))
+
+# Every folded menu and the sets of every workout row opened, so the menu's items and the exercise links are measured as they would be shown.
+EXPOSE = """(() => {
+  document.querySelectorAll('details').forEach(details => { details.open = true; });
+  document.querySelectorAll('.workout-details').forEach(element => { element.hidden = false; });
 })()"""
 
 SIZES = {'normal': 16, 'large': 18.4, 'larger': 20.8, 'largest': 24}
@@ -180,20 +190,41 @@ def run(t):
     print('F6  everything pressed is the size of a fingertip, on a phone, at the usual text size and the largest')
     cdp.send('Emulation.setDeviceMetricsOverride', width=375, height=800, deviceScaleFactor=1, mobile=True)
 
+    def measure(root='body'):
+        cdp.ev(EXPOSE)
+        cdp.pause(0.3)
+        return cdp.ev(SMALL_TARGETS.replace('ROOT', json.dumps(root)))
+
     def small_targets_everywhere():
         found = {}
         for label, path, ready in PAGES + [('the sign-in page', '/login.html', "!!document.getElementById('authForm')")]:
             settle(path, ready)
-            found[label] = cdp.ev(SMALL_TARGETS)
-        open_settings()
-        found['Settings'] = cdp.ev(SMALL_TARGETS)
+            found[label] = measure()
+            if label == 'History':
+                reached = cdp.ev("({ links: document.querySelectorAll('.workout-details a').length, menu: document.querySelectorAll('.row-menu-items button').length })")
+                check('History: the exercise links in the sets and the buttons in the row menus were measured', reached['links'] >= 3 and reached['menu'] >= 3, reached)
+        # The tracker's dialogs are built when they are opened: a template with a superset, the program builder with its days, and
+        # Settings. They are also measured on the smallest phones still in use (the seven training days have the least room there).
+        for width in (375, 320):
+            cdp.send('Emulation.setDeviceMetricsOverride', width=width, height=800, deviceScaleFactor=1, mobile=True)
+            suffix = '' if width == 375 else f' on a {width}px phone'
+            open_tracker()
+            cdp.ev("openTemplateEditor({ id: 'f6', name: 'F6', exercises: [{ name: 'Bench Press', reps: '8' }, { name: 'Plank', reps: '30', timed: true }] })")
+            found['the template editor' + suffix] = measure('#templateModal')
+            check('the template editor: its move and remove buttons were measured',
+                  cdp.ev("document.querySelectorAll('#templateModal [data-template-row-action]').length") >= 6)
+            open_tracker()
+            cdp.ev("openProgramBuilder()")
+            found['the program builder' + suffix] = measure('#builderModal')
+            check('the program builder: its day buttons were measured', cdp.ev("document.querySelectorAll('#builderModal .template-row-actions button').length") >= 3)
+            open_settings()
+            found['Settings' + suffix] = measure('#settingsModal')
+        cdp.send('Emulation.setDeviceMetricsOverride', width=375, height=800, deviceScaleFactor=1, mobile=True)
         cdp.ev("document.getElementById('closeSettings').click()")
         open_tracker()
         start(0)
         cdp.pause(0.4)
-        cdp.ev("document.querySelectorAll('details').forEach(details => { details.open = true; })")
-        cdp.pause(0.3)
-        found['a workout'] = cdp.ev(SMALL_TARGETS)
+        found['a workout'] = measure()
         end_workout()
         return found
 

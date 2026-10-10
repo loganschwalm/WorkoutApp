@@ -692,8 +692,10 @@ the button that opened them. Settings include:
   The theme swatches and training days, whose real inputs are hidden, draw it on the box beside them.
 - Tap targets: every button, tab, link styled as a button, disclosure heading and tick box row is at least 44px tall (and 44px wide
   where it stands alone), the size of a fingertip, at any text size. Two things are held to what they can fit: History's calendar
-  days (12 weeks across a phone, 24px, the least WCAG 2.5.8 allows) and the seven training days in Settings (44px tall, 36px wide).
-  The `accessibility` suite measures every control on every page, in Settings and in a workout, at Normal and Largest text.
+  days (12 weeks across a phone, 24px, the least WCAG 2.5.8 allows) and the seven training days in Settings (44px tall, 36px wide;
+  on a phone too narrow for seven in a row they wrap onto a second line rather than shrink). The `accessibility` suite measures
+  every control on every page, with History's rows and menus opened, in the template editor, the program builder, Settings (also on
+  a 320px phone) and a workout, at Normal and Largest text. Progress's exercise library is opened too.
 - Distance unit, for cardio: miles or kilometres. Until one is chosen it goes with the weight unit, kilometres with
   kilograms. A rowing machine is always in metres.
 - Weight unit: pounds (the default) or kilograms. Everything follows it, from the weight fields to

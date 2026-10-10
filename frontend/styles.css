@@ -77,7 +77,7 @@ html[data-theme="dark"] .form-feedback.success { color:#a5e5c2; background:#193b
 .feedback-action { margin-left:6px; padding:4px 12px; color:inherit; background:transparent; border:1px solid currentColor; border-radius:8px; font-weight:800; }
 #formFeedback { cursor:pointer; }
 #formFeedback::after { content:"\00d7"; float:right; margin-left:12px; font-size:1.25rem; line-height:1; opacity:.6; }
-.settings-button { width:40px; height:40px; padding:0; font-size:1.2rem; line-height:1; }
+.settings-button { width:44px; height:44px; padding:0; font-size:1.2rem; line-height:1; }
 .site-nav { display:flex; gap:6px; align-self:center; }
 .site-nav a { color:var(--muted); border-radius:8px; padding:8px 10px; font-size:.9rem; font-weight:700; text-decoration:none; }
 .site-nav a:hover, .site-nav a.active { color:var(--ink); background:var(--card); }
@@ -136,7 +136,7 @@ button:hover { transform:translateY(-1px); } .primary { color:var(--on-accent); 
 .row-actions { display:flex; align-items:center; gap:8px; flex-shrink:0; }
 .row-actions > button { padding:8px 16px; font-size:.85rem; }
 .row-menu { position:relative; }
-.row-menu > summary { display:grid; place-items:center; width:40px; height:34px; border-radius:10px; font-weight:800; letter-spacing:1px; list-style:none; cursor:pointer; }
+.row-menu > summary { display:grid; place-items:center; width:44px; height:44px; border-radius:10px; font-weight:800; letter-spacing:1px; list-style:none; cursor:pointer; }
 .row-menu > summary::-webkit-details-marker { display:none; }
 .row-menu-items {
   position:absolute; top:calc(100% + 6px); right:0; z-index:6; display:grid; min-width:170px; padding:6px; background:var(--card);
@@ -156,7 +156,7 @@ html[data-theme="dark"] .row-menu-items .danger { color:#ff9eaa; }
 .template-area-actions { display:flex; justify-content:flex-end; margin-top:14px; }
 .workout-details { margin-top:14px; padding:14px; background:var(--sunk); border-radius:10px; }
 .workout-details ul { margin:0; padding:0; list-style:none; }
-.workout-details li { display:flex; justify-content:space-between; gap:16px; padding:8px 0; border-bottom:1px solid var(--line); }
+.workout-details li { display:flex; justify-content:space-between; gap:16px; padding:12px 0; border-bottom:1px solid var(--line); }
 .workout-details li:last-child { border-bottom:0; }
 .danger, .remove { color:#bb4957; background:#fff1f3; }
 html[data-theme="dark"] .danger, html[data-theme="dark"] .remove { color:#ff9eaa; background:#482934; }
@@ -263,7 +263,7 @@ html[data-theme="dark"] .link-button.danger-link { color:#ff9eaa; }
 .template-exercise-row input[type="number"] { padding-left:10px; padding-right:6px; }
 .template-exercise-row label { white-space:nowrap; }
 .template-exercise-row .template-row-actions { display:flex; gap:4px; }
-.template-exercise-row button { width:32px; height:42px; padding:0; }
+.template-exercise-row button { width:44px; height:44px; padding:0; }
 .template-modal { max-height:min(720px,90vh); overflow:auto; }
 .badge {
   display:inline-block; padding:3px 8px; color:var(--accent); background:var(--accent-soft); border-radius:999px; font-size:.7rem; font-weight:800;
@@ -362,7 +362,7 @@ html[data-theme="dark"] .program-status.missed { color:#ff9eaa; }
 }
 .settings-heading { display:flex; justify-content:space-between; align-items:center; margin-bottom:22px; }
 .settings-heading h2 { margin:0; }
-.modal-close { width:34px; height:34px; padding:0; color:var(--muted); background:transparent; font-size:1.5rem; line-height:1; }
+.modal-close { flex:none; width:44px; height:44px; padding:0; color:var(--muted); background:transparent; font-size:1.5rem; line-height:1; }
 .settings-modal form { display:grid; gap:8px; }
 .settings-modal form > label:not(.setting-check) { margin-top:8px; }
 /* Appearance: a swatch for each theme, its preview drawn in the theme's own colours (a data-palette of its own), the
@@ -378,7 +378,7 @@ html[data-theme="dark"] .program-status.missed { color:#ff9eaa; }
 .theme-swatch input:checked + .theme-preview { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-ring); }
 .theme-swatch input:checked ~ .theme-name { color:var(--ink); }
 .theme-swatch input:focus-visible + .theme-preview { outline:2px solid var(--accent); outline-offset:2px; }
-.setting-check { display:flex; align-items:flex-start; gap:9px; margin-top:12px; color:var(--muted); font-size:.9rem; line-height:1.4; }
+.setting-check { display:flex; align-items:flex-start; gap:9px; margin-top:12px; padding:12px 0; color:var(--muted); font-size:.9rem; line-height:1.4; }
 .setting-check input { width:auto; margin:2px 0 0; }
 input[type="range"] { padding:0; border:0; background:transparent; accent-color:var(--accent); }
 .settings-modal form > .test-alert { justify-self:start; margin-top:10px; }
@@ -395,7 +395,7 @@ input[type="range"] { padding:0; border:0; background:transparent; accent-color:
 .plate-choices { min-width:0; margin:8px 0 0; padding:0; border:0; }
 .plate-choices legend { padding:0; margin-bottom:6px; color:var(--muted); font-size:.78rem; font-weight:700; }
 #plateSetting { display:flex; flex-wrap:wrap; gap:4px 16px; }
-#plateSetting .setting-check { margin:0; min-height:32px; align-items:center; font-variant-numeric:tabular-nums; }
+#plateSetting .setting-check { margin:0; padding:0; min-width:44px; align-items:center; font-variant-numeric:tabular-nums; }
 #plateSetting .setting-check input { margin:0; }
 /* The Tracker's saved workouts: Show more and the link to History, side by side. */
 .more-workouts { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
@@ -555,7 +555,7 @@ html[data-theme="dark"] .progression-hint.stalled { color:#f5c97a; }
 .session-list li { display:grid; gap:4px; padding:10px 14px; border:1px solid var(--line); border-radius:10px; color:var(--muted); font-size:.88rem; }
 .session-list li div { display:flex; flex-wrap:wrap; gap:4px 10px; align-items:baseline; }
 .session-list li strong { color:var(--ink); }
-.workout-details li strong a { color:inherit; text-decoration:underline; text-decoration-color:var(--line); text-underline-offset:3px; }
+.workout-details li strong a { display:inline-flex; align-items:center; min-height:44px; margin:-12px 0; color:inherit; text-decoration:underline; text-decoration-color:var(--line); text-underline-offset:3px; }
 /* On a phone: a small header (the title and Settings), and the pages as a tab bar along the bottom, in reach of a thumb.
    The install bar and the pinned rest timer sit above the tab bar, and the page leaves room for it at the bottom. */
 @media (max-width:620px) {
@@ -789,7 +789,7 @@ html[data-theme="dark"] .goal-feedback.error { color:#ff9eaa; }
 .builder-day { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.3fr) auto; gap:8px; align-items:end; padding:10px 0; }
 .builder-day + .builder-day { border-top:1px solid var(--line); }
 .builder-day .template-row-actions { display:flex; gap:4px; }
-.builder-day .template-row-actions button { width:36px; height:44px; padding:0; }
+.builder-day .template-row-actions button { width:44px; height:44px; padding:0; }
 .builder-day .template-row-actions button:disabled { opacity:.4; cursor:default; transform:none; }
 .builder-day select, .builder-day input { height:48px; }
 .builder-modal { max-height:min(760px,90vh); overflow:auto; }
@@ -838,9 +838,9 @@ html[data-theme="dark"] .guide-mistake { background:#3a3122; }
 .guide-video { display:inline-flex; align-items:center; min-height:44px; padding:0 4px; color:var(--accent); font-weight:600; }
 
 /* The training schedule: weekday chips in Settings, the Tracker's nudge, and planned days on the History calendar. */
-.weekday-choices { display:flex; gap:4px; min-width:0; margin:0; padding:0; border:0; }
-.weekday-choices legend { padding:0; margin-bottom:6px; color:var(--muted); font-size:.78rem; font-weight:700; }
-.weekday { position:relative; flex:1 1 0; min-width:0; margin:0; }
+.weekday-choices { display:grid; grid-template-columns:repeat(auto-fit,minmax(36px,1fr)); gap:4px; min-width:0; margin:0; padding:0; border:0; }
+.weekday-choices legend { grid-column:1 / -1; padding:0; margin-bottom:6px; color:var(--muted); font-size:.78rem; font-weight:700; }
+.weekday { position:relative; min-width:0; margin:0; }
 .weekday input { position:absolute; inset:0; width:100%; height:100%; margin:0; opacity:0; cursor:pointer; }
 .weekday span { display:block; padding:12px 0; text-align:center; border:1px solid var(--line); border-radius:10px; background:var(--card); font-size:.8rem; font-weight:700; }
 .weekday input:checked + span { color:var(--on-accent); background:var(--accent); border-color:var(--accent); }
@@ -867,13 +867,7 @@ html[data-theme="dark"] .guide-mistake { background:#3a3122; }
    calendar (12 weeks across a phone, 24px, the least WCAG 2.5.8 allows) and the seven training days in Settings (44px tall, as wide
    as seven in a row allow). */
 button, summary, .site-nav a, .setting-check, .past-sessions-link, .button-link { min-height:44px; }
-.settings-button, .modal-close, .exercise-menu > summary, .row-menu > summary { min-width:44px; min-height:44px; }
 .button-link { display:inline-flex; align-items:center; justify-content:center; }
-.settings-button { width:44px; height:44px; }
-.modal-close { width:44px; height:44px; }
-.setting-check, #plateSetting .setting-check { align-items:center; }
-.setting-check input { margin:0; }
-#plateSetting .setting-check { min-width:44px; min-height:44px; }
 input[type=range] { height:44px; padding:0; }
 .weekday span { display:grid; place-items:center; min-height:44px; padding:0; }
 .calendar-day { min-height:24px; }
