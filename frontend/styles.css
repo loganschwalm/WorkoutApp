@@ -67,7 +67,7 @@ html[data-theme="dark"] .auth-feedback { color:#ff9eaa; }
 .auth-notice { margin:18px 0 0; color:var(--ink); font-size:.9rem; line-height:1.45; }
 .link-button { justify-self:center; padding:8px; color:var(--accent); background:none; font-size:.85rem; }
 .link-button:hover { text-decoration:underline; transform:none; }
-header { display:flex; justify-content:space-between; align-items:flex-end; gap:20px; margin-bottom:28px; }
+header { display:flex; justify-content:space-between; align-items:center; gap:20px; margin-bottom:28px; }
 .header-actions { display:flex; align-items:center; gap:14px; margin-left:auto; }
 .form-feedback {
   position:sticky; top:12px; z-index:20; margin:0 0 20px; padding:12px 14px; box-shadow:0 6px 18px rgba(16,21,35,.12); color:#7e3942;
@@ -147,6 +147,9 @@ button:hover { transform:none; } button:active { transform:scale(.97); } .primar
 .saved-workout-toggle[aria-expanded="true"] strong::after { content:"\00a0\00a0\25BE"; }
 .row-actions { display:flex; align-items:center; gap:8px; flex-shrink:0; }
 .row-actions > button { padding:8px 16px; font-size:.85rem; }
+/* Start on a row of a log (History, saved workouts, cardio sessions) is an outline: a column of solid accent would shout over what was
+   done. Solid accent is for the one thing a screen wants done: Start workout, Complete set, Finish. */
+.row-actions > .primary { color:var(--accent); background:transparent; box-shadow:inset 0 0 0 1.5px var(--accent-line); }
 .row-menu { position:relative; }
 .row-menu > summary { display:grid; place-items:center; width:44px; height:44px; border-radius:10px; font-weight:800; letter-spacing:1px; list-style:none; cursor:pointer; }
 .row-menu > summary::-webkit-details-marker { display:none; }
@@ -180,10 +183,10 @@ html[data-theme="dark"] .danger, html[data-theme="dark"] .remove { color:#ff9eaa
 .weight-stepper { display:flex; gap:6px; }
 .weight-stepper { gap:8px; }
 /* The weight is the number being worked on, so it is the biggest thing on the page, between steppers made for a thumb. */
-.weight-stepper input { flex:1; min-width:0; min-height:68px; font-size:2.25rem; font-weight:800; letter-spacing:-.03em; text-align:center; background:var(--sunk); border-color:transparent; border-radius:var(--radius-panel); }
-.weight-stepper button { flex:none; width:64px; min-height:68px; padding:0; font-size:1.2rem; border-radius:var(--radius-panel); }
-.reps-entry input { min-height:64px; font-size:1.75rem; font-weight:800; text-align:center; background:var(--sunk); border-color:transparent; border-radius:var(--radius-panel); }
-#completeSetBtn { min-height:64px; font-size:1.05rem; border-radius:var(--radius-panel); }
+.weight-stepper input { flex:1; min-width:0; min-height:4.25rem; line-height:1.1; font-size:2.25rem; font-weight:800; letter-spacing:-.03em; text-align:center; background:var(--sunk); border-color:transparent; border-radius:var(--radius-panel); }
+.weight-stepper button { flex:none; width:4rem; min-height:4.25rem; padding:0; font-size:1.2rem; border-radius:var(--radius-panel); }
+.reps-entry input { min-height:4.25rem; line-height:1.1; font-size:1.75rem; font-weight:800; text-align:center; background:var(--sunk); border-color:transparent; border-radius:var(--radius-panel); }
+#completeSetBtn { min-height:4.25rem; font-size:1.05rem; border-radius:var(--radius-panel); }
 .plate-hint { margin:10px 0 0; color:var(--muted); font-size:.88rem; }
 /* The plates for each side of the bar, each drawn to its size. */
 .plates { display:inline-flex; align-items:center; gap:3px; margin-left:4px; vertical-align:middle; }
@@ -636,6 +639,12 @@ h2 { margin-bottom:14px; }
 /* During a workout. */
 .active-workout .section-heading h2 { margin-bottom:0; }
 #endWorkoutBtn { flex:none; padding:8px 13px; font-size:.85rem; white-space:nowrap; }
+/* Buttons come in three tiers. Solid is the one thing to do here, the tint (.secondary) is the other things to do, and an outline is
+   for showing more or going elsewhere. Cancel is drawn in the muted ink, so it does not look like a neighbour of Start. */
+.section-heading-actions > .secondary, .more-workouts > button, .more-workouts > .button-link {
+  color:var(--accent); background:transparent; box-shadow:inset 0 0 0 1.5px var(--accent-line);
+}
+#endWorkoutBtn, #cardioCancelBtn { color:var(--muted); background:transparent; box-shadow:inset 0 0 0 1.5px var(--line); }
 .progress-toggle { margin-top:4px; }
 .active-exercise { padding:12px 0 4px; }
 .plan-sets { margin-top:8px; }
@@ -657,6 +666,8 @@ h2 { margin-bottom:14px; }
 @media (max-width:620px) {
   .card { padding:16px; border-radius:var(--radius-panel); }
   .card:not([hidden]) ~ .card { margin-top:12px; }
+  /* Last time's sets are the longest line on the screen; two lines of them, and the set entry stays where the thumb is. */
+  #activeExerciseLast { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; line-clamp:2; overflow:hidden; font-size:.9rem; }
   /* A dialog is a sheet that rises from the bottom, where the thumb is. */
   .modal-backdrop { padding:0; place-items:end center; }
   .settings-modal { width:100%; max-height:92%; padding:20px 18px calc(20px + env(safe-area-inset-bottom)); border-bottom:0; border-radius:24px 24px 0 0; }
@@ -691,7 +702,7 @@ header { margin-bottom:22px; }
 /* The rest bar drains along the bottom of the panel as the rest runs out. */
 .rest-panel { overflow:hidden; }
 .rest-panel::after {
-  content:""; position:absolute; left:0; bottom:0; height:4px; width:calc(var(--rest-left, 1) * 100%); background:var(--card);
+  content:""; position:absolute; left:0; bottom:0; height:6px; width:calc(var(--rest-left, 1) * 100%); background:var(--card);
   border-radius:0 3px 3px 0; transition:width .3s linear;
 }
 
@@ -699,6 +710,8 @@ header { margin-bottom:22px; }
 .firework { position:fixed; z-index:100; width:0; height:0; pointer-events:none; }
 .firework i { position:absolute; left:-3px; top:-3px; width:6px; height:6px; border-radius:50%; animation:spark 1s cubic-bezier(.15,.7,.3,1) forwards; }
 @keyframes spark { from { transform:translate(0,0) scale(1); opacity:1; } to { transform:translate(var(--dx),var(--dy)) scale(.3); opacity:0; } }
+/* The bar's track, so how much rest is left reads against how much there was. */
+.rest-panel::before { content:""; position:absolute; left:0; right:0; bottom:0; height:6px; background:var(--card); opacity:.25; }
 @media (prefers-reduced-motion:reduce) { .rest-panel::after { transition:none; } }
 
 /* The green flash when a rest is over: over everything, one soft pulse, never in the way of a tap. */
@@ -708,6 +721,8 @@ header { margin-bottom:22px; }
 /* Three rest buttons do not fit beside the countdown on a phone, so they take a row of their own under it. */
 @media (max-width:620px) {
   .rest-panel { flex-wrap:wrap; }
+  .rest-time { flex:1 1 100%; }
+  .rest-adjust { margin-left:auto; }
   .rest-actions { flex:1 1 100%; margin-left:0; }
   .rest-actions button { flex:1; }
   .rest-actions #restResetBtn { flex:none; }
@@ -892,3 +907,15 @@ button, summary, .site-nav a, .setting-check, .past-sessions-link, .button-link 
 input[type=range] { height:44px; padding:0; }
 .weekday span { display:grid; place-items:center; min-height:44px; padding:0; }
 .calendar-day { min-height:24px; }
+
+/* The one moment of motion, and it answers a tap: after Complete set the next planned set pops in and the rest time settles, so a
+   logged set is seen to land. Nothing moves for someone who has asked for less motion, and nothing here moves a box, so a measure
+   taken the moment it appears is the same. */
+@media (prefers-reduced-motion:no-preference) {
+  .plan-sets li.current { animation:set-in .3s cubic-bezier(.2,.8,.3,1.25); }
+  .rest-panel { animation:rest-in .25s ease-out; }
+  .rest-time span { display:inline-block; transform-origin:left center; animation:rest-time-in .3s cubic-bezier(.2,.8,.3,1.25); }
+}
+@keyframes set-in { from { transform:scale(.88); } to { transform:scale(1); } }
+@keyframes rest-in { from { opacity:0; } to { opacity:1; } }
+@keyframes rest-time-in { from { transform:scale(1.3); } to { transform:scale(1); } }

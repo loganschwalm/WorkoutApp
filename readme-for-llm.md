@@ -76,7 +76,12 @@ own workouts, templates, and settings.
   navigation, the next workout of a program and the rest timer are drawn inverted (the theme's ink as the ground, its card
   colour as the text), which means "now". Because `tests/lint.py` reads each rule on its own, a rule for text on that ink
   panel also says `background:var(--ink)`, so its contrast is checked against the ink. During a workout the weight is the
-  largest thing on the screen, between large −5 and +5 buttons, and Complete set is 64px tall.
+  largest thing on the screen, between large −5 and +5 buttons, and Complete set is as tall as the boxes beside it (4.25rem).
+- Buttons come in three tiers: solid (the one thing to do on a screen: Start workout, Complete set, Finish), a tint (`.secondary`,
+  the other things to do) and an outline (showing more or going elsewhere, and Start on a row of a log, so a column of them does
+  not shout over what was done). Cancel workout and Cancel session are an outline in the muted ink.
+- Complete set is answered with the one motion in the app: the next planned set pops in and the rest time settles. It is off for
+  anyone who has asked for less motion, and moves no box, so a measure taken as it appears is unaffected.
 - Finish early, beside Next exercise until the last, ends the workout there: the exercises with sets are saved and the
   rest left out, after asking first.
 - Move through exercises one at a time, or go straight to any of them: tap "Exercise 2 of 6" for a
