@@ -10,11 +10,11 @@
    background starts from. theme.js sets data-palette on <html> to the chosen theme, and data-theme to light or dark,
    which the rules further down that differ in the dark (warnings, successes) go by. Each block also colours the
    previews in Settings, which carry a data-palette of their own. */
-:root, [data-palette="light"] { --bg:#f4f7fb; --card:#fff; --ink:#172033; --muted:#636d7f; --accent:#5b5ce2; --line:#e3e8f0; --on-accent:#fff;
-  --accent-soft:#eef0ff; --accent-line:#c9caf6; --accent-ring:#5b5ce21f; --sunk:#f8f9fd; --glow:#eef1ff; }
-:root { --tab-bar:0px; }
-[data-theme="dark"], [data-palette="dark"] { color-scheme:dark; --bg:#151923; --card:#202532; --ink:#edf1fa; --muted:#aab4c7; --accent:#9698f6; --line:#353d4e; --on-accent:#10131f;
-  --accent-soft:#303653; --accent-line:#4a4f86; --accent-ring:#9698f62e; --sunk:#171c27; --glow:#252b42; }
+:root, [data-palette="light"] { --bg:#e8ebf0; --card:#fff; --ink:#0e131d; --muted:#586174; --accent:#2a43dc; --line:#dbe0e8; --on-accent:#fff;
+  --accent-soft:#e3e8ff; --accent-line:#b4c0f7; --accent-ring:#2a43dc26; --sunk:#f2f4f8; --glow:#e3e8ff; }
+:root { --tab-bar:0px; --radius-control:12px; --radius-panel:16px; --radius-card:22px; }
+[data-theme="dark"], [data-palette="dark"] { color-scheme:dark; --bg:#0b0e13; --card:#151a22; --ink:#f0f3f8; --muted:#98a3b6; --accent:#8fa7ff; --line:#252c38; --on-accent:#080d28;
+  --accent-soft:#1d2644; --accent-line:#37478a; --accent-ring:#8fa7ff33; --sunk:#10141b; --glow:#18213b; }
 /* Light themes. */
 [data-palette="sunrise"] { --bg:#fbf5ef; --card:#fffdfb; --ink:#2b1d16; --muted:#7c6558; --accent:#b64621; --line:#efe1d4; --on-accent:#fff;
   --accent-soft:#fde8de; --accent-line:#f2c2ad; --accent-ring:#b6462124; --sunk:#fcf6f1; --glow:#ffe6d6; }
@@ -43,9 +43,12 @@ html[data-text-size="largest"] { font-size:150%; }
    leave the element showing, as it did for the rest timer and the empty-chart message. */
 [hidden] { display:none !important; }
 body {
-  margin:0; min-height:100vh; font-family:Inter,system-ui,-apple-system,sans-serif; color:var(--ink);
-  background:linear-gradient(135deg,var(--glow),var(--bg) 45%); transition:background .2s,color .2s;
+  margin:0; min-height:100vh; font-family:Inter,system-ui,-apple-system,sans-serif; color:var(--ink); background:var(--bg);
+  /* The single-storey a and the plainer 1 and 6 of Inter's alternates read faster at a glance across a gym. */
+  font-feature-settings:"cv11","ss03"; transition:background .2s,color .2s;
 }
+/* Numbers are set in tabular figures everywhere, so a weight that changes by 5 does not make its neighbours jump. */
+input[type=number], .weight-stepper input, .set-edit, .date, .cardio-clock, .summary-stats strong, .program-maxes strong { font-variant-numeric:tabular-nums; }
 .shell { width:min(960px,calc(100% - 32px)); margin:0 auto; padding:42px 0 60px; }
 .auth-shell { width:min(440px,calc(100% - 32px)); margin:0 auto; padding:12vh 0; }
 .auth-card h1 { font-size:2rem; margin:0; }
@@ -57,7 +60,7 @@ body {
 .auth-card form label { margin-top:8px; }
 .auth-card form h2 { margin:24px 0 0; }
 .auth-card form .subtitle { margin:0 0 4px; line-height:1.45; }
-.auth-feedback { margin:18px 0 0; color:#bb4957; font-size:.9rem; }
+.auth-feedback { margin:18px 0 0; color:#ab3a49; font-size:.9rem; }
 html[data-theme="dark"] .auth-feedback { color:#ff9eaa; }
 /* What a new password takes, under its field. */
 .field-advice { margin:0; color:var(--muted); font-size:.8rem; line-height:1.4; }
@@ -78,22 +81,31 @@ html[data-theme="dark"] .form-feedback.success { color:#a5e5c2; background:#193b
 #formFeedback { cursor:pointer; }
 #formFeedback::after { content:"\00d7"; float:right; margin-left:12px; font-size:1.25rem; line-height:1; opacity:.6; }
 .settings-button { width:44px; height:44px; padding:0; font-size:1.2rem; line-height:1; }
-.site-nav { display:flex; gap:6px; align-self:center; }
-.site-nav a { color:var(--muted); border-radius:8px; padding:8px 10px; font-size:.9rem; font-weight:700; text-decoration:none; }
-.site-nav a:hover, .site-nav a.active { color:var(--ink); background:var(--card); }
-h1 { margin:0; font-size:clamp(2rem,5vw,3.25rem); letter-spacing:-.05em; }
+.site-nav { display:flex; gap:2px; align-self:center; padding:4px; background:var(--card); border:1px solid var(--line); border-radius:999px; }
+.site-nav a { display:inline-flex; align-items:center; color:var(--muted); border-radius:999px; padding:8px 16px; font-size:.9rem; font-weight:700; text-decoration:none; }
+.site-nav a:hover { color:var(--ink); }
+/* Ink is the colour of "now": the page you are on here, the rest timer and the next workout on the Tracker. */
+.site-nav a.active { color:var(--card); background:var(--ink); }
+/* The phone's tab bar draws an icon over each name; the files are the app's own, because nothing may load from another origin. */
+.site-nav a::before { content:""; display:none; width:22px; height:22px; background:currentColor; -webkit-mask:var(--tab-icon) center / contain no-repeat; mask:var(--tab-icon) center / contain no-repeat; }
+.site-nav a[href="index.html"] { --tab-icon:url(icons/tab-strength.svg); }
+.site-nav a[href="cardio.html"] { --tab-icon:url(icons/tab-cardio.svg); }
+.site-nav a[href="progress.html"] { --tab-icon:url(icons/tab-progress.svg); }
+.site-nav a[href="history.html"] { --tab-icon:url(icons/tab-history.svg); }
+h1 { margin:0; font-size:clamp(2rem,5vw,3.25rem); font-weight:800; letter-spacing:-.045em; }
 .subtitle { color:var(--muted); margin:8px 0 0; }
 .date { color:var(--muted); font-size:.9rem; white-space:nowrap; }
-.card { background:var(--card); border:1px solid var(--line); border-radius:20px; padding:24px; box-shadow:0 14px 35px rgba(36,48,90,.08); }
+/* Surfaces are told from the page by their tone, a hairline and their corners, not by a shadow: shadows are kept for what floats. */
+.card { background:var(--card); border:1px solid var(--line); border-radius:var(--radius-card); padding:24px; }
 .card:not([hidden]) ~ .card { margin-top:20px; }
-h2 { font-size:1.25rem; margin:0 0 20px; }
+h2 { font-size:1.25rem; font-weight:750; letter-spacing:-.025em; margin:0 0 20px; }
 .section-heading { display:flex; justify-content:space-between; align-items:baseline; gap:16px; }
 .section-heading-actions { display:flex; align-items:center; gap:12px; }
 .button-link { display:inline-block; border-radius:10px; padding:10px 13px; font-size:.85rem; font-weight:700; text-decoration:none; }
 .workout-name { display:flex; align-items:end; gap:12px; margin-bottom:22px; }
 .workout-field { flex:1; }
-input, select { width:100%; border:1px solid var(--line); border-radius:10px; padding:12px 13px; color:var(--ink); background:var(--card); font:inherit; outline:none; }
-textarea { width:100%; resize:vertical; border:1px solid var(--line); border-radius:10px; padding:12px 13px; color:var(--ink); background:var(--card); font:inherit; outline:none; }
+input, select { width:100%; border:1px solid var(--line); border-radius:var(--radius-control); padding:12px 13px; color:var(--ink); background:var(--card); font:inherit; outline:none; }
+textarea { width:100%; resize:vertical; border:1px solid var(--line); border-radius:var(--radius-control); padding:12px 13px; color:var(--ink); background:var(--card); font:inherit; outline:none; }
 input:focus, select:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-ring); }
 textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-ring); }
 /* Keyboard focus: whatever is reached with the keyboard (and not what is clicked or tapped) gets a ring in the accent, which tests/lint.py
@@ -101,13 +113,13 @@ textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-r
    this is what makes their focus plain to someone who cannot see a change of border colour. Controls that are drawn by a sibling of a hidden
    input (the theme swatches, the training days) put the ring on that sibling, below. */
 :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
-input[aria-invalid="true"] { border-color:#bb4957; box-shadow:0 0 0 3px #bb49571f; }
+input[aria-invalid="true"] { border-color:#ab3a49; box-shadow:0 0 0 3px #ab3a491f; }
 .grid { display:grid; grid-template-columns:2fr 1fr 1fr auto; gap:12px; align-items:end; }
-label { display:block; color:var(--muted); font-size:.78rem; font-weight:700; margin:0 0 7px; }
+label { display:block; color:var(--muted); font-size:.8rem; font-weight:650; margin:0 0 7px; }
 /* The font shorthand cannot mix "inherit" with a size and weight (the browser drops the whole declaration, leaving
    buttons in its own default font), so the family is inherited first and the rest set after it. */
-button { border:0; border-radius:10px; padding:12px 17px; cursor:pointer; font:inherit; font-size:.92rem; font-weight:700; transition:transform .15s,opacity .15s; }
-button:hover { transform:translateY(-1px); } .primary { color:var(--on-accent); background:var(--accent); } .secondary { color:var(--accent); background:var(--accent-soft); }
+button { border:0; border-radius:var(--radius-control); padding:12px 17px; cursor:pointer; font:inherit; font-size:.92rem; font-weight:700; transition:transform .15s,opacity .15s; }
+button:hover { transform:none; } button:active { transform:scale(.97); } .primary { color:var(--on-accent); background:var(--accent); } .secondary { color:var(--accent); background:var(--accent-soft); }
 .exercise-list { margin:22px 0 0; padding:0; list-style:none; }
 .exercise { display:grid; grid-template-columns:1fr 90px 90px auto; gap:12px; align-items:center; padding:13px 0; border-top:1px solid var(--line); }
 .exercise-edit { padding:9px 10px; }
@@ -116,7 +128,7 @@ button:hover { transform:translateY(-1px); } .primary { color:var(--on-accent); 
 .exercise.has-sets .set-list { grid-column:1/-1; grid-row:2; margin:0; }
 .exercise.has-sets > button { align-self:stretch; }
 .exercise strong { font-size:.95rem; } .exercise span { color:var(--muted); font-size:.9rem; }
-.remove { color:#bb4957; background:#fff1f3; padding:8px 10px; font-size:.8rem; }
+.remove { color:#ab3a49; background:#fff1f3; padding:8px 10px; font-size:.8rem; }
 .empty { color:var(--muted); text-align:center; padding:22px 0 5px; }
 .saved-workout-list { margin:14px 0 0; padding:0; list-style:none; }
 .saved-workout { padding:14px 0; border-top:1px solid var(--line); }
@@ -144,7 +156,7 @@ button:hover { transform:translateY(-1px); } .primary { color:var(--on-accent); 
 }
 .row-menu-items button { padding:10px 12px; color:var(--ink); background:none; font-size:.9rem; text-align:left; }
 .row-menu-items button:hover { background:var(--bg); transform:none; }
-.row-menu-items .danger, html[data-theme="dark"] .row-menu-items .danger { color:#bb4957; background:none; }
+.row-menu-items .danger, html[data-theme="dark"] .row-menu-items .danger { color:#ab3a49; background:none; }
 html[data-theme="dark"] .row-menu-items .danger { color:#ff9eaa; }
 /* Start again: a few recent workouts, each a tap from starting. */
 .recent-list { margin:14px 0 0; padding:0; list-style:none; }
@@ -158,16 +170,20 @@ html[data-theme="dark"] .row-menu-items .danger { color:#ff9eaa; }
 .workout-details ul { margin:0; padding:0; list-style:none; }
 .workout-details li { display:flex; justify-content:space-between; gap:16px; padding:12px 0; border-bottom:1px solid var(--line); }
 .workout-details li:last-child { border-bottom:0; }
-.danger, .remove { color:#bb4957; background:#fff1f3; }
+.danger, .remove { color:#ab3a49; background:#fff1f3; }
 html[data-theme="dark"] .danger, html[data-theme="dark"] .remove { color:#ff9eaa; background:#482934; }
 .footer-actions { display:flex; justify-content:space-between; gap:12px; margin-top:24px; padding-top:20px; border-top:1px solid var(--line); }
 .active-exercise { padding:18px 0 8px; border-top:1px solid var(--line); }
-.active-exercise h3 { margin:0 0 6px; font-size:1.35rem; }
+.active-exercise h3 { margin:0 0 6px; font-size:1.6rem; font-weight:800; letter-spacing:-.035em; }
 .notes-field { margin:16px 0; }
 .set-entry { display:grid; grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) auto; gap:12px; align-items:end; margin-top:8px; }
 .weight-stepper { display:flex; gap:6px; }
-.weight-stepper input { flex:1; min-width:0; text-align:center; }
-.weight-stepper button { flex:none; width:52px; padding:0; }
+.weight-stepper { gap:8px; }
+/* The weight is the number being worked on, so it is the biggest thing on the page, between steppers made for a thumb. */
+.weight-stepper input { flex:1; min-width:0; min-height:68px; font-size:2.25rem; font-weight:800; letter-spacing:-.03em; text-align:center; background:var(--sunk); border-color:transparent; border-radius:var(--radius-panel); }
+.weight-stepper button { flex:none; width:64px; min-height:68px; padding:0; font-size:1.2rem; border-radius:var(--radius-panel); }
+.reps-entry input { min-height:64px; font-size:1.75rem; font-weight:800; text-align:center; background:var(--sunk); border-color:transparent; border-radius:var(--radius-panel); }
+#completeSetBtn { min-height:64px; font-size:1.05rem; border-radius:var(--radius-panel); }
 .plate-hint { margin:10px 0 0; color:var(--muted); font-size:.88rem; }
 /* The plates for each side of the bar, each drawn to its size. */
 .plates { display:inline-flex; align-items:center; gap:3px; margin-left:4px; vertical-align:middle; }
@@ -219,7 +235,7 @@ body.has-install-banner { padding-bottom:96px; }
 .account-editor { display:grid; gap:8px; margin-top:12px; padding:4px 14px 14px; border:1px solid var(--line); border-radius:12px; }
 .account-editor label { margin-top:8px; }
 .account-editor .auth-feedback { margin:4px 0 0; }
-.link-button.danger-link { color:#bb4957; }
+.link-button.danger-link { color:#ab3a49; }
 html[data-theme="dark"] .link-button.danger-link { color:#ff9eaa; }
 .delete-warning { margin:10px 0 0; }
 .data-section { display:grid; gap:10px; margin-top:16px; padding-top:16px; border-top:1px solid var(--line); }
@@ -234,17 +250,19 @@ html[data-theme="dark"] .link-button.danger-link { color:#ff9eaa; }
 .account-editor-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:6px; }
 .rest-panel {
   position:sticky; top:12px; bottom:calc(12px + var(--tab-bar)); z-index:4; display:flex; justify-content:space-between; align-items:center; gap:12px;
-  margin-top:16px; padding:10px 10px 10px 16px; background:var(--accent-soft); border-radius:12px; box-shadow:0 8px 22px rgba(36,48,90,.12);
+  margin-top:16px; padding:10px 10px 10px 18px; color:var(--card); background:var(--ink); border-radius:var(--radius-panel); box-shadow:0 10px 28px rgba(10,14,24,.28);
 }
 .rest-time { display:flex; align-items:baseline; gap:10px; }
-.rest-time span { color:var(--accent); font-size:1.5rem; font-weight:800; font-variant-numeric:tabular-nums; }
+/* Text on the ink panel is drawn in the card's colour. Each rule says its ground (the panel's own ink) so tests/lint.py checks it against that. */
+.rest-time strong { color:var(--card); background:var(--ink); }
+.rest-time span { color:var(--card); background:var(--ink); font-size:2rem; font-weight:800; letter-spacing:-.03em; font-variant-numeric:tabular-nums; }
 .rest-actions { display:flex; gap:8px; margin-left:auto; }
 /* −30s and +30s sit by the time. On a narrow screen the panel wraps, the pause and reset buttons going under. */
 .rest-panel { flex-wrap:wrap; }
 .rest-adjust { display:flex; gap:6px; align-self:center; }
 .screen-awake-notice { font-size:.85rem; line-height:1.45; }
-.rest-adjust button { padding:6px 10px; font-size:.82rem; background:var(--card); }
-.rest-actions button { padding:9px 13px; background:var(--card); }
+.rest-adjust button { padding:6px 10px; color:var(--ink); font-size:.82rem; background:var(--card); }
+.rest-actions button { padding:9px 13px; color:var(--ink); background:var(--card); }
 .template-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:14px; }
 .template-card { display:flex; flex-direction:column; justify-content:space-between; gap:16px; padding:16px; border:1px solid var(--line); border-radius:12px; }
 .template-card h3 { margin:0 0 6px; font-size:1rem; }
@@ -266,8 +284,8 @@ html[data-theme="dark"] .link-button.danger-link { color:#ff9eaa; }
 .template-exercise-row button { width:44px; height:44px; padding:0; }
 .template-modal { max-height:min(720px,90vh); overflow:auto; }
 .badge {
-  display:inline-block; padding:3px 8px; color:var(--accent); background:var(--accent-soft); border-radius:999px; font-size:.7rem; font-weight:800;
-  letter-spacing:.04em; text-transform:uppercase; white-space:nowrap;
+  display:inline-block; padding:3px 9px; color:var(--accent); background:var(--accent-soft); border-radius:999px; font-size:.75rem; font-weight:700;
+  white-space:nowrap;
 }
 .template-card-heading { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:6px; }
 .template-card-heading h3 { margin:0; }
@@ -277,22 +295,23 @@ html[data-theme="dark"] .link-button.danger-link { color:#ff9eaa; }
 .plan-sets li { padding:5px 10px; color:var(--muted); border:1px solid var(--line); border-radius:999px; font-size:.82rem; font-weight:700; }
 .plan-sets li.done { color:#22634c; background:#edf9f2; border-color:#b9e3ca; }
 .plan-sets li.done::before { content:"\2713\00a0"; }
-.plan-sets li.current { color:var(--accent); background:var(--accent-soft); border-color:var(--accent); }
+.plan-sets li.current { color:var(--on-accent); background:var(--accent); border-color:var(--accent); }
 html[data-theme="dark"] .plan-sets li.done { color:#a5e5c2; background:#193b2d; border-color:#2f654b; }
 .program-notice { margin:0 0 16px; padding:12px 14px; color:#22634c; background:#edf9f2; border:1px solid #b9e3ca; border-radius:10px; font-size:.9rem; }
 html[data-theme="dark"] .program-notice { color:#a5e5c2; background:#193b2d; border-color:#2f654b; }
-.program-next { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:16px; background:var(--accent-soft); border-radius:12px; }
-.program-kicker { color:var(--accent); font-size:.75rem; font-weight:800; letter-spacing:.04em; text-transform:uppercase; }
-.program-next strong { display:block; margin-top:4px; font-size:1.1rem; }
-.program-next ul { margin:8px 0 0; padding:0; list-style:none; color:var(--muted); font-size:.88rem; line-height:1.6; }
+.program-next { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:16px; color:var(--card); background:var(--ink); border-radius:var(--radius-panel); }
+.program-kicker { color:var(--card); background:var(--ink); font-size:.85rem; font-weight:700; opacity:.8; }
+.program-next strong { display:block; margin-top:4px; font-size:1.5rem; font-weight:800; letter-spacing:-.03em; }
+.program-next ul { margin:8px 0 0; padding:0; list-style:none; color:var(--card); background:var(--ink); opacity:.8; font-size:.88rem; line-height:1.6; }
 .program-next-actions, .program-day-actions { display:flex; align-items:center; gap:8px; flex-shrink:0; }
-.program-next .secondary { background:var(--card); }
+.program-next .primary { color:var(--ink); background:var(--card); }
+.program-next .secondary { color:var(--card); background:var(--ink); box-shadow:inset 0 0 0 1.5px var(--card); }
 .program-subheading { margin:22px 0 10px; font-size:.95rem; }
 .program-maxes { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; margin:0; padding:0; list-style:none; }
 .program-maxes li { display:grid; gap:3px; padding:12px; border:1px solid var(--line); border-radius:10px; }
 .program-maxes span, .program-maxes small { color:var(--muted); font-size:.8rem; }
 .program-maxes strong { font-size:1.1rem; }
-.program-maxes small.warn { color:#bb4957; }
+.program-maxes small.warn { color:#ab3a49; }
 html[data-theme="dark"] .program-maxes small.warn { color:#ff9eaa; }
 /* Progress on the program card: a chart a lift, the program's number as a line and estimated maxes as dots. */
 .program-progress-key { display:flex; flex-wrap:wrap; gap:6px 16px; margin:0 0 10px; color:var(--muted); font-size:.8rem; }
@@ -320,7 +339,7 @@ html[data-theme="dark"] .program-maxes small.warn { color:#ff9eaa; }
 .program-day > div:first-child span { display:block; margin-top:2px; color:var(--muted); font-size:.85rem; }
 .program-day button { padding:8px 12px; font-size:.8rem; }
 .program-status { color:#22634c; font-size:.82rem; font-weight:700; }
-.program-status.missed { color:#bb4957; }
+.program-status.missed { color:#ab3a49; }
 .program-status.skipped, html[data-theme="dark"] .program-status.skipped { color:var(--muted); }
 html[data-theme="dark"] .program-status { color:#a5e5c2; }
 html[data-theme="dark"] .program-status.missed { color:#ff9eaa; }
@@ -358,7 +377,7 @@ html[data-theme="dark"] .program-status.missed { color:#ff9eaa; }
 .modal-backdrop { position:fixed; inset:0; z-index:10; display:grid; place-items:center; padding:20px; background:rgba(16,21,35,.48); }
 .settings-modal {
   width:min(440px,100%); max-height:100%; overflow-y:auto; padding:24px; color:var(--ink); background:var(--card); border:1px solid var(--line);
-  border-radius:16px; box-shadow:0 24px 70px rgba(16,21,35,.25);
+  border-radius:var(--radius-card); box-shadow:0 24px 70px rgba(10,14,24,.3);
 }
 .settings-heading { display:flex; justify-content:space-between; align-items:center; margin-bottom:22px; }
 .settings-heading h2 { margin:0; }
@@ -559,7 +578,7 @@ html[data-theme="dark"] .progression-hint.stalled { color:#f5c97a; }
 /* On a phone: a small header (the title and Settings), and the pages as a tab bar along the bottom, in reach of a thumb.
    The install bar and the pinned rest timer sit above the tab bar, and the page leaves room for it at the bottom. */
 @media (max-width:620px) {
-  :root { --tab-bar:60px; }
+  :root { --tab-bar:88px; }
   body { padding-bottom:calc(var(--tab-bar) + env(safe-area-inset-bottom)); }
   .shell { padding-top:16px; }
   header { flex-wrap:nowrap; align-items:center; gap:12px; margin-bottom:16px; }
@@ -567,10 +586,10 @@ html[data-theme="dark"] .progression-hint.stalled { color:#f5c97a; }
   header .subtitle { display:none; }
   h1 { font-size:1.75rem; letter-spacing:-.04em; }
   .header-actions { flex:none; }
-  .site-nav { position:fixed; left:0; right:0; bottom:0; z-index:8; order:0; width:auto; gap:6px; height:calc(var(--tab-bar) + env(safe-area-inset-bottom));
-    padding:8px 12px calc(8px + env(safe-area-inset-bottom)); background:var(--card); border-top:1px solid var(--line); box-shadow:0 -8px 24px rgba(16,21,35,.08); }
-  .site-nav a { display:grid; flex:1; place-items:center; padding:0; font-size:.92rem; }
-  .site-nav a.active { color:var(--accent); background:var(--accent-soft); }
+  .site-nav { position:fixed; left:12px; right:12px; bottom:calc(12px + env(safe-area-inset-bottom)); z-index:8; order:0; width:auto; gap:4px; height:64px;
+    padding:6px; border-radius:24px; box-shadow:0 12px 32px rgba(10,14,24,.22); }
+  .site-nav a { display:grid; flex:1; grid-template-rows:22px auto; justify-items:center; align-content:center; gap:3px; padding:0; border-radius:18px; font-size:.72rem; letter-spacing:.01em; }
+  .site-nav a::before { display:block; }
   .install-banner { bottom:var(--tab-bar); }
   body.has-install-banner { padding-bottom:calc(96px + var(--tab-bar)); }
 }
@@ -619,7 +638,6 @@ h2 { margin-bottom:14px; }
 #endWorkoutBtn { flex:none; padding:8px 13px; font-size:.85rem; white-space:nowrap; }
 .progress-toggle { margin-top:4px; }
 .active-exercise { padding:12px 0 4px; }
-.active-exercise h3 { font-size:1.25rem; }
 .plan-sets { margin-top:8px; }
 .plan-sets li { padding:4px 9px; font-size:.78rem; }
 .set-entry label { margin-bottom:5px; }
@@ -637,8 +655,11 @@ h2 { margin-bottom:14px; }
 .workout-extras .add-exercise[open] { flex-basis:100%; }
 .footer-actions { margin-top:16px; padding-top:14px; justify-content:flex-end; }
 @media (max-width:620px) {
-  .card { padding:16px; border-radius:16px; }
+  .card { padding:16px; border-radius:var(--radius-panel); }
   .card:not([hidden]) ~ .card { margin-top:12px; }
+  /* A dialog is a sheet that rises from the bottom, where the thumb is. */
+  .modal-backdrop { padding:0; place-items:end center; }
+  .settings-modal { width:100%; max-height:92%; padding:20px 18px calc(20px + env(safe-area-inset-bottom)); border-bottom:0; border-radius:24px 24px 0 0; }
   h2 { font-size:1.12rem; }
   .active-workout .section-heading { align-items:center; }
   .program-next { gap:12px; }
@@ -646,7 +667,7 @@ h2 { margin-bottom:14px; }
   .rest-panel { flex-wrap:nowrap; gap:8px; }
   .rest-time { gap:8px; }
   .rest-time strong { display:none; }
-  .rest-time span { font-size:1.35rem; }
+  .rest-time span { font-size:1.75rem; }
   .rest-adjust button { padding:6px 7px; font-size:.78rem; }
   .rest-actions { gap:6px; }
   .rest-actions button { padding:9px 10px; font-size:.85rem; white-space:nowrap; }
@@ -670,7 +691,7 @@ header { margin-bottom:22px; }
 /* The rest bar drains along the bottom of the panel as the rest runs out. */
 .rest-panel { overflow:hidden; }
 .rest-panel::after {
-  content:""; position:absolute; left:0; bottom:0; height:3px; width:calc(var(--rest-left, 1) * 100%); background:var(--accent);
+  content:""; position:absolute; left:0; bottom:0; height:4px; width:calc(var(--rest-left, 1) * 100%); background:var(--card);
   border-radius:0 3px 3px 0; transition:width .3s linear;
 }
 
@@ -706,7 +727,7 @@ html[data-theme="dark"] .goal.reached .goal-foot span { color:#a5e5c2; }
 .goal-foot .link-button { padding:2px 4px; }
 .goal-form { display:grid; grid-template-columns:2fr 1fr 1fr auto; gap:12px; align-items:end; margin-top:18px; }
 .goal-feedback { min-height:1.2em; margin:10px 0 0; color:var(--muted); font-size:.9rem; }
-.goal-feedback.error { color:#bb4957; }
+.goal-feedback.error { color:#ab3a49; }
 html[data-theme="dark"] .goal-feedback.error { color:#ff9eaa; }
 @media (max-width:620px) { .goal-form { grid-template-columns:1fr; } }
 /* A date box is drawn a little taller than a number box, which put their labels out of line; one height for both. */
@@ -724,7 +745,7 @@ html[data-theme="dark"] .goal-feedback.error { color:#ff9eaa; }
    any box with smaller text when it is tapped. */
 .set-edit { min-height:44px; font-size:16px; }
 .set-list .remove { width:44px; height:44px; }
-#endWorkoutBtn, #cardioCancelBtn, #activeWorkoutProgress, #completeSetBtn, #activeAddBtn, #nextExerciseBtn, .active-workout .effort-choices button, .active-workout .rest-adjust button, .active-workout .rest-actions button {
+#endWorkoutBtn, #cardioCancelBtn, #activeWorkoutProgress, #activeAddBtn, #nextExerciseBtn, .active-workout .effort-choices button, .active-workout .rest-adjust button, .active-workout .rest-actions button {
   min-height:44px;
 }
 .active-workout .effort-choices button { min-width:44px; }
