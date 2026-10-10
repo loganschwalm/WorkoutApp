@@ -108,9 +108,9 @@ def run(t):
             check('and so is a flag', says(['ANOTHER_UNDOCUMENTED_FLAG']), found())
 
         # -- contrast
-        with changed('frontend/styles.css', replaced('--muted:#636d7f;', '--muted:#aab4c7;')):
+        with changed('frontend/styles.css', replaced('--muted:#586174;', '--muted:#aab4c7;')):
             check('muted text too pale for a light theme is named, with the theme and the ratio', says(['light theme', 'muted text', 'needs 4.5']), found())
-        with changed('frontend/styles.css', replaced('--on-accent:#10131f;', '--on-accent:#ffffff;')):
+        with changed('frontend/styles.css', replaced('--on-accent:#080d28;', '--on-accent:#ffffff;')):
             check('and text on the accent that is hard to read', says(['dark theme', 'the text on the accent']), found())
         with changed('frontend/styles.css', replaced('--accent:#217855;', '--accent:#cfe9da;')):
             check('and an accent too close to the page to draw the focus ring in', says(['meadow theme', 'focus ring', 'needs 3']), found())
