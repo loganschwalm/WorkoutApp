@@ -68,7 +68,15 @@ own workouts, templates, and settings.
 - During a workout the Tracker is only the workout: the program, Start again, templates and saved
   workouts wait behind "Show the rest of the Tracker" under it, and come back when the workout ends.
 - On a phone the header is just the page's name and Settings, and Strength (the Tracker), Cardio, Progress and History
-  are a tab bar along the bottom of the screen, in reach of a thumb.
+  are a tab bar along the bottom of the screen, in reach of a thumb: a pill floating just above the edge, an icon over each
+  name (the SVGs in `frontend/icons/`, drawn with a CSS mask so they take the text colour, and precached). Dialogs, Settings
+  among them, rise from the bottom as sheets there. On a wider screen the pages are a segmented pill in the header.
+- The look is flat: surfaces are told from the page by tone, a hairline and their corners (`--radius-control`, `--radius-panel`
+  and `--radius-card` in `styles.css`), shadows are kept for what floats, and numbers are tabular. The page you are on in the
+  navigation, the next workout of a program and the rest timer are drawn inverted (the theme's ink as the ground, its card
+  colour as the text), which means "now". Because `tests/lint.py` reads each rule on its own, a rule for text on that ink
+  panel also says `background:var(--ink)`, so its contrast is checked against the ink. During a workout the weight is the
+  largest thing on the screen, between large −5 and +5 buttons, and Complete set is 64px tall.
 - Finish early, beside Next exercise until the last, ends the workout there: the exercises with sets are saved and the
   rest left out, after asking first.
 - Move through exercises one at a time, or go straight to any of them: tap "Exercise 2 of 6" for a

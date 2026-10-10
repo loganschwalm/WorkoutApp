@@ -281,7 +281,7 @@ def run(t):
     cdp.wait("!!document.getElementById('authForm')")
     check('the sign-in page follows the device too', cdp.ev(theme) == 'dark' and cdp.ev('window.__themeAtBody') == 'dark',
           f"{cdp.ev('window.__themeAtBody')} {cdp.ev(theme)}")
-    check('with the browser chrome to match', cdp.ev("document.querySelector('meta[name=theme-color]').content").lower() == '#151923')
+    check('with the browser chrome to match', cdp.ev("document.querySelector('meta[name=theme-color]').content").lower() == '#0b0e13')
 
     print('P6b colour themes beyond light and dark')
     device('light')

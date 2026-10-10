@@ -744,7 +744,7 @@ def run_progress(t, text, violations):
     check('the key names the line and the dots', text('programProgressKey') == "Training maxEstimated one-rep max, from each session's sets", text('programProgressKey'))
     colours = cdp.ev("""(() => { const path = getComputedStyle(document.querySelector('path.progress-number')).stroke;
       return { path, accent: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() }; })()""")
-    check('the line in the theme\'s accent', colours['path'] == 'rgb(91, 92, 226)', colours)
+    check('the line in the theme\'s accent', colours['path'] == 'rgb(42, 67, 220)', colours)
     check('drawn with nothing inline the Content-Security-Policy would refuse', violations() == [], violations())
     api('PUT', '/api/state', {'settings': {'unit': 'kg'}}, token)
     t.open_tracker()

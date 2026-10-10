@@ -445,7 +445,8 @@ def run(t):
     # A phone's header is the title and Settings; the pages are a tab bar along the bottom of the screen.
     bar = cdp.ev("(r => ({ top: r.top, bottom: r.bottom, vh: innerHeight, position: getComputedStyle(document.querySelector('.site-nav')).position }))"
                  "(document.querySelector('.site-nav').getBoundingClientRect())")
-    check('on a phone the pages are a tab bar along the bottom', bar['position'] == 'fixed' and abs(bar['bottom'] - bar['vh']) < 1, bar)
+    # A pill floating a little above the edge (12px, and clear of the home indicator) is still along the bottom.
+    check('on a phone the pages are a tab bar along the bottom', bar['position'] == 'fixed' and 0 <= bar['vh'] - bar['bottom'] <= 24, bar)
     check("and the header leaves out the page's tagline", cdp.ev("getComputedStyle(document.querySelector('header .subtitle')).display") == 'none')
 
     def shown(selector):
