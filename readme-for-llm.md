@@ -65,6 +65,9 @@ own workouts, templates, and settings.
   Start again, with up to three recent workouts and the one you did longest ago first (going round
   push, pull and legs, that is the one due). Templates fold away once you have saved workouts or a
   program, a tap from showing again.
+- The next workout is the Tracker's one raised surface: a dark panel as wide as the page, with the program
+  (its weights and weeks, folded) lying flat around it. Start again is a card; the templates and saved
+  workouts are plain lists on the page, set off by a hairline.
 - During a workout the Tracker is only the workout: the program, Start again, templates and saved
   workouts wait behind "Show the rest of the Tracker" under it, and come back when the workout ends.
 - On a phone the header is just the page's name and Settings, and Strength (the Tracker), Cardio, Progress and History
@@ -119,6 +122,7 @@ own workouts, templates, and settings.
   heavier and warm-ups use. It loads the fewest plates that make the weight, so with 2 kg plates and no
   1.25s, 4 kg a side is two 2s. Pounds and kilograms each keep their own.
 - See how you did last time on each exercise; its weight and reps are prefilled, and after each set the next one defaults to the set you just logged.
+  What to do this set and last time's sets are in the ink at body size, each run of sets kept whole when the line wraps.
 - View completed sets during the workout, correct a set's weight or reps in place, or remove a set that was logged by mistake.
   They fold away under Completed sets, beside Workout notes and Add an exercise, with a count of how many are done
   and the last one logged ("Completed sets (3) · last 145 lbs × 6").

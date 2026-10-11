@@ -100,6 +100,14 @@ def run(t):
     cdp.pause(0.5)
     check('the dialog closes', visible('programModal') is False)
     check('the program card appears', visible('programCard') and text('programTitle') == 'Wendler 5/3/1')
+    # The next workout is the Tracker's one raised surface: the program around it is flat on the page, and it is as wide as the page.
+    check('the program lies flat, its next workout a panel as wide as the page',
+          cdp.ev("""(() => { const card = getComputedStyle(document.getElementById('programCard'));
+              const panel = document.getElementById('programNext');
+              const width = element => element.getBoundingClientRect().width;
+              return card.backgroundColor === 'rgba(0, 0, 0, 0)' && card.borderTopWidth === '0px'
+                  && getComputedStyle(panel).backgroundColor !== 'rgba(0, 0, 0, 0)'
+                  && Math.abs(width(panel) - width(document.querySelector('main'))) < 1; })()""") is True)
     summary = text('programSummary')
     check('at the start of cycle 1', 'Cycle 1' in summary and '0 of 16 workouts done' in summary and 'week 1 of 4, 5s week' in summary, summary)
     check('the user is told what comes first', 'Press Day, week 1' in text('formFeedback'), text('formFeedback'))

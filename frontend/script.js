@@ -250,6 +250,24 @@ function completedSetsHtml(exercise, timed) {
     + `<button class="remove" type="button" data-remove-set="${index}" aria-label="Remove set ${index + 1}" title="Remove">&times;</button></li>`).join('');
 }
 
+// Last time's line: the label, then each run of sets ("75 lbs × 5", "115 lbs × 5, 5, 9") as one span, which the line wraps
+// whole (see .set-run), so a weight is never left on one line and its reps on the next. The text is what it always was;
+// describeLoggedSets joins its runs with " · ", which no run contains.
+function showLastTime(label, described) {
+  const line = $('activeExerciseLast');
+  const labelSpan = document.createElement('span');
+  labelSpan.className = 'context-label';
+  labelSpan.textContent = label;
+  line.replaceChildren(labelSpan);
+  described.split(' · ').forEach((run, index) => {
+    if (index) line.append(' · ');
+    const part = document.createElement('span');
+    part.className = 'set-run';
+    part.textContent = run;
+    line.append(part);
+  });
+}
+
 function renderActiveWorkout() {
   const exercise = activeSession.exercises[activeSession.currentIndex];
   exercise.sets = exercise.sets || [];
@@ -267,7 +285,7 @@ function renderActiveWorkout() {
   $('activeExerciseLast').hidden = !previous;
   if (previous) {
     const when = new Date(previous.date).toLocaleDateString(undefined, { month:'short', day:'numeric' });
-    $('activeExerciseLast').textContent = `Last time (${when}): ${describeLoggedSets(previous.sets, timed)}`;
+    showLastTime(`Last time (${when}): `, describeLoggedSets(previous.sets, timed));
   }
   $('completedRepsLabel').textContent = timed ? 'Seconds' : 'Reps completed';
   // Once a set is logged, one tap logs it again, whatever the fields were changed to since.

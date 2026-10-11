@@ -18,7 +18,9 @@
 :root, [data-palette="light"] { --bg:#e8ebf0; --card:#fff; --ink:#0e131d; --muted:#586174; --accent:#2a43dc; --line:#dbe0e8; --on-accent:#fff;
   --accent-soft:#e3e8ff; --accent-line:#b4c0f7; --accent-ring:#2a43dc26; --sunk:#f2f4f8; --glow:#e3e8ff; }
 :root { --tab-bar:0px; --radius-control:12px; --radius-panel:16px; --radius-card:22px;
-  --font-display:"Schibsted Grotesk","Helvetica Neue",Arial,sans-serif; --font-body:Figtree,system-ui,-apple-system,"Segoe UI",sans-serif; }
+  --font-display:"Schibsted Grotesk","Helvetica Neue",Arial,sans-serif; --font-body:Figtree,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --rule:var(--line); }
+@supports (color:color-mix(in srgb, red, blue)) { :root { --rule:color-mix(in srgb, var(--ink) 16%, var(--bg)); } }
 [data-theme="dark"], [data-palette="dark"] { color-scheme:dark; --bg:#0b0e13; --card:#151a22; --ink:#f0f3f8; --muted:#98a3b6; --accent:#8fa7ff; --line:#252c38; --on-accent:#080d28;
   --accent-soft:#1d2644; --accent-line:#37478a; --accent-ring:#8fa7ff33; --sunk:#10141b; --glow:#18213b; }
 /* Light themes. */
@@ -108,6 +110,14 @@ h1 { margin:0; font-size:clamp(2rem,5vw,3.25rem); font-weight:800; letter-spacin
 /* Surfaces are told from the page by their tone, a hairline and their corners, not by a shadow: shadows are kept for what floats. */
 .card { background:var(--card); border:1px solid var(--line); border-radius:var(--radius-card); padding:24px; }
 .card:not([hidden]) ~ .card { margin-top:20px; }
+/* Not everything needs a surface. On the Tracker the next workout is the one raised thing (the ink panel); the program around it, the
+   templates and the saved workouts lie flat on the page, the lists told apart by a hairline and their headings. They stay .card in
+   the markup so the spacing between sections, and the rest being put away during a workout, work as they do for every other card. */
+.card.flat { padding:0; background:none; border:0; border-radius:0; }
+.card.ruled { padding-top:18px; border-top:1px solid var(--rule); }
+/* Lines between rows that sit on the page rather than on a card use --rule, which is darker than --line (a card's hairline is drawn
+   on white or the card tone; on the page it would all but vanish, about 1.1 to 1 in Light). */
+.card.flat .saved-workout, .card.flat .more-workouts, .card.flat .program-section { border-top-color:var(--rule); }
 h2 { font-size:1.25rem; font-weight:750; letter-spacing:-.025em; margin:0 0 20px; }
 .section-heading { display:flex; justify-content:space-between; align-items:baseline; gap:16px; }
 .section-heading-actions { display:flex; align-items:center; gap:12px; }
@@ -214,7 +224,14 @@ html[data-theme="dark"] .danger, html[data-theme="dark"] .remove { color:#ff9eaa
 .set-number { color:var(--muted); font-size:.85rem; font-weight:700; }
 .set-field { display:flex; align-items:center; gap:6px; color:var(--muted); font-size:.85rem; }
 .set-edit { min-width:0; padding:8px 9px; }
-.active-exercise .subtitle + .subtitle { margin-top:4px; }
+/* What to do this set, and what was done last time, are read mid-set and at arm's length: body text in the ink, not a muted caption.
+   In last time's line the label is the quiet part and the sets the firm one. */
+.exercise-context { margin:6px 0 0; color:var(--ink); font-size:1rem; line-height:1.45; }
+.exercise-context.target { font-weight:650; }
+.exercise-context + .exercise-context { margin-top:4px; }
+.context-label { color:var(--muted); }
+/* A run of sets goes to the next line whole when it fits there, and breaks inside itself only when it is longer than a line. */
+.set-run { display:inline-block; max-width:100%; font-weight:600; }
 .footer-buttons { display:flex; gap:10px; }
 .add-exercise { margin-top:18px; }
 .add-exercise summary { color:var(--accent); font-size:.9rem; font-weight:700; cursor:pointer; }
@@ -277,7 +294,7 @@ html[data-theme="dark"] .link-button.danger-link { color:#ff9eaa; }
 .rest-adjust button { padding:6px 10px; color:var(--ink); font-size:.82rem; background:var(--card); }
 .rest-actions button { padding:9px 13px; color:var(--ink); background:var(--card); }
 .template-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:14px; }
-.template-card { display:flex; flex-direction:column; justify-content:space-between; gap:16px; padding:16px; border:1px solid var(--line); border-radius:12px; }
+.template-card { display:flex; flex-direction:column; justify-content:space-between; gap:16px; padding:16px; background:var(--card); border:1px solid var(--line); border-radius:12px; }
 .template-card h3 { margin:0 0 6px; font-size:1rem; }
 .template-card p { margin:0; color:var(--muted); font-size:.85rem; line-height:1.5; }
 .template-card button { align-self:flex-start; padding:9px 12px; font-size:.82rem; }
@@ -312,16 +329,17 @@ html[data-theme="dark"] .link-button.danger-link { color:#ff9eaa; }
 html[data-theme="dark"] .plan-sets li.done { color:#a5e5c2; background:#193b2d; border-color:#2f654b; }
 .program-notice { margin:0 0 16px; padding:12px 14px; color:#22634c; background:#edf9f2; border:1px solid #b9e3ca; border-radius:10px; font-size:.9rem; }
 html[data-theme="dark"] .program-notice { color:#a5e5c2; background:#193b2d; border-color:#2f654b; }
-.program-next { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:16px; color:var(--card); background:var(--ink); border-radius:var(--radius-panel); }
+/* The next workout is the Tracker's one raised surface, so it is the biggest thing on it: a card's own corners, and its name large. */
+.program-next { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:20px 22px; color:var(--card); background:var(--ink); border-radius:var(--radius-card); }
 .program-kicker { color:var(--card); background:var(--ink); font-size:.85rem; font-weight:700; opacity:.8; }
-.program-next strong { display:block; margin-top:4px; font-size:1.5rem; font-weight:800; letter-spacing:-.03em; }
+.program-next strong { display:block; margin-top:4px; font-size:clamp(1.65rem,5.5vw,2.25rem); font-weight:800; letter-spacing:-.035em; line-height:1.1; }
 .program-next ul { margin:8px 0 0; padding:0; list-style:none; color:var(--card); background:var(--ink); opacity:.8; font-size:.88rem; line-height:1.6; }
 .program-next-actions, .program-day-actions { display:flex; align-items:center; gap:8px; flex-shrink:0; }
 .program-next .primary { color:var(--ink); background:var(--card); }
 .program-next .secondary { color:var(--card); background:var(--ink); box-shadow:inset 0 0 0 1.5px var(--card); }
 .program-subheading { margin:22px 0 10px; font-size:.95rem; }
 .program-maxes { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; margin:0; padding:0; list-style:none; }
-.program-maxes li { display:grid; gap:3px; padding:12px; border:1px solid var(--line); border-radius:10px; }
+.program-maxes li { display:grid; gap:3px; padding:12px; background:var(--card); border:1px solid var(--line); border-radius:10px; }
 .program-maxes span, .program-maxes small { color:var(--muted); font-size:.8rem; }
 .program-maxes strong { font-size:1.1rem; }
 .program-maxes small.warn { color:#ab3a49; }
@@ -636,7 +654,6 @@ h2 { margin-bottom:14px; }
 .program-heading { align-items:flex-start; }
 .program-heading h2 { margin-bottom:4px; }
 .program-heading .subtitle { margin:0 0 14px; }
-.program-next { padding:14px; }
 .program-next ul { line-height:1.45; }
 .program-section { border-top:1px solid var(--line); }
 .program-next + .program-section, .program-notice + .program-section { margin-top:14px; }
@@ -676,8 +693,8 @@ h2 { margin-bottom:14px; }
 @media (max-width:620px) {
   .card { padding:16px; border-radius:var(--radius-panel); }
   .card:not([hidden]) ~ .card { margin-top:12px; }
-  /* Last time's sets are the longest line on the screen; two lines of them, and the set entry stays where the thumb is. */
-  #activeExerciseLast { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; line-clamp:2; overflow:hidden; font-size:.9rem; }
+  /* Last time's sets are the longest line on the screen; three lines of them at most, and the set entry stays where the thumb is. */
+  #activeExerciseLast { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3; line-clamp:3; overflow:hidden; }
   /* A dialog is a sheet that rises from the bottom, where the thumb is. */
   .modal-backdrop { padding:0; place-items:end center; }
   .settings-modal { width:100%; max-height:92%; padding:20px 18px calc(20px + env(safe-area-inset-bottom)); border-bottom:0; border-radius:24px 24px 0 0; }

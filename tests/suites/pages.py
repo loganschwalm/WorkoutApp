@@ -369,6 +369,14 @@ def run(t):
     check('Start again offers the recent workouts, the one done longest ago first', shown == ['C Day', 'A Day', 'B Day'], shown)
     check('above the templates and the saved workouts',
           top('#recentCard') < top('#templatesToggle') < top('#savedWorkoutList'), f"{top('#recentCard')} {top('#templatesToggle')}")
+    # Start again is the one surface among them; the templates and the saved workouts lie flat on the page, set off by a hairline.
+    surfaces = cdp.ev("""['recentCard', 'templatesToggle', 'savedWorkoutList'].map(id => {
+        const style = getComputedStyle(document.getElementById(id).closest('section'));
+        return { fill: style.backgroundColor, top: style.borderTopWidth, side: style.borderLeftWidth }; })""")
+    clear = 'rgba(0, 0, 0, 0)'
+    check('Start again is a card, and the templates and saved workouts are flat on the page with a rule above',
+          surfaces[0]['fill'] != clear and surfaces[0]['side'] == '1px'
+          and all(s == {'fill': clear, 'top': '1px', 'side': '0px'} for s in surfaces[1:]), surfaces)
     check('with the templates folded away, since there is history', cdp.ev("document.getElementById('templateArea').hidden") is True)
     check('a button says how many there are', cdp.ev("document.getElementById('templatesToggle').textContent") == 'Show templates (9)',
           cdp.ev("document.getElementById('templatesToggle').textContent"))

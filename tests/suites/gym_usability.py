@@ -50,6 +50,13 @@ def run(t):
     cdp.pause(0.4)
     last = text('activeExerciseLast')
     check('shows the most recent session of the exercise', visible('activeExerciseLast') and 'Last time' in last and '105 lbs × 8' in last, last)
+    # Read mid-set, so both lines are body text in the ink, and each run of sets is one span the line wraps whole.
+    runs = cdp.ev("[...document.querySelectorAll('#activeExerciseLast .set-run')].map(s => s.textContent)")
+    check('each run of last time\'s sets is one piece, with the label and the text as they were',
+          runs and '105 lbs × 8' in runs and last.startswith('Last time (') and last.endswith('): ' + ' · '.join(runs)), [runs, last])
+    ink = cdp.ev("getComputedStyle(document.querySelector('h1')).color")
+    colours = cdp.ev("['activeExerciseTarget', 'activeExerciseLast'].map(id => getComputedStyle(document.getElementById(id)).color)")
+    check('and the target and last time are in the ink, not the muted caption colour', colours == [ink, ink], [ink, colours])
     check('prefills weight and reps from it (template has no weight)', field('activeWeight') == '105' and field('completedReps') == '8', f"{field('activeWeight')} × {field('completedReps')}")
     log(110, 6)
     cdp.pause(0.3)

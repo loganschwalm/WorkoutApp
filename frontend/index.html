@@ -50,7 +50,7 @@
         <div class="swap-panel guide-panel" id="guidePanel" hidden><h4 id="guideTitle"></h4><p class="subtitle guide-for" id="guideFor" hidden></p><ol class="guide-steps" id="guideSteps"></ol><p class="guide-mistake" id="guideMistake" hidden></p><p class="guide-none subtitle" id="guideNone" hidden></p><div class="note-actions"><a class="guide-video" id="guideVideo" href="#" target="_blank" rel="noopener noreferrer">Find a video demo</a><button class="secondary" id="guideClose" type="button">Close</button></div></div>
         <div class="swap-panel" id="notePanel" hidden><label for="noteText">Note for this exercise</label><textarea class="notes-input" id="noteText" rows="2" maxlength="2000" placeholder="e.g. Seat on 4, grip on the rings"></textarea><div class="note-actions"><button class="primary" id="noteSave" type="button">Save note</button><button class="secondary" id="noteCancel" type="button">Cancel</button></div><p class="subtitle">Shown whenever you do this exercise, in any workout. Save it empty to remove it.</p></div>
         <p class="exercise-note" id="exerciseNote" hidden></p><p class="subtitle superset-line" id="supersetLine" hidden></p>
-        <p id="activeExerciseTarget" class="subtitle"></p><p id="activeExerciseLast" class="subtitle" hidden></p><p class="progression-hint" id="progressionHint" hidden><span id="progressionText"></span> <button class="link-button" id="progressionUse" type="button"></button></p><details class="past-sessions" id="pastSessions" hidden><summary>Past sessions</summary><ul id="pastSessionList"></ul><a class="past-sessions-link" id="exerciseHistoryLink" href="progress.html">Every session, chart and records</a></details><ol class="plan-sets" id="activePlan" aria-label="Planned sets" hidden></ol></div>
+        <p id="activeExerciseTarget" class="exercise-context target"></p><p id="activeExerciseLast" class="exercise-context" hidden></p><p class="progression-hint" id="progressionHint" hidden><span id="progressionText"></span> <button class="link-button" id="progressionUse" type="button"></button></p><details class="past-sessions" id="pastSessions" hidden><summary>Past sessions</summary><ul id="pastSessionList"></ul><a class="past-sessions-link" id="exerciseHistoryLink" href="progress.html">Every session, chart and records</a></details><ol class="plan-sets" id="activePlan" aria-label="Planned sets" hidden></ol></div>
       <div class="set-entry">
         <div class="weight-entry"><label for="activeWeight">Weight (<span class="unit-label">lbs</span>)</label><div class="weight-stepper" id="weightStepper"><button class="secondary" type="button" data-weight-step="-5" aria-label="5 lbs lighter">&minus;5</button><input id="activeWeight" type="number" inputmode="decimal" min="0" step="0.5" placeholder="0" /><button class="secondary" type="button" data-weight-step="5" aria-label="5 lbs heavier">+5</button></div></div>
         <div class="reps-entry"><label for="completedReps" id="completedRepsLabel">Reps completed</label><input id="completedReps" type="number" inputmode="numeric" min="1" step="1" placeholder="0" /></div>
@@ -88,7 +88,7 @@
       <div class="schedule-actions"><button class="primary" id="scheduleStart" type="button" hidden></button><button class="link-button" id="scheduleChange" type="button">Change schedule</button></div>
     </section>
 
-    <section class="card between-workouts" id="programCard" hidden>
+    <section class="card between-workouts flat" id="programCard" hidden>
       <div class="section-heading program-heading"><div><h2 id="programTitle">Training program</h2><p id="programSummary" class="subtitle"></p></div><details class="row-menu program-menu"><summary class="secondary" aria-label="Program options">&middot;&middot;&middot;</summary><div class="row-menu-items"><button id="editProgramBtn" type="button">Edit program</button><button id="calendarProgramBtn" type="button">Add to calendar</button><button class="danger" id="endProgramBtn" type="button">End program</button></div></details></div>
       <p class="program-notice" id="programNotice" role="status" hidden></p>
       <div class="program-next" id="programNext"></div>
@@ -102,7 +102,7 @@
       <ul class="recent-list" id="recentList"></ul>
     </section>
 
-    <section class="card between-workouts">
+    <section class="card between-workouts flat ruled">
       <div class="section-heading"><div><h2>Templates</h2></div><div class="section-heading-actions"><button class="secondary" id="templatesToggle" type="button" aria-controls="templateArea" aria-expanded="false">Show templates</button></div></div>
       <div id="templateArea" hidden>
         <div class="template-grid" id="templateList"></div>
@@ -110,7 +110,7 @@
       </div>
     </section>
 
-    <section class="card between-workouts">
+    <section class="card between-workouts flat ruled">
       <div class="section-heading"><div><h2>Saved workouts</h2><p id="storageStatus" class="subtitle"></p></div><div class="section-heading-actions"><button class="secondary" id="createWorkoutBtn" type="button">Create workout</button></div></div>
       <ul class="saved-workout-list" id="savedWorkoutList"><li class="empty">No saved workouts yet.</li></ul>
     </section>
