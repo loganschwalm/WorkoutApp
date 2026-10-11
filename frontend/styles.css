@@ -623,9 +623,12 @@ html[data-theme="dark"] .progression-hint.stalled { color:#f5c97a; }
 .template-exercise-row .template-superset { grid-column:1 / -1; margin:0; }
 /* Every session of one exercise, on Progress. */
 .session-list { display:grid; gap:8px; margin:14px 0 0; padding:0; list-style:none; }
-.session-list li { display:grid; gap:4px; padding:10px 14px; border:1px solid var(--line); border-radius:10px; color:var(--muted); font-size:.88rem; }
-.session-list li div { display:flex; flex-wrap:wrap; gap:4px 10px; align-items:baseline; }
-.session-list li strong { color:var(--ink); }
+.session-list li.session { display:grid; gap:4px; padding:10px 14px; border:1px solid var(--line); border-radius:10px; color:var(--muted); font-size:.88rem; }
+.session-list li.session div { display:flex; flex-wrap:wrap; gap:4px 10px; align-items:baseline; }
+.session-list li.session strong { color:var(--ink); }
+/* The sessions are History's folding groups (years, months); their rows are spaced as the boxes were. */
+.session-list .history-month-list { display:grid; gap:8px; margin:4px 0 10px; }
+.session-list .history-year:first-child { margin-top:0; }
 .workout-details li strong a { display:inline-flex; align-items:center; min-height:44px; margin:-12px 0; color:inherit; text-decoration:underline; text-decoration-color:var(--line); text-underline-offset:3px; }
 /* On a phone: a small header (the title and Settings), and the pages as a tab bar along the bottom, in reach of a thumb.
    The install bar and the pinned rest timer sit above the tab bar, and the page leaves room for it at the bottom. */
@@ -669,6 +672,20 @@ body.has-install-banner .rest-panel { bottom:calc(84px + var(--tab-bar)); }
 .history-year-group > summary .history-group-name { font-size:1.2rem; font-weight:800; letter-spacing:-.025em; }
 .history-year-group > summary { padding:8px 0; }
 .history-month-group > summary { padding:4px 0 4px 18px; }
+/* Progress under its chart: rows that fold open, each saying where it stands in one line, so the page is the chart and what it
+   needs, not eight cards of the same weight. The title is the row's heading and the state at the right is hidden once it is open,
+   since what it says is then in front of you. Flat on the page, set off by a hairline, as the Tracker's lists are. */
+.fold-summary { display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 12px; list-style:none; cursor:pointer; }
+.fold-summary::-webkit-details-marker { display:none; }
+.fold-summary::before { content:"\25B8"; color:var(--accent); font-size:.9em; }
+.fold-details[open] > .fold-summary::before { content:"\25BE"; }
+.fold-summary h2 { margin:0; }
+.fold-state { margin-left:auto; color:var(--muted); font-size:.9rem; text-align:right; }
+.fold-state:empty, .fold-details[open] > .fold-summary > .fold-state { display:none; }
+.fold-body { padding:6px 0 14px; }
+/* One list of rows: no space between them but their hairlines (the first still has the page's spacing above it). */
+.card.flat.ruled.fold { padding-top:6px; padding-bottom:0; }
+.card.fold ~ .card.fold { margin-top:0; }
 .row-actions > .button-link { padding:8px 16px; }
 /* A day picked on the calendar marks its workouts for a moment. */
 @keyframes picked { from { background:var(--accent-soft); box-shadow:0 0 0 8px var(--accent-soft); } to { background:transparent; box-shadow:0 0 0 8px transparent; } }

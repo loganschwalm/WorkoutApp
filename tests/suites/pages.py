@@ -673,6 +673,8 @@ def run(t):
         cdp.pause(0.3)
 
     settle('/progress.html', "document.querySelectorAll('#recordsList .record').length > 0")
+    # Goals is a folded row, and whoever is setting one has it open.
+    cdp.ev("document.getElementById('goalsFold').open = true")
     check('with no goals the card says so', cdp.ev("document.querySelectorAll('#goalList .goal').length") == 0
           and 'No goals yet' in cdp.ev("document.getElementById('goalList').textContent"))
     check('the exercises done are offered', 'Bench Press' in cdp.ev("[...document.querySelectorAll('#goalExercises option')].map(o => o.value)"))
@@ -862,11 +864,61 @@ def run(t):
     cdp.pause(0.3)
     check('Remove takes a day away', cdp.ev(rows) == ['186.6 lbs'] and field('bodyweightFeedback').startswith('Removed the weight for '), field('bodyweightFeedback'))
     check('for good', t.wait_for(lambda: list(t.api('GET', '/api/state', token=lifter)[0]['bodyweight']) == [today_key]))
+    # A folded row has no width to draw a canvas in, so the chart is drawn when Bodyweight is opened, and its row says the latest weight.
+    check('the folded row says the latest weight', cdp.ev("document.getElementById('bodyweightState').textContent").startswith('186.6 lbs on '),
+          cdp.ev("document.getElementById('bodyweightState').textContent"))
+    cdp.ev("document.getElementById('bodyweightFold').open = false; document.getElementById('bodyweightFold').open = true")
+    cdp.pause(0.4)
+    painted = cdp.ev("""(canvas => ({ width: canvas.clientWidth,
+        ink: canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data.some(value => value !== 0) }))(document.getElementById('bodyweightChart'))""")
+    check('and opening it draws the chart', painted['width'] > 100 and painted['ink'] is True, painted)
     cdp.send('Emulation.setDeviceMetricsOverride', width=375, height=800, deviceScaleFactor=1, mobile=True)
     cdp.pause(0.3)
     fits = cdp.ev("(f => f.scrollWidth <= f.clientWidth && document.documentElement.scrollWidth <= innerWidth)(document.getElementById('bodyweightForm'))")
     check('and on a phone the form fits, with no sideways scrolling', fits is True)
     cdp.send('Emulation.clearDeviceMetricsOverride')
+    t.set_cookie(t.token)
+
+    # ------------------------------------------------------------------ P8d Progress: the chart, then rows that fold open
+    print('P8d Progress is the chart, its sessions in years and months, and the rest rows that fold open, each saying where it stands')
+    folder = account('folder')
+    # Bench Press three times this month, once last month, once the year before, so there are two years and three months.
+    for days_ago in (0, 1, 2, 33, 400):
+        t.api('POST', '/api/workouts', {'name': 'Push Day', 'createdAt': int(time.time() * 1000) - days_ago * DAY - 3600000,
+                                        'exercises': [t.ex('Bench Press', 135, 5, [(5, 135)])]}, folder)
+    t.set_cookie(folder)
+    settle('/progress.html?exercise=bench%20press', "!document.getElementById('sessionsCard').hidden && document.querySelectorAll('#sessionList li.session').length === 5")
+    sessions = cdp.ev("""({ years: [...document.querySelectorAll('#sessionList .history-year')].map(y => [y.dataset.group, y.querySelector('details').open]),
+        months: [...document.querySelectorAll('#sessionList .history-month')].map(m => [m.dataset.group, m.querySelector('details').open]),
+        shown: [...document.querySelectorAll('#sessionList li.session')].filter(li => !li.closest('details:not([open])')).length })""")
+    check('the sessions are years holding months, the latest of each open and the rest folded',
+          len(sessions['years']) == 2 and sessions['years'][0][1] is True and sessions['years'][1][1] is False
+          and sessions['months'][0][1] is True and not any(m[1] for m in sessions['months'][1:]) and len(sessions['months']) >= 3,
+          sessions)
+    # The three of this month are the ones showing; the rest are one tap each away, and a tap is remembered.
+    check('so only the latest month shows, which is no more than the recent ones', 1 <= sessions['shown'] <= 3, sessions['shown'])
+    cdp.ev("document.querySelectorAll('#sessionList .history-month > details > summary')[1].click()")
+    opened = cdp.ev("[...document.querySelectorAll('#sessionList .history-month > details')].map(d => d.open)")
+    cdp.ev("renderSessions(allWorkouts)")
+    kept = cdp.ev("[...document.querySelectorAll('#sessionList .history-month > details')].map(d => d.open)")
+    check('pressing a month heading opens it, and it stays open when the list is drawn again', opened[1] is True and kept == opened, [opened, kept])
+
+    # Under it, six rows folded to start with, each saying in a line where it stands.
+    folds = cdp.ev("""[...document.querySelectorAll('.fold-details')].map(d => [d.id, d.open, d.querySelector('.fold-state').textContent])""")
+    check('Sets per muscle, Bodyweight, Goals, Stalled lifts, Personal records and Exercises are rows, folded',
+          [f[0] for f in folds] == ['musclesFold', 'bodyweightFold', 'goalsFold', 'stallsFold', 'recordsFold', 'exercisesFold']
+          and not any(f[1] for f in folds), folds)
+    states = {f[0]: f[2] for f in folds}
+    # The same weight in every session over weeks is a stalled lift, so that is what the row says.
+    check('each says where it stands: the week, no weight logged, no goal, the stalled lift, the records, the exercises',
+          states['musclesFold'].startswith('This week, ') and states['bodyweightFold'] == 'Nothing logged yet' and states['goalsFold'] == 'None yet'
+          and states['stallsFold'] == '1 lift stalled: Bench Press' and states['recordsFold'] == '1 exercise · latest Bench Press'
+          and states['exercisesFold'] == '1 exercise', states)
+    cdp.ev("document.querySelector('#goalsFold > summary').click()")
+    check('opening a row shows what is in it, and it no longer says it twice',
+          cdp.ev("document.getElementById('goalsFold').open") is True
+          and cdp.ev("getComputedStyle(document.getElementById('goalsState')).display") == 'none'
+          and cdp.ev("document.getElementById('goalForm').checkVisibility()") is True)
     t.set_cookie(t.token)
 
     # ------------------------------------------------------------------ P9 History, a month at a time

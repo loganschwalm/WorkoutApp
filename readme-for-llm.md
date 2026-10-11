@@ -650,8 +650,14 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
   workouts the chart shows; the latest value is always written. Tap any point to see its value.
 - The chart is described in words for screen readers: what it shows, over how many workouts, and the
   lowest and highest values.
+- The page is the chart and what it needs: under it, Sets per muscle, Bodyweight, Goals, Stalled lifts, Personal
+  records and Exercises are rows that fold open, folded to start with. Each says in a line where it stands ("This
+  week, Oct 5 – Oct 11 · 33 sets", "180.5 lbs on Oct 9 · down 2 lbs", "3 goals · 1 reached", "2 lifts stalled:
+  Bench Press, Squat", "15 exercises · latest Rowing machine"), which it stops saying once it is open. A link
+  that needs one (Give them a muscle) opens it.
 - With one exercise chosen, every session of it, newest first, with its sets, the reps they had left,
-  and the note kept with it. History's exercise names, and a workout's Past sessions, link here.
+  and the note kept with it, in years and months as History's list is: the latest year and month open, the rest folded,
+  and what you open kept while you look at that exercise. History's exercise names, and a workout's Past sessions, link here.
 - Stalled lifts: every lift that has stalled (see Stalls, under Guided workouts), the longest stalled first, with when
   its best was set, what it was, and the week at 10% off to try. Tapping one charts it. With none, the card says so.
 - Personal records, under the chart: for each exercise, the heaviest weight (with the most reps done at

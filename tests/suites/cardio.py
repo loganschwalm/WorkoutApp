@@ -325,7 +325,7 @@ def run(t):
     fill('metricFilter', 'heartRate')
     cdp.pause(0.3)
     check('a measure few sessions have charts those', cdp.ev('chartData.points.length') == 1)
-    sessions_list = cdp.ev("[...document.querySelectorAll('#sessionList li')].map(li => li.lastElementChild.textContent)")
+    sessions_list = cdp.ev("[...document.querySelectorAll('#sessionList li.session')].map(li => li.lastElementChild.textContent)")
     check('every session of the run is listed', text('sessionsTitle') == 'Every session of Run' and len(sessions_list) == 4
           and sessions_list[-1] == '4.99 km in 28:00 · 5:37 /km · 150 bpm · 300 cal', sessions_list)
     fill('exerciseFilter', 'cardio:rower')

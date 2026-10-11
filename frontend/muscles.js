@@ -65,6 +65,8 @@ function renderMuscles() {
   $('musclesSummary').textContent = allWorkouts.length
     ? `${which}, ${formatDate(shownWeek)} – ${formatDate(weeksAfter(shownWeek, 1) - 1)} · ${plural(total, 'set')}`
     : 'Every set you log, counted for the muscle its exercise works most.';
+  // The folded row says the same of the week shown, so it is read without opening it.
+  $('musclesState').textContent = allWorkouts.length ? $('musclesSummary').textContent : 'No sets yet';
   $('musclesEarlier').disabled = shownWeek <= first;
   $('musclesLater').disabled = shownWeek >= thisWeek;
   $('muscleList').innerHTML = rows.length ? rows.map(([muscle, label]) => {
@@ -89,8 +91,9 @@ function renderMuscles() {
 
 $('musclesEarlier').onclick = () => { shownWeek = weeksAfter(shownWeek, -1); renderMuscles(); };
 $('musclesLater').onclick = () => { shownWeek = weeksAfter(shownWeek, 1); renderMuscles(); };
-// To the Exercises card, at the first exercise with no muscle.
+// To the Exercises row, opened, at the first exercise with no muscle.
 $('musclesUncountedLink').onclick = () => {
+  $('exercisesFold').open = true;
   $('libraryDetails').open = true;
   $('librarySearch').value = '';
   renderLibrary();
@@ -127,6 +130,7 @@ function renderLibrary() {
   $('librarySummary').textContent = exercises.length
     ? `Show your ${plural(exercises.length, 'exercise')}${missing ? ` · ${missing} with no muscle` : ''}`
     : 'Show your exercises';
+  $('exercisesState').textContent = exercises.length ? `${plural(exercises.length, 'exercise')}${missing ? ` · ${missing} with no muscle` : ''}` : '';
   // Every word typed has to be in the name, as History's search works.
   const words = $('librarySearch').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const shown = exercises.filter(exercise => words.every(word => exercise.name.toLowerCase().includes(word)));

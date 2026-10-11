@@ -175,9 +175,9 @@ def run(t):
     check('and a link to every session', link == 'progress.html?exercise=bench%20press', link)
     end()
     cdp.goto('/' + link)
-    cdp.wait("!document.getElementById('sessionsCard').hidden && document.querySelectorAll('#sessionList li').length > 0")
+    cdp.wait("!document.getElementById('sessionsCard').hidden && document.querySelectorAll('#sessionList li.session').length > 0")
     cdp.pause(0.3)
-    all_sessions = cdp.ev("[...document.querySelectorAll('#sessionList li')].map(li => li.textContent)") or []
+    all_sessions = cdp.ev("[...document.querySelectorAll('#sessionList li.session')].map(li => li.textContent)") or []
     bench_workouts = [w for w in t.workouts() if any(e['name'] == 'Bench Press' and e.get('sets') for e in w['exercises'])]
     check('Progress opens on that exercise', cdp.ev("document.getElementById('exerciseFilter').value") == 'bench press'
           and text('sessionsTitle') == 'Every session of Bench Press')

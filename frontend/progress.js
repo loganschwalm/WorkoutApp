@@ -404,8 +404,8 @@ function renderSessions(workouts) {
     $('sessionsTitle').textContent = `Every session of ${label}`;
     $('sessionsSummary').textContent = sessions.length ? `${plural(sessions.length, 'session')}, the most recent first.` : 'None for these filters.';
     $('sessionsNote').hidden = true;
-    $('sessionList').innerHTML = sessions.map(workout => `<li><div><strong>${escapeHTML(longDate(workout.createdAt))}</strong><span>${escapeHTML(workout.name)}</span></div>`
-      + `<span>${escapeHTML(describeCardio(workout))}</span></li>`).join('');
+    $('sessionList').innerHTML = sessionGroups(sessions, workout => workout.createdAt, workout => `<li class="session"><div><strong>${escapeHTML(longDate(workout.createdAt))}</strong>`
+      + `<span>${escapeHTML(workout.name)}</span></div><span>${escapeHTML(describeCardio(workout))}</span></li>`);
     return;
   }
   const sessions = [...workouts].sort((a, b) => b.createdAt - a.createdAt).map(workout => ({
@@ -417,12 +417,52 @@ function renderSessions(workouts) {
   const note = notes && typeof notes === 'object' ? notes[selectedExercise] : '';
   $('sessionsNote').hidden = !note;
   $('sessionsNote').textContent = note ? `Your note: ${note}` : '';
-  $('sessionList').innerHTML = sessions.map(({ workout, items }) => {
+  $('sessionList').innerHTML = sessionGroups(sessions, session => session.workout.createdAt, ({ workout, items }) => {
     const efforts = describeEfforts(items.flatMap(item => item.sets || []));
-    return `<li><div><strong>${escapeHTML(longDate(workout.createdAt))}</strong><span>${escapeHTML(workout.name || 'Untitled workout')}</span></div>`
+    return `<li class="session"><div><strong>${escapeHTML(longDate(workout.createdAt))}</strong><span>${escapeHTML(workout.name || 'Untitled workout')}</span></div>`
       + `<span>${escapeHTML(items.map(describeSavedExercise).join(' · '))}${efforts ? ` · ${escapeHTML(efforts)}` : ''}</span></li>`;
+  });
+}
+
+// The sessions as years holding months, each folded or open on its heading, the latest year and month open and the rest folded, so
+// an exercise done for years is not one long column. These are the folding groups of History's list, and use its classes.
+// What was opened or closed by hand is kept, for the exercise it was done on, when the list is drawn again.
+const sessionGroupOpened = new Map();
+
+function sessionGroups(sessions, timeOf, rowOf) {
+  const years = new Map();
+  sessions.forEach(session => {
+    const date = new Date(timeOf(session));
+    const months = years.get(date.getFullYear()) || new Map();
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    months.set(key, [...(months.get(key) || []), session]);
+    years.set(date.getFullYear(), months);
+  });
+  const isOpen = (group, latest) => sessionGroupOpened.has(`${selectedExercise}|${group}`) ? sessionGroupOpened.get(`${selectedExercise}|${group}`) : latest;
+  const fold = (className, group, open, name, total, inner) => `<li class="${className.split(' ')[0]}" data-group="${group}">`
+    + `<details class="history-group ${className.split(' ')[1]}"${open ? ' open' : ''}><summary class="history-group-summary">`
+    + `<h3 class="history-group-name">${escapeHTML(name)}</h3><span class="history-group-total">${escapeHTML(total)}</span></summary>${inner}</details></li>`;
+  return [...years].map(([year, months], yearIndex) => {
+    const monthItems = [...months].map(([key, inMonth], monthIndex) => {
+      const name = new Date(Number(key.slice(0, 4)), Number(key.slice(5)) - 1, 1).toLocaleDateString(undefined, { month:'long' });
+      return fold('history-month history-month-group', `month:${key}`, isOpen(`month:${key}`, yearIndex === 0 && monthIndex === 0), name,
+        plural(inMonth.length, 'session'), `<ul class="history-month-list">${inMonth.map(rowOf).join('')}</ul>`);
+    }).join('');
+    const inYear = [...months.values()].flat();
+    return fold('history-year history-year-group', `year:${year}`, isOpen(`year:${year}`, yearIndex === 0), String(year),
+      plural(inYear.length, 'session'), `<ul class="history-year-list">${monthItems}</ul>`);
   }).join('');
 }
+
+$('sessionList').onclick = event => {
+  const heading = event.target.closest('.history-group-summary');
+  if (!heading) return;
+  // Drawn by hand, so what was said is kept when the list is drawn again.
+  event.preventDefault();
+  const details = heading.parentElement;
+  details.open = !details.open;
+  sessionGroupOpened.set(`${selectedExercise}|${details.parentElement.dataset.group}`, details.open);
+};
 
 // ---- Personal records -----------------------------------------------------
 // Each exercise's best, from every saved workout whatever the filters: the heaviest weight (with the most reps done at
@@ -489,6 +529,7 @@ function renderRecords() {
     + `<strong>${escapeHTML(record.name)}</strong>${record.lines.map(([label, value, date]) =>
       `<span><span class="record-label">${label}</span> ${escapeHTML(value)} <span class="record-date">· ${escapeHTML(longDate(date))}</span></span>`).join('')}</button></li>`).join('')
     : '<li class="empty">Your records appear once you have saved a workout.</li>';
+  $('recordsState').textContent = records.length ? `${plural(records.length, 'exercise')} · latest ${records[0].name}` : 'None yet';
 }
 
 // ---- Stalled lifts ------------------------------------------------------------
@@ -502,6 +543,8 @@ function renderStalls() {
     + `<span><span class="record-label">Try</span> a week at ${escapeHTML(formatWeight(stall.deload))} ${unit}, 10% off last time's ${escapeHTML(formatWeight(stall.heaviest))}</span>`
       + `</button></li>`).join('')
     : '<li class="empty">Nothing has stalled: every lift you have trained lately has set a best within three weeks, or is still early on.</li>';
+  const named = stalls.slice(0, 2).map(({ name }) => name).join(', ');
+  $('stallsState').textContent = stalls.length ? `${plural(stalls.length, 'lift')} stalled: ${named}${stalls.length > 2 ? ` and ${stalls.length - 2} more` : ''}` : 'None stalled';
 }
 
 // ---- Goals ------------------------------------------------------------------
@@ -558,6 +601,7 @@ function renderGoals() {
   // Set through the DOM: the Content-Security-Policy refuses style="" attributes written into markup, which left every
   // bar full whatever the goal's progress.
   $('goalList').querySelectorAll('.goal-bar').forEach(bar => { bar.firstElementChild.style.width = `${bar.getAttribute('aria-valuenow')}%`; });
+  $('goalsState').textContent = items.length ? `${plural(items.length, 'goal')} · ${items.filter(item => item.reached).length} reached` : 'None yet';
 }
 
 function showGoalFeedback(message, isError = false) {

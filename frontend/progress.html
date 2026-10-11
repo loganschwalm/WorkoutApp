@@ -39,16 +39,24 @@
       <ul class="session-list" id="sessionList"></ul>
     </section>
 
-    <section class="card" id="musclesCard" aria-labelledby="musclesTitle">
-      <div class="section-heading"><div><h2 id="musclesTitle">Sets per muscle</h2><p class="subtitle" id="musclesSummary">Every set you log, counted for the muscle its exercise works most.</p></div>
+    <section class="card flat ruled fold" id="musclesCard" aria-labelledby="musclesTitle">
+      <details class="fold-details" id="musclesFold">
+        <summary class="fold-summary"><h2 id="musclesTitle">Sets per muscle</h2><span class="fold-state" id="musclesState"></span></summary>
+        <div class="fold-body">
+      <div class="section-heading"><p class="subtitle" id="musclesSummary">Every set you log, counted for the muscle its exercise works most.</p>
         <div class="week-nav"><button class="secondary" id="musclesEarlier" type="button" aria-label="Week before" disabled>&#8249;</button><button class="secondary" id="musclesLater" type="button" aria-label="Week after" disabled>&#8250;</button></div></div>
       <ul class="muscle-list" id="muscleList"><li class="empty">Your sets appear once your workouts load.</li></ul>
       <p class="subtitle muscle-key" id="musclesKey" hidden></p>
       <p class="subtitle muscle-key" id="musclesUncounted" hidden><span id="musclesUncountedNames"></span> <button class="link-button" id="musclesUncountedLink" type="button">Give them a muscle</button></p>
+        </div>
+      </details>
     </section>
 
-    <section class="card" aria-labelledby="bodyweightTitle">
-      <div class="section-heading"><div><h2 id="bodyweightTitle">Bodyweight</h2><p class="subtitle" id="bodyweightSummary">Log your weight to see how it changes alongside your lifts.</p></div></div>
+    <section class="card flat ruled fold" aria-labelledby="bodyweightTitle">
+      <details class="fold-details" id="bodyweightFold">
+        <summary class="fold-summary"><h2 id="bodyweightTitle">Bodyweight</h2><span class="fold-state" id="bodyweightState"></span></summary>
+        <div class="fold-body">
+      <p class="subtitle" id="bodyweightSummary">Log your weight to see how it changes alongside your lifts.</p>
       <div class="bodyweight-chart"><canvas id="bodyweightChart" role="img" aria-label="No bodyweight logged yet." hidden></canvas></div>
       <p class="subtitle chart-detail" id="bodyweightDetail" role="status"></p>
       <form class="goal-form bodyweight-form" id="bodyweightForm" novalidate>
@@ -58,10 +66,15 @@
       </form>
       <p class="goal-feedback" id="bodyweightFeedback" role="status"></p>
       <ul class="bodyweight-list" id="bodyweightList"></ul>
+        </div>
+      </details>
     </section>
 
-    <section class="card" aria-labelledby="goalsTitle">
-      <div class="section-heading"><div><h2 id="goalsTitle">Goals</h2><p class="subtitle">A weight to reach in an exercise. Your heaviest set so far is measured against it.</p></div></div>
+    <section class="card flat ruled fold" aria-labelledby="goalsTitle">
+      <details class="fold-details" id="goalsFold">
+        <summary class="fold-summary"><h2 id="goalsTitle">Goals</h2><span class="fold-state" id="goalsState"></span></summary>
+        <div class="fold-body">
+      <p class="subtitle">A weight to reach in an exercise. Your heaviest set so far is measured against it.</p>
       <ul class="goal-list" id="goalList"><li class="empty">No goals yet. Set one below.</li></ul>
       <form class="goal-form" id="goalForm" novalidate>
         <div><label for="goalExercise">Exercise</label><input id="goalExercise" list="goalExercises" autocomplete="off" placeholder="Bench Press" /><datalist id="goalExercises"></datalist></div>
@@ -70,20 +83,35 @@
         <button class="primary" type="submit">Set goal</button>
       </form>
       <p class="goal-feedback" id="goalFeedback" role="status"></p>
+        </div>
+      </details>
     </section>
 
-    <section class="card" id="stallsCard" aria-labelledby="stallsTitle">
-      <div class="section-heading"><div><h2 id="stallsTitle">Stalled lifts</h2><p class="subtitle">Lifts whose estimated one-rep max has not gone up in three weeks, over three sessions or more. A lighter week usually gets one moving. Tap one to chart it.</p></div></div>
+    <section class="card flat ruled fold" id="stallsCard" aria-labelledby="stallsTitle">
+      <details class="fold-details" id="stallsFold">
+        <summary class="fold-summary"><h2 id="stallsTitle">Stalled lifts</h2><span class="fold-state" id="stallsState"></span></summary>
+        <div class="fold-body">
+      <p class="subtitle">Lifts whose estimated one-rep max has not gone up in three weeks, over three sessions or more. A lighter week usually gets one moving. Tap one to chart it.</p>
       <ul class="records-list" id="stallList"><li class="empty">Your lifts are checked once your workouts load.</li></ul>
+        </div>
+      </details>
     </section>
 
-    <section class="card" aria-labelledby="recordsTitle">
-      <div class="section-heading"><div><h2 id="recordsTitle">Personal records</h2><p class="subtitle">Your best in each exercise, the most recent record first. Tap one to chart it.</p></div></div>
+    <section class="card flat ruled fold" aria-labelledby="recordsTitle">
+      <details class="fold-details" id="recordsFold">
+        <summary class="fold-summary"><h2 id="recordsTitle">Personal records</h2><span class="fold-state" id="recordsState"></span></summary>
+        <div class="fold-body">
+      <p class="subtitle">Your best in each exercise, the most recent record first. Tap one to chart it.</p>
       <ul class="records-list" id="recordsList"><li class="empty">Your records appear once your workouts load.</li></ul>
+        </div>
+      </details>
     </section>
 
-    <section class="card" id="exercisesCard" aria-labelledby="exercisesTitle">
-      <div class="section-heading"><div><h2 id="exercisesTitle">Exercises</h2><p class="subtitle">The muscle each exercise works most, for Sets per muscle, and what it is done with: a barbell lift gets plates and warm-ups. Each is guessed from its name until you choose.</p></div></div>
+    <section class="card flat ruled fold" id="exercisesCard" aria-labelledby="exercisesTitle">
+      <details class="fold-details" id="exercisesFold">
+        <summary class="fold-summary"><h2 id="exercisesTitle">Exercises</h2><span class="fold-state" id="exercisesState"></span></summary>
+        <div class="fold-body">
+      <p class="subtitle">The muscle each exercise works most, for Sets per muscle, and what it is done with: a barbell lift gets plates and warm-ups. Each is guessed from its name until you choose.</p>
       <details class="library" id="libraryDetails">
         <summary id="librarySummary">Show your exercises</summary>
         <div class="library-search"><label for="librarySearch">Find an exercise</label><input id="librarySearch" type="search" autocomplete="off" placeholder="Bench" /></div>
@@ -96,6 +124,8 @@
         <button class="primary" type="submit">Add exercise</button>
       </form>
       <p class="goal-feedback" id="libraryFeedback" role="status"></p>
+        </div>
+      </details>
     </section>
   </main>
   <script src="common.js"></script>

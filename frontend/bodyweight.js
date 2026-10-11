@@ -103,6 +103,8 @@ function renderBodyweight() {
   $('bodyweightSummary').textContent = latest
     ? [`${formatBodyweight(latest.weight)} ${unit} on ${formatDate(latest.time)}`, bodyweightTrend(entries) || 'Log it again to see how it moves'].join(' · ')
     : 'Log your weight to see how it changes alongside your lifts.';
+  // The folded row says the same, so it is read without opening it.
+  $('bodyweightState').textContent = latest ? $('bodyweightSummary').textContent : 'Nothing logged yet';
   $('bodyweightChart').hidden = !entries.length;
   $('bodyweightChart').setAttribute('aria-label', entries.length
     ? `Bodyweight: ${plural(entries.length, 'weigh-in')} from ${longDate(entries[0].time)} to ${longDate(latest.time)}, lowest ${formatBodyweight(Math.min(...entries.map(entry => entry.weight)))} ${unit}, `
@@ -181,6 +183,8 @@ loadBodyweights();
 renderBodyweight();
 window.addEventListener('resize', drawBodyweight);
 document.fonts.ready.then(drawBodyweight);
+// The row is folded to start with, and a canvas drawn in a folded row has no width: it is drawn when the row opens.
+$('bodyweightFold').addEventListener('toggle', () => { if ($('bodyweightFold').open) drawBodyweight(); });
 // The server's copy replaces this device's once it answers, unless a weight logged here is still uploading.
 window.serverStateReady.then(() => { loadBodyweights(); renderBodyweight(); });
 // The unit changes the numbers; the theme, the colours.
