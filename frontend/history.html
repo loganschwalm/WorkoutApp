@@ -19,13 +19,14 @@
 <body>
   <main class="shell">
     <header>
-      <div><h1>Workout History</h1><p class="subtitle">Review every workout you have saved.</p></div>
+      <div><h1>Workout History</h1><p class="subtitle page-status" id="pageStatus"></p></div>
       <nav class="site-nav" aria-label="Primary navigation"><a href="index.html">Strength</a><a href="cardio.html">Cardio</a><a href="progress.html">Progress</a><a class="active" href="history.html" aria-current="page">History</a></nav>
       <div class="header-actions"><div class="date" id="today"></div><button class="secondary settings-button" id="settingsButton" type="button" aria-label="Settings" title="Settings">&#9881;</button></div>
     </header>
 
     <section class="card" id="calendarCard">
-      <div class="section-heading"><div><h2>Training calendar</h2><p class="subtitle" id="calendarSummary">The last 12 weeks.</p></div><span class="subtitle calendar-streak" id="streakSummary"></span></div>
+      <div class="section-heading heading-line"><h2>Training calendar</h2><span class="subtitle calendar-streak" id="streakSummary"></span></div>
+      <p class="subtitle heading-intro" id="calendarSummary">The last 12 weeks.</p>
       <div class="training-calendar" id="trainingCalendar" role="group" aria-label="Days trained in the last 12 weeks. The arrow keys move between days, and Enter shows a day's workouts."></div>
       <p class="subtitle calendar-detail" id="calendarDetail" aria-live="polite"></p>
       <p class="subtitle calendar-note">Each square is a day, Monday at the top. A filled one is a day you lifted, a ring a day of cardio only; both count toward the weekly goal in Settings. A dashed square in colour is a training day still to come.</p>
@@ -34,8 +35,9 @@
     </section>
 
     <section class="card">
-      <div class="section-heading"><div><h2>All saved workouts</h2><p class="subtitle">Strength workouts and cardio sessions. Tap one to see what was done, or start it again.</p></div><span id="historySummary" class="subtitle"></span></div>
-      <div class="history-search"><label class="visually-hidden" for="historySearch">Search saved workouts</label><input id="historySearch" type="search" autocomplete="off" placeholder="Search by workout, exercise, activity or note" /></div>
+      <div class="section-heading heading-line"><h2>All saved workouts</h2><span id="historySummary" class="subtitle"></span></div>
+      <p class="subtitle heading-intro">Strength workouts and cardio sessions. Tap one to see what was done, or start it again.</p>
+      <div class="history-search"><label class="visually-hidden" for="historySearch">Search saved workouts</label><input id="historySearch" type="search" autocomplete="off" placeholder="Search by name, exercise or note" /></div>
       <p class="subtitle history-feedback" id="historyFeedback" role="status" hidden></p>
       <ul class="saved-workout-list" id="historyList"><li class="empty">No saved workouts yet.</li></ul>
     </section>

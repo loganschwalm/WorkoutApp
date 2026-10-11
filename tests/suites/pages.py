@@ -369,6 +369,9 @@ def run(t):
     check('Start again offers the recent workouts, the one done longest ago first', shown == ['C Day', 'A Day', 'B Day'], shown)
     check('above the templates and the saved workouts',
           top('#recentCard') < top('#templatesToggle') < top('#savedWorkoutList'), f"{top('#recentCard')} {top('#templatesToggle')}")
+    # The header says when you last trained (the next workout is the panel under it), by calendar day.
+    status = cdp.ev("document.getElementById('pageStatus').textContent")
+    check('the header says when you last trained', status == 'Last workout: B Day, 6 days ago.', status)
     # Start again is the one surface among them; the templates and the saved workouts lie flat on the page, set off by a hairline.
     surfaces = cdp.ev("""['recentCard', 'templatesToggle', 'savedWorkoutList'].map(id => {
         const style = getComputedStyle(document.getElementById(id).closest('section'));
@@ -393,6 +396,10 @@ def run(t):
         [...row.querySelectorAll('button')].filter(b => b.checkVisibility() && !b.closest('.row-menu-items')).map(b => b.dataset.action).join(' '))""")
     check('each saved workout shows only its name and Start, with the rest in its menu',
           counts and all(c == 'view start' for c in counts) and cdp.ev(menu_hidden) is True, counts)
+    # The triangle after a name says it opens: it is the accent, as the triangles of the other folded things are.
+    marker = cdp.ev("""[getComputedStyle(document.querySelector('#savedWorkoutList .saved-workout-toggle strong'), '::after').color,
+                       getComputedStyle(document.getElementById('createWorkoutBtn')).color]""")
+    check('the triangle after a saved workout is in the accent', marker[0] == marker[1], marker)
     cdp.ev("document.querySelector('#savedWorkoutList .saved-workout-toggle').click()")
     check('tapping the name shows what was done',
           cdp.ev("(b => b.getAttribute('aria-expanded') === 'true' && !b.closest('.saved-workout').querySelector('.workout-details').hidden)(document.querySelector('#savedWorkoutList .saved-workout-toggle'))") is True)
@@ -730,6 +737,23 @@ def run(t):
           mixed['labels'] >= 2 and mixed['overlaps'] == 0 and mixed['clipped'] == 0, mixed)
     fits = cdp.ev("document.querySelector('.progress-filters').scrollWidth <= document.querySelector('.progress-filters').clientWidth")
     check('and the filters fit the phone', fits is True)
+    # "All workout types" does not fit half a phone, so Workout type has a line of its own; From and To share one, each field whole.
+    layout = cdp.ev("""(() => {
+      const box = id => document.getElementById(id).getBoundingClientRect();
+      const panel = document.querySelector('.progress-filters').getBoundingClientRect();
+      const [metric, type, from, to] = ['metricFilter', 'workoutTypeFilter', 'startDateFilter', 'endDateFilter'].map(box);
+      const dates = ['startDateFilter', 'endDateFilter'].map(id => document.getElementById(id));
+      dates.forEach(input => { input.value = '2026-12-31'; });
+      return { sameWidth: Math.abs(type.width - metric.width) < 1, oneLine: Math.abs(from.top - to.top) < 1 && to.left > from.left,
+               inside: [metric, type, from, to].every(r => r.left >= panel.left && r.right <= panel.right),
+               datesWhole: dates.every(input => input.scrollWidth <= input.clientWidth) };
+    })()""")
+    cdp.ev("['startDateFilter', 'endDateFilter'].forEach(id => { document.getElementById(id).value = ''; })")
+    check('with Workout type on a line of its own, and From and To side by side with a whole date in each',
+          all(layout.values()), layout)
+    status = cdp.ev("document.getElementById('progressSummary').getBoundingClientRect().height")
+    line_height = cdp.ev("parseFloat(getComputedStyle(document.getElementById('progressSummary')).fontSize) * 1.6")
+    check('and the count beside the title keeps to one line', status < line_height, [status, line_height])
     cdp.send('Emulation.clearDeviceMetricsOverride')
 
     print('P8c Progress logs bodyweight a day at a time, charts it, and says how it has moved')
@@ -844,6 +868,18 @@ def run(t):
     state = history()
     this_month = today.strftime('%B %Y')
     check('each workout is one line, its sets folded away', state['open'] == [] and state['rows'][:2] == ['Leg Day', 'Push Day'], state)
+    # The line under the page's name says how much there is and since when (this week is the calendar's line).
+    status = cdp.ev("document.getElementById('pageStatus').textContent")
+    check('the header says how many sessions there are, and since when',
+          status.startswith(f'{total} sessions since ') and ', the latest on ' in status and status.endswith('.'), status)
+    # On a phone the streak and the count each keep a line, the streak on the title's or under it, never broken in two.
+    cdp.send('Emulation.setDeviceMetricsOverride', width=375, height=800, deviceScaleFactor=1, mobile=True)
+    cdp.pause(0.3)
+    kept = cdp.ev("""(() => ['streakSummary', 'historySummary'].map(id => {
+        const element = document.getElementById(id);
+        return element.getBoundingClientRect().height < parseFloat(getComputedStyle(element).fontSize) * 1.6; }))()""")
+    cdp.send('Emulation.clearDeviceMetricsOverride')
+    check('on a phone the streak and the count each keep to one line', kept == [True, True], kept)
     check("under a heading for its month, with the month's workouts and time", state['months'][0] == [this_month, '2 workouts · 1 h 30 min', False], state['months'])
     check('the latest three months show, and a button brings the rest', [m[2] for m in state['months']] == [False] * 3 + [True] * 3
           and state['older'] == 'Show 3 older workouts' and len(state['rows']) == 4, state)

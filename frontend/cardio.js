@@ -441,8 +441,9 @@ function renderCardioWeek() {
   $('cardioWeek').textContent = [`This week: ${plural(week.length, 'session')}`, formatDuration(seconds), far].filter(Boolean).join(' · ');
 }
 
-// A button for each activity, saying when it was last done and how far (or for how long). A number keeps its unit on its
-// line, where a narrow button would break "5,000 m" in two.
+// A button for each activity, saying when it was last done and how far (or for how long); an activity not done yet is its name
+// alone, since the switch above says what a tap does. A number keeps its unit on its line, where a narrow button would break
+// "5,000 m" in two.
 function renderCardioStart() {
   const sessions = allCardio();
   $('cardioActivityGrid').innerHTML = cardioActivities.map(activity => {
@@ -450,8 +451,8 @@ function renderCardioStart() {
     const distance = last ? sessionDistance(last) : null;
     const line = activity.named ? `Anything else; name it ${cardioManual ? 'in the form' : 'when you finish'}`
       : last ? `Last ${shortDate(last.createdAt)} · ${distance ? formatDistance(distance, shownDistanceUnit(activity)).replace(' ', '\u00a0') : formatClock(last.duration)}`
-        : cardioManual ? 'Enter its time' : 'Start the timer';
-    return `<button class="cardio-activity" type="button" data-activity="${activity.id}"><strong>${escapeHTML(activity.name)}</strong><span>${escapeHTML(line)}</span></button>`;
+        : '';
+    return `<button class="cardio-activity" type="button" data-activity="${activity.id}"><strong>${escapeHTML(activity.name)}</strong>${line ? `<span>${escapeHTML(line)}</span>` : ''}</button>`;
   }).join('');
   $('cardioModeTimer').setAttribute('aria-pressed', String(!cardioManual));
   $('cardioModeManual').setAttribute('aria-pressed', String(cardioManual));

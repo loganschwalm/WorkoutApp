@@ -68,6 +68,10 @@ own workouts, templates, and settings.
 - The next workout is the Tracker's one raised surface: a dark panel as wide as the page, with the program
   (its weights and weeks, folded) lying flat around it. Start again is a card; the templates and saved
   workouts are plain lists on the page, set off by a hairline.
+- The line under the Tracker's name says when you last trained ("Last workout: Push Day, 2 days ago", counted in calendar
+  days), since the next workout is the panel under it. History's says how many sessions there are and since when
+  ("25 sessions since Sep 16, the latest on Oct 10"); this week is the calendar's own line. Neither shows on a phone, where
+  the header is only the page's name.
 - During a workout the Tracker is only the workout: the program, Start again, templates and saved
   workouts wait behind "Show the rest of the Tracker" under it, and come back when the workout ends.
 - On a phone the header is just the page's name and Settings, and Strength (the Tracker), Cardio, Progress and History
@@ -547,7 +551,7 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
 
 - The activities: Walk, Run, Cycling, Exercise bike, Elliptical, Rowing machine, Stair climber, and Other, under a name of
   your own (Jump rope, Swimming), which is then charted and kept apart under that name. Each button says when it was
-  last done and how far ("Last Sep 30 · 3.5 mi").
+  last done and how far ("Last Sep 30 · 3.5 mi"); one not done yet is just its name.
 - Above the activities, a switch says what tapping one does: Start the timer (the first time, and whenever it is chosen),
   or Enter the time, which opens the form below for that activity instead, for a session done without the app or timed
   on a watch. The choice is kept on this device.

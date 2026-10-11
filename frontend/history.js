@@ -54,7 +54,19 @@ function historyRow(workout) {
     + `<ul>${workoutLines(workout)}</ul></div></li>`;
 }
 
+// The line under the page's name: how many sessions there are, over how long. This week is the calendar's line.
+function renderHistoryStatus(workouts) {
+  if (!workouts.length) { $('pageStatus').textContent = 'Nothing saved yet. Finish a workout and it shows up here.'; return; }
+  const times = workouts.map(workout => workout.createdAt);
+  const thisYear = new Date().getFullYear();
+  const date = time => new Date(time).toLocaleDateString(undefined, { month:'short', day:'numeric', ...(new Date(time).getFullYear() === thisYear ? {} : { year:'numeric' }) });
+  const first = Math.min(...times), latest = Math.max(...times);
+  $('pageStatus').textContent = workouts.length === 1 ? `1 session, on ${date(latest)}.`
+    : `${plural(workouts.length, 'session')} since ${date(first)}, the latest on ${date(latest)}.`;
+}
+
 function renderHistory(workouts) {
+  renderHistoryStatus(workouts);
   const words = searchWords();
   const shown = words.length ? workouts.filter(workout => matchesSearch(workout, words)) : workouts;
   $('historySummary').textContent = words.length ? `${shown.length} of ${plural(workouts.length, 'saved workout')}` : plural(workouts.length, 'saved workout');

@@ -120,6 +120,24 @@ function renderSavedWorkouts(workouts) {
   // Drawn again (after a sync, say) while a button in the list has the focus, the same button gets it back.
   if (focusedId) list.querySelector(`.saved-workout[data-id="${focusedId}"] [data-action="${focusedAction}"]`)?.focus({ preventScroll:true });
   renderRecentWorkouts();
+  renderTrackerStatus(workouts);
+}
+
+// "Today", "yesterday", "3 days ago", and the date from two weeks on: by calendar day, so a workout late last night is
+// yesterday even when it was only hours ago. Here and not in common.js, so a page cached from before this change cannot be
+// left calling something the cached common.js lacks.
+function describeDaysAgo(when, now = new Date()) {
+  const startOfDayOf = value => { const date = new Date(value); return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime(); };
+  const days = Math.round((startOfDayOf(now) - startOfDayOf(when)) / 86400000);
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  return days < 14 ? `${days} days ago` : new Date(when).toLocaleDateString(undefined, { month:'short', day:'numeric' });
+}
+
+// The line under the page's name: when you last trained. What is next is the panel just below it, so the header does not say it again.
+function renderTrackerStatus(workouts) {
+  const last = workouts[0];
+  $('pageStatus').textContent = last ? `Last workout: ${last.name}, ${describeDaysAgo(last.createdAt)}.` : 'Nothing logged yet. Start one from a template below.';
 }
 
 // Up to three different workouts from the recent ones, to start again in one tap. The one done longest ago comes first:

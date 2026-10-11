@@ -62,11 +62,11 @@ def run(t):
     nav = cdp.ev("[...document.querySelectorAll('.site-nav a')].map(a => a.textContent + (a.classList.contains('active') ? '*' : ''))")
     check('the tabs are Strength, Cardio, Progress and History', nav == ['Strength', 'Cardio*', 'Progress', 'History'], nav)
     tiles = cdp.ev("Object.fromEntries([...document.querySelectorAll('#cardioActivityGrid .cardio-activity')].map(b => [b.querySelector('strong').textContent, "
-                   "b.querySelector('span').textContent.replace(/\u00a0/g, ' ')]))")
+                   "(b.querySelector('span')?.textContent ?? '').replace(/\u00a0/g, ' ')]))")
     check('every activity can be started, walking and running and the machines',
           list(tiles) == ['Walk', 'Run', 'Cycling', 'Exercise bike', 'Elliptical', 'Rowing machine', 'Stair climber', 'Other'], list(tiles))
-    check('each says when it was last done, and how far', tiles.get('Run', '').endswith('· 3.5 mi') and tiles.get('Rowing machine', '').endswith('· 5,000 m')
-          and tiles.get('Walk') == 'Start the timer', tiles)
+    check('each says when it was last done, and how far, and one not done yet is its name alone', tiles.get('Run', '').endswith('· 3.5 mi')
+          and tiles.get('Rowing machine', '').endswith('· 5,000 m') and tiles.get('Walk') == '', tiles)
     check('the sessions are listed, newest first, without the strength workout', rows() == ['Rowing machine', 'Run', 'Run'], rows())
     line = cdp.ev("document.querySelectorAll('#cardioList .saved-workout')[1].querySelector('.saved-workout-toggle span').textContent")
     check('each with its day, time and distance', line.endswith(' · 31:30 · 3.5 mi'), line)
@@ -144,9 +144,9 @@ def run(t):
     # ------------------------------------------------------------------ C4 logging by hand
     print('C4  a session is logged by hand: any activity, any day, with what the machine said and was set to')
     click('#cardioModeManual')
-    tile = lambda activity: cdp.ev(f"document.querySelector('#cardioActivityGrid [data-activity={activity}] span').textContent").replace('\u00a0', ' ')
+    tile = lambda activity: cdp.ev(f"document.querySelector('#cardioActivityGrid [data-activity={activity}] span')?.textContent ?? ''").replace('\u00a0', ' ')
     check('Enter the time, above the activities, makes a tap open the form instead of the timer',
-          cdp.ev("document.getElementById('cardioModeManual').getAttribute('aria-pressed')") == 'true' and tile('cycle') == 'Enter its time'
+          cdp.ev("document.getElementById('cardioModeManual').getAttribute('aria-pressed')") == 'true' and tile('cycle') == ''
           and text('cardioStartHelp') == 'Tap what you did to enter its time, distance and the rest.', [tile('cycle'), text('cardioStartHelp')])
     open_cardio()
     check('and it is remembered on this device', cdp.ev("document.getElementById('cardioModeManual').getAttribute('aria-pressed')") == 'true')
@@ -219,8 +219,8 @@ def run(t):
     check('and keeps it', t.wait_for(lambda: any(w['name'] == 'Jump rope' and w['cardio']['activity'] == 'other' for w in sessions())))
     click('#cardioSummaryDone')
     click('#cardioModeTimer')
-    check('Start the timer goes back to timing', tile('cycle') == 'Start the timer' and cdp.ev("document.getElementById('cardioModeTimer').getAttribute('aria-pressed')") == 'true',
-          tile('cycle'))
+    check('Start the timer goes back to timing', text('cardioStartHelp') == 'Tap what you are doing and the timer starts.'
+          and cdp.ev("document.getElementById('cardioModeTimer').getAttribute('aria-pressed')") == 'true', text('cardioStartHelp'))
 
     # ------------------------------------------------------------------ C5 changing one
     print('C5  a session is edited, copied, started again or deleted from its menu')
