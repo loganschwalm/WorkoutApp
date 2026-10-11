@@ -287,7 +287,7 @@ function placeValueLabels(latest, others, width) {
 // Draws each workout type's line and dots, and notes where every point is (drawnPoints, for a tap on the chart). Returns the
 // value to write at each: each line's latest, and the rest.
 function drawSeries(context, { across, y, format }) {
-  context.font = '11px Inter, system-ui, sans-serif';
+  context.font = '11px Figtree, system-ui, sans-serif';
   const latest = [], others = [];
   chartData.types.forEach((type, typeIndex) => {
     const colour = seriesColour(typeIndex);
@@ -665,7 +665,7 @@ $('recordsList').onclick = event => {
   document.querySelector('.progress-card').scrollIntoView({ behavior:'smooth', block:'start' });
 };
 window.addEventListener('resize', drawChart);
-// A canvas only draws in Inter once it has loaded, and the labels' spacing is measured in it.
+// A canvas only draws in Figtree once it has loaded, and the labels' spacing is measured in it.
 document.fonts.ready.then(drawChart);
 // The note kept with an exercise may only arrive from the server once the page has drawn.
 window.serverStateReady.then(() => {

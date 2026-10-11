@@ -89,7 +89,7 @@ function drawBodyweight() {
   const latest = entries[entries.length - 1];
   const before = entries[entries.length - 2];
   const text = formatBodyweight(latest.weight);
-  context.font = '12px Inter, system-ui, sans-serif';
+  context.font = '12px Figtree, system-ui, sans-serif';
   const onRight = x(latest) + 8 + context.measureText(text).width <= width - 2;
   context.textAlign = onRight ? 'left' : 'right';
   context.fillText(text, x(latest) + (onRight ? 8 : -8), y(latest.weight) + (before && before.weight > latest.weight ? 18 : -9));

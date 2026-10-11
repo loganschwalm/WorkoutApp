@@ -23,7 +23,7 @@ function chartColours() {
 
 // A line across the chart at each tick, `y(tick)` down, with its number (`label(tick)`) to the left of the chart, `gap` away.
 function drawGuides(context, { colours, ticks, y, left, right, width, label, gap }) {
-  context.font = '12px Inter, system-ui, sans-serif';
+  context.font = '12px Figtree, system-ui, sans-serif';
   context.lineWidth = 1;
   context.strokeStyle = colours.line;
   context.fillStyle = colours.ink;
@@ -61,7 +61,7 @@ function labelsThatFit(labels, gap) {
 // A date under every point runs together once there are a few weeks of workouts, so only those with room are written, always
 // including the most recent. `points` are { time, x }; the dates are written on `baseline`.
 function drawDateLabels(context, points, baseline, colours) {
-  context.font = '12px Inter, system-ui, sans-serif';
+  context.font = '12px Figtree, system-ui, sans-serif';
   context.fillStyle = colours.ink;
   context.textAlign = 'center';
   const dates = points.map(point => {

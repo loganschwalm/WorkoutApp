@@ -62,7 +62,8 @@ def run(t):
     print('S3  the app shell is cached')
     for path in ('/styles.css', '/script.js', '/rest-timer.js', '/records.js', '/templates.js', '/training-tools.js',
                  '/program-definitions.js', '/program.js', '/settings-dialog.js', '/settings.js', '/offline.js', '/pwa.js', '/theme.js',
-                 '/login.html', '/manifest.webmanifest', '/icons/icon-192.png', '/fonts/inter-latin.woff2'):
+                 '/login.html', '/manifest.webmanifest', '/icons/icon-192.png', '/fonts/schibsted-grotesk-latin.woff2',
+                 '/fonts/figtree-latin.woff2'):
         check(f'{path} is in the cache', cached(path) is True)
     check('the tracker page itself is cached', cached('/index.html') is True)
 
