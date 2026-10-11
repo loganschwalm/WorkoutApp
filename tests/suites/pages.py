@@ -904,7 +904,7 @@ def run(t):
     check('pressing a month heading opens it, and it stays open when the list is drawn again', opened[1] is True and kept == opened, [opened, kept])
 
     # Under it, six rows folded to start with, each saying in a line where it stands.
-    folds = cdp.ev("""[...document.querySelectorAll('.fold-details')].map(d => [d.id, d.open, d.querySelector('.fold-state').textContent])""")
+    folds = cdp.ev("""[...document.querySelectorAll('main .fold-details')].map(d => [d.id, d.open, d.querySelector('.fold-state').textContent])""")
     check('Sets per muscle, Bodyweight, Goals, Stalled lifts, Personal records and Exercises are rows, folded',
           [f[0] for f in folds] == ['musclesFold', 'bodyweightFold', 'goalsFold', 'stallsFold', 'recordsFold', 'exercisesFold']
           and not any(f[1] for f in folds), folds)

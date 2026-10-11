@@ -146,6 +146,8 @@ function applySettings(settings) {
   settingFields.forEach(field => field.show(settings));
   syncSoundControls();
   syncPlateControls();
+  // Each folded section says its values in a line (the table's summary), so they are read without opening it.
+  settingSections.forEach(section => { getSettingElement(`settings-${section.id}-state`).textContent = section.summary(settings); });
 }
 
 // Set by an import, whose workouts, templates and program the page then loads again to show.
@@ -184,6 +186,7 @@ function showSettingsSaved() {
 function showAccount() {
   const known = Boolean(window.localUsername);
   getSettingElement('accountName').textContent = known ? `Signed in as ${window.localUsername}` : '';
+  getSettingElement('settings-account-state').textContent = known ? window.localUsername : '';
   getSettingElement('accountEmail').textContent = window.localEmail || 'No email yet. Add one so you can reset a forgotten password.';
   getSettingElement('accountEmail').hidden = getSettingElement('changeEmailButton').hidden = getSettingElement('changePasswordButton').hidden = !known;
   getSettingElement('deleteAccountButton').hidden = !known;
@@ -373,6 +376,8 @@ function showAccountPanel(name) {
   getSettingElement('settingsModal').querySelectorAll('[aria-invalid]').forEach(field => field.removeAttribute('aria-invalid'));
   getSettingElement('accountNotice').hidden = true;
   if (!name) return;
+  // A panel is in the Account section, which is folded to start with, and the field the focus goes to would not take it there.
+  getSettingElement('settings-account').open = true;
   const panel = accountPanels[name];
   getSettingElement(panel.feedback).hidden = true;
   panel.start();

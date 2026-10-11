@@ -703,12 +703,18 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
 ### Settings
 
 The gear button opens a settings modal available on every page, in sections: General, Training schedule, During a
-workout, Bar and plates, Rest timer, Your data and Account. Each change is saved as you make it, so there is no Save
-button, just Done; closing it any other way (the ×, Escape, or a tap outside) keeps your changes too.
+workout, Bar and plates, Rest timer, Your data and Account. Each section is a row that folds open, and says in a line
+what it holds ("Dark · lbs · mi · 3 a week", "Mon, Wed, Fri · 5:00 PM", "3 of 3 on", "45 lbs bar · 7 plates · 5 lbs
+step", "90 s · starts itself · Double beep"), until it is open. General is open with the dialog, since it holds what is
+changed most and the keyboard focus goes to it; the rest are folded. The line of each is written from the settings by its
+`summary` in the table (`settings-fields.js`), so a section added to the table has its own. Each change is saved as you
+make it, so there is no Save button, just Done; closing it any other way (the ×, Escape, or a tap outside) keeps your
+changes too.
 Closing it puts the keyboard focus back on the gear button, as the template and program editors do on
 the button that opened them. Settings include:
 
-- Appearance: a swatch for each colour theme, previewed in its own colours. Match system (the default) is Light
+- Appearance: a swatch for each colour theme, previewed in its own colours, in one row that scrolls sideways (the
+  chosen one is in view). Match system (the default) is Light
   or Dark as the device's own mode is, and follows it when it changes while the app is open. Besides Light and
   Dark there are three more light themes, Sunrise (coral on cream), Meadow (green) and Blossom (rose), and five
   dark ones, Crimson (red on black), Emerald (green on black), Ocean (sky blue on navy), Gold (amber on black)

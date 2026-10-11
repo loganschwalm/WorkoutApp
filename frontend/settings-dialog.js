@@ -9,9 +9,20 @@ function accountEditor(id, fields, actions, lead = '') {
   return `<div class="account-editor" id="${id}" hidden>${lead}${fields}<div class="account-editor-actions">${actions}</div></div>`;
 }
 
+// A section of the dialog: a row that folds open, its heading with where it stands in a line (the state, written by applySettings
+// in settings.js, hidden once it is open), and what is in it. The ids are settings-<id> and settings-<id>-state.
+function settingsFold(id, title, body, { open = false, state = '' } = {}) {
+  return `<details class="fold-details settings-fold" id="settings-${id}"${open ? ' open' : ''}>
+        <summary class="fold-summary"><h3 class="settings-section">${title}</h3><span class="fold-state" id="settings-${id}-state">${state}</span></summary>
+        <div class="fold-body">
+      ${body}
+        </div>
+      </details>`;
+}
+
 // The settings' controls, section by section, from the table of settings (settings-fields.js), which loads before this file.
-const settingsFieldsHtml = settingSections.map(section => `<h3 class="settings-section">${section.title}</h3>
-      ${section.fields.map(field => field.html()).join('\n      ')}${section.after ? `\n      ${section.after}` : ''}`).join('\n      ');
+const settingsFieldsHtml = settingSections.map(section => settingsFold(section.id, section.title,
+  `${section.fields.map(field => field.html()).join('\n      ')}${section.after ? `\n      ${section.after}` : ''}`, { open:section.open })).join('\n      ');
 
 document.body.insertAdjacentHTML('beforeend', `
 <div class="modal-backdrop" id="settingsModal" hidden>
@@ -22,8 +33,7 @@ document.body.insertAdjacentHTML('beforeend', `
     </div>
     <form id="settingsForm">
       ${settingsFieldsHtml}
-      <h3 class="settings-section">Your data</h3>
-      <div class="data-section">
+      ${settingsFold('data', 'Your data', `<div class="data-section">
         <div class="account-details">
           <span class="subtitle">Save every workout to a file, with your templates, program and settings, or bring in one saved from any Workout Tracker.</span>
         </div>
@@ -34,8 +44,10 @@ document.body.insertAdjacentHTML('beforeend', `
         </div>
         <input id="importFile" type="file" accept=".json,application/json" hidden />
         <p class="subtitle data-status" id="dataStatus" role="status" hidden></p>
-      </div>
-      <h3 class="settings-section">Account</h3>
+      </div>`, { state:'Export or import' })}
+      <details class="fold-details settings-fold" id="settings-account">
+        <summary class="fold-summary"><h3 class="settings-section">Account</h3><span class="fold-state" id="settings-account-state"></span></summary>
+        <div class="fold-body">
       <div class="account-row">
         <div class="account-details">
           <span class="subtitle" id="accountName"></span>
@@ -76,6 +88,8 @@ document.body.insertAdjacentHTML('beforeend', `
         + '<button class="danger" id="confirmDelete" type="submit" form="deleteForm">Delete account</button>',
         '<p class="subtitle delete-warning">This deletes your account from this server for good: every workout, template and setting in it, and your '
         + 'training program. Export first to keep a copy.</p>')}
+        </div>
+      </details>
       <div class="settings-actions">
         <p class="subtitle settings-saved" id="settingsSaved" role="status">Changes are saved as you make them.</p>
         <button class="primary" id="doneSettings" type="submit">Done</button>

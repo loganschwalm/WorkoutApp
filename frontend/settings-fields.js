@@ -73,7 +73,7 @@ const themeSwatches = Object.keys(themeNames).map(id => {
 
 const themeSetting = {
   defaults:{ theme:themeChoices.includes(legacyTheme) ? legacyTheme : 'system' },
-  html:() => `<fieldset class="theme-picker" id="themeSetting"><legend>Appearance</legend>${themeSwatches}</fieldset>`,
+  html:() => `<fieldset class="theme-picker" id="themeSetting"><legend>Appearance</legend><div class="theme-row">${themeSwatches}</div></fieldset>`,
   show(settings) {
     // theme.js, in <head>, applies it and follows the device. A page from before theme.js existed (served from the
     // cache for one load after an update) lacks it, and just gets light or dark.
@@ -134,7 +134,8 @@ function weeklyGoalFrom(value) {
 // ---- The training schedule ---------------------------------------------------------------
 
 // Training days, Monday first as the calendar has them, by the number the browser gives each (Sunday is 0).
-const trainingDayChoices = [[1, 'Mon', 'Monday'], [2, 'Tue', 'Tuesday'], [3, 'Wed', 'Wednesday'], [4, 'Thu', 'Thursday'], [5, 'Fri', 'Friday'], [6, 'Sat', 'Saturday'], [0, 'Sun', 'Sunday']]
+const trainingDays = [[1, 'Mon', 'Monday'], [2, 'Tue', 'Tuesday'], [3, 'Wed', 'Wednesday'], [4, 'Thu', 'Thursday'], [5, 'Fri', 'Friday'], [6, 'Sat', 'Saturday'], [0, 'Sun', 'Sunday']];
+const trainingDayChoices = trainingDays
   .map(([value, short, name]) => `<label class="weekday"><input type="checkbox" value="${value}" aria-label="${name}" /><span aria-hidden="true">${short}</span></label>`).join('');
 
 // The days of the week the lifter trains (as the browser numbers them, Sunday 0) and the time of day to remind them, from
@@ -242,16 +243,43 @@ const equipmentSetting = {
 // The alert sounds and their names. Each needs tones of the same name in alertTones (settings.js), which makes them.
 const alertSoundOptions = [['beep', 'Double beep'], ['chime', 'Chime'], ['long', 'Long tone']];
 
+// What each section says of itself while it is folded, in a line, from the settings it holds: the values that are set, so they are
+// read without opening it (applySettings, in settings.js, writes each one). A time is written as the device writes one.
+const clockText = time => {
+  const [hour, minute] = time.split(':').map(Number);
+  return new Date(2000, 0, 1, hour, minute).toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' });
+};
+
 const settingSections = [
-  { title:'General', fields:[
+  // General is open when the dialog is, since it holds what is changed most and where the focus goes.
+  { id:'general', title:'General', open:true,
+    summary:settings => [
+      themeNames[themeChoices.includes(settings.theme) ? settings.theme : 'system'],
+      settings.unit === 'kg' ? 'kg' : 'lbs',
+      distanceUnitOf(settings),
+      `${weeklyGoalFrom(settings.weeklyGoal)} a week`,
+      ...(textSizeFrom(settings.textSize) === 'normal' ? [] : [`${textSizeChoices.find(([size]) => size === textSizeFrom(settings.textSize))[1]} text`])
+    ].join(' · '),
+    fields:[
     themeSetting,
     textSizeSetting,
     choiceSetting('unit', 'unitSetting', 'Weight unit', [['lbs', 'Pounds (lbs)'], ['kg', 'Kilograms (kg)']], value => value === 'kg' ? 'kg' : 'lbs', 'lbs'),
     distanceSetting,
     choiceSetting('weeklyGoal', 'weeklyGoalSetting', 'Weekly goal', [1, 2, 3, 4, 5, 6, 7].map(goal => [goal, `${goal} workout${goal === 1 ? '' : 's'} a week`]), weeklyGoalFrom, 3)
   ] },
-  { title:'Training schedule', fields:[scheduleSetting] },
-  { title:'During a workout', fields:[
+  { id:'schedule', title:'Training schedule',
+    summary:settings => {
+      const { days, time } = scheduleFrom(settings);
+      return days.length ? `${trainingDays.filter(([value]) => days.includes(value)).map(([, short]) => short).join(', ')} · ${clockText(time)}` : 'No days chosen';
+    },
+    fields:[scheduleSetting] },
+  { id:'workout', title:'During a workout',
+    // How many of the options that this browser has are on.
+    summary:settings => {
+      const keys = ['confirmEnd', 'trackEffort', 'warmupSets', ...('wakeLock' in navigator ? [] : ['keepAwakeVideo'])];
+      return `${keys.filter(key => settings[key] !== false).length} of ${keys.length} on`;
+    },
+    fields:[
     checkSetting('confirmEnd', 'confirmEndSetting', 'Ask before cancelling a workout with sets logged'),
     checkSetting('trackEffort', 'effortSetting', 'Ask how many reps each set had left (effort)'),
     checkSetting('warmupSets', 'warmupSetting', 'Suggest warm-up sets for barbell lifts'),
@@ -259,8 +287,19 @@ const settingSections = [
     checkSetting('keepAwakeVideo', 'keepAwakeSetting', 'Keep the screen on with a silent video, as this browser will not do it itself',
       { row:'keepAwakeSettingRow', available:() => !('wakeLock' in navigator) })
   ] },
-  { title:'Bar and plates', fields:[equipmentSetting] },
-  { title:'Rest timer', fields:[
+  { id:'equipment', title:'Bar and plates',
+    summary:settings => {
+      const gym = gymEquipment(settings);
+      return `${formatWeight(gym.bar)} ${gym.unit} bar · ${plural(gym.plates.length, 'plate')} · ${formatWeight(gym.step)} ${gym.unit} step`;
+    },
+    fields:[equipmentSetting] },
+  { id:'rest', title:'Rest timer',
+    summary:settings => {
+      const sound = alertSoundOptions.find(([name]) => name === settings.alertSound) || alertSoundOptions[0];
+      return [`${Number(settings.restDuration) || defaultSettings.restDuration} s`, settings.autoRest === false ? 'starts on tap' : 'starts itself',
+        settings.soundEnabled === false ? 'no sound' : sound[1]].join(' · ');
+    },
+    fields:[
     rangeSetting('restDuration', 'restDurationSetting', 'Default rest duration (seconds)', 'type="number" inputmode="numeric" min="15" max="600" step="15"',
       { least:15, most:600, blank:90, defaultValue:90 }),
     checkSetting('autoRest', 'autoRestSetting', 'Start the rest timer automatically after each set'),

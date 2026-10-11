@@ -18,10 +18,25 @@ def run(t):
 
     # ------------------------------------------------------------------ T the dialog
     print('T   the dialog is made from the table')
-    sections = ev("[...document.querySelectorAll('#settingsForm > .settings-section')].map(h => h.textContent)")
+    sections = ev("[...document.querySelectorAll('#settingsForm > .settings-fold > .fold-summary > .settings-section')].map(h => h.textContent)")
     check('its sections are the table’s, in order, then the two the dialog writes out itself',
           sections == ['General', 'Training schedule', 'During a workout', 'Bar and plates', 'Rest timer', 'Your data', 'Account'], sections)
     check('the table’s are what the code says', ev('settingSections.map(section => section.title)') == sections[:5])
+    # Each section is a row that folds open: General is open with the dialog (it is what is changed most, and where the focus goes),
+    # and each says in a line what it holds, from the table's summary.
+    folds = ev("[...document.querySelectorAll('#settingsForm > .settings-fold')].map(d => [d.id, d.open, d.querySelector('.fold-state').textContent])")
+    check('each section is a row that folds, General open and the rest folded, each saying what it holds',
+          [f[0] for f in folds] == ['settings-general', 'settings-schedule', 'settings-workout', 'settings-equipment', 'settings-rest', 'settings-data', 'settings-account']
+          and [f[1] for f in folds] == [True] + [False] * 6 and all(f[2] for f in folds[:6]), folds)
+    check('and every section of the table has an id and a summary', ev("settingSections.every(s => typeof s.id === 'string' && typeof s.summary === 'function')") is True)
+    states = ev("""(() => { applySettings({ ...defaultSettings, theme: 'ocean', unit: 'kg', distanceUnit: 'km', weeklyGoal: 5, textSize: 'large',
+        schedule: { days: [4, 1], time: '07:45' }, confirmEnd: false, restDuration: 120, soundEnabled: false });
+      return Object.fromEntries(settingSections.map(s => [s.id, document.getElementById('settings-' + s.id + '-state').textContent])); })()""")
+    check('the lines are the settings: the theme, units and goal; the days; the options on; the bar; the rest',
+          states['general'] == 'Ocean · kg · km · 5 a week · Large text' and states['schedule'].startswith('Mon, Thu · ')
+          and states['workout'].startswith('2 of ') and states['equipment'] == '20 kg bar · 7 plates · 2.5 kg step'
+          and states['rest'] == '120 s · starts itself · no sound', states)
+    ev("applySettings(defaultSettings)")
     ids = ev("[...document.querySelectorAll('[id]')].map(el => el.id)")
     check('no id is used twice on the page', len(ids) == len(set(ids)), sorted({i for i in ids if ids.count(i) > 1}))
     check('every control the table makes is in the dialog', ev("""settingFields.every(field => { const holder = document.createElement('div'); holder.innerHTML = field.html();
