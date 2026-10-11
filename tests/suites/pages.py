@@ -131,7 +131,8 @@ def run(t):
 
     settle('/index.html', "document.querySelectorAll('#savedWorkoutList .saved-workout').length >= 10")
     names = cdp.ev("[...document.querySelectorAll('#savedWorkoutList .saved-workout-summary strong')].map(s => s.textContent)")
-    check('the Tracker lists the ten most recent workouts', len(names) == 10 and names[0] == 'Format Check' and names.count('Older Session') == 4, names)
+    # The one that is due leads, so the newest is found by name.
+    check('the Tracker lists the ten most recent workouts', len(names) == 10 and 'Format Check' in names and names.count('Older Session') == 4, names)
     # A workout left going from before would keep the list out of the way (and out of reach of the focus).
     if cdp.ev("!document.getElementById('activeWorkout').hidden"):
         t.end_workout()
@@ -144,8 +145,9 @@ def run(t):
     check('which shows them, and goes to the first of them', rows_shown() == 10 and cdp.ev("!document.querySelector('#savedWorkoutList [data-action=more]')")
           and cdp.ev("document.activeElement === document.querySelectorAll('#savedWorkoutList .saved-workout-toggle')[3]"),
           rows_shown())
-    cdp.ev("document.querySelector('#savedWorkoutList [data-action=view]').click()")
-    spans = cdp.ev("[...document.querySelectorAll('#savedWorkoutList .saved-workout')[0].querySelectorAll('.workout-details li span')].map(s => s.textContent)")
+    format_row = "[...document.querySelectorAll('#savedWorkoutList .saved-workout')].find(li => li.querySelector('strong').textContent === 'Format Check')"
+    cdp.ev(f"{format_row}.querySelector('[data-action=view]').click()")
+    spans = cdp.ev(f"[...{format_row}.querySelectorAll('.workout-details li span')].map(s => s.textContent)")
     check('its details write sets the same way', spans == expected, spans)
     t.start(0)
     cdp.pause(0.4)
@@ -365,30 +367,50 @@ def run(t):
     t.set_cookie(rotation)
     t.open_tracker()
     cdp.wait('initialLoadDone')
-    shown = cdp.ev("[...document.querySelectorAll('#recentList strong')].map(s => s.textContent)")
-    check('Start again offers the recent workouts, the one done longest ago first', shown == ['C Day', 'A Day', 'B Day'], shown)
-    check('above the templates and the saved workouts',
-          top('#recentCard') < top('#templatesToggle') < top('#savedWorkoutList'), f"{top('#recentCard')} {top('#templatesToggle')}")
+    # The one done longest ago of the recent ones is due, and leads Recent workouts, marked and with a solid Start; it is not listed
+    # again where it was done.
+    rows = cdp.ev("[...document.querySelectorAll('#savedWorkoutList .saved-workout')].map(r => [r.querySelector('strong').textContent, r.classList.contains('is-due')])")
+    check('the workout that is due leads the recent workouts, marked, and is not listed twice',
+          rows == [['C Day', True], ['B Day', False], ['A Day', False], ['B Day', False], ['A Day', False]], rows)
+    start_fill = cdp.ev("[...document.querySelectorAll('#savedWorkoutList .saved-workout')].slice(0, 2).map(r => getComputedStyle(r.querySelector('[data-action=start]')).backgroundColor)")
+    check('with a tag, and the one solid Start among outlines',
+          cdp.ev("document.querySelector('#savedWorkoutList .is-due .due-tag').textContent") == 'Due next'
+          and start_fill[0] != 'rgba(0, 0, 0, 0)' and start_fill[1] == 'rgba(0, 0, 0, 0)', start_fill)
+    check('there is no Start again card, and the templates are above the recent workouts',
+          cdp.ev("document.getElementById('recentCard') === null") is True and top('#templatesToggle') < top('#savedWorkoutList'), top('#templatesToggle'))
+    # Who is due: the oldest of the recent workouts, leaving out a program's while one is followed, and only among two different ones.
+    due = cdp.ev("""(() => {
+      const make = (name, createdAt, program) => ({ name, createdAt, program, exercises: [] });
+      const kept = currentProgram;
+      const list = [make('X', 3), make('Y', 2), make('P', 1, { name: 'p' })];
+      currentProgram = null;
+      const without = dueWorkout(list)?.name;
+      currentProgram = { definition: 'x' };
+      const following = dueWorkout(list)?.name;
+      const alone = dueWorkout([make('X', 3), make('X', 2)]) === null && dueWorkout([make('P', 3, { name: 'p' }), make('X', 2)]) === null;
+      currentProgram = kept;
+      return { without, following, alone }; })()""")
+    check('the oldest recent workout is due, a followed program\'s are left out, and one workout alone is no rotation',
+          due == {'without': 'P', 'following': 'Y', 'alone': True}, due)
     # The header says when you last trained (the next workout is the panel under it), by calendar day.
     status = cdp.ev("document.getElementById('pageStatus').textContent")
     check('the header says when you last trained', status == 'Last workout: B Day, 6 days ago.', status)
     headings = cdp.ev("[...document.querySelectorAll('h2')].map(h => h.textContent)")
     check('and the list of workouts is called Recent workouts', 'Recent workouts' in headings and 'Saved workouts' not in headings, headings)
-    # Start again is the one surface among them; the templates and the saved workouts lie flat on the page, set off by a hairline.
-    surfaces = cdp.ev("""['recentCard', 'templatesToggle', 'savedWorkoutList'].map(id => {
+    # The templates and the recent workouts lie flat on the page, set off by a hairline.
+    surfaces = cdp.ev("""['templatesToggle', 'savedWorkoutList'].map(id => {
         const style = getComputedStyle(document.getElementById(id).closest('section'));
         return { fill: style.backgroundColor, top: style.borderTopWidth, side: style.borderLeftWidth }; })""")
     clear = 'rgba(0, 0, 0, 0)'
-    check('Start again is a card, and the templates and saved workouts are flat on the page with a rule above',
-          surfaces[0]['fill'] != clear and surfaces[0]['side'] == '1px'
-          and all(s == {'fill': clear, 'top': '1px', 'side': '0px'} for s in surfaces[1:]), surfaces)
+    check('the templates and the recent workouts are flat on the page, with a rule above',
+          all(s == {'fill': clear, 'top': '1px', 'side': '0px'} for s in surfaces), surfaces)
     check('with the templates folded away, since there is history', cdp.ev("document.getElementById('templateArea').hidden") is True)
     check('a button says how many there are', cdp.ev("document.getElementById('templatesToggle').textContent") == 'Show templates (9)',
           cdp.ev("document.getElementById('templatesToggle').textContent"))
     cdp.ev("document.getElementById('templatesToggle').click()")
     check('and shows them', cdp.ev("!document.getElementById('templateArea').hidden && document.getElementById('templatesToggle').textContent === 'Hide templates'") is True)
     cdp.ev("document.getElementById('templatesToggle').click()")
-    cdp.ev("document.querySelector('#recentList button').click()")
+    cdp.ev("document.querySelector('#savedWorkoutList .is-due [data-action=start]').click()")
     cdp.pause(0.4)
     check("Start begins the workout that is due", cdp.ev("document.getElementById('activeWorkoutTitle').textContent") == 'C Day')
     t.end_workout()
@@ -442,8 +464,17 @@ def run(t):
     t.open_tracker()
     cdp.wait('initialLoadDone')
     cdp.pause(0.3)
-    check('someone new sees the templates straight away, and no Start again',
-          cdp.ev("!document.getElementById('templateArea').hidden && document.getElementById('recentCard').hidden") is True)
+    check('someone new sees the templates straight away, and nothing is due',
+          cdp.ev("!document.getElementById('templateArea').hidden && !document.querySelector('.is-due')") is True)
+    # One workout done again and again is no rotation: nothing is due, and the newest leads as in any list.
+    repeater = account('repeater')
+    for day in range(3):
+        t.api('POST', '/api/workouts', {'name': 'Same Day', 'createdAt': base + day * DAY,
+                                        'exercises': [t.ex('Bench Press', 135, 5, [(5, 135)])]}, repeater)
+    t.set_cookie(repeater)
+    t.open_tracker()
+    cdp.wait('initialLoadDone')
+    check('one workout done over and over has nothing due', cdp.ev("!document.querySelector('.is-due') && document.querySelectorAll('#savedWorkoutList .saved-workout').length === 3") is True)
     t.set_cookie(t.token)
 
     # ------------------------------------------------------------------ the training calendar

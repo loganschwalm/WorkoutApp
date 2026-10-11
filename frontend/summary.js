@@ -113,6 +113,8 @@ function showWorkoutSummary(workout, records, before = {}) {
   $('summaryStats').innerHTML = stats.map(([value, label]) => `<li><strong>${escapeHTML(value)}</strong><span>${escapeHTML(label)}</span></li>`).join('');
   $('summaryCompare').textContent = compared;
   $('summaryCompare').hidden = !compared;
+  // Something to lead with (a comparison, a goal reached, a record) makes the totals a quiet line; without, they are the summary.
+  $('workoutSummary').classList.toggle('has-lead', Boolean(compared || goals.length || records.length));
   $('summaryWeek').textContent = before.week ? weekGoalLine(before.week, weeklyGoalFrom(getWorkoutSettings().weeklyGoal)) : '';
   $('summaryWeek').hidden = !before.week;
   $('summaryGoals').hidden = !goals.length;

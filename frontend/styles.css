@@ -185,13 +185,9 @@ button:hover { transform:none; } button:active { transform:scale(.97); } .primar
 .row-menu-items button:hover { background:var(--bg); transform:none; }
 .row-menu-items .danger, html[data-theme="dark"] .row-menu-items .danger { color:#ab3a49; background:none; }
 html[data-theme="dark"] .row-menu-items .danger { color:#ff9eaa; }
-/* Start again: a few recent workouts, each a tap from starting. */
-.recent-list { margin:14px 0 0; padding:0; list-style:none; }
-.recent-workout { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:12px 0; border-top:1px solid var(--line); }
-.recent-workout:first-child { padding-top:0; border-top:0; }
-.recent-workout strong { display:block; font-size:.95rem; }
-.recent-workout span { color:var(--muted); font-size:.85rem; }
-.recent-workout button { flex-shrink:0; padding:9px 18px; }
+/* The workout that is due leads Recent workouts: marked, with its Start solid, the one thing this list suggests doing. */
+.due-tag { margin-right:4px; padding:2px 8px; color:var(--accent); background:var(--accent-soft); border-radius:999px; font-size:.72rem; font-style:normal; font-weight:800; white-space:nowrap; }
+.saved-workout.is-due .row-actions > .primary { color:var(--on-accent); background:var(--accent); box-shadow:none; }
 .template-area-actions { display:flex; justify-content:flex-end; margin-top:14px; }
 .workout-details { margin-top:14px; padding:14px; background:var(--sunk); border-radius:10px; }
 .workout-details ul { margin:0; padding:0; list-style:none; }
@@ -566,6 +562,13 @@ html[data-theme="dark"] .exercise-jump .done .jump-sets::before { color:#a5e5c2;
 .summary-stats li { display:grid; gap:3px; padding:12px; border:1px solid var(--line); border-radius:10px; }
 .summary-stats strong { font-size:1.2rem; }
 .summary-stats span { color:var(--muted); font-size:.8rem; }
+/* The summary leads with what changed: the comparison with last time is the headline, under the title, with goals and records below
+   it. The totals are then one quiet line, label before value, since they were never the news. With nothing to lead with (a first
+   workout) they keep their boxes (see has-lead, set in summary.js). */
+.summary-headline { margin:16px 0 0; font-family:var(--font-display); font-size:clamp(1.2rem, 4.2vw, 1.5rem); font-weight:750; letter-spacing:-.02em; line-height:1.25; text-wrap:balance; }
+.workout-summary.has-lead .summary-stats { display:flex; flex-wrap:wrap; gap:4px 20px; margin:16px 0 0; }
+.workout-summary.has-lead .summary-stats li { display:flex; flex-direction:row-reverse; justify-content:flex-end; align-items:baseline; gap:6px; padding:0; border:0; }
+.workout-summary.has-lead .summary-stats strong { font-size:1rem; }
 .summary-records h3 { margin:20px 0 8px; font-size:.95rem; }
 .summary-records ul { display:grid; gap:6px; margin:0; padding:0; list-style:none; }
 .summary-records li { padding:10px 12px; color:#22634c; background:#edf9f2; border:1px solid #b9e3ca; border-radius:10px; font-size:.9rem; }
@@ -677,7 +680,6 @@ body.has-install-banner .rest-panel { bottom:calc(84px + var(--tab-bar)); }
 h2 { margin-bottom:14px; }
 .section-heading > div > h2:only-child { margin-bottom:12px; }
 #storageStatus:empty { display:none; }
-.recent-workout { padding:10px 0; }
 /* The program: its menu in the heading, the next workout, then the weights and the week folded away. */
 .program-menu { flex:none; }
 .program-heading { align-items:flex-start; }

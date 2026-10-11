@@ -90,9 +90,25 @@ const recentWorkoutLimit = 10;
 const savedWorkoutsShown = 3;
 let showingAllSaved = false;
 
+// The workout that is due, to lead the list: of the recent ones (up to three different ones), the one done longest ago, since
+// someone going round a rotation (push, pull, legs) is most likely due for it next. There has to be a rotation to be due in, two
+// different workouts or more, and while a program is being followed its panel says what is next, so its workouts are left out.
+function dueWorkout(workouts) {
+  const picked = new Map();
+  for (const workout of workouts.slice(0, recentWorkoutLimit)) {
+    if (picked.size === 3) break;
+    if (currentProgram && workout.program) continue;
+    if (!picked.has(exerciseKey(workout.name))) picked.set(exerciseKey(workout.name), workout);
+  }
+  return picked.size > 1 ? [...picked.values()].sort((a, b) => a.createdAt - b.createdAt)[0] : null;
+}
+
 function renderSavedWorkouts(workouts) {
   const list = $('savedWorkoutList');
   const recent = workouts.slice(0, recentWorkoutLimit);
+  // The due one leads, marked, and is not listed again where it was done, so the list is as long as it was.
+  const due = dueWorkout(workouts);
+  const ordered = due ? [due, ...recent.filter(workout => workout !== due)] : recent;
   const folded = showingAllSaved ? 0 : Math.max(0, recent.length - savedWorkoutsShown);
   const moreButton = folded ? `<button class="secondary" type="button" data-action="more">Show ${folded} more</button>` : '';
   const historyLink = workouts.length > savedWorkoutsShown
@@ -103,11 +119,12 @@ function renderSavedWorkouts(workouts) {
   const focusedAction = focused?.dataset.action;
   // One row a workout: tapping its name shows what was done, Start is the one button, and everything else (copying,
   // editing, deleting) waits in its ⋯ menu, away from a thumb reaching for Start.
-  list.innerHTML = recent.length ? recent.map((workout, index) => `<li class="saved-workout" data-id="${escapeHTML(workout.id)}"`
-    + `${index >= recent.length - folded ? ' hidden' : ''}>`
+  list.innerHTML = ordered.length ? ordered.map((workout, index) => `<li class="saved-workout${workout === due ? ' is-due' : ''}" data-id="${escapeHTML(workout.id)}"`
+    + `${index >= ordered.length - folded ? ' hidden' : ''}>`
     + '<div class="saved-workout-summary saved-workout-row">'
     + '<button class="saved-workout-toggle" type="button" data-action="view" aria-expanded="false">'
-    + `<strong>${escapeHTML(workout.name)}</strong><span>${escapeHTML(describeWorkoutDate(workout))}</span></button>`
+    + `<strong>${escapeHTML(workout.name)}</strong><span>${workout === due ? '<em class="due-tag">Due next</em> ' : ''}`
+    + `${escapeHTML(describeWorkoutDate(workout))}</span></button>`
     + '<div class="row-actions"><button class="primary" type="button" data-action="start">Start</button>'
     + `<details class="row-menu"><summary class="secondary" aria-label="More for ${escapeHTML(workout.name)}">&middot;&middot;&middot;</summary>`
     + '<div class="row-menu-items"><button type="button" data-action="repeat">Copy as new</button><button type="button" data-action="edit">Edit</button>'
@@ -119,7 +136,6 @@ function renderSavedWorkouts(workouts) {
     : '<li class="empty">No saved workouts yet.</li>';
   // Drawn again (after a sync, say) while a button in the list has the focus, the same button gets it back.
   if (focusedId) list.querySelector(`.saved-workout[data-id="${focusedId}"] [data-action="${focusedAction}"]`)?.focus({ preventScroll:true });
-  renderRecentWorkouts();
   renderTrackerStatus(workouts);
 }
 
@@ -138,24 +154,6 @@ function describeDaysAgo(when, now = new Date()) {
 function renderTrackerStatus(workouts) {
   const last = workouts[0];
   $('pageStatus').textContent = last ? `Last workout: ${last.name}, ${describeDaysAgo(last.createdAt)}.` : 'Nothing logged yet. Start one from a template below.';
-}
-
-// Up to three different workouts from the recent ones, to start again in one tap. The one done longest ago comes first:
-// someone going round a rotation (push, pull, legs) is most likely due for it next. While a program is being followed,
-// its card says what is next, so its workouts are left out here.
-function renderRecentWorkouts() {
-  const picked = new Map();
-  for (const workout of savedWorkouts.slice(0, recentWorkoutLimit)) {
-    if (picked.size === 3) break;
-    if (currentProgram && workout.program) continue;
-    if (!picked.has(exerciseKey(workout.name))) picked.set(exerciseKey(workout.name), workout);
-  }
-  const recent = [...picked.values()].sort((a, b) => a.createdAt - b.createdAt);
-  $('recentCard').hidden = !recent.length;
-  $('recentList').innerHTML = recent.map((workout, index) => `<li class="recent-workout"><div><strong>${escapeHTML(workout.name)}</strong>`
-    + `<span>Last done ${new Date(workout.createdAt).toLocaleDateString(undefined, { month:'short', day:'numeric' })}`
-    + ` &middot; ${workout.exercises.length} exercise${workout.exercises.length === 1 ? '' : 's'}</span></div>`
-    + `<button class="${index === 0 ? 'primary' : 'secondary'}" type="button" data-recent-id="${escapeHTML(workout.id)}">Start</button></li>`).join('');
 }
 
 // Names suggested wherever an exercise is typed (the <datalist> every exercise field uses): everything logged, spelled
@@ -954,11 +952,6 @@ $('savedWorkoutList').onclick = async e => {
       console.error('Unable to delete workout.', error);
     }
   }
-};
-$('recentList').onclick = e => {
-  const button = e.target.closest('[data-recent-id]');
-  const workout = button && savedWorkouts.find(item => item.id === Number(button.dataset.recentId));
-  if (workout) startWorkout(workout);
 };
 $('saveBtn').onclick = async () => {
   if (!exercises.length) { showFeedback('Add at least one exercise before saving the workout.'); return; }

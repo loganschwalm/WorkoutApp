@@ -75,11 +75,11 @@
 
     <section class="card workout-summary" id="workoutSummary" aria-labelledby="summaryTitle" hidden>
       <div class="section-heading"><div><h2 id="summaryTitle">Workout complete</h2><p class="subtitle" id="summaryName"></p></div><button class="secondary" id="summaryDone" type="button">Done</button></div>
-      <ul class="summary-stats" id="summaryStats"></ul>
-      <p class="summary-line" id="summaryCompare" hidden></p>
-      <p class="summary-line" id="summaryWeek" hidden></p>
+      <p class="summary-headline" id="summaryCompare" hidden></p>
       <div class="summary-goals summary-records" id="summaryGoals" hidden><h3>Goals reached</h3><ul id="summaryGoalList"></ul></div>
       <div class="summary-records" id="summaryRecords" hidden><h3>New personal records</h3><ul id="summaryRecordList"></ul></div>
+      <p class="summary-line" id="summaryWeek" hidden></p>
+      <ul class="summary-stats" id="summaryStats"></ul>
       <div class="summary-exercises" id="summaryExercises" hidden><h3>By exercise</h3><ul id="summaryExerciseList"></ul></div>
     </section>
 
@@ -95,11 +95,6 @@
       <details class="program-section" id="programNumbersSection"><summary id="programNumbersHeading">Training maxes</summary><ul class="program-maxes" id="programMaxes"></ul></details>
       <details class="program-section" id="programProgressSection" hidden><summary>Progress</summary><p class="program-progress-key" id="programProgressKey"></p><ul class="program-progress" id="programProgress"></ul></details>
       <details class="program-section"><summary id="programBlockHeading">This cycle</summary><div id="programWeeks"></div></details>
-    </section>
-
-    <section class="card between-workouts" id="recentCard" hidden>
-      <div class="section-heading"><div><h2>Start again</h2></div></div>
-      <ul class="recent-list" id="recentList"></ul>
     </section>
 
     <section class="card between-workouts flat ruled">

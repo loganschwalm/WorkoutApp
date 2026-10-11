@@ -15,7 +15,7 @@ library, with SQLite for storage, so there is no build step, no package manager 
 
 ## Screenshots
 
-![The tracker: recent workouts to start again, the templates folded away, and recent saved workouts](docs/screenshots/tracker.png)
+![The tracker: the workout that is due, the templates folded away, and the recent workouts](docs/screenshots/tracker.png)
 
 <table>
   <tr>

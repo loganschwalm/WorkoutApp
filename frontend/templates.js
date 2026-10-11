@@ -44,7 +44,7 @@ function syncTemplateArea() {
 }
 
 // Training programs (program.js) come first, then the single-workout templates. program.js calls this when the program
-// changes, which also changes what Start again offers and whether the templates stay folded.
+// changes, which also changes which workout is due in Recent workouts and whether the templates stay folded.
 function renderTemplates() {
   const action = (template, kind, style, label) =>
     `<button class="${style}" type="button" data-template-action="${kind}" data-template-id="${escapeHTML(template.id)}">${label}</button>`;
@@ -53,7 +53,8 @@ function renderTemplates() {
     + `<p>${template.exercises.map(item => `${escapeHTML(item.name)} (${escapeHTML(describeTemplateTarget(item))})`).join(' &middot; ')}</p></div>`
     + `<div class="template-actions">${action(template, 'start', 'primary', 'Start workout')}${action(template, 'duplicate', 'secondary', 'Duplicate')}`
     + `${template.builtIn ? '' : action(template, 'edit', 'secondary', 'Edit') + action(template, 'delete', 'danger', 'Delete')}</div></article>`).join('');
-  renderRecentWorkouts();
+  // The workouts of a program being followed are not due (its panel says what is next), so the list is drawn again with it.
+  if (savedWorkoutsLoaded) renderSavedWorkouts(savedWorkouts);
   syncTemplateArea();
   renderExerciseSuggestions();
 }

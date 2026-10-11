@@ -61,7 +61,7 @@ def run(t):
     check('weight labels say kg', labels == ['kg', 'kg'], labels)
     steppers = cdp.ev("[...document.querySelectorAll('#weightStepper [data-weight-step]')].map(b => [b.textContent, b.dataset.weightStep, b.getAttribute('aria-label')])")
     check('the weight buttons step 2.5 kg', steppers == [['−2.5', '-2.5', '2.5 kg lighter'], ['+2.5', '2.5', '2.5 kg heavier']], steppers)
-    cdp.ev("document.querySelector('#savedWorkoutList [data-action=view]').click()")
+    cdp.ev("document.querySelector('#savedWorkoutList .saved-workout:not(.is-due) [data-action=view]').click()")
     check('saved pound workouts are shown in kilograms', details('Seed Push') == ['Bench Press' + f'{kg(105)} kg × 8', 'Overhead Press' + f'{kg(62)} kg × 8'], details('Seed Push'))
     stored = t.workout(t.W1)
     check('while the stored workout is untouched, in pounds', stored.get('unit') is None and stored['exercises'][0]['sets'][0]['weight'] == 100, stored)
@@ -69,7 +69,7 @@ def run(t):
     # ------------------------------------------------------------------ K3 a workout in kilograms
     print('K3  logging a workout in kilograms')
     known = t.ids()
-    cdp.ev("document.querySelector('#savedWorkoutList [data-action=start]').click()")
+    cdp.ev("document.querySelector('#savedWorkoutList .saved-workout:not(.is-due) [data-action=start]').click()")
     cdp.pause(0.5)
     check('last time is shown in kilograms', text('activeExerciseLast').endswith(f'{kg(105)} kg × 8'), text('activeExerciseLast'))
     check('the weight to lift is rounded to the nearest half kilo', text('activeExerciseTarget') == 'Target: 8 reps at 47.5 kg'
@@ -185,7 +185,7 @@ def run(t):
         open_tracker()
         cdp.wait("initialLoadDone")
         cdp.pause(0.3)
-        cdp.ev("document.querySelector('#savedWorkoutList [data-action=view]').click()")
+        cdp.ev("document.querySelector('#savedWorkoutList .saved-workout:not(.is-due) [data-action=view]').click()")
         shown = details('Seed Push')
         # The newest Seed Push is the one logged in kilograms in K3.
         if shown != [f'Bench Press{kg_in_lbs} lbs × 5']:

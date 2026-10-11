@@ -16,7 +16,7 @@ own workouts, templates, and settings.
 
 ## Screenshots
 
-![The tracker: recent workouts to start again, the templates folded away, and recent saved workouts](docs/screenshots/tracker.png)
+![The tracker: the workout that is due, the templates folded away, and the recent workouts](docs/screenshots/tracker.png)
 
 <table>
   <tr>
@@ -62,17 +62,19 @@ own workouts, templates, and settings.
 
 - Start workouts from built-in templates or saved workouts.
 - The Tracker opens with your own workouts first: a program's next workout when you follow one, and
-  Start again, with up to three recent workouts and the one you did longest ago first (going round
-  push, pull and legs, that is the one due). Templates fold away once you have saved workouts or a
-  program, a tap from showing again.
+  Recent workouts, the ten latest, the first three showing. When you go round a rotation (push, pull and
+  legs), the one you did longest ago of the recent ones is due, and leads the list, marked "Due next", with
+  its Start solid; it is not listed again where it was done. One workout done over and over is no rotation,
+  and a program's own workouts are left out of it while you follow one. Templates fold away once you have
+  saved workouts or a program, a tap from showing again.
 - The next workout is the Tracker's one raised surface: a dark panel as wide as the page, with the program
-  (its weights and weeks, folded) lying flat around it. Start again is a card; the templates and saved
-  workouts are plain lists on the page, set off by a hairline.
+  (its weights and weeks, folded) lying flat around it. The templates and recent workouts are plain lists
+  on the page, set off by a hairline.
 - The line under the Tracker's name says when you last trained ("Last workout: Push Day, 2 days ago", counted in calendar
   days), since the next workout is the panel under it. History's says how many sessions there are and since when
   ("25 sessions since Sep 16, the latest on Oct 10"); this week is the calendar's own line. Neither shows on a phone, where
   the header is only the page's name.
-- During a workout the Tracker is only the workout: the program, Start again, templates and saved
+- During a workout the Tracker is only the workout: the program, templates and recent
   workouts wait behind "Show the rest of the Tracker" under it, and come back when the workout ends.
 - On a phone the header is just the page's name and Settings, and Strength (the Tracker), Cardio, Progress and History
   are a tab bar along the bottom of the screen, in reach of a thumb: a pill floating just above the edge, an icon over each
@@ -181,6 +183,9 @@ own workouts, templates, and settings.
   and the week so far against the weekly goal, cardio counted, as History's calendar says it. Everything compared with is
   taken before the workout joins the history (`summaryBefore`), since after that "last time" would be itself. It stays until
   Done or the next workout starts, and goes on reload.
+  It leads with what changed: the comparison with last time is its headline, under the title, then goals reached and
+  new records, then the week; the totals (time, exercises, sets, volume) are one quiet line under them, and keep their
+  boxes only when there is nothing to lead with (a first workout), when they are the summary.
   A set that beats your best also sets off a small firework from Complete set as you log it, and a set that reaches a goal
   from Progress a bigger one, once (not with reduced motion on).
 - Add notes while training; they fold away until you open them, unless the workout already has some.
@@ -310,7 +315,7 @@ Users can also:
   weight from last time: once every set reached the top of the range (or the reps, without a range), it
   goes up the weight step from Settings, and the line under the exercise says so ("Up from 100 lbs:
   last time every set reached 12 reps"); until then it stays at last time's weight. Starting that
-  workout again from History or Start again progresses the same way. Sets left blank mean as many as
+  workout again from History or Recent workouts progresses the same way. Sets left blank mean as many as
   you like, as before.
 - Delete custom templates.
 - Start a workout directly from any template.

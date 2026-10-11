@@ -187,7 +187,7 @@ def run(t):
           and f'Training max 100 lbs throughout; estimated max {estimate} lbs, over 1 session' in text('programProgress'), text('programProgress'))
     check('and the next workout is Deadlift Day', 'Deadlift Day' in text('programNext'), text('programNext'))
     check('the saved list says where it came from', cdp.wait("document.getElementById('savedWorkoutList').textContent.includes('Cycle 1, week 1 · 5s week')"))
-    cdp.ev("document.querySelector('#savedWorkoutList .saved-workout [data-action=start]').click()")
+    cdp.ev("document.querySelector('#savedWorkoutList .saved-workout:not(.is-due) [data-action=start]').click()")
     cdp.pause(0.3)
     check('starting the saved workout again is not a day of the program',
           cdp.ev("activeSession.name === '5/3/1 Press Day' && !activeSession.programDay && !activeSession.exercises[0].plan") is True,

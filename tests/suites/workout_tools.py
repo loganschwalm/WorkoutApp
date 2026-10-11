@@ -150,10 +150,28 @@ def run(t):
     saved = newest(known)
     check('in seconds', isinstance(saved.get('duration'), int) and 0 < saved['duration'] < 600, saved.get('duration'))
     # The list is drawn again once the upload has gone through.
-    listed = cdp.wait("document.querySelector('#savedWorkoutList .saved-workout-toggle span').textContent.endsWith(' · 1 min')")
-    check('and the Tracker’s list says so', listed, cdp.ev("document.querySelector('#savedWorkoutList .saved-workout-toggle span').textContent"))
+    # Its own row, which is not always the first: the workout that is due leads the list.
+    row_text = f"document.querySelector('#savedWorkoutList .saved-workout[data-id=\"{saved['id']}\"] .saved-workout-toggle span')?.textContent"
+    listed = cdp.wait(f"{row_text}?.endsWith(' · 1 min')")
+    check('and the Tracker’s list says so', listed, cdp.ev(row_text))
+    # The summary leads with what changed: the comparison, then goals and records, and the totals are one quiet line under them.
+    layout = cdp.ev("""(() => {
+        const at = id => document.getElementById(id);
+        const before = (a, b) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+        return { headline: before(at('summaryCompare'), at('summaryStats')), records: before(at('summaryRecords'), at('summaryStats')),
+                 weekAfter: before(at('summaryRecords'), at('summaryWeek')), lead: at('workoutSummary').classList.contains('has-lead'),
+                 quiet: getComputedStyle(document.querySelector('#summaryStats li')).borderTopWidth === '0px' }; })()""")
+    check('the summary leads with the comparison and the records, the totals one quiet line under them', all(layout.values()), layout)
     click('summaryDone')
     check('Done puts the summary away', not visible('workoutSummary'))
+    # With nothing to lead with (a first workout, no records), the totals are the summary and keep their boxes.
+    boxed = cdp.ev("""(() => {
+        showWorkoutSummary({ name: 'Solo', duration: 60, exercises: [{ name: 'Row', weight: 50, reps: 5, sets: [{ weight: 50, reps: 5 }] }] }, [], {});
+        const result = { lead: document.getElementById('workoutSummary').classList.contains('has-lead'),
+                         border: getComputedStyle(document.querySelector('#summaryStats li')).borderTopWidth };
+        document.getElementById('workoutSummary').hidden = true;
+        return result; })()""")
+    check('with nothing to lead with, the totals keep their boxes', boxed == {'lead': False, 'border': '1px'}, boxed)
 
     start_saved(t.W3)
     log(100, 5)
