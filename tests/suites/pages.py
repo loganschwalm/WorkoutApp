@@ -744,9 +744,18 @@ def run(t):
       const [metric, type, from, to] = ['metricFilter', 'workoutTypeFilter', 'startDateFilter', 'endDateFilter'].map(box);
       const dates = ['startDateFilter', 'endDateFilter'].map(id => document.getElementById(id));
       dates.forEach(input => { input.value = '2026-12-31'; });
+      // A date field does not report its text running past its edge (scrollWidth is its box), so the text is measured: the longest
+      // date, the padding and the calendar icon have to be within the field.
+      const room = input => {
+        const style = getComputedStyle(input);
+        const context = document.createElement('canvas').getContext('2d');
+        context.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+        return input.getBoundingClientRect().width - context.measureText('12/31/2026').width
+          - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - 24;
+      };
       return { sameWidth: Math.abs(type.width - metric.width) < 1, oneLine: Math.abs(from.top - to.top) < 1 && to.left > from.left,
                inside: [metric, type, from, to].every(r => r.left >= panel.left && r.right <= panel.right),
-               datesWhole: dates.every(input => input.scrollWidth <= input.clientWidth) };
+               datesWhole: dates.every(input => room(input) >= 0) };
     })()""")
     cdp.ev("['startDateFilter', 'endDateFilter'].forEach(id => { document.getElementById(id).value = ''; })")
     check('with Workout type on a line of its own, and From and To side by side with a whole date in each',

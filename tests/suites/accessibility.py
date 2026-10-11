@@ -167,6 +167,23 @@ def run(t):
     for label, path, ready in PAGES:
         settle(path, ready)
         check(f'{label}: no sideways scrolling', cdp.ev(sideways) <= 0, cdp.ev(sideways))
+        if label == 'History':
+            # The streak note is the one string here whose length depends on the data (the week, what was trained), and the longest
+            # is wider than a phone at this size: it has to wrap, not run off the side.
+            cdp.ev("document.getElementById('streakSummary').textContent = 'No streak right now · best 52 weeks'")
+            check('History: and with the longest streak note', cdp.ev(sideways) <= 0, cdp.ev(sideways))
+        if label == 'Progress':
+            # A date field does not report its text running past its edge, so it is measured: the longest date, the field's padding and
+            # its calendar icon have to be within it.
+            room = cdp.ev("""['startDateFilter', 'endDateFilter'].map(id => {
+                const input = document.getElementById(id);
+                input.value = '2026-12-31';
+                const style = getComputedStyle(input);
+                const context = document.createElement('canvas').getContext('2d');
+                context.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+                return Math.round(input.getBoundingClientRect().width - context.measureText('12/31/2026').width
+                  - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - 24); })""")
+            check('Progress: and a whole date shows in each date field', all(space >= 0 for space in room), room)
     open_settings()
     check('Settings: no sideways scrolling', cdp.ev(sideways) <= 0, cdp.ev(sideways))
     cdp.ev("document.getElementById('closeSettings').click()")
