@@ -604,18 +604,20 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
 - With a training schedule (Settings), the calendar also marks the training days still to come in the week, with the
   workout planned for each, and Coming up lists the next six. See [Training schedule and
   reminders](#training-schedule-and-reminders).
-- Review all saved workouts on the History page, a line each under a heading for its month, with that
-  month's workouts and training time ("September 2026 · 14 workouts · 12 h 19 min"). Each shows its
-  name and date (tap it for the sets), Start, and a ⋯ menu to copy it as a new workout, edit it (both
-  in the Tracker's form), or delete it. The latest three months show at first, and Show older brings
-  the rest.
+- Review all saved workouts on the History page, under Recent workouts: a line each, in a month, in a year. Each year
+  and month is a heading that folds and opens, with its workouts and training time beside it ("2026 · 41 workouts ·
+  30 h 2 min", "October · 14 workouts · 12 h 19 min"). The latest year and its latest month start open and the rest
+  folded, so the list is not one long column; what you open or fold stays so when the list is drawn again (a search, a
+  deletion). Each workout shows its name and date (tap it for the sets), Start, and a ⋯ menu to copy it as a new
+  workout, edit it (both in the Tracker's form), or delete it.
 - Search History by workout name, exercise, activity or note; every word typed has to match, and the search
-  looks through every month.
+  looks through every year and month, opening each that has a match.
 - Cardio sessions are listed with the workouts, under their activity's name with their day, time and distance ("Oct 1,
   2026 · 32:20 · 3.8 mi"), and open to show everything they did ("3.8 mi in 32:20 · 8:31 /mi · 152 bpm"). Both kinds
   count toward the weekly goal and the month's totals.
 - Tapping a day you trained on the calendar (or Enter on it) goes to that day's workouts in the list,
-  opened and marked for a moment, even if a search or Show older was keeping them out of sight.
+  opened and marked for a moment, even if a search was keeping them out of the list or a folded year or month out of sight
+  (its year and month are opened).
 - The Tracker lists the 3 most recent workouts, with Show more for the next 7 and a link to the rest
   in History, with the same row and ⋯ menu.
 - See workout dates, how long each workout took, exercises, weights, reps, completed sets, and notes.

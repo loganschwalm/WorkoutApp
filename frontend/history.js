@@ -1,9 +1,11 @@
 // ---- Every saved workout ---------------------------------------------------
-// One line a workout (tap it for its sets), under a heading for its month with that month's workouts and time. A search
-// narrows the list to workouts whose name, exercises or notes have every word typed. The latest few months show at
-// first and Show older brings the rest; a search, or a day picked on the calendar, looks through all of them.
-const monthsShownAtFirst = 3;
-let showingAllMonths = false;
+// One line a workout (tap it for its sets), in a month, in a year; each year and month is folded or open on its heading, with its
+// workouts and time beside it. The latest year and month start open and the rest folded, so the list is not one long column. A
+// search narrows the list to workouts whose name, exercises or notes have every word typed, with every year and month that has
+// one open; a day picked on the calendar opens the year and month it is in.
+// What was opened or closed by hand ("year:2026", "month:2026-10" to true or false), kept when the list is drawn again (a search,
+// a deletion). A group with nothing said about it is open if it is the latest one.
+const groupOpened = new Map();
 // Workouts opened to show their sets, kept open when the list is drawn again (a search, a deletion).
 const openWorkouts = new Set();
 
@@ -20,8 +22,8 @@ function matchesSearch(workout, words) {
   return words.every(word => text.includes(word));
 }
 
-// "12 workouts · 11 h 40 min": the time only counts workouts that were timed.
-function describeMonth(workouts) {
+// "12 workouts · 11 h 40 min", of a month or a year: the time only counts workouts that were timed.
+function describeGroup(workouts) {
   const seconds = workouts.reduce((sum, workout) => sum + (Number(workout.duration) > 0 ? Number(workout.duration) : 0), 0);
   return [plural(workouts.length, 'workout'), seconds ? formatDuration(seconds) : ''].filter(Boolean).join(' · ');
 }
@@ -70,24 +72,43 @@ function renderHistory(workouts) {
   const words = searchWords();
   const shown = words.length ? workouts.filter(workout => matchesSearch(workout, words)) : workouts;
   $('historySummary').textContent = words.length ? `${shown.length} of ${plural(workouts.length, 'saved workout')}` : plural(workouts.length, 'saved workout');
-  // Newest first, as the server sends them, so each month's workouts arrive together.
-  const months = new Map();
+  // Newest first, as the server sends them, so each month's workouts arrive together, and the months of a year.
+  const years = new Map();
   shown.forEach(workout => {
-    const key = monthKey(new Date(workout.createdAt));
-    months.set(key, [...(months.get(key) || []), workout]);
+    const date = new Date(workout.createdAt);
+    const months = years.get(date.getFullYear()) || new Map();
+    months.set(monthKey(date), [...(months.get(monthKey(date)) || []), workout]);
+    years.set(date.getFullYear(), months);
   });
-  const everyMonth = showingAllMonths || words.length > 0;
-  const folded = everyMonth ? [] : [...months.values()].slice(monthsShownAtFirst).flat();
-  const list = [...months].map(([key, monthWorkouts], index) => {
-    const [year, month] = key.split('-').map(Number);
-    const name = new Date(year, month - 1, 1).toLocaleDateString(undefined, { month:'long', year:'numeric' });
-    return `<li class="history-month" data-month="${key}"${!everyMonth && index >= monthsShownAtFirst ? ' hidden' : ''}>`
-      + `<h3 class="history-month-heading"><span>${escapeHTML(name)}</span><span class="history-month-total">${escapeHTML(describeMonth(monthWorkouts))}</span></h3>`
-      + `<ul class="history-month-list">${monthWorkouts.map(historyRow).join('')}</ul></li>`;
+  // A search opens everything it found; otherwise what was said by hand, and the latest year and month when nothing was.
+  const isOpen = (key, latest) => words.length > 0 || (groupOpened.has(key) ? groupOpened.get(key) : latest);
+  const group = (className, open, name, total, body) => `<details class="history-group ${className}"${open ? ' open' : ''}>`
+    + `<summary class="history-group-summary"><h3 class="history-group-name">${escapeHTML(name)}</h3>`
+    + `<span class="history-group-total">${escapeHTML(total)}</span></summary>${body}</details>`;
+  const list = [...years].map(([year, months], yearIndex) => {
+    const monthItems = [...months].map(([key, monthWorkouts], monthIndex) => {
+      const name = new Date(Number(key.slice(0, 4)), Number(key.slice(5)) - 1, 1).toLocaleDateString(undefined, { month:'long' });
+      return `<li class="history-month" data-month="${key}">`
+        + group('history-month-group', isOpen(`month:${key}`, yearIndex === 0 && monthIndex === 0), name, describeGroup(monthWorkouts),
+          `<ul class="history-month-list">${monthWorkouts.map(historyRow).join('')}</ul>`) + '</li>';
+    }).join('');
+    return `<li class="history-year" data-year="${year}">`
+      + group('history-year-group', isOpen(`year:${year}`, yearIndex === 0), String(year), describeGroup([...months.values()].flat()),
+        `<ul class="history-year-list">${monthItems}</ul>`) + '</li>';
   }).join('');
-  const older = folded.length ? `<li class="more-workouts"><button class="secondary" type="button" data-action="older">Show ${plural(folded.length, 'older workout')}</button></li>` : '';
-  $('historyList').innerHTML = shown.length ? list + older
+  $('historyList').innerHTML = shown.length ? list
     : `<li class="empty">${workouts.length ? 'No saved workouts match that search.' : 'No saved workouts yet.'}</li>`;
+}
+
+// A year or a month opened or closed by its heading. Drawn by hand, not left to the browser, so what was said is kept (groupOpened)
+// when the list is drawn again; while a search has everything open, a heading only shows or hides, and nothing is kept.
+function toggleHistoryGroup(summary) {
+  const details = summary.parentElement;
+  const item = details.parentElement;
+  const open = !details.open;
+  details.open = open;
+  if (searchWords().length) return;
+  groupOpened.set(item.dataset.month ? `month:${item.dataset.month}` : `year:${item.dataset.year}`, open);
 }
 
 function showHistoryFeedback(message, failed = false) {
@@ -121,17 +142,15 @@ function showWorkoutDetails(row, open) {
 }
 
 $('historyList').onclick = event => {
+  const heading = event.target.closest('.history-group-summary');
+  if (heading) {
+    event.preventDefault();
+    toggleHistoryGroup(heading);
+    return;
+  }
   const button = event.target.closest('[data-action]');
   if (!button || !historyWorkouts) return;
   const action = button.dataset.action;
-  if (action === 'older') {
-    const first = $('historyList').querySelector('.history-month[hidden]');
-    showingAllMonths = true;
-    renderHistory(historyWorkouts);
-    // Focus goes to the first workout that was folded away, where reading carries on.
-    if (first) $('historyList').querySelector(`.history-month[data-month="${first.dataset.month}"] .saved-workout-toggle`)?.focus();
-    return;
-  }
   const row = button.closest('.history-workout');
   const workout = historyWorkouts.find(item => String(item.id) === row.dataset.id);
   if (!workout) return;
@@ -276,13 +295,15 @@ function showCalendarDay(event) {
 }
 
 // Tapping a day you trained (or Enter on it) goes to its workouts in the list, opened and marked for a moment. One that
-// a search or Show older is keeping out of sight is brought back into it first.
+// a search is keeping out of the list, or a folded year or month is keeping out of sight, is brought back into it first.
 function goToDay(key) {
   const rows = () => [...$('historyList').querySelectorAll(`.history-workout[data-date="${key}"]`)];
   let found = rows();
-  if (!found.length || found.some(row => row.closest('.history-month[hidden]'))) {
+  if (!found.length || found.some(row => row.closest('details:not([open])'))) {
     $('historySearch').value = '';
-    showingAllMonths = true;
+    // A day is "2026-10-09" and its month "2026-10".
+    groupOpened.set(`year:${key.slice(0, 4)}`, true);
+    groupOpened.set(`month:${key.slice(0, 7)}`, true);
     renderHistory(historyWorkouts);
     found = rows();
   }

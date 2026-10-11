@@ -651,10 +651,21 @@ body.has-install-banner .rest-panel { bottom:calc(84px + var(--tab-bar)); }
 /* History: a search, then the workouts a month at a time under a heading with the month's count and time. */
 .history-search { margin-top:16px; }
 .history-feedback { margin:12px 0 0; }
-.history-month-heading { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:baseline; gap:4px 12px; margin:28px 0 8px; font-size:1rem; }
-.history-month:first-child .history-month-heading { margin-top:6px; }
-.history-month-total { color:var(--muted); font-size:.85rem; font-weight:600; }
-.history-month-list { margin:0; padding:0; list-style:none; }
+/* The list is years, each holding months, each folded or open on its heading, with its workouts and time at the right. The heading is
+   the summary of a <details>; its triangle is the accent's, as the other folded things', and turns down when open. A year is the larger
+   heading and is set off from the one above by a hairline. */
+.history-year-list, .history-month-list { margin:0; padding:0; list-style:none; }
+.history-group > summary { display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 10px; list-style:none; cursor:pointer; }
+.history-group > summary::-webkit-details-marker { display:none; }
+.history-group > summary::before { content:"\25B8"; color:var(--accent); font-size:.9em; }
+.history-group[open] > summary::before { content:"\25BE"; }
+.history-group-name { margin:0; font-size:1.02rem; font-weight:750; letter-spacing:-.01em; }
+.history-group-total { margin-left:auto; color:var(--muted); font-size:.85rem; font-weight:600; }
+.history-year { margin-top:10px; border-top:1px solid var(--line); }
+.history-year:first-child { margin-top:6px; border-top:0; }
+.history-year-group > summary .history-group-name { font-size:1.2rem; font-weight:800; letter-spacing:-.025em; }
+.history-year-group > summary { padding:8px 0; }
+.history-month-group > summary { padding:4px 0 4px 18px; }
 .row-actions > .button-link { padding:8px 16px; }
 /* A day picked on the calendar marks its workouts for a moment. */
 @keyframes picked { from { background:var(--accent-soft); box-shadow:0 0 0 8px var(--accent-soft); } to { background:transparent; box-shadow:0 0 0 8px transparent; } }

@@ -372,6 +372,8 @@ def run(t):
     # The header says when you last trained (the next workout is the panel under it), by calendar day.
     status = cdp.ev("document.getElementById('pageStatus').textContent")
     check('the header says when you last trained', status == 'Last workout: B Day, 6 days ago.', status)
+    headings = cdp.ev("[...document.querySelectorAll('h2')].map(h => h.textContent)")
+    check('and the list of workouts is called Recent workouts', 'Recent workouts' in headings and 'Saved workouts' not in headings, headings)
     # Start again is the one surface among them; the templates and the saved workouts lie flat on the page, set off by a hairline.
     surfaces = cdp.ev("""['recentCard', 'templatesToggle', 'savedWorkoutList'].map(id => {
         const style = getComputedStyle(document.getElementById(id).closest('section'));
@@ -861,12 +863,19 @@ def run(t):
     settle('/history.html', f"document.querySelectorAll('.history-workout').length === {total}")
 
     def history():
-        return cdp.ev("""(() => ({
-          months: [...document.querySelectorAll('.history-month')].map(m => [m.querySelector('h3 span').textContent, m.querySelector('.history-month-total').textContent, m.hidden]),
-          rows: [...document.querySelectorAll('.history-workout')].filter(r => !r.closest('[hidden]')).map(r => r.querySelector('strong').textContent),
-          open: [...document.querySelectorAll('.history-workout')].filter(r => !r.querySelector('.workout-details').hidden).map(r => r.dataset.id),
-          older: document.querySelector('#historyList [data-action=older]')?.textContent ?? null,
-          summary: document.getElementById('historySummary').textContent }))()""")
+        # A year or a month as [name, its workouts and time, whether it is open]; a row counts as shown when no folded year or month is over it.
+        return cdp.ev("""(() => {
+          const group = (item, name) => [name, item.querySelector('summary .history-group-total').textContent, item.querySelector('details').open];
+          return {
+            years: [...document.querySelectorAll('.history-year')].map(y => group(y, y.dataset.year)),
+            months: [...document.querySelectorAll('.history-month')].map(m => group(m, m.querySelector('summary .history-group-name').textContent)),
+            rows: [...document.querySelectorAll('.history-workout')].filter(r => !r.closest('details:not([open])')).map(r => r.querySelector('strong').textContent),
+            open: [...document.querySelectorAll('.history-workout')].filter(r => !r.querySelector('.workout-details').hidden).map(r => r.dataset.id),
+            summary: document.getElementById('historySummary').textContent }; })()""")
+
+    def fold(selector, index=0):
+        """Press the heading of the nth year or month (the page folds or opens it as a tap does)."""
+        cdp.ev(f"document.querySelectorAll('{selector} > details > summary')[{index}].click()")
 
     def search(words):
         cdp.ev(f"(i => {{ i.value = {json.dumps(words)}; i.dispatchEvent(new Event('input')); }})(document.getElementById('historySearch'))")
@@ -875,8 +884,15 @@ def run(t):
         return f"document.querySelector('.history-workout[data-id=\"{workout_id}\"]')"
 
     state = history()
-    this_month = today.strftime('%B %Y')
+    this_month = today.strftime('%B')
+    # The same workouts as years and months: today's two, and an Old Pull in each of the five months before, which may be last year.
+    years = sorted({today.year} | {mid_month(back).year for back in range(1, 6)}, reverse=True)
+    in_year = lambda year: (2 if year == today.year else 0) + sum(1 for back in range(1, 6) if mid_month(back).year == year)
+    year_total = lambda year: plural_workouts(in_year(year)) + (' · 1 h 30 min' if year == today.year else '')
+    plural_workouts = lambda count: f"{count} workout{'' if count == 1 else 's'}"
     check('each workout is one line, its sets folded away', state['open'] == [] and state['rows'][:2] == ['Leg Day', 'Push Day'], state)
+    check('the list is called Recent workouts', 'Recent workouts' in cdp.ev("[...document.querySelectorAll('h2')].map(h => h.textContent)")
+          and 'Saved workouts' not in cdp.ev("[...document.querySelectorAll('h2')].map(h => h.textContent)"))
     # The line under the page's name says how much there is and since when (this week is the calendar's line).
     status = cdp.ev("document.getElementById('pageStatus').textContent")
     check('the header says how many sessions there are, and since when',
@@ -889,13 +905,23 @@ def run(t):
         return element.getBoundingClientRect().height < parseFloat(getComputedStyle(element).fontSize) * 1.6; }))()""")
     cdp.send('Emulation.clearDeviceMetricsOverride')
     check('on a phone the streak and the count each keep to one line', kept == [True, True], kept)
-    check("under a heading for its month, with the month's workouts and time", state['months'][0] == [this_month, '2 workouts · 1 h 30 min', False], state['months'])
-    check('the latest three months show, and a button brings the rest', [m[2] for m in state['months']] == [False] * 3 + [True] * 3
-          and state['older'] == 'Show 3 older workouts' and len(state['rows']) == 4, state)
+    check("a heading for each year, and each month in it, with its workouts and time",
+          [y[0] for y in state['years']] == [str(year) for year in years] and state['years'][0][1] == year_total(today.year)
+          and state['months'][0][:2] == [this_month, '2 workouts · 1 h 30 min'], [state['years'], state['months']])
+    check('the latest year and month are open, and every other one folded, so the list is not one long column',
+          [y[2] for y in state['years']] == [True] + [False] * (len(years) - 1) and [m[2] for m in state['months']] == [True] + [False] * 5
+          and len(state['rows']) == 2, state)
     cdp.ev(f"{row(push)}.querySelector('[data-action=view]').click()")
     check('tapping a workout shows its sets and notes', history()['open'] == [str(push)]
           and 'Felt strong' in cdp.ev(f"{row(push)}.querySelector('.workout-details').textContent")
           and cdp.ev(f"{row(push)}.querySelector('[data-action=view]').getAttribute('aria-expanded')") == 'true')
+    # A heading opens its month, and the next press folds it; the month before this one is the second (in a folded year if it is last year's).
+    if years[0] == mid_month(1).year:
+        fold('.history-month', 1)
+        state = history()
+        check('pressing a month heading opens it, with its workout', state['months'][1][2] is True and len(state['rows']) == 3, state)
+        fold('.history-month', 1)
+        check('and pressing it again folds it', history()['months'][1][2] is False and len(history()['rows']) == 2, history())
 
     search('squat')
     state = history()
@@ -904,16 +930,27 @@ def run(t):
     check('or by a note, whatever the case', history()['rows'] == ['Push Day'], history()['rows'])
     search('deadlift')
     state = history()
-    check('and looks through every month, the older ones too', state['rows'] == ['Old Pull'] * 5 and state['older'] is None, state)
+    check('and looks through every month, the older ones too, each opened for what it found',
+          state['rows'] == ['Old Pull'] * 5 and len(state['months']) == 5 and all(m[2] for m in state['months'])
+          and all(y[2] for y in state['years']), state)
     search('old squat')
     check('every word has to match', cdp.ev("document.getElementById('historyList').textContent") == 'No saved workouts match that search.')
     search('')
     state = history()
-    check('clearing it brings the list back as it was, the open workout still open', len(state['rows']) == 4 and state['open'] == [str(push)], state)
-    cdp.ev("document.querySelector('#historyList [data-action=older]').click()")
+    check('clearing it brings the list back as it was, the open workout still open',
+          state['rows'] == ['Leg Day', 'Push Day'] and state['open'] == [str(push)] and [m[2] for m in state['months']] == [True] + [False] * 5, state)
+    # Every year and month, opened by their headings (the years first, since a month in a folded year is not shown).
+    cdp.ev("[...document.querySelectorAll('.history-year > details:not([open]) > summary')].forEach(s => s.click())")
+    cdp.ev("[...document.querySelectorAll('.history-month > details:not([open]) > summary')].forEach(s => s.click())")
     state = history()
-    check('Show older brings the older months', not any(m[2] for m in state['months']) and len(state['rows']) == total and state['older'] is None, state)
-    check('with the focus on the first of them', cdp.ev("document.activeElement === document.querySelectorAll('.history-month')[3].querySelector('.saved-workout-toggle')") is True)
+    check('opening each of them shows every workout', all(y[2] for y in state['years']) and all(m[2] for m in state['months']) and len(state['rows']) == total, state)
+    # What was opened by hand is kept when the list is drawn again (here by a search that is then cleared).
+    search('squat')
+    search('')
+    check('and what was opened stays open when the list is drawn again', len(history()['rows']) == total, len(history()['rows']))
+    fold('.history-month', 0)
+    check('the latest month can be folded too, and stays so', len(history()['rows']) == total - 2 and history()['months'][0][2] is False, history())
+    fold('.history-month', 0)
 
     # The calendar leads to a day's workouts, opened and marked for a moment, even when a search was hiding them.
     settle('/history.html', f"document.querySelectorAll('.history-workout').length === {total}")
@@ -927,8 +964,8 @@ def run(t):
           and cdp.ev(f"document.activeElement === {row(legs)}.querySelector('.saved-workout-toggle')") is True)
     old = mid_month(4).isoformat()
     cdp.ev(f"goToDay('{old}')")
-    check('a day in a month still folded away brings the older months out first',
-          cdp.ev(f"!document.querySelector('.history-workout[data-date=\"{old}\"]').closest('[hidden]') && !document.querySelector('.history-workout[data-date=\"{old}\"] .workout-details').hidden") is True)
+    check('a day in a month still folded away opens its year and month first',
+          cdp.ev(f"!document.querySelector('.history-workout[data-date=\"{old}\"]').closest('details:not([open])') && !document.querySelector('.history-workout[data-date=\"{old}\"] .workout-details').hidden") is True)
 
     # The ⋯ menu: copying and editing open the Tracker's form; deleting happens here.
     cdp.ev(f"{row(legs)}.querySelector('.row-menu summary').click()")
