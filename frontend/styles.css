@@ -723,7 +723,7 @@ h2 { margin-bottom:14px; }
 .program-day-actions { flex-direction:row; }
 /* During a workout. */
 .active-workout .section-heading h2 { margin-bottom:0; }
-#endWorkoutBtn { flex:none; padding:8px 13px; font-size:.85rem; white-space:nowrap; }
+#endWorkoutBtn, #bigViewBtn { flex:none; padding:8px 13px; font-size:.85rem; white-space:nowrap; }
 /* Buttons come in three tiers. Solid is the one thing to do here, the tint (.secondary) is the other things to do, and an outline is
    for showing more or going elsewhere. Cancel is drawn in the muted ink, so it does not look like a neighbour of Start. */
 .section-heading-actions > .secondary, .more-workouts > button, .more-workouts > .button-link {
@@ -1004,3 +1004,37 @@ input[type=range] { height:44px; padding:0; }
 @keyframes set-in { from { transform:scale(.88); } to { transform:scale(1); } }
 @keyframes rest-in { from { opacity:0; } to { opacity:1; } }
 @keyframes rest-time-in { from { transform:scale(1.3); } to { transform:scale(1); } }
+
+/* The big view (big-view.js): the set and the rest clock in very large type, to read from a few feet away. One palette whatever
+   the theme (white on black, 7:1 or better throughout), since it is read across a room, often in glare. It sits above the page, its
+   tab bar and its install bar, but under the page's feedback banner and the rest flash, which still have to be seen. Type is sized
+   by the smaller of the width and height, so a phone on its side is as readable as one upright, and by rem, so Text size applies. */
+.big-view {
+  --big-ink:#fff; --big-dim:#cfd4df; --big-go:#5cf29a; --big-fill:#232937; --big-line:#8a93a8;
+  position:fixed; inset:0; z-index:50; display:flex; flex-direction:column; gap:12px; overflow-y:auto; color:var(--big-ink); background:#000;
+  padding:max(14px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+}
+body.big-view-open { overflow:hidden; }
+body.big-view-open .form-feedback { z-index:60; }
+.big-view :focus-visible { outline:3px solid #fff; outline-offset:3px; }
+.big-view p, .big-view h2 { margin:0; }
+.big-view button { min-height:56px; padding:12px 18px; color:var(--big-ink); background:var(--big-fill); box-shadow:inset 0 0 0 2px var(--big-line); font-size:1.15rem; }
+.big-view-top { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; }
+.big-view-top h2 { font-size:clamp(1.4rem, min(7vw, 8vh), 3rem); line-height:1.1; overflow-wrap:anywhere; }
+.big-view-top p { margin-top:4px; color:var(--big-dim); font-size:clamp(.95rem, min(3.4vw, 4vh), 1.4rem); }
+.big-view-top button { flex:none; width:56px; font-size:2rem; line-height:1; }
+.big-view-main { flex:1; display:grid; align-content:center; justify-items:center; gap:clamp(4px, 1.6vh, 14px); min-height:0; text-align:center; }
+.big-view-label { color:var(--big-dim); font-size:clamp(1.2rem, min(5vw, 6vh), 2.4rem); font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+.big-view-clock, .big-view-numbers { font-family:var(--font-display); font-weight:800; font-variant-numeric:tabular-nums; letter-spacing:-.03em; line-height:1; }
+.big-view-clock { font-size:clamp(4rem, min(30vw, 36vh), 14rem); }
+.big-view-bar { width:min(100%, 34rem); height:12px; overflow:hidden; background:var(--big-fill); border-radius:999px; }
+.big-view-bar span { display:block; height:100%; width:calc(var(--rest-left, 1) * 100%); background:var(--big-ink); border-radius:999px; }
+.big-view-set { color:var(--big-dim); font-size:clamp(1.3rem, min(5.4vw, 6.4vh), 2.6rem); font-weight:700; }
+.big-view-numbers { font-size:clamp(2.4rem, min(14vw, 17vh), 7.5rem); overflow-wrap:anywhere; }
+.big-view.resting .big-view-numbers { font-size:clamp(1.8rem, min(8vw, 9.5vh), 3.8rem); }
+.big-view.go .big-view-label, .big-view.go .big-view-numbers { color:var(--big-go); }
+.big-view-actions { display:grid; gap:10px; }
+.big-view-rest { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.big-view .big-view-primary { min-height:clamp(72px, 14vh, 120px); color:#000; background:#fff; box-shadow:none; font-size:clamp(1.4rem, min(6vw, 7vh), 2.4rem); }
+.big-view.go .big-view-primary { background:var(--big-go); }
+@media (prefers-reduced-motion:reduce) { .big-view-bar span { transition:none; } }

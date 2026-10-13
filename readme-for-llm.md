@@ -161,6 +161,20 @@ own workouts, templates, and settings.
   Settings can turn it off. The workout says what is being done, and if the phone locks anyway: set Auto-Lock to
   Never while you train, or put the app behind HTTPS (see [Offline support needs HTTPS](#offline-support-needs-https)).
   The server answers byte-range requests for the video (206), which Safari needs before it plays one.
+- **Big view**, a button in the workout's heading (`big-view.js`), draws the set to do and the rest clock in very large type,
+  white on black whatever the theme, for reading from a few feet away with the phone propped on a bench. It is only a view
+  of the workout on the page: the clock is the rest timer's (or a hold's) own, the weight and reps are what the entry fields
+  hold, so they are what Complete set will log, and every button presses the page's own, so a set, a rest and a superset
+  behave as they do there. While a rest has time left it shows the clock, a bar draining along it, and under it
+  "Next: Set 3 of 5" with its numbers, with −30s, +30s, Pause or Start, and Skip rest; when the rest runs out it turns
+  green, "Rest over", with the set waiting. A planned set counts as "Set 3 of 5" (a template's as "Set 3"), a bodyweight
+  one is "8 reps" and a timed one "30 s", whose big button is Start timer and then Stop, with the hold's clock. Once the
+  planned sets are done it says "All sets done" and the big button is the page's Next exercise (or Finish workout, which
+  closes the view so the summary shows). A set the page will not take (no reps, a weight that looks like a slip and was
+  declined) closes the view, so the page's message and its field are there. Escape or × closes it and the focus goes back to
+  the button; Tab stays inside it. It does not change how the screen is kept awake, which is the item above and goes on
+  under it. A web page cannot draw on the lock screen, so this is for a screen kept on, not a locked one. It sits above the
+  page and its tab bar and under the feedback banner and the rest flash, so a message is still seen.
 - On an iPhone, sound the phone paused (a locked screen, a call, another app taking the audio) is started again
   before the next alert, rather than leaving every alert after it silent.
 - Move to the next exercise with the rest timer reset to that exercise's rest.

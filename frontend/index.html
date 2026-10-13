@@ -43,7 +43,7 @@
     </section>
 
     <section class="card active-workout" id="activeWorkout" hidden>
-      <div class="section-heading"><div><h2 id="activeWorkoutTitle">Active workout</h2><button class="progress-toggle" id="activeWorkoutProgress" type="button" aria-expanded="false" aria-controls="exerciseJump"></button></div><button class="secondary" id="endWorkoutBtn" type="button">Cancel workout</button></div>
+      <div class="section-heading"><div><h2 id="activeWorkoutTitle">Active workout</h2><button class="progress-toggle" id="activeWorkoutProgress" type="button" aria-expanded="false" aria-controls="exerciseJump"></button></div><div class="section-heading-actions"><button class="secondary" id="bigViewBtn" type="button">Big view</button><button class="secondary" id="endWorkoutBtn" type="button">Cancel workout</button></div></div>
       <ol class="exercise-jump" id="exerciseJump" aria-label="Go to an exercise" hidden></ol>
       <div class="active-exercise"><div class="active-exercise-heading"><h3 id="activeExerciseName"></h3><details class="row-menu exercise-menu" id="exerciseMenu"><summary class="secondary" aria-label="More for this exercise">&middot;&middot;&middot;</summary><div class="row-menu-items"><button type="button" id="swapToggle" aria-expanded="false" aria-controls="swapPanel">Swap exercise</button><button type="button" id="guideToggle" aria-expanded="false" aria-controls="guidePanel">How to do it</button><button type="button" id="noteToggle" aria-expanded="false" aria-controls="notePanel">Add note</button><button type="button" id="supersetToggle">Superset with next</button></div></details></div>
         <div class="swap-panel" id="swapPanel" hidden><label for="swapName">Do this instead</label><div class="swap-fields"><input id="swapName" type="text" list="exerciseNames" autocomplete="off" placeholder="e.g. Dumbbell Bench Press" /><button class="primary" id="swapBtn" type="button">Swap</button><button class="secondary" id="swapCancel" type="button">Cancel</button></div><p class="subtitle" id="swapHelp"></p></div>
@@ -111,6 +111,23 @@
       <ul class="saved-workout-list" id="savedWorkoutList"><li class="empty">No saved workouts yet.</li></ul>
     </section>
   </main>
+  <div class="big-view" id="bigView" role="dialog" aria-modal="true" aria-labelledby="bigViewExercise" hidden>
+    <div class="big-view-top">
+      <div><h2 id="bigViewExercise"></h2><p id="bigViewProgress"></p></div>
+      <button id="bigViewClose" type="button" aria-label="Close the big view">&times;</button>
+    </div>
+    <div class="big-view-main">
+      <p class="big-view-label" id="bigViewLabel" hidden></p>
+      <p class="big-view-clock" id="bigViewClock" role="timer" aria-live="off" hidden></p>
+      <div class="big-view-bar" id="bigViewBar" aria-hidden="true" hidden><span></span></div>
+      <p class="big-view-set" id="bigViewSet"></p>
+      <p class="big-view-numbers" id="bigViewNumbers" hidden></p>
+    </div>
+    <div class="big-view-actions">
+      <div class="big-view-rest" id="bigViewRest" hidden><button type="button" data-big-rest="-30" aria-label="30 seconds less rest">&minus;30s</button><button type="button" data-big-rest="30" aria-label="30 seconds more rest">+30s</button><button type="button" id="bigViewToggle"></button><button type="button" id="bigViewSkip">Skip rest</button></div>
+      <button class="big-view-primary" id="bigViewPrimary" type="button" data-kind="complete">Complete set</button>
+    </div>
+  </div>
   <!-- Suggested exercise names for every exercise field on the page: whatever has been logged or is in a template. -->
   <datalist id="exerciseNames"></datalist>
   <div class="modal-backdrop" id="templateModal" hidden>
@@ -171,6 +188,7 @@
   <script src="schedule.js"></script>
   <script src="program-calendar.js"></script>
   <script src="script.js"></script>
+  <script src="big-view.js"></script>
   <script src="pwa.js"></script>
 </body>
 </html>
