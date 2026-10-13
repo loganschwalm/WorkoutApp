@@ -99,11 +99,19 @@ function implausibleSet(exercise, set, others = []) {
   return reps > implausibleReps && reps > most ? { message:`${reps} reps in one set? Log it anyway?`, field:'reps' } : null;
 }
 
-function rememberBests(workout) {
+// The bests once a workout has joined them: each the higher of what it was and what the workout did. A new object, so the
+// achievements' replay (achievements.js) can count records as each workout was told them, with the bests before it.
+function mergeBests(bests, workout) {
+  const merged = { ...bests };
   Object.entries(bestsOf([workout])).forEach(([key, best]) => {
-    const had = personalBests[key];
-    personalBests[key] = had ? Object.fromEntries(Object.keys(best).map(field => [field, Math.max(had[field] || 0, best[field])])) : best;
+    const had = merged[key];
+    merged[key] = had ? Object.fromEntries(Object.keys(best).map(field => [field, Math.max(had[field] || 0, best[field])])) : best;
   });
+  return merged;
+}
+
+function rememberBests(workout) {
+  personalBests = mergeBests(personalBests, workout);
   writeLocal(localKey('bests'), personalBests);
 }
 

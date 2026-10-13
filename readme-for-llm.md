@@ -201,8 +201,18 @@ own workouts, templates, and settings.
   It leads with what changed: the comparison with last time is its headline, under the title, then goals reached and
   new records, then the week; the totals (time, exercises, sets, volume) are one quiet line under them, and keep their
   boxes only when there is nothing to lead with (a first workout), when they are the summary.
-  A set that beats your best also sets off a small firework from Complete set as you log it, and a set that reaches a goal
-  from Progress a bigger one, once (not with reduced motion on).
+  A set that beats your best also sets off fireworks as you log it, and says the record in the banner ("New record!
+  Bench Press: 190 lbs × 3, your heaviest yet (was 185 lbs)."), and a set that reaches a goal from Progress a bigger show,
+  once. The fireworks (`celebrate` in `common.js`) cover the whole screen: the first burst goes up from the button tapped
+  (the big view's, when it is open), more follow across the screen a moment apart, and from a goal up confetti falls
+  across the width. There are three sizes, a record's, a goal's and an achievement's, each bigger than the last. They are
+  over everything, the big view and the banner included, never in the way of a tap, and not shown with reduced motion
+  on; what they celebrate is always said in words too.
+  The summary also says what the workout earned (see [Achievements, streaks and encouragement](#achievements-streaks-and-encouragement)):
+  a line to cheer it, picked for the biggest thing it did, any achievements it unlocked, in gold, above the rest, and
+  whether it reached the weekly goal and the streak it leaves ("Weekly goal reached: that's a 4-week streak."). An
+  achievement sets off the biggest fireworks, and reaching the weekly goal a goal's; records and goals reached had theirs
+  on their set.
 - Add notes while training; they fold away until you open them, unless the workout already has some.
 - Keep a note with an exercise ("seat on 4", "grip on the rings"): Add note, in the exercise's ⋯ menu,
   saves it to your account, and it shows under that exercise whenever it comes up, in any workout.
@@ -601,7 +611,10 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
   records and a link to the activity on Progress. Records are an activity's longest distance, its fastest pace, speed
   or split (from a session of at least five minutes, so a short burst does not stand for a whole session), its longest
   time and the most floors ("Run: your fastest yet, 8:20 /mi (was 9:00 /mi)"). The first session of an activity has
-  nothing to beat. A record sets off a firework, as a strength record does (not with reduced motion on).
+  nothing to beat. A record sets off fireworks over the whole screen, as a strength record does (not with reduced motion
+  on). The summary also has a line to cheer the session, any achievements it unlocked, counted with the strength workouts
+  as well (a run can be the tenth workout), and the weekly goal and streak, as the Strength page's summary does, with
+  fireworks for the biggest of them.
 - Your sessions lists the latest, as the Tracker lists saved workouts: the name, then the day, time and distance (tap
   for everything it did, and its note), Start to time it again, and a ⋯ menu to copy it as a new session, edit it or
   delete it. Five show, then Show more, then History for the rest. Above them, this week's totals ("This week: 3
@@ -621,6 +634,11 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
   today, and the arrow keys move a day up or down and a week left or right), this week's workouts
   against your weekly goal, your current streak of weeks at the goal, and your best. A week still in progress never breaks the streak; it
   joins it once it reaches the goal. The goal is in Settings.
+- Under the week's count, a line about the streak. A run of two weeks or more that is longer than any before it says so
+  ("New best streak: 6 weeks in a row at your goal."), in the accent colour, with fireworks the first time it reaches each
+  length (kept on the device, so opening the page again does not set them off). Otherwise a streak this week has yet to
+  keep says what it takes ("2 more workouts by Sunday keeps your 4-week streak going."), while there are days enough
+  left in the week; with too few, nothing is said.
 - With a training schedule (Settings), the calendar also marks the training days still to come in the week, with the
   workout planned for each, and Coming up lists the next six. See [Training schedule and
   reminders](#training-schedule-and-reminders).
@@ -665,9 +683,9 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
   workouts the chart shows; the latest value is always written. Tap any point to see its value.
 - The chart is described in words for screen readers: what it shows, over how many workouts, and the
   lowest and highest values.
-- The page is the chart and what it needs: under it, Sets per muscle, Bodyweight, Goals, Stalled lifts, Personal
-  records and Exercises are rows that fold open, folded to start with. Each says in a line where it stands ("This
-  week, Oct 5 – Oct 11 · 33 sets", "180.5 lbs on Oct 9 · down 2 lbs", "3 goals · 1 reached", "2 lifts stalled:
+- The page is the chart and what it needs: under it, Achievements, Sets per muscle, Bodyweight, Goals, Stalled lifts,
+  Personal records and Exercises are rows that fold open, folded to start with. Each says in a line where it stands
+  ("12 of 49 earned · latest Squat: 2 plates", "This week, Oct 5 – Oct 11 · 33 sets", "180.5 lbs on Oct 9 · down 2 lbs", "3 goals · 1 reached", "2 lifts stalled:
   Bench Press, Squat", "15 exercises · latest Rowing machine"), which it stops saying once it is open. A link
   that needs one (Give them a muscle) opens it.
 - With one strength exercise chosen, a card for it above its sessions (hidden across all exercises and for a cardio
@@ -724,6 +742,46 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
   muscle, and can be searched. Add exercise adds one of your own, with a muscle and equipment or left to the guess
   (shown as you type the name); it is then suggested wherever an exercise is typed, and can be removed until it is
   logged. Adding one already there changes only what was chosen for it. Kept with your account like notes and goals.
+
+### Achievements, streaks and encouragement
+
+`achievements.js`, on the Strength, Cardio, Progress and History pages, makes progress feel like progress.
+
+- **Achievements are worked out from the workouts every time, never stored.** The history is replayed oldest first, and
+  each tier is earned by the workout that first takes its measure past it, so it has the day it was earned. So they follow
+  every device and an import, need no migration or synced state, and a workout edited or deleted in History takes back what
+  it earned. A workout that has uploaded and is still in the queue counts once (by its `clientId`).
+- The catalogue, a row each on Progress:
+
+  | Kind | Tiers | Measure |
+  |---|---|---|
+  | Workouts | 1, 10, 25, 50, 100, 250, 500, 1000 | Strength workouts and cardio sessions |
+  | Weekly streak | 2, 4, 8, 12, 26, 52 weeks | Weeks in a row at the weekly goal, as it is set now |
+  | Personal records | 1, 10, 25, 50, 100 | Records beaten, as each workout was told them: `newRecords` and the cardio records, against the bests before it |
+  | Bench press | 1, 2, 3 plates | Plates a side in a set: 135, 225, 315, 405 lbs or 60, 100, 140, 180 kg, in the unit the set was logged in |
+  | Squat, Deadlift | 1, 2, 3, 4 plates | The same; only these names count (`plateLifts`), so a dumbbell bench or a front squat is not one |
+  | Weight lifted | 10k, 100k, 500k, 1M lbs, or 5k, 50k, 250k, 500k kg | Every set's weight times its reps, timed exercises left out, in the unit shown |
+  | Distance covered | 10, 50, 100, 250, 500 mi, or 25, 100, 250, 500, 1000 km | Walks, runs, rides, the bike and the elliptical; a rower's metres and floors do not count |
+  | Cardio time | 5, 25, 50, 100 hours | Every cardio session's time |
+  | Exercises tried | 5, 15, 30 | Strength exercises, each counted once |
+  | Big week | 5, 7 days | Different days trained in one week, Monday to Sunday |
+  | Back at it | once | A workout after two weeks or more off |
+
+  The weekly streak is counted against the weekly goal as it is now, and the weight and distance tiers are in the units
+  shown, so changing either can change what is earned; a plate is counted in the unit its set was loaded in.
+- **What a workout earned.** A finished workout or session is compared with the history before it (`finishRewards`): what it
+  earned is what the history after it has and the history before it had not. Only when the whole history is in hand: before
+  the saved workouts have loaded (`savedWorkoutsLoaded` on the Strength page, `cardioEverything` on Cardio) it earns nothing,
+  since against part of the history it would seem to earn what was earned long ago. A missed award is better than a false
+  one. The Cardio page counts the strength workouts too.
+- **Progress** has an Achievements row, first of the folding rows: a box for each kind, with the best tier earned and its day
+  ("Squat: 2 plates · Earned Oct 3, 2026"), gold once one is earned, a mark for each tier, a bar to the next, and what that is
+  ("Next: 25 workouts · now 12 workouts"). Its folded line says how many are earned and the latest.
+- **Encouraging lines** (`splashLine`): plain, picked at random when something happens (never while drawing), and not the same
+  twice running in a tab. The Tracker has one under its status between workouts, picked once a visit and gone while a workout
+  is on; the summaries of a finished workout and session pick one for the biggest thing they did (an achievement, a record,
+  the weekly goal, or a plain finish).
+- **Streaks** are celebrated in the summaries and on History (see [Workout history](#workout-history)).
 
 ### Settings
 

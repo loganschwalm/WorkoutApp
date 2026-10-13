@@ -190,22 +190,24 @@ function trainingByDate(workouts) {
   return { days, weeks, cardioOnly };
 }
 
-// The current run of weeks at the goal, and the longest. This week counts once it reaches the goal; until then it is
-// still in progress, so the run is counted from last week and nothing is lost yet.
-function weeklyStreaks(weeks, goal, thisWeek) {
-  const reached = monday => (weeks.get(calendarDayKey(monday)) || 0) >= goal;
-  let current = reached(thisWeek) ? 1 : 0;
-  for (let monday = addDays(thisWeek, -7); reached(monday); monday = addDays(monday, -7)) current += 1;
-  const mondays = [...weeks.keys()].sort();
-  let best = current, run = 0;
-  if (mondays.length) {
-    const [year, month, day] = mondays[0].split('-').map(Number);
-    for (let monday = new Date(year, month - 1, day); monday <= thisWeek; monday = addDays(monday, 7)) {
-      run = reached(monday) ? run + 1 : 0;
-      best = Math.max(best, run);
-    }
+// The runs of weeks at the goal (weeklyStreaks, bestStreakBefore) are achievements.js's, which the Strength page uses too.
+
+// Under the week's count: a run longer than any before it is said, with fireworks the first time it reaches each length (kept
+// on this device, so a reload does not set them off again); otherwise a run this week has yet to keep says what it takes, while
+// there are days enough left in the week to do it.
+function renderStreakNote(weeks, goal, thisWeek, current, thisWeekCount) {
+  const newBest = current >= 2 && current > bestStreakBefore(weeks, goal, thisWeek, current);
+  const needed = goal - thisWeekCount;
+  const daysLeft = 7 - ((new Date().getDay() + 6) % 7);
+  const note = newBest ? `New best streak: ${plural(current, 'week')} in a row at your goal.`
+    : current > 0 && needed > 0 && needed <= daysLeft ? `${plural(needed, 'more workout')} by Sunday keeps your ${current}-week streak going.` : '';
+  $('streakNote').textContent = note;
+  $('streakNote').hidden = !note;
+  $('streakNote').classList.toggle('best', newBest);
+  if (newBest && current > (Number(readLocal(localKey('streak-celebrated'))) || 0)) {
+    writeLocal(localKey('streak-celebrated'), current);
+    celebrate($('streakNote'), 'goal');
   }
-  return { current, best };
 }
 
 function renderCalendar() {
@@ -226,6 +228,7 @@ function renderCalendar() {
   $('streakSummary').textContent = current
     ? `${current}-week streak${best > current ? ` · best ${best}` : ''}`
     : best ? `No streak right now · best ${plural(best, 'week')}` : `Reach ${goal} in a week to start a streak`;
+  renderStreakNote(weeks, goal, thisWeek, current, thisWeekCount);
 
   // A header row of month names over the week they start in, then a row per weekday.
   const columns = Array.from({ length:calendarWeeks }, (entry, index) => addDays(first, 7 * index));

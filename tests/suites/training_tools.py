@@ -255,28 +255,35 @@ def run(t):
     check('a set short of the best sets off nothing', cdp.ev(fireworks) == 0, cdp.ev(fireworks))
     log(105, 5)
     check('a heavier weight than ever does', cdp.ev(fireworks) == 1, cdp.ev(fireworks))
-    check('with sparks that carry their own direction', cdp.ev("document.querySelectorAll('.firework i').length") == 28
-          and cdp.ev("!!document.querySelector('.firework i').style.getPropertyValue('--dx')"), cdp.ev("document.querySelectorAll('.firework i').length"))
+    check("a record's size: bursts of sparks that carry their own direction, over the whole screen",
+          cdp.ev("document.querySelector('.firework').dataset.size") == 'record' and cdp.ev("document.querySelectorAll('.firework .firework-burst').length") == 3
+          and cdp.ev("!!document.querySelector('.firework i').style.getPropertyValue('--dx')")
+          and cdp.ev("(box => Math.abs(box.width - document.documentElement.clientWidth) <= 1 && Math.abs(box.height - innerHeight) <= 1)(document.querySelector('.firework').getBoundingClientRect())") is True,
+          cdp.ev("document.querySelectorAll('.firework .firework-burst').length"))
+    check('the first burst goes up from the button that was tapped', cdp.ev("""(burst => { const button = document.getElementById('completeSetBtn').getBoundingClientRect();
+        return Math.abs(parseFloat(burst.style.left) - (button.left + button.width / 2)) < 1 && Math.abs(parseFloat(burst.style.top) - (button.top + button.height / 2)) < 1; })
+        (document.querySelector('.firework-burst'))""") is True)
     check('never in the way of a tap', cdp.ev("getComputedStyle(document.querySelector('.firework')).pointerEvents") == 'none')
-    cdp.pause(1.4)
+    cdp.pause(2.0)
     check('and clears itself away', cdp.ev(fireworks) == 0, cdp.ev(fireworks))
     log(105, 5)
     check('repeating the same record sets off nothing new', cdp.ev(fireworks) == 0, cdp.ev(fireworks))
     log(110, 5)
     check('beating it again does', cdp.ev(fireworks) == 1, cdp.ev(fireworks))
-    cdp.pause(1.4)
+    cdp.pause(2.0)
     cdp.ev("saveLocalState('goals', { 'bench press': { name: 'Bench Press', target: 120, unit: 'lbs', by: '' }, 'squat': { name: 'Squat', target: 100, unit: 'kg', by: '' } })")
     log(115, 5)
-    check('a set short of a goal is only a record', cdp.ev(fireworks) == 1 and cdp.ev("document.querySelectorAll('.firework i').length") == 28
+    check('a set short of a goal is only a record', cdp.ev(fireworks) == 1 and cdp.ev("document.querySelector('.firework').dataset.size") == 'record'
           and 'Goal reached' not in text('formFeedback'), text('formFeedback'))
-    cdp.pause(1.4)
+    cdp.pause(2.0)
     log(120, 5)
-    check('a set that reaches a goal sets off a bigger firework, once', cdp.ev(fireworks) == 1 and cdp.ev("document.querySelectorAll('.firework i').length") == 64,
-          cdp.ev("document.querySelectorAll('.firework i').length"))
+    check('a set that reaches a goal sets off a bigger show, once, with confetti across the screen', cdp.ev(fireworks) == 1
+          and cdp.ev("document.querySelector('.firework').dataset.size") == 'goal' and cdp.ev("document.querySelectorAll('.firework .firework-burst').length") == 5
+          and cdp.ev("document.querySelectorAll('.firework b').length") > 0, cdp.ev("document.querySelector('.firework').dataset.size"))
     check('and says which goal', text('formFeedback') == 'Goal reached: Bench Press, 120 lbs!', text('formFeedback'))
-    cdp.pause(1.4)
+    cdp.pause(3.0)
     log(125, 5)
-    check('going past it is a record again, not the goal', cdp.ev(fireworks) == 1 and cdp.ev("document.querySelectorAll('.firework i').length") == 28
+    check('going past it is a record again, not the goal', cdp.ev(fireworks) == 1 and cdp.ev("document.querySelector('.firework').dataset.size") == 'record'
           and 'Goal reached' not in text('formFeedback'), text('formFeedback'))
     end()
 

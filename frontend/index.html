@@ -19,7 +19,7 @@
 <body>
   <main class="shell">
     <header>
-      <div><h1>Workout Tracker</h1><p class="subtitle page-status" id="pageStatus"></p></div>
+      <div><h1>Workout Tracker</h1><p class="subtitle page-status" id="pageStatus"></p><p class="splash" id="splashLine" hidden></p></div>
       <nav class="site-nav" aria-label="Primary navigation"><a class="active" href="index.html" aria-current="page">Strength</a><a href="cardio.html">Cardio</a><a href="progress.html">Progress</a><a href="history.html">History</a></nav>
       <div class="header-actions"><div class="date" id="today"></div><button class="secondary settings-button" id="settingsButton" type="button" aria-label="Settings" title="Settings">&#9881;</button></div>
     </header>
@@ -75,10 +75,13 @@
 
     <section class="card workout-summary" id="workoutSummary" aria-labelledby="summaryTitle" hidden>
       <div class="section-heading"><div><h2 id="summaryTitle">Workout complete</h2><p class="subtitle" id="summaryName"></p></div><button class="secondary" id="summaryDone" type="button">Done</button></div>
+      <p class="summary-splash" id="summarySplash" hidden></p>
+      <div class="summary-records summary-achievements" id="summaryAchievements" hidden><h3>Achievements unlocked</h3><ul id="summaryAchievementList"></ul></div>
       <p class="summary-headline" id="summaryCompare" hidden></p>
       <div class="summary-goals summary-records" id="summaryGoals" hidden><h3>Goals reached</h3><ul id="summaryGoalList"></ul></div>
       <div class="summary-records" id="summaryRecords" hidden><h3>New personal records</h3><ul id="summaryRecordList"></ul></div>
       <p class="summary-line" id="summaryWeek" hidden></p>
+      <p class="summary-line summary-streak" id="summaryStreak" hidden></p>
       <ul class="summary-stats" id="summaryStats"></ul>
       <div class="summary-exercises" id="summaryExercises" hidden><h3>By exercise</h3><ul id="summaryExerciseList"></ul></div>
       <button class="link-button summary-export" id="summaryExport" type="button" hidden>Download for Strava (.tcx)</button>
@@ -177,6 +180,8 @@
   <!-- The Tracker's own scripts, each loaded before script.js, which starts the page. -->
   <script src="rest-timer.js"></script>
   <script src="records.js"></script>
+  <script src="cardio-activities.js"></script>
+  <script src="achievements.js"></script>
   <script src="summary.js"></script>
   <script src="activity-export.js"></script>
   <script src="templates.js"></script>

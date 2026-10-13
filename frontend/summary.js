@@ -75,8 +75,9 @@ function goalsReached(workout, bests) {
 }
 
 // Everything the summary compares a workout with, taken before it is added to the history: the last time of each exercise
-// (in the unit shown), the volume of the last workout of the same name, the records so far (for goals), and how many workouts
-// this week has had, this one included.
+// (in the unit shown), the volume of the last workout of the same name, the records so far (for goals), how many workouts
+// this week has had, this one included, and every session before it, for its achievements (achievements.js): null until the
+// saved workouts have loaded, since against part of the history a workout would seem to earn what was earned long ago.
 function summaryBefore(workout) {
   const named = String(workout.name).trim().toLowerCase();
   const previous = [...savedWorkouts, ...readPendingWorkouts()]
@@ -88,13 +89,17 @@ function summaryBefore(workout) {
     if (entry) last[exerciseKey(item.name)] = entry;
   });
   const week = calendarDayKey(startOfWeek(new Date(workout.createdAt)));
-  const thisWeek = [...savedSessions, ...readPendingWorkouts()].filter(other => calendarDayKey(startOfWeek(new Date(other.createdAt))) === week).length;
+  // A workout that has uploaded and is still in the queue is one workout, not two.
+  const sessions = uniqueSessions([...savedSessions, ...readPendingWorkouts()]);
+  const thisWeek = sessions.filter(other => calendarDayKey(startOfWeek(new Date(other.createdAt))) === week).length;
   return { last, bests:JSON.parse(JSON.stringify(personalBests)), week:thisWeek + 1,
-    previous:previous ? { volume:workoutVolume(inUnit(previous)), date:previous.createdAt } : null };
+    previous:previous ? { volume:workoutVolume(inUnit(previous)), date:previous.createdAt } : null,
+    history:typeof savedWorkoutsLoaded !== 'undefined' && savedWorkoutsLoaded ? sessions : null };
 }
 
-// How long it took, how much was done, how that compares, and any new personal records; it stays until Done or the next
-// workout starts. `before` is summaryBefore's, from before the workout was added to the history.
+// How long it took, how much was done, how that compares, any new personal records, and what it earned: achievements, the
+// weekly goal, the streak, with a line to cheer it and fireworks for the big things (each record had its own on its set). It
+// stays until Done or the next workout starts. `before` is summaryBefore's, from before the workout was added to the history.
 function showWorkoutSummary(workout, records, before = {}) {
   const shown = inUnit(workout);
   const rows = summaryExercises(shown, before.last || {});
@@ -108,13 +113,21 @@ function showWorkoutSummary(workout, records, before = {}) {
   ];
   const compared = volumeLine(volume, before.previous);
   const goals = goalsReached(workout, before.bests || {});
+  const rewards = finishRewards(before.history || null, workout);
+  const streakLine = rewardStreakLine(rewards);
   const symbols = { up:'▲', down:'▼', same:'', first:'' };
   $('summaryName').textContent = workout.name;
   $('summaryStats').innerHTML = stats.map(([value, label]) => `<li><strong>${escapeHTML(value)}</strong><span>${escapeHTML(label)}</span></li>`).join('');
   $('summaryCompare').textContent = compared;
   $('summaryCompare').hidden = !compared;
   // Something to lead with (a comparison, a goal reached, a record) makes the totals a quiet line; without, they are the summary.
-  $('workoutSummary').classList.toggle('has-lead', Boolean(compared || goals.length || records.length));
+  $('workoutSummary').classList.toggle('has-lead', Boolean(compared || goals.length || records.length || rewards.earned.length));
+  $('summarySplash').textContent = splashLine(rewardSplashKind(rewards, records));
+  $('summarySplash').hidden = false;
+  $('summaryAchievements').hidden = !rewards.earned.length;
+  renderEarnedAchievements($('summaryAchievementList'), rewards.earned);
+  $('summaryStreak').textContent = streakLine;
+  $('summaryStreak').hidden = !streakLine;
   $('summaryWeek').textContent = before.week ? weekGoalLine(before.week, weeklyGoalFrom(getWorkoutSettings().weeklyGoal)) : '';
   $('summaryWeek').hidden = !before.week;
   $('summaryGoals').hidden = !goals.length;
@@ -127,6 +140,8 @@ function showWorkoutSummary(workout, records, before = {}) {
   offerActivityExport($('summaryExport'), workout);
   $('workoutSummary').hidden = false;
   $('workoutSummary').scrollIntoView({ behavior:'smooth', block:'start' });
+  if (rewards.earned.length) celebrate($('summaryTitle'), 'achievement');
+  else if (rewards.weekReached) celebrate($('summaryTitle'), 'goal');
 }
 
 $('summaryDone').onclick = () => { $('workoutSummary').hidden = true; };

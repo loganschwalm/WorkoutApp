@@ -622,6 +622,19 @@ html[data-theme="dark"] .progression-hint.stalled { color:#f5c97a; }
 .past-sessions li { display:grid; gap:2px; }
 .past-sessions li span:first-child { color:var(--muted); font-size:.82rem; }
 .past-sessions-link { color:var(--accent); font-weight:600; }
+/* What a finished workout earned (achievements.js): a line to cheer it, its achievements in gold above its records, and the streak. */
+.summary-splash { margin:12px 0 0; color:var(--accent); font-family:var(--font-display); font-size:clamp(1.05rem, 3.6vw, 1.3rem); font-weight:750; letter-spacing:-.01em; text-wrap:balance; }
+.summary-achievements li { display:grid; gap:2px; color:#5c3f00; background:#fff4d6; border-color:#efcd6e; }
+.summary-achievements li strong { font-size:1rem; }
+.summary-achievements li span { font-size:.85rem; }
+html[data-theme="dark"] .summary-achievements li { color:#ffe2a0; background:#3a2e10; border-color:#6b5520; }
+.summary-streak { color:var(--ink); font-weight:700; }
+/* The Tracker's line to start on, under the page's status, between workouts only. */
+.splash { margin:2px 0 0; color:var(--accent); font-size:.95rem; font-weight:600; font-style:italic; }
+body.training .splash { display:none; }
+/* History's line about the streak: a new best is celebrated, a streak to keep is a nudge. */
+.streak-note { margin:6px 0 0; color:var(--ink); font-size:.95rem; font-weight:700; }
+.streak-note.best { color:var(--accent); }
 .summary-export { display:block; margin-top:6px; padding:12px 0; }
 /* Reps left in the tank, tapped before Complete set. */
 .effort-choices { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:10px; color:var(--muted); font-size:.85rem; }
@@ -791,10 +804,24 @@ header { margin-bottom:22px; }
   border-radius:0 3px 3px 0; transition:width .3s linear;
 }
 
-/* The firework for a new personal record: sparks from the middle of a button, over everything, never in the way of a tap. */
-.firework { position:fixed; z-index:100; width:0; height:0; pointer-events:none; }
-.firework i { position:absolute; left:-3px; top:-3px; width:6px; height:6px; border-radius:50%; animation:spark 1s cubic-bezier(.15,.7,.3,1) forwards; }
-@keyframes spark { from { transform:translate(0,0) scale(1); opacity:1; } to { transform:translate(var(--dx),var(--dy)) scale(.3); opacity:0; } }
+/* The firework show (celebrate in common.js): bursts across the whole screen, and confetti for the big moments. Over everything,
+   the big view and the banner included, and never in the way of a tap. Each burst and piece waits its --delay, unseen. */
+.firework { position:fixed; inset:0; z-index:100; overflow:hidden; pointer-events:none; }
+.firework-burst { position:absolute; width:0; height:0; }
+.firework i { position:absolute; left:-4px; top:-4px; width:8px; height:8px; border-radius:50%; background:currentColor;
+  box-shadow:0 0 8px 1px currentColor; animation:spark 1.25s cubic-bezier(.12,.75,.3,1) var(--delay, 0s) both; }
+@keyframes spark {
+  0% { transform:translate(0,0) scale(.4); opacity:0; }
+  6% { transform:translate(calc(var(--dx) * .08), calc(var(--dy) * .08)) scale(1.2); opacity:1; }
+  70% { transform:translate(calc(var(--dx) * .92), calc(var(--dy) * .92)) scale(.8); opacity:.9; }
+  100% { transform:translate(var(--dx), calc(var(--dy) + var(--fall, 0px))) scale(.3); opacity:0; }
+}
+.firework b { position:absolute; top:-16px; width:9px; height:14px; border-radius:2px; animation:confetti 2.2s cubic-bezier(.3,.1,.6,1) var(--delay, 0s) both; }
+@keyframes confetti {
+  0% { transform:translate(0,0) rotate(0); opacity:0; }
+  4%, 85% { opacity:1; }
+  100% { transform:translate(var(--sway), var(--drop)) rotate(var(--spin)); opacity:0; }
+}
 /* The bar's track, so how much rest is left reads against how much there was. */
 .rest-panel::before { content:""; position:absolute; left:0; right:0; bottom:0; height:6px; background:var(--card); opacity:.25; }
 @media (prefers-reduced-motion:reduce) { .rest-panel::after { transition:none; } }
@@ -825,6 +852,17 @@ header { margin-bottom:22px; }
 .goal.reached .goal-foot span { color:#22634c; font-weight:700; }
 html[data-theme="dark"] .goal.reached .goal-foot span { color:#a5e5c2; }
 .goal-foot .link-button { padding:2px 4px; }
+/* Progress's achievements: a row for each kind, gold once one is earned, its tiers as marks and a bar to the next. */
+.achievement-list { display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:10px; margin:18px 0 0; padding:0; list-style:none; }
+.achievement-list .empty { grid-column:1/-1; }
+.achievement { display:grid; align-content:start; gap:6px; padding:14px 16px; color:var(--muted); border:1px solid var(--line); border-radius:12px; font-size:.85rem; }
+.achievement strong { color:var(--ink); font-size:1rem; }
+.achievement-head { display:flex; justify-content:space-between; align-items:baseline; gap:10px; }
+.achievement-marks { display:flex; flex:none; gap:4px; }
+.achievement-marks i { width:9px; height:9px; border:1.5px solid var(--line); border-radius:50%; }
+.achievement-marks i.on { background:#d9a21b; border-color:#d9a21b; }
+.achievement.earned { border-color:#e3bf5a; background:linear-gradient(180deg, rgba(245,184,61,.12), transparent 70%); }
+.achievement.earned .achievement-bar span { background:#d9a21b; }
 .goal-form { display:grid; grid-template-columns:2fr 1fr 1fr auto; gap:12px; align-items:end; margin-top:18px; }
 .goal-feedback { min-height:1.2em; margin:10px 0 0; color:var(--muted); font-size:.9rem; }
 .goal-feedback.error { color:#ab3a49; }

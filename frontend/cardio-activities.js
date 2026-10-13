@@ -156,21 +156,24 @@ function keyActivity(key) {
 // set, and the latest name the activity went by.
 function cardioBests(workouts) {
   const bests = new Map();
-  [...workouts].filter(isCardio).sort((a, b) => a.createdAt - b.createdAt).forEach(workout => {
-    const key = cardioKey(workout);
-    const activity = activityOf(workout);
-    const best = bests.get(key) || { key, activity, name:'', distance:null, duration:null, rate:null, floors:null };
-    best.name = workout.name;
-    const at = workout.createdAt, seconds = Number(workout.duration) || 0;
-    const distance = sessionDistance(workout), rate = sessionRate(workout);
-    const floors = activity.floors ? Number(workout.cardio && workout.cardio.floors) || 0 : 0;
-    if (distance && (!best.distance || distance > best.distance.value)) best.distance = { value:distance, at };
-    if (seconds > 0 && (!best.duration || seconds > best.duration.value)) best.duration = { value:seconds, at };
-    if (rate && seconds >= cardioRateRecordSeconds && (!best.rate || fasterRate(activity, rate.value, best.rate.value))) best.rate = { ...rate, distance, at };
-    if (floors > 0 && (!best.floors || floors > best.floors.value)) best.floors = { value:floors, at };
-    bests.set(key, best);
-  });
+  [...workouts].filter(isCardio).sort((a, b) => a.createdAt - b.createdAt).forEach(workout => addToCardioBests(bests, workout));
   return bests;
+}
+
+// One session joins the bests, after every session before it has (so the achievements' replay can keep them as it goes).
+function addToCardioBests(bests, workout) {
+  const key = cardioKey(workout);
+  const activity = activityOf(workout);
+  const best = bests.get(key) || { key, activity, name:'', distance:null, duration:null, rate:null, floors:null };
+  best.name = workout.name;
+  const at = workout.createdAt, seconds = Number(workout.duration) || 0;
+  const distance = sessionDistance(workout), rate = sessionRate(workout);
+  const floors = activity.floors ? Number(workout.cardio && workout.cardio.floors) || 0 : 0;
+  if (distance && (!best.distance || distance > best.distance.value)) best.distance = { value:distance, at };
+  if (seconds > 0 && (!best.duration || seconds > best.duration.value)) best.duration = { value:seconds, at };
+  if (rate && seconds >= cardioRateRecordSeconds && (!best.rate || fasterRate(activity, rate.value, best.rate.value))) best.rate = { ...rate, distance, at };
+  if (floors > 0 && (!best.floors || floors > best.floors.value)) best.floors = { value:floors, at };
+  bests.set(key, best);
 }
 
 // A pace, split or speed half as fast again as the activity's best is more likely a slip (a distance of 30 for 3, a
@@ -188,7 +191,11 @@ function implausibleRate(workout, earlier) {
 // What a new session beats, against the sessions before it, in the words of the strength records: "Run: your longest
 // yet, 4.2 mi (was 3.1 mi)". The first session of an activity has nothing to beat, so it sets no records.
 function newCardioRecords(workout, earlier) {
-  const before = cardioBests(earlier).get(cardioKey(workout));
+  return cardioRecordsAgainst(workout, cardioBests(earlier).get(cardioKey(workout)));
+}
+
+// The same, against the bests of the activity before it (cardioBests' entry), which the achievements' replay keeps as it goes.
+function cardioRecordsAgainst(workout, before) {
   if (!before) return [];
   const now = cardioBests([workout]).get(cardioKey(workout));
   const activity = activityOf(workout), unit = shownDistanceUnit(activity), name = workout.name;

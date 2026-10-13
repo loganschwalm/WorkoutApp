@@ -951,13 +951,15 @@ def run(t):
 
     # Under it, six rows folded to start with, each saying in a line where it stands.
     folds = cdp.ev("""[...document.querySelectorAll('main .fold-details')].map(d => [d.id, d.open, d.querySelector('.fold-state').textContent])""")
-    check('Sets per muscle, Bodyweight, Goals, Stalled lifts, Personal records and Exercises are rows, folded',
-          [f[0] for f in folds] == ['musclesFold', 'bodyweightFold', 'goalsFold', 'stallsFold', 'recordsFold', 'exercisesFold']
+    check('Achievements, Sets per muscle, Bodyweight, Goals, Stalled lifts, Personal records and Exercises are rows, folded',
+          [f[0] for f in folds] == ['achievementsFold', 'musclesFold', 'bodyweightFold', 'goalsFold', 'stallsFold', 'recordsFold', 'exercisesFold']
           and not any(f[1] for f in folds), folds)
     states = {f[0]: f[2] for f in folds}
     # The same weight in every session over weeks is a stalled lift, so that is what the row says.
-    check('each says where it stands: the week, no weight logged, no goal, the stalled lift, the records, the exercises',
-          states['musclesFold'].startswith('This week, ') and states['bodyweightFold'] == 'Nothing logged yet' and states['goalsFold'] == 'None yet'
+    # Five sessions of Bench Press at 135 lbs, one 400 days ago: the first workout, a plate a side, and a comeback.
+    check('each says where it stands: the achievements, the week, no weight logged, no goal, the stalled lift, the records, the exercises',
+          states['achievementsFold'].startswith('3 of ') and states['achievementsFold'].endswith(' earned · latest Back at it')
+          and states['musclesFold'].startswith('This week, ') and states['bodyweightFold'] == 'Nothing logged yet' and states['goalsFold'] == 'None yet'
           and states['stallsFold'] == '1 lift stalled: Bench Press' and states['recordsFold'] == '1 exercise · latest Bench Press'
           and states['exercisesFold'] == '1 exercise', states)
     cdp.ev("document.querySelector('#goalsFold > summary').click()")

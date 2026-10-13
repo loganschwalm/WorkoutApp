@@ -13,6 +13,10 @@ let workoutsReachable = true;
 let initialLoadDone = false;
 
 $('workoutDate').value = dateInputValue(Date.now());
+// A line to start on, picked once a visit (achievements.js). The workout in progress has the screen to itself, so it is not
+// shown then (see body.training).
+$('splashLine').textContent = splashLine('idle');
+$('splashLine').hidden = false;
 
 // The form for writing a workout down by hand opens as its own card at the top, and closes again on Cancel or once saved.
 function showWorkoutBuilder(editing = false) {
@@ -691,7 +695,8 @@ function refusedSet(exercise, { weightValue, reps }, timed) {
   return null;
 }
 
-// Adds the set to the exercise, shows it, and marks a record or a goal reached.
+// Adds the set to the exercise, shows it, and marks a record or a goal reached. Returns what it said of them, or '', so what
+// follows the set (restAfterSet) can say it again rather than over it.
 function recordSet(exercise, { weightValue, reps }) {
   const weight = Number(weightValue) || 0;
   const effort = effortAsked(exercise) && effortChoice !== null ? { rir:effortChoice } : {};
@@ -703,24 +708,33 @@ function recordSet(exercise, { weightValue, reps }) {
   renderActiveWorkout();
   const recordNow = exerciseRecord(exercise.name);
   // A goal reached gets a bigger firework than a record, and the record's would only sit on top of it.
+  // The fireworks go up from the button that was tapped: the big view's, when it is open over the page.
+  const tapped = bigViewIsOpen() ? $('bigViewPrimary') : $('completeSetBtn');
+  let said = '';
   if (goalReached) {
-    celebrate($('completeSetBtn'), 64, 1.6);
-    showFeedback(`Goal reached: ${goalReached.name}, ${formatWeight(goalReached.target)} ${goalReached.unit || 'lbs'}!`, 'success');
-  } else if (recordNow && recordNow !== recordBefore) celebrate($('completeSetBtn'));
+    celebrate(tapped, 'goal');
+    said = `Goal reached: ${goalReached.name}, ${formatWeight(goalReached.target)} ${goalReached.unit || 'lbs'}!`;
+  } else if (recordNow && recordNow !== recordBefore) {
+    celebrate(tapped, 'record');
+    said = `New record! ${recordNow}.`;
+  }
+  if (said) showFeedback(said, 'success');
   unlockAudio();
   // A tap: the moment a phone that refused the keep-awake video (see syncWakeLock) is asked again.
   syncWakeLock();
+  return said;
 }
 
-// What follows a set: rest, or in a superset the next exercise at once, with no rest until the round is done.
-function restAfterSet() {
+// What follows a set: rest, or in a superset the next exercise at once, with no rest until the round is done. `said` is what
+// the set's record or goal said, which the superset's message keeps in front of it, so a record is never only fireworks.
+function restAfterSet(said = '') {
   const index = activeSession.currentIndex;
   const next = nextInRound(activeSession, index);
   if (next !== null) {
     stopRestTimer();
     $('restPanel').hidden = true;
     moveWithinSuperset(next);
-    showFeedback(`Next in the superset: ${activeSession.exercises[next].name}.`, 'success');
+    showFeedback(`${said ? `${said} ` : ''}Next in the superset: ${activeSession.exercises[next].name}.`, 'success');
     return;
   }
   if (getWorkoutSettings().autoRest) startRestTimer();
@@ -758,8 +772,7 @@ function logSet(entry = null) {
     return;
   }
   clearFeedback();
-  recordSet(exercise, entry);
-  restAfterSet();
+  restAfterSet(recordSet(exercise, entry));
 }
 
 $('completeSetBtn').onclick = () => logSet();

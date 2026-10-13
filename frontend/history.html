@@ -27,6 +27,7 @@
     <section class="card" id="calendarCard">
       <div class="section-heading heading-line"><h2>Training calendar</h2><span class="subtitle calendar-streak" id="streakSummary"></span></div>
       <p class="subtitle heading-intro" id="calendarSummary">The last 12 weeks.</p>
+      <p class="streak-note" id="streakNote" hidden></p>
       <div class="training-calendar" id="trainingCalendar" role="group" aria-label="Days trained in the last 12 weeks. The arrow keys move between days, and Enter shows a day's workouts."></div>
       <p class="subtitle calendar-detail" id="calendarDetail" aria-live="polite"></p>
       <p class="subtitle calendar-note">Each square is a day, Monday at the top. A filled one is a day you lifted, a ring a day of cardio only; both count toward the weekly goal in Settings. A dashed square in colour is a training day still to come.</p>
@@ -56,6 +57,8 @@
   <script src="schedule.js"></script>
   <script src="cardio-activities.js"></script>
   <script src="activity-export.js"></script>
+  <script src="records.js"></script>
+  <script src="achievements.js"></script>
   <script src="history.js"></script>
   <script src="pwa.js"></script>
 </body>

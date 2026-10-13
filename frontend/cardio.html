@@ -62,7 +62,10 @@
 
     <section class="card workout-summary" id="cardioSummary" aria-labelledby="cardioSummaryTitle" hidden>
       <div class="section-heading"><div><h2 id="cardioSummaryTitle">Session saved</h2><p class="subtitle" id="cardioSummaryName"></p></div><button class="secondary" id="cardioSummaryDone" type="button">Done</button></div>
+      <p class="summary-splash" id="cardioSummarySplash"></p>
+      <div class="summary-records summary-achievements" id="cardioSummaryAchievements" hidden><h3>Achievements unlocked</h3><ul id="cardioSummaryAchievementList"></ul></div>
       <ul class="summary-stats" id="cardioSummaryStats"></ul>
+      <p class="summary-line summary-streak" id="cardioSummaryStreak" hidden></p>
       <div class="summary-records" id="cardioSummaryRecords" hidden><h3>New personal records</h3><ul id="cardioSummaryRecordList"></ul></div>
       <a class="past-sessions-link" id="cardioSummaryProgress" href="progress.html">Every session, charted on Progress</a>
       <button class="link-button summary-export" id="cardioSummaryExport" type="button" hidden>Download for Strava (.tcx)</button>
@@ -89,6 +92,8 @@
   <script src="devices.js"></script>
   <script src="reminders.js"></script>
   <script src="cardio-activities.js"></script>
+  <script src="records.js"></script>
+  <script src="achievements.js"></script>
   <script src="activity-export.js"></script>
   <script src="cardio.js"></script>
   <script src="pwa.js"></script>

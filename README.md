@@ -54,7 +54,8 @@ library, with SQLite for storage, so there is no build step, no package manager 
   written cues for it and a link to a video demo.
 - A typo like 1355 lbs for 135 is asked about before it's logged, and Finish early ends a workout from any exercise.
 - Cancel a workout started by mistake: nothing is saved and no stats change, with Undo in case the tap was the slip.
-- Finishing shows a summary with any new personal records.
+- Finishing shows a summary with any new personal records, achievements unlocked, the weekly goal and your streak, and a line
+  to cheer it; records, goals and achievements set off fireworks across the whole screen.
 
 **Training programs**
 - **Wendler 5/3/1**: four days a week, with training maxes that go up each cycle, and Boring But Big or First Set Last.
@@ -83,6 +84,9 @@ see a program working over the weeks.
 - Charts of heaviest weight, estimated one-rep max, best reps or volume, per exercise and over time, and of each
   cardio activity's distance, time, pace or speed, calories and heart rate.
 - Personal records, goals to aim for, and a bodyweight log.
+- Achievements, worked out from your workouts: workout milestones, weekly streaks, records beaten, plates on the bench, squat
+  and deadlift, weight lifted, distance and time on cardio, and more, each with the day you earned it and a bar to the next.
+  History cheers a new best streak and says what keeps one going.
 - Pick one exercise on Progress for its card: its records, the heaviest weight it has done for 1, 3, 5, 8 and 10
   reps, its goal, whether it has stalled, and its muscle, above every session of it.
 - Sets per muscle each week against your recent average, and your exercises' muscles and equipment, guessed from

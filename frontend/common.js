@@ -64,28 +64,64 @@ function timestampFromDateInput(value) {
   return new Date(year, month - 1, day, 12).getTime();
 }
 
-// A small firework: sparks flying out of an element, gone after a second, for a record. Skipped for anyone who asks for
-// less motion. Its colours are inside it: records.js, before this moved here, kept them in a const of its own.
-function celebrate(origin, sparks = 28, reach = 1) {
+// A firework show over the whole screen, for something worth it. The first burst goes up from what earned it (the button
+// tapped, the summary's title), so the cause is plain, and more follow across the screen, a moment apart, each falling a
+// little as it fades. The bigger the moment, the more bursts, and from a goal up, confetti falls across the whole width too.
+// It is over everything (the big view and the banner included) and never in the way of a tap, and it is skipped for anyone
+// who asks for less motion. Its colours are inside it: records.js, before this moved here, kept them in a const of its own.
+const celebrationSizes = {
+  record:{ bursts:3, sparks:24, confetti:0, last:1700 },
+  goal:{ bursts:5, sparks:28, confetti:60, last:2600 },
+  achievement:{ bursts:7, sparks:30, confetti:90, last:3200 }
+};
+
+function celebrate(origin, size = 'record') {
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  const colours = ['#f5b83d', '#ff6b6b', '#5bd6a4', '#8183f4', '#4cc3ff'];
-  const box = origin.getBoundingClientRect();
-  const burst = document.createElement('div');
-  burst.className = 'firework';
-  burst.setAttribute('aria-hidden', 'true');
-  burst.style.left = `${box.left + box.width / 2}px`;
-  burst.style.top = `${box.top + box.height / 2}px`;
-  for (let i = 0; i < sparks; i++) {
-    const angle = (i / sparks) * 2 * Math.PI + Math.random() * 0.3;
-    const distance = (60 + Math.random() * 70) * reach;
-    const spark = document.createElement('i');
-    spark.style.setProperty('--dx', `${Math.cos(angle) * distance}px`);
-    spark.style.setProperty('--dy', `${Math.sin(angle) * distance}px`);
-    spark.style.background = colours[i % colours.length];
-    burst.appendChild(spark);
+  const show = celebrationSizes[size] || celebrationSizes.record;
+  const colours = ['#f5b83d', '#ff6b6b', '#5bd6a4', '#8183f4', '#4cc3ff', '#ff8ad8'];
+  const width = innerWidth, height = innerHeight, reach = Math.min(width, height);
+  const box = origin ? origin.getBoundingClientRect() : null;
+  const stage = document.createElement('div');
+  stage.className = 'firework';
+  stage.dataset.size = size in celebrationSizes ? size : 'record';
+  stage.setAttribute('aria-hidden', 'true');
+  for (let burstIndex = 0; burstIndex < show.bursts; burstIndex++) {
+    // The first from what earned it, where it is on screen; the rest spread over the upper two thirds, left to right in turn.
+    const fromOrigin = burstIndex === 0 && box && box.width > 0 && box.bottom > 0 && box.top < height;
+    const across = (burstIndex + 0.5) / show.bursts;
+    const x = fromOrigin ? box.left + box.width / 2 : width * (0.08 + 0.84 * (across + (Math.random() - 0.5) / show.bursts));
+    const y = fromOrigin ? box.top + box.height / 2 : height * (0.15 + Math.random() * 0.45);
+    const burst = document.createElement('div');
+    burst.className = 'firework-burst';
+    burst.style.left = `${x}px`;
+    burst.style.top = `${y}px`;
+    burst.style.setProperty('--delay', `${burstIndex === 0 ? 0 : burstIndex * 0.22 + Math.random() * 0.15}s`);
+    const tint = colours[burstIndex % colours.length];
+    for (let i = 0; i < show.sparks; i++) {
+      const angle = (i / show.sparks) * 2 * Math.PI + Math.random() * 0.3;
+      const distance = reach * (0.16 + Math.random() * 0.16);
+      const spark = document.createElement('i');
+      spark.style.setProperty('--dx', `${Math.cos(angle) * distance}px`);
+      spark.style.setProperty('--dy', `${Math.sin(angle) * distance}px`);
+      spark.style.setProperty('--fall', `${reach * 0.08}px`);
+      // Each burst mostly its own colour, with a few of the others through it.
+      spark.style.color = i % 4 ? tint : colours[(burstIndex + i) % colours.length];
+      burst.appendChild(spark);
+    }
+    stage.appendChild(burst);
   }
-  document.body.appendChild(burst);
-  setTimeout(() => burst.remove(), 1200);
+  for (let i = 0; i < show.confetti; i++) {
+    const piece = document.createElement('b');
+    piece.style.left = `${Math.random() * 100}%`;
+    piece.style.background = colours[i % colours.length];
+    piece.style.setProperty('--delay', `${Math.random() * 0.6}s`);
+    piece.style.setProperty('--sway', `${(Math.random() - 0.5) * reach * 0.3}px`);
+    piece.style.setProperty('--spin', `${(Math.random() < 0.5 ? -1 : 1) * (360 + Math.random() * 540)}deg`);
+    piece.style.setProperty('--drop', `${height + 40}px`);
+    stage.appendChild(piece);
+  }
+  document.body.appendChild(stage);
+  setTimeout(() => stage.remove(), show.last);
 }
 
 // A cardio session (the Cardio page) is saved as a workout with kind 'cardio' and no exercises; anything else is a strength

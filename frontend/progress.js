@@ -538,6 +538,31 @@ function renderExerciseCard() {
   $('exerciseFacts').innerHTML = tiles.join('') || '<li class="empty">Nothing is logged for it yet.</li>';
 }
 
+// ---- Achievements --------------------------------------------------------------
+// A row for each kind (achievements.js): the best tier earned and its day, a mark for each tier, and a bar to the next. From the
+// workouts as they were logged (not converted), so a plate counts in the unit it was loaded in.
+function renderAchievements() {
+  const { families, earned } = achievementsOf(loadedWorkouts);
+  const total = families.reduce((sum, family) => sum + family.tiers.length, 0);
+  const latest = earned.reduce((newest, item) => !newest || item.at >= newest.at ? item : newest, null);
+  $('achievementsState').textContent = earned.length ? `${earned.length} of ${total} earned · latest ${latest.name}` : `0 of ${total} earned`;
+  const names = new Map(earned.map(item => [item.id, item]));
+  $('achievementList').innerHTML = families.map(family => {
+    const top = family.earned.length ? names.get(`${family.id}:${family.tiers[family.earned.length - 1]}`) : null;
+    const percent = family.next === null ? 100 : Math.min(100, Math.round(family.value / family.next * 100));
+    const marks = family.tiers.map((tier, index) => `<i class="${index < family.earned.length ? 'on' : ''}"></i>`).join('');
+    const now = family.reads ? ` · now ${family.reads}` : '';
+    const next = family.next === null ? `All ${family.tiers.length} earned${family.reads ? ` · ${family.reads}` : ''}` : `Next: ${family.nextName}${now}`;
+    return `<li class="achievement${top ? ' earned' : ''}"><div class="achievement-head"><strong>${escapeHTML(top ? top.name : family.title)}</strong>`
+      + `<span class="achievement-marks" role="img" aria-label="${family.earned.length} of ${family.tiers.length} earned">${marks}</span></div>`
+      + `<span>${escapeHTML(top ? `Earned ${longDate(top.at)}` : 'Not earned yet')}</span>`
+      + `<div class="goal-bar achievement-bar" role="progressbar" aria-label="${escapeHTML(`${family.title}, toward the next`)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}"><span></span></div>`
+      + `<span class="achievement-next">${escapeHTML(next)}</span></li>`;
+  }).join('');
+  // Through the DOM, as the goals' bars are: the Content-Security-Policy refuses style="" written into markup.
+  $('achievementList').querySelectorAll('.achievement-bar').forEach(bar => { bar.firstElementChild.style.width = `${bar.getAttribute('aria-valuenow')}%`; });
+}
+
 // ---- Personal records -----------------------------------------------------
 // Each exercise's best, from every saved workout whatever the filters: the heaviest weight (with the most reps done at
 // it), the best estimated one-rep max, the most reps in a set without weight, and a timed exercise's longest hold. Each
@@ -758,6 +783,7 @@ async function loadProgress() {
     renderRecords();
     renderStalls();
     renderGoals();
+    renderAchievements();
     // muscles.js, loaded after this, counts the same workouts.
     renderMuscles();
     renderLibrary();
@@ -766,6 +792,7 @@ async function loadProgress() {
     $('chartEmpty').textContent = 'Progress data could not be loaded.';
     $('recordsList').innerHTML = '<li class="empty">Your records show once your workouts load.</li>';
     $('muscleList').innerHTML = '<li class="empty">Your sets show once your workouts load.</li>';
+    $('achievementList').innerHTML = '<li class="empty">Your achievements show once your workouts load.</li>';
     console.error('Unable to load progress.', error);
   }
 }
@@ -809,6 +836,8 @@ window.serverStateReady.then(() => {
 // The theme changes the chart's colours; the weight unit changes its numbers, and the distance unit a cardio chart's and
 // the cardio records.
 window.addEventListener('settingschange', () => {
+  // The units shown and the weekly goal decide some tiers.
+  if (loadedWorkouts.length) renderAchievements();
   const converted = loadedWorkouts.map(workout => inUnit(workout));
   if (converted.some((workout, index) => workout !== allWorkouts[index])) {
     allWorkouts = converted;

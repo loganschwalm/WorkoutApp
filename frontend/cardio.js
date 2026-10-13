@@ -49,6 +49,10 @@ function cardioElapsed(session = cardioActive, now = Date.now()) {
   return Math.max(0, ((session.pausedAt || now) - session.startedAt - (Number(session.pausedTotal) || 0)) / 1000);
 }
 
+// Every saved workout, strength too, as last loaded (null until then): what a session's achievements and the week are counted
+// against, since they count both kinds.
+let cardioEverything = null;
+
 // Every session there is: those saved, and those finished here that are still waiting to upload.
 function allCardio() {
   const pending = readPendingWorkouts().filter(isCardio).filter(workout => !cardioSessions.some(saved => saved.clientId && saved.clientId === workout.clientId));
@@ -384,6 +388,8 @@ async function saveCardioForm() {
   // Records are against every session before this one, so they are worked out before it joins them. Then it goes into
   // the upload queue, where nothing can lose it.
   const records = newCardioRecords(workout, allCardio());
+  // Achievements are counted against everything before it, both kinds, and only once all of that has loaded.
+  const history = cardioEverything ? uniqueSessions([...cardioEverything, ...readPendingWorkouts()]) : null;
   queuePendingWorkout(workout);
   if (mode === 'finish') {
     cardioActive = null;
@@ -391,7 +397,7 @@ async function saveCardioForm() {
   }
   closeCardioForm();
   renderCardio();
-  showCardioSummary(workout, records);
+  showCardioSummary(workout, records, history);
   const synced = await flushPendingWorkouts();
   showFeedback(synced ? `“${workout.name}” saved.` : `“${workout.name}” is saved on this device and will sync when the server is reachable again.`, 'success');
   if (synced) await loadCardioSessions();
@@ -399,7 +405,11 @@ async function saveCardioForm() {
 
 // ---- After a session ------------------------------------------------------
 
-function showCardioSummary(workout, records) {
+// What the session did, its records, and what it earned (achievements.js) against `history`, the sessions before it, both
+// kinds (null when they have not all loaded, which earns nothing), with a line to cheer it and fireworks for the best of it.
+function showCardioSummary(workout, records, history = null) {
+  const rewards = finishRewards(history, workout);
+  const streakLine = rewardStreakLine(rewards);
   const activity = activityOf(workout);
   const cardio = workout.cardio || {};
   const distance = sessionDistance(workout), rate = sessionRate(workout);
@@ -414,11 +424,18 @@ function showCardioSummary(workout, records) {
   $('cardioSummaryStats').innerHTML = stats.map(([value, label]) => `<li><strong>${escapeHTML(value)}</strong><span>${escapeHTML(label)}</span></li>`).join('');
   $('cardioSummaryRecords').hidden = !records.length;
   $('cardioSummaryRecordList').innerHTML = records.map(record => `<li>${escapeHTML(record)}</li>`).join('');
+  $('cardioSummarySplash').textContent = splashLine(rewardSplashKind(rewards, records));
+  $('cardioSummaryAchievements').hidden = !rewards.earned.length;
+  renderEarnedAchievements($('cardioSummaryAchievementList'), rewards.earned);
+  $('cardioSummaryStreak').textContent = streakLine;
+  $('cardioSummaryStreak').hidden = !streakLine;
   $('cardioSummaryProgress').href = `progress.html?exercise=${encodeURIComponent(cardioKey(workout))}`;
   offerActivityExport($('cardioSummaryExport'), workout);
   $('cardioSummary').hidden = false;
   $('cardioSummary').scrollIntoView({ behavior:'smooth', block:'start' });
-  if (records.length) celebrate($('cardioSummaryTitle'), 40, 1.2);
+  if (rewards.earned.length) celebrate($('cardioSummaryTitle'), 'achievement');
+  else if (rewards.weekReached) celebrate($('cardioSummaryTitle'), 'goal');
+  else if (records.length) celebrate($('cardioSummaryTitle'), 'record');
 }
 
 // ---- The sessions so far --------------------------------------------------
@@ -503,7 +520,9 @@ function renderCardio() {
 
 async function loadCardioSessions() {
   try {
-    cardioSessions = (await getSavedWorkouts()).filter(isCardio).sort((a, b) => b.createdAt - a.createdAt);
+    const everything = await getSavedWorkouts();
+    cardioEverything = everything;
+    cardioSessions = everything.filter(isCardio).sort((a, b) => b.createdAt - a.createdAt);
     cardioLoaded = true;
     cardioReachable = true;
   } catch (error) {
