@@ -47,7 +47,7 @@ library, with SQLite for storage, so there is no build step, no package manager 
   week to try when a lift has stalled for three weeks (listed on Progress too).
 - A rest timer starts after each set, with a sound and vibration when it's over (−30s/+30s, pause, skip).
 - Big view, a button in the workout, shows the set to do and the rest clock in very large type, to read from a few feet away
-  on a bench.
+  on a bench, and can open itself for each rest if you choose.
 - Swap an exercise when the equipment is taken, add one mid-workout, superset two, or hold a timed one like a plank.
 - Correct or undo a set, keep notes per workout or per exercise, and rate how many reps you had left.
 - Same as last set logs the previous set again in one tap, and How to do it, in an exercise's ⋯ menu, gives a few

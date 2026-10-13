@@ -48,17 +48,27 @@ def run(t):
     entry_keys = ev("settingFields.map(field => Object.keys(field.defaults))")
     flat = [key for keys in entry_keys for key in keys]
     check('every entry has a default for each setting it owns, and no two entries own the same one', len(flat) == len(set(flat)) and all(isinstance(keys, list) for keys in entry_keys), flat)
-    check('the defaults are what they were: every setting there is', sorted(flat) == sorted(ev('Object.keys(defaultSettings)')) and len(flat) == 22, sorted(flat))
+    check('the defaults are what they were: every setting there is', sorted(flat) == sorted(ev('Object.keys(defaultSettings)')) and len(flat) == 23, sorted(flat))
     check('and a form showing them reads back as them, apart from the distance unit, which follows the weight unit until it is chosen',
           ev("applySettings(defaultSettings); JSON.stringify(Object.fromEntries(Object.entries(readSettingsForm()).sort()))") == ev("JSON.stringify(Object.fromEntries(Object.entries(defaultSettings).sort()))"))
     chosen = {'unit': 'kg', 'distanceUnit': 'km', 'weeklyGoal': 5, 'restDuration': 120, 'soundVolume': 65, 'alertSound': 'chime', 'autoRest': False, 'confirmEnd': False,
-              'trackEffort': False, 'warmupSets': False, 'keepAwakeVideo': False, 'soundEnabled': False, 'vibrate': False, 'playThroughSilent': False,
+              'trackEffort': False, 'warmupSets': False, 'bigViewOnRest': True, 'keepAwakeVideo': False, 'soundEnabled': False, 'vibrate': False, 'playThroughSilent': False,
               'schedule': {'days': [1, 4], 'time': '07:45'}, 'theme': 'ocean', 'barKg': 15, 'platesKg': [25, 10], 'stepKg': 1}
     read = ev(f"applySettings({{ ...defaultSettings, ...{json.dumps(chosen)} }}); (() => {{ const c = readSettingsForm(); return JSON.stringify(Object.fromEntries(Object.entries(c).sort())); }})()")
     expected = {**json.loads(ev('JSON.stringify(defaultSettings)')), **chosen}
     check('what is chosen comes back as chosen', json.loads(read) == expected, [(k, json.loads(read).get(k), expected[k]) for k in expected if json.loads(read).get(k) != expected[k]])
     check('and what is no longer one of the choices comes back as the default', ev("""(() => { applySettings({ ...defaultSettings, unit: 'oz', weeklyGoal: 9, alertSound: 'bogus', restDuration: 5, soundVolume: 500 });
         const read = readSettingsForm(); return [read.unit, read.weeklyGoal, read.alertSound, read.restDuration, read.soundVolume]; })()""") == ['lbs', 3, 'beep', 15, 100])
+    # A tick box that is off unless turned on (the big view opening itself is not for everyone), where the rest are on unless turned off.
+    check('the big view opening itself is off to start with, and its tick box is clear', ev("defaultSettings.bigViewOnRest") is False
+          and ev("applySettings(defaultSettings); document.getElementById('bigViewSetting').checked") is False)
+    check('a setting never chosen (an account from before it, or one imported) is off too, not on',
+          ev("(() => { const { bigViewOnRest, ...older } = defaultSettings; applySettings(older); return document.getElementById('bigViewSetting').checked; })()") is False)
+    summary_off = ev("applySettings(defaultSettings); document.getElementById('settings-workout-state').textContent")
+    summary_on = ev("applySettings({ ...defaultSettings, bigViewOnRest: true }); document.getElementById('settings-workout-state').textContent")
+    on, total = (int(part) for part in summary_off.replace(' on', '').split(' of '))
+    check('the row counts it only when it is on', summary_on == f'{on + 1} of {total} on' and on == total - 1, [summary_off, summary_on])
+    ev("applySettings(defaultSettings)")
     check('the alert sounds in the table have tones to play, and no tone is left out',
           sorted(ev('alertSoundOptions.map(([name]) => name)')) == sorted(ev('Object.keys(alertTones)')), ev('Object.keys(alertTones)'))
     check('a control left to a browser that cannot do it is hidden, and the rest are shown', ev("""settingFields.every(field => true)

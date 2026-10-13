@@ -728,6 +728,8 @@ function restAfterSet() {
   // The round is done: rest, then the superset starts again from its first exercise with sets left.
   const first = supersetMembers(activeSession, index).length > 1 ? firstWithSetsLeft(activeSession, index) : null;
   if (first !== null && first !== index) moveWithinSuperset(first);
+  // The rest is what the big view is for (big-view.js), if Settings asks for it. One closed by hand stays closed until the next set.
+  if (getWorkoutSettings().bigViewOnRest === true) openBigView();
 }
 
 // Logs a set: the one in the entry fields (Complete set), or the entry given (Same as last set), after the checks and

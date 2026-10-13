@@ -18,14 +18,15 @@ const canPlayThroughSilent = 'audioSession' in navigator;
 
 // ---- Settings that are one control ------------------------------------------------
 
-// A tick box. On unless it was turned off; row, if there is one, is the id of its label, which is hidden when available()
-// says the browser cannot do what it is for.
-function checkSetting(key, id, label, { row, available } = {}) {
+// A tick box. On unless it was turned off, or with `off`, off unless it was turned on: for what would be unwelcome to have
+// without asking. row, if there is one, is the id of its label, which is hidden when available() says the browser cannot do
+// what it is for.
+function checkSetting(key, id, label, { row, available, off = false } = {}) {
   return {
-    defaults:{ [key]:true },
+    defaults:{ [key]:!off },
     html:() => `<label class="setting-check"${row ? ` id="${row}"` : ''}><input id="${id}" type="checkbox" /> ${label}</label>`,
     show(settings) {
-      getSettingElement(id).checked = settings[key] !== false;
+      getSettingElement(id).checked = off ? settings[key] === true : settings[key] !== false;
       if (row && available) getSettingElement(row).hidden = !available();
     },
     read:() => ({ [key]:getSettingElement(id).checked })
@@ -274,15 +275,16 @@ const settingSections = [
     },
     fields:[scheduleSetting] },
   { id:'workout', title:'During a workout',
-    // How many of the options that this browser has are on.
+    // How many of the options that this browser has are on: the first are on unless turned off, the big view's off unless on.
     summary:settings => {
       const keys = ['confirmEnd', 'trackEffort', 'warmupSets', ...('wakeLock' in navigator ? [] : ['keepAwakeVideo'])];
-      return `${keys.filter(key => settings[key] !== false).length} of ${keys.length} on`;
+      return `${keys.filter(key => settings[key] !== false).length + (settings.bigViewOnRest === true ? 1 : 0)} of ${keys.length + 1} on`;
     },
     fields:[
     checkSetting('confirmEnd', 'confirmEndSetting', 'Ask before cancelling a workout with sets logged'),
     checkSetting('trackEffort', 'effortSetting', 'Ask how many reps each set had left (effort)'),
     checkSetting('warmupSets', 'warmupSetting', 'Suggest warm-up sets for barbell lifts'),
+    checkSetting('bigViewOnRest', 'bigViewSetting', 'Open the big view when a rest starts, to read the clock from a distance', { off:true }),
     // Only where the browser has no Wake Lock of its own (a plain http:// address): elsewhere the screen stays on anyway.
     checkSetting('keepAwakeVideo', 'keepAwakeSetting', 'Keep the screen on with a silent video, as this browser will not do it itself',
       { row:'keepAwakeSettingRow', available:() => !('wakeLock' in navigator) })

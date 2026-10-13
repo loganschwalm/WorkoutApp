@@ -174,7 +174,8 @@ own workouts, templates, and settings.
   declined) closes the view, so the page's message and its field are there. Escape or × closes it and the focus goes back to
   the button; Tab stays inside it. It does not change how the screen is kept awake, which is the item above and goes on
   under it. A web page cannot draw on the lock screen, so this is for a screen kept on, not a locked one. It sits above the
-  page and its tab bar and under the feedback banner and the rest flash, so a message is still seen.
+  page and its tab bar and under the feedback banner and the rest flash, so a message is still seen. Settings, During a
+  workout, can open it by itself after every set (see below).
 - On an iPhone, sound the phone paused (a locked screen, a call, another app taking the audio) is started again
   before the next alert, rather than leaving every alert after it silent.
 - Move to the next exercise with the rest timer reset to that exercise's rest.
@@ -777,6 +778,10 @@ the button that opened them. Settings include:
 - Cancel confirmation toggle: whether Cancel workout asks first when sets have been logged.
 - Effort toggle: whether to ask how many reps each set had left.
 - Warm-up toggle: whether to suggest warm-up sets for barbell lifts.
+- Big view toggle: whether the big view opens by itself when a rest starts, after each set (it is off to start with, unlike the
+  tick boxes above it, since a full-screen view is not for everyone to have unasked). It leaves a superset's next exercise, which
+  has no rest, as it is. A view closed by hand stays closed until the next set, and a set logged from inside it leaves it open.
+  A setting never chosen, as in an account from before it was added, is off.
 - Keep-awake video toggle, shown only where the browser has no Wake Lock of its own (a plain `http://` address):
   whether to keep the screen on during a workout with a silent video. On by default.
 - Bar and plates: the bar's weight, the plates you have, and the weight step, for pounds and kilograms
