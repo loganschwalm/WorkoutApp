@@ -493,8 +493,10 @@ async function loadSavedWorkouts() {
     // The program card's Progress is drawn from the workouts, which have only now arrived.
     renderProgram();
     renderScheduleNudge();
-    // A workout already under way can say what finishing it earns, now the whole history is here.
+    // A workout already under way can say what finishing it earns, and last week can be looked back on, now the whole
+    // history is here.
     if (activeSession) renderReach();
+    renderRecap();
     workoutsReachable = true;
     renderStorageStatus();
     return workouts;
@@ -1040,6 +1042,8 @@ function applyUnit() {
   // Once the list has loaded, whenever that was: the unit can arrive from the server while the page is still loading.
   if (savedWorkoutsLoaded) renderSavedWorkouts(savedWorkouts);
   renderTemplates();
+  // Last week's totals are in the units shown, and its streak is against the weekly goal: both are settings.
+  renderRecap();
 }
 
 window.addEventListener('settingschange', applyUnit);

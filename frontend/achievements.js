@@ -322,3 +322,64 @@ function rewardSplashKind(rewards, records, program = null) {
   return rewards.earned.length ? 'achievement' : program && program.completed ? 'cycle' : records.length || (program && program.beat) ? 'record'
     : rewards.weekReached ? 'streak' : 'finish';
 }
+
+// ---- The week in review ----------------------------------------------------------
+// A week's recap, for the Tracker's Last week card (recap.js): Monday `monday` (a Date at midnight, as startOfWeek gives) to
+// the Sunday after, out of every session, worked out as the achievements are and in the units shown. Null when the week has
+// no sessions. Its records are those each workout was told, from one replay of everything up to the week's end; its
+// achievements those earned in it. A week is over, so it has no grace: it reached the goal or it did not, and its streak is
+// the run of weeks at the goal that ends with it, or none.
+function weekRecapOf(sessions, monday, options = {}) {
+  const context = achievementContext(options);
+  const start = monday.getTime(), end = addDays(monday, 7).getTime(), before = addDays(monday, -7).getTime();
+  const upTo = uniqueSessions(sessions).filter(session => session.createdAt < end).sort((a, b) => a.createdAt - b.createdAt);
+  const week = upTo.filter(session => session.createdAt >= start);
+  if (!week.length) return null;
+  let bests = {};
+  const cardioBestsSoFar = new Map(), records = [];
+  upTo.forEach(session => {
+    let lines;
+    if (isCardio(session)) {
+      const had = cardioBestsSoFar.get(cardioKey(session));
+      lines = had ? cardioRecordsAgainst(session, had) : [];
+      addToCardioBests(cardioBestsSoFar, session);
+    } else {
+      lines = newRecords(session, bests);
+      bests = mergeBests(bests, session);
+    }
+    if (session.createdAt >= start) lines.forEach(line => records.push({ line, at:session.createdAt }));
+  });
+  // Each exercise's latest record of the week, newest first; the count is of all of them.
+  const latest = new Map();
+  [...records].reverse().forEach(record => { const name = record.line.split(':')[0]; if (!latest.has(name)) latest.set(name, record.line); });
+  const volumeOf = session => (session.exercises || []).filter(item => !isTimed(item)).reduce((total, item) =>
+    total + (item.sets || [{ weight:item.weight, reps:item.reps }]).reduce((sum, set) => {
+      const weight = Number(set.weight) || 0, reps = Number(set.reps) || 0;
+      return weight > 0 && reps >= 1 ? sum + convertWeight(weight, recordUnit(session), context.unit) * reps : sum;
+    }, 0), 0);
+  const setsOf = session => isCardio(session) ? 0 : (session.exercises || []).reduce((total, item) => total + (item.sets ? item.sets.length : 1), 0);
+  const distanceOf = session => {
+    const distance = Number(session.cardio && session.cardio.distance);
+    return isCardio(session) && distance > 0 && activityOf(session).distance === 'road' ? convertDistance(distance, enteredDistanceUnit(session), context.distanceUnit) : 0;
+  };
+  const sum = (list, measure) => list.reduce((total, session) => total + measure(session), 0);
+  const volume = sum(week, volumeOf);
+  const previous = upTo.filter(session => session.createdAt >= before && session.createdAt < start);
+  // The biggest week of lifting yet, only against three weeks of lifting or more, so a first week is not called one.
+  const earlier = new Map();
+  upTo.filter(session => session.createdAt < start && !isCardio(session)).forEach(session => {
+    const key = calendarDayKey(startOfWeek(new Date(session.createdAt)));
+    earlier.set(key, (earlier.get(key) || 0) + volumeOf(session));
+  });
+  const lifted = [...earlier.values()].filter(value => value > 0);
+  const weeks = weekCountsOf(upTo);
+  const count = weeks.get(calendarDayKey(monday)) || 0;
+  const reached = count >= context.goal;
+  const achievements = achievementsOf(upTo, options);
+  return { start, end, context, sessions:week.length, strength:week.filter(session => !isCardio(session)).length, cardio:week.filter(isCardio).length,
+    seconds:sum(week, session => Number(session.duration) > 0 ? Number(session.duration) : 0), sets:sum(week, setsOf), volume, distance:sum(week, distanceOf),
+    records:[...latest.values()], recordCount:records.length, achievements, earned:achievements.earned.filter(item => item.at >= start),
+    goal:context.goal, reached, streak:reached ? weeklyStreaks(weeks, context.goal, monday).current : 0,
+    previous:{ sessions:previous.length, volume:sum(previous, volumeOf) },
+    biggest:volume > 0 && lifted.length >= 3 && volume > Math.max(...lifted) };
+}

@@ -636,6 +636,26 @@ html[data-theme="dark"] .summary-achievements li { color:#ffe2a0; background:#3a
 /* Within reach (reach.js): what finishing the workout earns, under its heading, and what the next set would be a record of. */
 .reach-line { margin:6px 0 0; color:var(--accent); font-size:.92rem; font-weight:700; }
 .reach-hint { margin:8px 0 0; padding:8px 12px; color:var(--ink); background:var(--accent-soft); border-left:3px solid var(--accent); border-radius:8px; font-size:.92rem; font-weight:600; }
+/* Last week (recap.js), on the Tracker between workouts: a headline, the totals on one line, then what the week earned. It is
+   put away during a workout, as the cards under it are, with them when Show the rest of the Tracker brings them back. */
+body.training:not(.showing-all) .recap-card { display:none; }
+.recap-card h2 { margin-bottom:0; }
+.recap-card .recap-best { margin-top:12px; }
+.recap-card .recap-best + .recap-headline { margin-top:4px; }
+.recap-card .summary-stats { display:flex; flex-wrap:wrap; gap:4px 20px; margin:12px 0 0; }
+.recap-card .summary-stats li { display:flex; flex-direction:row-reverse; justify-content:flex-end; align-items:baseline; gap:6px; padding:0; border:0; }
+.recap-card .summary-stats strong { font-size:1rem; font-variant-numeric:normal; }
+/* Its achievements a line each, Share beside the name (what each took is on Progress), and its records folded under their count. */
+.recap-card .summary-achievements li { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:4px 4px 4px 14px; }
+.recap-card .summary-achievements li > span { display:none; }
+.recap-card .summary-achievements .achievement-share { margin:0; }
+.recap-records { margin-top:14px; }
+.recap-records > summary { display:flex; align-items:center; gap:6px; color:var(--accent); font-weight:700; cursor:pointer; }
+.recap-records > summary::-webkit-details-marker { display:none; }
+.recap-records > summary::before { content:"\25B8"; font-size:.9em; }
+.recap-records[open] > summary::before { content:"\25BE"; }
+.recap-records ul { margin-top:8px; }
+.recap-card .recap-more { color:var(--muted); background:none; border-color:transparent; padding-top:0; padding-bottom:0; }
 /* The Tracker's line to start on, under the page's status, between workouts only. */
 .splash { margin:2px 0 0; color:var(--accent); font-size:.95rem; font-weight:600; font-style:italic; }
 body.training .splash { display:none; }

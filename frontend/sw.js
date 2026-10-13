@@ -6,7 +6,7 @@
 //
 // Every request goes to the network first, so a deploy reaches the next load without
 // bumping anything (unless that load's network is too slow; see NETWORK_WAIT). Bump VERSION only to drop old caches, e.g. when PRECACHE changes.
-const VERSION = 'v31';
+const VERSION = 'v32';
 const CACHE = `workout-tracker-${VERSION}`;
 
 // Files that are the same for everyone, so they are safe to fetch at install time.
@@ -49,6 +49,7 @@ const PRECACHE = [
   '/achievements.js',
   '/reach.js',
   '/achievement-card.js',
+  '/recap.js',
   '/activity-export.js',
   '/cardio.js',
   '/history.js',

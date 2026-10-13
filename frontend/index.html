@@ -89,6 +89,16 @@
       <button class="link-button summary-export" id="summaryExport" type="button" hidden>Download for Strava (.tcx)</button>
     </section>
 
+    <section class="card recap-card" id="recapCard" aria-labelledby="recapTitle" hidden>
+      <div class="section-heading"><div><h2 id="recapTitle">Last week</h2><p class="subtitle" id="recapRange"></p></div><button class="secondary" id="recapDone" type="button">Done</button></div>
+      <p class="summary-splash recap-best" id="recapBest" hidden>Your biggest week of lifting yet.</p>
+      <p class="summary-headline recap-headline" id="recapHeadline"></p>
+      <p class="summary-line" id="recapCompare" hidden></p>
+      <ul class="summary-stats" id="recapStats"></ul>
+      <div class="summary-records summary-achievements" id="recapAchievements" hidden><h3>Achievements</h3><ul id="recapAchievementList"></ul></div>
+      <details class="recap-records summary-records" id="recapRecords" hidden><summary id="recapRecordsTitle">Personal records</summary><ul id="recapRecordList"></ul></details>
+    </section>
+
     <section class="card between-workouts schedule-card" id="scheduleCard" aria-label="Training schedule" hidden>
       <p class="schedule-text" id="scheduleText"></p>
       <div class="schedule-actions"><button class="primary" id="scheduleStart" type="button" hidden></button><button class="link-button" id="scheduleChange" type="button">Change schedule</button></div>
@@ -187,6 +197,7 @@
   <script src="achievements.js"></script>
   <script src="reach.js"></script>
   <script src="achievement-card.js"></script>
+  <script src="recap.js"></script>
   <script src="summary.js"></script>
   <script src="activity-export.js"></script>
   <script src="templates.js"></script>

@@ -59,6 +59,8 @@ library, with SQLite for storage, so there is no build step, no package manager 
 - While you train, it says what is within reach: the reps at this weight that would be a record, a plate milestone close by,
   and what finishing the workout earns.
 - Share an achievement as a picture for social media, drawn in your theme.
+- Each new week, the Tracker looks back on the last: your workouts against the weekly goal and your streak, how it compares
+  with the week before, its totals, records and achievements.
 
 **Training programs**
 - **Wendler 5/3/1**: four days a week, with training maxes that go up each cycle, and Boring But Big or First Set Last.

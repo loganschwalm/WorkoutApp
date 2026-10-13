@@ -810,6 +810,22 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
   sheet still counts as its answer. The share sheet takes files only over HTTPS; at a plain `http://` address, and where
   the share sheet is refused, the picture is saved as a file instead, and the page says so. Closing the share sheet does
   nothing more.
+- **Last week** (`recap.js`, from `weekRecapOf`): from the first visit of a new week, the Tracker has a card looking back on the
+  week before, Monday to Sunday, between workouts (a workout puts it away, as it does the cards under it):
+  - "Your biggest week of lifting yet.", when its volume beats every week before it, and there are at least three weeks of
+    lifting to beat, so a first week is never called one;
+  - a headline: its workouts against the weekly goal and the streak it makes ("6 workouts, your goal of 3 reached: a 5-week
+    streak."). A week is over, so it has no grace: one short of the goal claims no streak, and says so looking forward ("2
+    workouts. A new streak can start this week."), never that a streak was lost;
+  - how it compares with the week before ("1 workout more than the week before, and 12% more volume."), when that week had
+    any;
+  - its totals on a line: workouts, time, sets, volume and distance, each where there is one;
+  - the achievements earned in it, a line each with Share, and its personal records, folded under their count, each
+    exercise's latest of the week, up to three, and how many more. The records are those each of its workouts was told,
+    from one replay of the history up to the week's end.
+  It is worked out from the history, in the units shown and against the weekly goal as it is now, and only once all of it
+  has loaded. A week with nothing in it has no card: it looks back at what was done, never at what was not. Done puts it
+  away until the next week, kept on this device by the week's Monday.
 - **Encouraging lines** (`splashLine`): plain, picked at random when something happens (never while drawing), and not the same
   twice running in a tab. The Tracker has one under its status between workouts, picked once a visit and gone while a workout
   is on; the summaries of a finished workout and session pick one for the biggest thing they did (an achievement, a record,
