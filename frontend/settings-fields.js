@@ -185,6 +185,15 @@ const welcomeSetting = {
   read:current => ({ welcomed:current.welcomed === true })
 };
 
+// Which release's What's new (whats-new.js) the account has seen, so the card shows once on every device. Like `welcomed`, no
+// control says it and `read` keeps what is kept; it has no place in the dialog at all. Empty until a card is seen.
+const whatsNewSetting = {
+  defaults:{ seenWhatsNew:'' },
+  html:() => '',
+  show() {},
+  read:current => ({ seenWhatsNew:typeof current.seenWhatsNew === 'string' ? current.seenWhatsNew : '' })
+};
+
 // ---- Bar and plates --------------------------------------------------------------------
 // The bar, the plates there are to load on it, and the step the weight buttons and Go heavier go up by. Each unit keeps
 // its own, since a gym's pound plates are not its kilogram ones, and switching units never turns one into the other.
@@ -281,7 +290,8 @@ const settingSections = [
     distanceSetting,
     choiceSetting('weeklyGoal', 'weeklyGoalSetting', 'Weekly goal', [1, 2, 3, 4, 5, 6, 7].map(goal => [goal, `${goal} workout${goal === 1 ? '' : 's'} a week`]), weeklyGoalFrom, 3),
     // Last, under the settings the welcome itself sets up; the summary above leaves it out, as there is nothing to say of it.
-    welcomeSetting
+    welcomeSetting,
+    whatsNewSetting
   ] },
   { id:'schedule', title:'Training schedule',
     summary:settings => {

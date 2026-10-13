@@ -497,6 +497,7 @@ async function loadSavedWorkouts() {
     // history is here.
     if (activeSession) renderReach();
     renderRecap();
+    renderWhatsNew();
     workoutsReachable = true;
     renderStorageStatus();
     return workouts;
@@ -1042,8 +1043,10 @@ function applyUnit() {
   // Once the list has loaded, whenever that was: the unit can arrive from the server while the page is still loading.
   if (savedWorkoutsLoaded) renderSavedWorkouts(savedWorkouts);
   renderTemplates();
-  // Last week's totals are in the units shown, and its streak is against the weekly goal: both are settings.
+  // Last week's totals are in the units shown, and its streak is against the weekly goal: both are settings. What's new goes
+  // once it has been seen, which is a setting too.
   renderRecap();
+  renderWhatsNew();
 }
 
 window.addEventListener('settingschange', applyUnit);

@@ -826,6 +826,14 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
   It is worked out from the history, in the units shown and against the weekly goal as it is now, and only once all of it
   has loaded. A week with nothing in it has no card: it looks back at what was done, never at what was not. Done puts it
   away until the next week, kept on this device by the week's Monday.
+- **What's new** (`whats-new.js`): once a release, the Tracker has a card for someone who was training before it, saying
+  what the app has learned since, a line for each thing (its name, then what it does), the first three showing and the rest
+  folded under how many there are, with a link where one helps (Achievements opens its row on Progress, through
+  `progress.html#achievements`). It is shown to an account with a workout older than the release's first day, once the
+  whole history has loaded, and between workouts. An account whose workouts all came after the release (one made since,
+  which the welcome showed the app to) has nothing to catch up on and never sees it. Done saves the release as seen in
+  `seenWhatsNew`, a setting with no control of its own (as `welcomed` is), so the card is seen once on every device. A new
+  release adds its list to `whatsNewItems` and moves `whatsNewRelease` on.
 - **Encouraging lines** (`splashLine`): plain, picked at random when something happens (never while drawing), and not the same
   twice running in a tab. The Tracker has one under its status between workouts, picked once a visit and gone while a workout
   is on; the summaries of a finished workout and session pick one for the biggest thing they did (an achievement, a record,

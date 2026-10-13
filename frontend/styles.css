@@ -656,6 +656,12 @@ body.training:not(.showing-all) .recap-card { display:none; }
 .recap-records[open] > summary::before { content:"\25BE"; }
 .recap-records ul { margin-top:8px; }
 .recap-card .recap-more { color:var(--muted); background:none; border-color:transparent; padding-top:0; padding-bottom:0; }
+/* What's new (whats-new.js): Last week's card, with a line for each thing new, its name in bold over what it does. */
+.whats-new-list { display:grid; gap:12px; margin:14px 0 0; padding:0; list-style:none; }
+.whats-new-list li { display:grid; gap:2px; padding-left:14px; border-left:3px solid var(--accent); }
+.whats-new-list strong { color:var(--ink); }
+.whats-new-list span { color:var(--muted); font-size:.92rem; }
+.whats-new-list .past-sessions-link { justify-self:start; padding:10px 0; }
 /* The Tracker's line to start on, under the page's status, between workouts only. */
 .splash { margin:2px 0 0; color:var(--accent); font-size:.95rem; font-weight:600; font-style:italic; }
 body.training .splash { display:none; }

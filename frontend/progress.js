@@ -797,6 +797,10 @@ async function loadProgress() {
     renderStalls();
     renderGoals();
     renderAchievements();
+    if (location.hash === '#achievements') {
+      $('achievementsFold').open = true;
+      $('achievementsCard').scrollIntoView({ block:'start' });
+    }
     // muscles.js, loaded after this, counts the same workouts.
     renderMuscles();
     renderLibrary();

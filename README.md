@@ -59,6 +59,7 @@ library, with SQLite for storage, so there is no build step, no package manager 
 - While you train, it says what is within reach: the reps at this weight that would be a record, a plate milestone close by,
   and what finishing the workout earns.
 - Share an achievement as a picture for social media, drawn in your theme.
+- After an update, a What's new card says what the app has learned since you started, once on every device.
 - Each new week, the Tracker looks back on the last: your workouts against the weekly goal and your streak, how it compares
   with the week before, its totals, records and achievements.
 

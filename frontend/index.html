@@ -90,6 +90,12 @@
       <button class="link-button summary-export" id="summaryExport" type="button" hidden>Download for Strava (.tcx)</button>
     </section>
 
+    <section class="card recap-card whats-new-card" id="whatsNewCard" aria-labelledby="whatsNewTitle" hidden>
+      <div class="section-heading"><div><h2 id="whatsNewTitle">What's new</h2><p class="subtitle" id="whatsNewRelease"></p></div><button class="secondary" id="whatsNewDone" type="button">Done</button></div>
+      <ul class="whats-new-list" id="whatsNewList"></ul>
+      <details class="recap-records whats-new-more" id="whatsNewMore" hidden><summary id="whatsNewMoreTitle">More</summary><ul class="whats-new-list" id="whatsNewMoreList"></ul></details>
+    </section>
+
     <section class="card recap-card" id="recapCard" aria-labelledby="recapTitle" hidden>
       <div class="section-heading"><div><h2 id="recapTitle">Last week</h2><p class="subtitle" id="recapRange"></p></div><button class="secondary" id="recapDone" type="button">Done</button></div>
       <p class="summary-splash recap-best" id="recapBest" hidden>Your biggest week of lifting yet.</p>
@@ -199,6 +205,7 @@
   <script src="reach.js"></script>
   <script src="achievement-card.js"></script>
   <script src="recap.js"></script>
+  <script src="whats-new.js"></script>
   <script src="summary.js"></script>
   <script src="activity-export.js"></script>
   <script src="templates.js"></script>
