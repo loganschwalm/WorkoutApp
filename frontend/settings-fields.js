@@ -172,6 +172,19 @@ const scheduleSetting = {
   }
 };
 
+// ---- The welcome ---------------------------------------------------------------------------
+
+// Whether this account has been through the welcome a new account gets on the Tracker (onboarding.js), finished or skipped. It is
+// a setting so that it follows the account: done on one device, it never shows on another. No control says it, so `read` keeps
+// what is kept (saving the form never undoes it), and its place in the dialog is the button that shows the welcome again, which
+// settings.js gives its click. Off by default, so a device filling in the defaults is not taken to have chosen it.
+const welcomeSetting = {
+  defaults:{ welcomed:false },
+  html:() => '<button class="secondary" id="welcomeAgainButton" type="button">Show the welcome tour again</button>',
+  show() {},
+  read:current => ({ welcomed:current.welcomed === true })
+};
+
 // ---- Bar and plates --------------------------------------------------------------------
 // The bar, the plates there are to load on it, and the step the weight buttons and Go heavier go up by. Each unit keeps
 // its own, since a gym's pound plates are not its kilogram ones, and switching units never turns one into the other.
@@ -266,7 +279,9 @@ const settingSections = [
     textSizeSetting,
     choiceSetting('unit', 'unitSetting', 'Weight unit', [['lbs', 'Pounds (lbs)'], ['kg', 'Kilograms (kg)']], value => value === 'kg' ? 'kg' : 'lbs', 'lbs'),
     distanceSetting,
-    choiceSetting('weeklyGoal', 'weeklyGoalSetting', 'Weekly goal', [1, 2, 3, 4, 5, 6, 7].map(goal => [goal, `${goal} workout${goal === 1 ? '' : 's'} a week`]), weeklyGoalFrom, 3)
+    choiceSetting('weeklyGoal', 'weeklyGoalSetting', 'Weekly goal', [1, 2, 3, 4, 5, 6, 7].map(goal => [goal, `${goal} workout${goal === 1 ? '' : 's'} a week`]), weeklyGoalFrom, 3),
+    // Last, under the settings the welcome itself sets up; the summary above leaves it out, as there is nothing to say of it.
+    welcomeSetting
   ] },
   { id:'schedule', title:'Training schedule',
     summary:settings => {

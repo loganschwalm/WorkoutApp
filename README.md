@@ -112,6 +112,9 @@ celebrated.
   website or to open in an app such as HealthFit that adds it to Apple Health (which cannot read a file itself).
 - Accounts with email or username sign-in (a username works in any capitals, and one that differs from another only in capitals
   is refused), "Remember me", and password reset by command or by email.
+- A new account starts with a short welcome on the Tracker: your units, how you want to train (a program, a template, or just
+  logging), your weekly goal and training days, and a quick tour, then the program's setup or the templates if you chose one.
+  Skip it at any time, or see it again from Settings.
 
 The [full reference](readme-for-llm.md#features) describes each of these in detail.
 

@@ -142,10 +142,22 @@ form.onsubmit = event => {
     [passwordInput, passwordProblem(passwordInput.value, loginInput.value.trim(), emailInput.value.trim())]])) return;
   // Without "Remember me" the session ends when the browser closes, and after half a day without use (server.py).
   const remember = document.getElementById('remember').checked;
-  const body = mode === 'register'
+  // Taken now, since the tabs can change the mode while the request is on its way.
+  const registering = mode === 'register';
+  const body = registering
     ? { email:emailInput.value, username:loginInput.value, password:passwordInput.value, remember }
     : { login:loginInput.value, password:passwordInput.value, remember };
-  submitWith(submit, async () => signedIn(await post(`/api/auth/${mode}`, body)));
+  submitWith(submit, async () => {
+    const result = await post(`/api/auth/${registering ? 'register' : 'login'}`, body);
+    // A new account is welcomed on the Tracker (onboarding.js), once the account exists, and only in this tab: signing in to
+    // an account, here or anywhere, never sets it, and clears one left by an account made here and not yet welcomed, so that
+    // welcome is not shown to whoever signs in next. The account's own `welcomed` setting is what stops it for good.
+    try {
+      if (registering) sessionStorage.setItem('workout-tracker-welcome', '1');
+      else sessionStorage.removeItem('workout-tracker-welcome');
+    } catch (error) { /* no storage: the account goes straight to the Tracker, unwelcomed */ }
+    return signedIn(result);
+  });
 };
 
 forgotButton.onclick = () => {

@@ -48,7 +48,8 @@ def run(t):
     entry_keys = ev("settingFields.map(field => Object.keys(field.defaults))")
     flat = [key for keys in entry_keys for key in keys]
     check('every entry has a default for each setting it owns, and no two entries own the same one', len(flat) == len(set(flat)) and all(isinstance(keys, list) for keys in entry_keys), flat)
-    check('the defaults are what they were: every setting there is', sorted(flat) == sorted(ev('Object.keys(defaultSettings)')) and len(flat) == 23, sorted(flat))
+    # 24 since `welcomed`, whether the account has been through the welcome (onboarding.js): a setting with no control of its own.
+    check('the defaults are what they were: every setting there is', sorted(flat) == sorted(ev('Object.keys(defaultSettings)')) and len(flat) == 24, sorted(flat))
     check('and a form showing them reads back as them, apart from the distance unit, which follows the weight unit until it is chosen',
           ev("applySettings(defaultSettings); JSON.stringify(Object.fromEntries(Object.entries(readSettingsForm()).sort()))") == ev("JSON.stringify(Object.fromEntries(Object.entries(defaultSettings).sort()))"))
     chosen = {'unit': 'kg', 'distanceUnit': 'km', 'weeklyGoal': 5, 'restDuration': 120, 'soundVolume': 65, 'alertSound': 'chime', 'autoRest': False, 'confirmEnd': False,
@@ -69,6 +70,18 @@ def run(t):
     on, total = (int(part) for part in summary_off.replace(' on', '').split(' of '))
     check('the row counts it only when it is on', summary_on == f'{on + 1} of {total} on' and on == total - 1, [summary_off, summary_on])
     ev("applySettings(defaultSettings)")
+    # The welcome's entry has nothing in the form to read, so it keeps what is kept: saving the form never undoes it, nor makes it.
+    check('the welcome is a setting, not yet had to start with', ev("defaultSettings.welcomed") is False)
+    check('which the form reads back as it is kept, and as not had when it is anything but true',
+          ev("""(() => { const entry = settingFields.find(field => 'welcomed' in field.defaults);
+            return [entry.read({ welcomed: true }).welcomed, entry.read({ welcomed: false }).welcomed, entry.read({}).welcomed, entry.read({ welcomed: 'yes' }).welcomed]; })()""")
+          == [True, False, False, False])
+    check('its place in the dialog is the button that shows the welcome again, last in General',
+          ev("""(() => { const button = document.getElementById('welcomeAgainButton');
+            return [button.closest('.settings-fold').id, button.nextElementSibling, button.type, button.textContent]; })()""")
+          == ['settings-general', None, 'button', 'Show the welcome tour again'])
+    check('and General’s line says nothing of it', ev("""(() => { applySettings({ ...defaultSettings, welcomed: true }); const had = document.getElementById('settings-general-state').textContent;
+        applySettings(defaultSettings); return had === document.getElementById('settings-general-state').textContent; })()""") is True)
     check('the alert sounds in the table have tones to play, and no tone is left out',
           sorted(ev('alertSoundOptions.map(([name]) => name)')) == sorted(ev('Object.keys(alertTones)')), ev('Object.keys(alertTones)'))
     check('a control left to a browser that cannot do it is hidden, and the rest are shown', ev("""settingFields.every(field => true)

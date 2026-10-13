@@ -437,3 +437,19 @@ getSettingElement('settingsForm').onsubmit = event => {
   event.preventDefault();
   closeSettings();
 };
+
+// Show the welcome tour again (its entry in settings-fields.js). The welcome lives on the Tracker (onboarding.js): there it opens
+// in place of Settings; any other page goes to the Tracker asking for it, keeping a rest duration still being typed on the way, as
+// closing would. So does the Tracker after an import, which closing would reload, taking the welcome with it. Looked for rather than
+// assumed: for one load after an update, this file can run beside an older settings-fields.js from the cache, without the button.
+if (getSettingElement('welcomeAgainButton')) {
+  getSettingElement('welcomeAgainButton').onclick = () => {
+    if (typeof startOnboarding !== 'function' || reloadAfterImport) {
+      saveSettings();
+      location.href = 'index.html?welcome';
+      return;
+    }
+    closeSettings();
+    startOnboarding({ replay:true });
+  };
+}

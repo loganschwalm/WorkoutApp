@@ -1066,4 +1066,14 @@ window.localReady.then(() => {
   } catch (error) {
     console.error('Unable to show the workout in progress.', error);
   }
-}).then(flushPendingWorkouts).then(loadSavedWorkouts).then(resumeOrStartWorkout).finally(() => { initialLoadDone = true; syncTemplateArea(); });
+}).then(flushPendingWorkouts).then(loadSavedWorkouts).then(resumeOrStartWorkout).finally(() => {
+  initialLoadDone = true;
+  // A new account's welcome (onboarding.js) comes once the page has started and the workout in progress, if there is one, is
+  // back on screen, since a workout under way keeps it away; and once the account's settings are in, since one that has been
+  // welcomed on another device never sees it again. A chain of its own, so it comes even when the start went wrong (which
+  // still fails where it is seen), and nothing it does can stop the page: a missing onboarding.js (an older page from the
+  // cache) or one that throws only leaves the Tracker without it. Asked first, but it runs after the line below all the same.
+  window.serverStateReady.then(() => { if (typeof maybeStartOnboarding === 'function') maybeStartOnboarding(); })
+    .catch(error => console.error('Unable to start the welcome.', error));
+  syncTemplateArea();
+});

@@ -35,6 +35,18 @@ def run(t):
         landed = cdp.wait("location.pathname === '/'", timeout=10)
         return landed and cdp.wait(f"window.localUsername === {json.dumps(username)}", timeout=10)
 
+    welcome_flag = "sessionStorage.getItem('workout-tracker-welcome')"
+
+    def skip_welcome():
+        # An account created on the sign-in page is welcomed on the Tracker (onboarding.js, which has a suite of its own). These
+        # checks are about the account, so the welcome is skipped as its Skip would: otherwise the flag, which lasts as long as the
+        # tab, would open it over the Tracker for every account signed in after, and take the focus the Settings checks look at.
+        cdp.wait('initialLoadDone === true', timeout=12)
+        if cdp.ev("typeof finishOnboarding === 'function'"):
+            check('and the welcome opens over the Tracker for it', cdp.wait("document.body.classList.contains('onboarding-open')", timeout=10))
+            cdp.ev("finishOnboarding('skipped')")
+        cdp.ev("sessionStorage.removeItem('workout-tracker-welcome')")
+
     def shows_error(words):
         cdp.wait("!document.getElementById('authFeedback').hidden")
         return shown('authFeedback') and words in text('authFeedback')
@@ -55,6 +67,8 @@ def run(t):
     submit('authForm')
     check('an account is created and signed in', signed_in_as('newbie'), cdp.ev('location.pathname'))
     check('with its email', cdp.ev('window.localEmail') == 'newbie@example.test', cdp.ev('window.localEmail'))
+    check('and is to be welcomed on the Tracker, as a new account', cdp.ev(welcome_flag) == '1', cdp.ev(welcome_flag))
+    skip_welcome()
 
     # ------------------------------------------------------------------ C2 signing in with an email
     print('C2  signing in with an email')
@@ -66,6 +80,7 @@ def run(t):
     fill(password='chalk-and-plates-42')
     submit('authForm')
     check('the email, in any case, signs in', signed_in_as('newbie'), cdp.ev('location.pathname'))
+    check('and signing in is not welcomed, as creating an account is', cdp.ev(welcome_flag) is None, cdp.ev(welcome_flag))
 
     # ------------------------------------------------------------------ C2b remember me
     print('C2b "Remember me" is ticked to begin with, and unticked signs in for this visit only')
@@ -373,6 +388,7 @@ def run(t):
     fill(password='deadlifts-on-monday')
     submit('authForm')
     check('one that follows the rules creates the account', signed_in_as('ruleslifter'), cdp.ev('location.pathname'))
+    skip_welcome()
     open_login()
     check('signing in shows no advice and sets no limits, for accounts from before them', not shown('passwordAdvice')
           and not cdp.ev("document.getElementById('username').hasAttribute('maxlength')"))

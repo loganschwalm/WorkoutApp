@@ -832,6 +832,36 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
   the weekly goal, or a plain finish).
 - **Streaks** are celebrated in the summaries and on History (see [Workout history](#workout-history)).
 
+### The welcome
+
+`onboarding.js` and `onboarding.css`, on the Tracker only, greet a new account with a full-screen welcome in six steps before
+letting it into the app.
+
+- **When it shows.** Creating an account on the sign-in page (`login.js`), and only that, marks the browser tab
+  (`sessionStorage` `workout-tracker-welcome`) before going on to the Tracker; signing in never does. Once the Tracker has
+  started (the workout in progress back on screen, if there is one) and the account's settings are in (`serverStateReady`),
+  `maybeStartOnboarding()` opens it when the tab is marked, the account's `welcomed` setting is not `true`, and no workout is
+  under way. So an account made through the API, as the test suites make theirs, and every account from before the welcome
+  never see it, and nor does an account that was welcomed on another device. Whatever goes wrong starting it is caught in
+  `script.js`, so the Tracker starts either way.
+- **The steps**, in order (`data-step`): `welcome` (what the app is), `units` (pounds or kilograms, miles or kilometres),
+  `training` (how to start: Wendler 5/3/1, Reddit PPL or Apartment Gym, a template, which is chosen to begin with, or just
+  logging), `week` (the weekly goal, 1 to 7, and the days you train, Monday first), `tour` (around the app) and `ready`. A
+  line says "Step N of 6", with a dot for each. Back, Next ("Get started" on the first step) and Skip are on every step but
+  the last, which has one button saying what it will do: "Set up Wendler 5/3/1", "Choose a template" or "Go to the Tracker".
+  The units, goal and days start from the settings as they are, so a replay shows what is set now.
+- **Finishing** saves the units, the weekly goal and the training days (keeping the reminder time) with `welcomed: true`.
+  **Skipping**, with Skip or Escape at any step, saves `welcomed: true` and changes nothing else. Either way the tab's mark
+  goes and the page is told the settings changed. Then, after finishing, it hands over: a program opens that program's own
+  setup form, which asks for its starting weights (the welcome never sets up a program itself), templates opens the template
+  list and scrolls to it, and logging leaves you on the Tracker. It never asks to send notifications; reminders stay in
+  Settings. The whole flow is guarded, so an error in it closes it as if skipped rather than leaving a new account shut out.
+- **Seeing it again.** Settings has *Show the welcome tour again*, last in General. On the Tracker it closes Settings and
+  starts the welcome; on any other page it goes to the Tracker as `index.html?welcome`, which starts it and takes `welcome`
+  off the address. A replay works the same way and saves the same things.
+- **It follows the account.** `welcomed` is a setting like the rest (see [Settings](#settings)), so finishing or skipping on
+  one device stops it on every other, offline included, once the change has uploaded.
+
 ### Settings
 
 The gear button opens a settings modal available on every page, in sections: General, Training schedule, During a
@@ -899,6 +929,7 @@ the button that opened them. Settings include:
   app lets go straight after so the music app can carry on. Turn it off to have the alert follow the Ring/Silent
   switch instead, leaving your music alone. iPhones do not let web pages vibrate, so there the alert is sound only.
 - A Test alert button plays the alert with the current choices.
+- Show the welcome tour again, last in General: the welcome a new account gets, from its first step. See [The welcome](#the-welcome).
 - Your data: Export, Export sets as CSV, and Import. See [Exporting and importing](#exporting-and-importing).
 - The signed-in account name and a Sign out button. Signing out warns first if a workout has not finished syncing; it stays on the device and uploads the next time you sign in to the same account.
 - The account's email, with a button to add or change it. Changing it asks for your password.
@@ -929,7 +960,9 @@ workout, Bar and plates, Rest timer), each a list of entries. An entry says its 
 (`settings-dialog.js`), `applySettings` and `readSettingsForm` (`settings.js`) are all made from that table. A setting that is one
 control is a line, made by `checkSetting` (a tick box, on by default), `choiceSetting` (a list of values, with a `normalize` that
 turns anything else into one of them) or `rangeSetting` (a number kept between two limits); anything more, such as the theme
-picker, the training days or the bar and plates, is an entry of its own. To add a setting, add its entry to a section, then
+picker, the training days or the bar and plates, is an entry of its own. A setting no control shows, such as `welcomed` (whether the
+account has been through [the welcome](#the-welcome)), has a `read(current)` that returns what is kept, so saving the form never
+changes it, and an `html()` of whatever stands in its place (there, the button that shows the welcome again). To add a setting, add its entry to a section, then
 use `getWorkoutSettings().yourKey` where it matters; if it is shown by the server (a reminder time, say), also check it in
 `validate_settings` in `state.py`. The `settings_table` suite shows that a setting added to the table is shown, read and
 defaulted with nothing else changed, and that a form showing the defaults reads back as them.

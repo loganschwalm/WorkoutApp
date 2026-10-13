@@ -435,7 +435,7 @@ html[data-theme="dark"] .program-status.missed { color:#ff9eaa; }
 .setting-check { display:flex; align-items:flex-start; gap:9px; margin-top:12px; padding:12px 0; color:var(--muted); font-size:.9rem; line-height:1.4; }
 .setting-check input { width:auto; margin:2px 0 0; }
 input[type="range"] { padding:0; border:0; background:transparent; accent-color:var(--accent); }
-.settings-modal .fold-body > .test-alert { justify-self:start; margin-top:10px; }
+.settings-modal .fold-body > .test-alert, .settings-modal .fold-body > #welcomeAgainButton { justify-self:start; margin-top:10px; }
 .settings-modal :disabled { opacity:.5; cursor:not-allowed; }
 .settings-actions { display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-top:20px; padding-top:18px; border-top:1px solid var(--line); }
 /* Settings in sections that fold open, each a row with a line above it: its heading, and at the right the values it holds (what

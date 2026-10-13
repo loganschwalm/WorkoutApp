@@ -1,0 +1,134 @@
+/* The first-login welcome (onboarding.js): six short steps over the whole screen, then the Tracker. It is the page's own ground
+   and type, a single calm column with the step's question set large in the grotesk, its choices as rows and segments under it,
+   and Back and Next held at the bottom where a thumb is. Its one flourish is the progress: a short bar with a plate for each
+   step, loaded one at a time, in ink once done and the accent for the step you are on. Every colour is a theme variable, so it
+   is right in all ten themes; every control is 44px or more; and nothing in it is wider than the screen, at any Text size.
+
+   It sits above the page, the tab bar (8 and 9), the header (30) and the big view (50); the feedback banner is lifted over it
+   while it is open, and the fireworks (100) stay above everything. Loaded on index.html after styles.css. */
+.onboarding {
+  position:fixed; inset:0; z-index:70; display:flex; flex-direction:column; overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain;
+  color:var(--ink); background:radial-gradient(120% 60% at 50% 0, var(--glow), transparent 70%) var(--bg);
+}
+body.onboarding-open { overflow:hidden; }
+body.onboarding-open .form-feedback { z-index:80; }
+
+/* One column, centred and never over-wide. On a phone it fills the screen, with the actions at the foot of it however short the
+   step, where a thumb is. On a larger screen it is a block of its own height in the middle, so Next is not a long way from the
+   question; auto margins centre it without ever pushing its top out of reach when it is taller than the window. */
+.onboarding-frame {
+  flex:1 0 auto; display:grid; grid-template-rows:auto 1fr auto; width:min(36rem, calc(100% - 32px)); margin:0 auto;
+  padding-top:max(12px, env(safe-area-inset-top));
+}
+@media (min-width:621px) and (min-height:640px) {
+  .onboarding-frame { flex:0 0 auto; min-height:min(100%, 42rem); margin:auto; }
+}
+.onboarding-top { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px 16px; min-height:56px; }
+
+/* The progress: a bar seen end on, a plate for each step. A step to come is a small outline, as an empty space on the bar is;
+   one done is loaded in ink, and the step you are on is the accent and stands a little taller. The words beside it say the same
+   for anyone who cannot see it, and are what the live region reads out. */
+.onboarding-progress { display:flex; align-items:center; gap:12px; min-width:0; }
+.onboarding-bar { position:relative; display:inline-flex; align-items:center; gap:3px; height:28px; padding:0 12px 0 6px; }
+.onboarding-bar::before { content:""; position:absolute; left:0; right:0; top:50%; height:3px; margin-top:-1.5px; background:var(--muted); border-radius:2px; opacity:.5; }
+.onboarding-dot { position:relative; width:7px; height:12px; background:var(--bg); border:1.5px solid var(--muted); border-radius:2px; }
+.onboarding-dot.done { height:22px; background:var(--ink); border-color:var(--ink); }
+.onboarding-dot.current { width:9px; height:26px; background:var(--accent); border-color:var(--accent); }
+.onboarding-count { color:var(--ink); font-size:.85rem; font-weight:600; font-variant-numeric:tabular-nums; white-space:nowrap; }
+/* The top row is in ink rather than the muted grey: it sits on the strongest of the glow, where the muted grey of the lightest
+   themes (Blossom) falls just under 4.5 to 1. */
+.onboarding-skip { padding:10px 14px; color:var(--ink); background:transparent; font-weight:600; }
+.onboarding-skip:hover { text-decoration:underline; }
+
+/* A step: its question, a line or two on why it matters, then the choices. It starts at the same height on every step, so moving
+   on does not shift the heading about. */
+.onboarding-steps { min-width:0; padding:clamp(20px, 7vh, 80px) 0 28px; }
+.onboarding-step { display:grid; align-content:start; min-width:0; }
+.onboarding-step h2 {
+  margin:0 0 14px; font-size:clamp(1.85rem, 1.2rem + 2.8vw, 2.75rem); font-weight:800; letter-spacing:-.035em; line-height:1.08;
+  text-wrap:balance; overflow-wrap:anywhere;
+}
+/* The heading takes the focus so a screen reader starts each step from its question; it is not a control, so it draws no ring. */
+.onboarding-step h2:focus { outline:none; }
+.onboarding-lead { max-width:32rem; margin:0; font-size:1.1rem; line-height:1.5; }
+.onboarding-text { max-width:32rem; margin:16px 0 0; line-height:1.55; }
+.onboarding-note { max-width:32rem; margin:18px 0 0; color:var(--muted); font-size:.88rem; line-height:1.5; }
+
+.onboarding-group { min-width:0; margin:26px 0 0; padding:0; border:0; }
+.onboarding-group legend { margin:0 0 8px; padding:0; color:var(--muted); font-size:.82rem; font-weight:700; }
+.onboarding-group + .onboarding-group { margin-top:22px; }
+.onboarding-group select { max-width:20rem; }
+.onboarding-days { margin-top:22px; }
+.onboarding-choices { display:grid; gap:8px; }
+.onboarding-segments { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 8.5rem), 1fr)); gap:8px; }
+
+/* A choice: the radio lies over the whole of it, unseen but still the thing tapped, focused and moved with the arrow keys, and the
+   body beside it shows the state, as the training days in Settings do. Chosen is the accent's tint with an accent edge. */
+.onboarding-choice { position:relative; display:block; min-width:0; margin:0; color:var(--ink); font-size:1rem; font-weight:400; }
+.onboarding-choice input { position:absolute; inset:0; z-index:1; width:100%; height:100%; margin:0; padding:0; opacity:0; cursor:pointer; }
+.onboarding-choice-body {
+  display:grid; align-content:center; min-height:44px; padding:14px 16px; background:var(--card); border:1px solid var(--line);
+  border-radius:var(--radius-panel); transition:border-color .15s, background-color .15s;
+}
+.onboarding-choice strong { font-weight:700; line-height:1.3; overflow-wrap:anywhere; }
+.onboarding-choice small { display:block; margin-top:2px; color:var(--muted); font-size:.82rem; font-weight:600; overflow-wrap:anywhere; }
+.onboarding-choice-text { display:block; margin-top:6px; color:var(--muted); font-size:.88rem; line-height:1.45; overflow-wrap:anywhere; }
+.onboarding-choice:hover .onboarding-choice-body { border-color:var(--accent-line); }
+.onboarding-choice input:checked + .onboarding-choice-body { background:var(--accent-soft); border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); }
+.onboarding-choice input:checked + .onboarding-choice-body small,
+.onboarding-choice input:checked + .onboarding-choice-body .onboarding-choice-text { color:var(--ink); }
+.onboarding-choice input:focus-visible + .onboarding-choice-body { outline:2px solid var(--accent); outline-offset:2px; }
+
+/* A row (a way to train) has a radio's mark at its start, since several lines of text alone do not say "pick one". */
+.onboarding-row .onboarding-choice-body { grid-template-columns:20px minmax(0, 1fr); column-gap:12px; }
+.onboarding-row .onboarding-choice-body::before {
+  content:""; grid-row:1 / span 3; width:20px; height:20px; margin-top:1px; border:2px solid var(--muted); border-radius:50%;
+}
+.onboarding-row .onboarding-choice-body > * { grid-column:2; }
+.onboarding-row input:checked + .onboarding-choice-body::before { background:var(--accent); border-color:var(--accent); box-shadow:inset 0 0 0 3px var(--accent-soft); }
+/* A segment (a unit) is a short word in the middle. */
+.onboarding-segment .onboarding-choice-body { justify-items:center; text-align:center; }
+.onboarding-segment strong { font-size:1.05rem; }
+
+/* The tour: a line for each page, beside the icon its tab has on a phone, so the bar along the bottom is known on sight. */
+.onboarding-tour { display:grid; margin:22px 0 0; padding:0; list-style:none; }
+.onboarding-tour li { display:grid; grid-template-columns:44px minmax(0, 1fr); gap:14px; align-items:start; padding:14px 0; border-top:1px solid var(--rule); }
+.onboarding-tour li:last-child { border-bottom:1px solid var(--rule); }
+.onboarding-tour strong { font-family:var(--font-display); font-size:1.05rem; font-weight:750; }
+.onboarding-tour p { margin:4px 0 0; color:var(--muted); font-size:.9rem; line-height:1.45; overflow-wrap:anywhere; }
+.onboarding-tour-icon { position:relative; width:44px; height:44px; background:var(--accent-soft); border-radius:var(--radius-control); }
+.onboarding-tour-icon::after {
+  content:""; position:absolute; inset:11px; background:var(--accent);
+  -webkit-mask:var(--onboarding-icon) center / contain no-repeat; mask:var(--onboarding-icon) center / contain no-repeat;
+}
+.onboarding-tour-icon[data-page="strength"]::after { --onboarding-icon:url(icons/tab-strength.svg); }
+.onboarding-tour-icon[data-page="cardio"]::after { --onboarding-icon:url(icons/tab-cardio.svg); }
+.onboarding-tour-icon[data-page="progress"]::after { --onboarding-icon:url(icons/tab-progress.svg); }
+.onboarding-tour-icon[data-page="history"]::after { --onboarding-icon:url(icons/tab-history.svg); }
+
+/* What was chosen, on the ink panel: in this app ink is "now", as on the next workout and the rest timer. */
+.onboarding-summary { display:grid; gap:12px; margin:24px 0 0; padding:20px 22px; color:var(--card); background:var(--ink); border-radius:var(--radius-card); }
+.onboarding-summary div { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:baseline; gap:2px 16px; min-width:0; }
+.onboarding-summary dt { color:var(--card); background:var(--ink); font-size:.85rem; font-weight:600; opacity:.75; }
+.onboarding-summary dd { margin:0; color:var(--card); background:var(--ink); font-family:var(--font-display); font-size:1.08rem; font-weight:750; overflow-wrap:anywhere; }
+
+/* Back on the left, the way on at the right, held to the foot of the screen on the page's own ground so the step scrolls under it. */
+.onboarding-actions {
+  position:sticky; bottom:0; display:flex; align-items:center; gap:10px; padding:14px 0 max(16px, env(safe-area-inset-bottom)); background:var(--bg);
+}
+.onboarding-actions .onboarding-next { min-width:9rem; min-height:52px; margin-left:auto; font-size:1rem; border-radius:var(--radius-panel); }
+.onboarding-back { min-height:52px; border-radius:var(--radius-panel); }
+@media (max-width:620px) {
+  .onboarding-actions .onboarding-next { flex:1; min-width:0; }
+  .onboarding-step h2 { margin-bottom:12px; }
+}
+
+/* Moving on: the new step fades in, and its plate slides onto the bar. Nothing moves for someone who has asked for less motion. */
+@media (prefers-reduced-motion:no-preference) {
+  .onboarding-step:not([hidden]) { animation:onboarding-step-in .3s ease-out; }
+  .onboarding-dot.current { animation:onboarding-plate-on .35s cubic-bezier(.2,.8,.3,1.25); }
+  .onboarding-dot { transition:height .2s ease-out, background-color .2s, border-color .2s; }
+}
+@keyframes onboarding-step-in { from { opacity:0; } to { opacity:1; } }
+@keyframes onboarding-plate-on { from { transform:translateX(8px); opacity:0; } to { transform:none; opacity:1; } }
+@media (prefers-reduced-motion:reduce) { .onboarding-choice-body { transition:none; } }
