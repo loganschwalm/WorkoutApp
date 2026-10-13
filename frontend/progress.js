@@ -388,6 +388,7 @@ function renderProgress(workouts) {
   $('progressChart').setAttribute('aria-label', describeChart());
   $('chartDetail').textContent = chartData.points.length ? 'Tap a point to see its value.' : '';
   drawChart();
+  renderExerciseCard();
   renderSessions(workouts);
 }
 
@@ -464,6 +465,79 @@ $('sessionList').onclick = event => {
   sessionGroupOpened.set(`${selectedExercise}|${details.parentElement.dataset.group}`, details.open);
 };
 
+// ---- This exercise ------------------------------------------------------------
+// With one strength exercise chosen, what there is to know about it in one place, over every saved workout whatever the
+// filters (as Personal records are): its records, the heaviest weight it has done for 1, 3, 5, 8 and 10 reps, its goal and
+// whether it has stalled, under its muscle and equipment. These are the same figures as the rows below the chart, which
+// are for every exercise at once and fold away.
+
+// The rep counts the table is kept for.
+const repMaxTargets = [1, 3, 5, 8, 10];
+
+// The heaviest weight done for at least each of repMaxTargets' reps, each with the day it was first reached, as
+// { reps, weight, date } for those that have one. At least, so a set of 8 counts for 5 and the table never gets heavier as
+// the reps rise. A timed exercise and sets without weight have none. An exercise saved without sets is one set of its own
+// weight and reps, as recordsOf takes it, and one saved with an empty set list was skipped.
+function repMaxesOf(workouts, key) {
+  const best = new Map();
+  [...workouts].sort((a, b) => a.createdAt - b.createdAt).forEach(workout => (workout.exercises || []).forEach(item => {
+    if (exerciseKey(item.name ?? '') !== key || isTimed(item)) return;
+    (item.sets || [{ weight:item.weight, reps:item.reps }]).forEach(set => {
+      const weight = Number(set.weight) || 0, reps = Number(set.reps) || 0;
+      if (!(weight > 0)) return;
+      repMaxTargets.forEach(target => {
+        // Oldest first and strictly heavier, so the day is the one the weight was first done for that many.
+        if (reps >= target && (!best.has(target) || weight > best.get(target).weight)) best.set(target, { reps:target, weight, date:workout.createdAt });
+      });
+    });
+  }));
+  return repMaxTargets.filter(target => best.has(target)).map(target => best.get(target));
+}
+
+// Which of an exercise's muscle and equipment were guessed from its name, as the Exercises list says it.
+function describeExerciseDetails(details) {
+  const parts = [muscleLabel(details.muscle), equipmentLabel(details.equipment)].filter(Boolean);
+  if (details.muscleGuessed && details.equipmentGuessed) parts.push('guessed from its name');
+  else if (details.muscleGuessed) parts.push('muscle guessed from its name');
+  else if (details.equipmentGuessed) parts.push('equipment guessed from its name');
+  if (!details.muscle) parts.push('its sets are not counted until it has a muscle');
+  return parts.join(' · ');
+}
+
+// Hidden across all exercises and for a cardio activity, whose records and sessions are listed with its chart.
+function renderExerciseCard() {
+  const single = selectedExercise !== 'all' && !chartingCardio() && allWorkouts.length > 0;
+  $('exerciseCard').hidden = !single;
+  if (!single) return;
+  const unit = weightUnit();
+  const record = recordsOf(allWorkouts).find(own => own.key === selectedExercise);
+  const name = record ? record.name : $('exerciseFilter').selectedOptions[0]?.textContent || selectedExercise;
+  $('exerciseTitle').textContent = name;
+  $('exerciseDetails').textContent = describeExerciseDetails(exerciseDetails(name));
+  const tile = (title, lines) => `<li class="record fact"><strong>${escapeHTML(title)}</strong>${lines.join('')}</li>`;
+  const tiles = [];
+  const recordLines = record ? strengthRecordLines(record, unit) : [];
+  if (recordLines.length) tiles.push(tile('Records', recordLines.map(recordLineHTML)));
+  const repMaxes = repMaxesOf(allWorkouts, selectedExercise);
+  if (repMaxes.length) {
+    tiles.push(tile('Heaviest weight for reps', repMaxes.map(({ reps, weight, date }) =>
+      recordLineHTML([reps === 1 ? '1 rep' : `${reps}+ reps`, `${formatWeight(weight)} ${unit}`, date]))));
+  }
+  const goal = goals[selectedExercise];
+  if (goal && goal.target > 0) {
+    const best = record && record.heaviest ? record.heaviest.value : 0;
+    const standing = goalStanding(goal, best, unit);
+    tiles.push(tile('Goal', [`<span>${escapeHTML(`${formatWeight(best)} of ${formatWeight(standing.target)} ${unit}`)}</span>`,
+      `<span>${escapeHTML(standing.text)}</span>`]));
+  }
+  const stall = stallOf(allWorkouts, selectedExercise);
+  if (stall) {
+    tiles.push(tile('Stalled', [`<span>${escapeHTML(describeStall(stall))}</span>`,
+      `<span><span class="record-label">Try</span> ${escapeHTML(`a week at ${formatWeight(stall.deload)} ${unit}, 10% off last time's ${formatWeight(stall.heaviest)}`)}</span>`]));
+  }
+  $('exerciseFacts').innerHTML = tiles.join('') || '<li class="empty">Nothing is logged for it yet.</li>';
+}
+
 // ---- Personal records -----------------------------------------------------
 // Each exercise's best, from every saved workout whatever the filters: the heaviest weight (with the most reps done at
 // it), the best estimated one-rep max, the most reps in a set without weight, and a timed exercise's longest hold. Each
@@ -513,21 +587,28 @@ function cardioRecordsOf(workouts) {
   });
 }
 
+// A strength exercise's records as [label, value, day] lines, in the unit shown: Personal records lists them, and so does the
+// This exercise card.
+function strengthRecordLines(record, unit) {
+  const lines = [];
+  if (record.heaviest) lines.push(['Heaviest', `${formatWeight(record.heaviest.value)} ${unit} × ${record.heaviest.reps}`, record.heaviest.date]);
+  if (record.oneRepMax) lines.push(['Est. one-rep max', `${Math.round(record.oneRepMax.value)} ${unit}, from ${formatWeight(record.oneRepMax.weight)} × ${record.oneRepMax.reps}`, record.oneRepMax.date]);
+  if (record.reps) lines.push(['Most reps', plural(record.reps.value, 'rep'), record.reps.date]);
+  if (record.hold) lines.push(['Longest hold', `${record.hold.value} s`, record.hold.date]);
+  return lines;
+}
+
+function recordLineHTML([label, value, date]) {
+  return `<span><span class="record-label">${escapeHTML(label)}</span> ${escapeHTML(value)} <span class="record-date">· ${escapeHTML(longDate(date))}</span></span>`;
+}
+
 function renderRecords() {
   const unit = weightUnit();
-  const strength = recordsOf(allWorkouts).map(record => {
-    const lines = [];
-    if (record.heaviest) lines.push(['Heaviest', `${formatWeight(record.heaviest.value)} ${unit} × ${record.heaviest.reps}`, record.heaviest.date]);
-    if (record.oneRepMax) lines.push(['Est. one-rep max', `${Math.round(record.oneRepMax.value)} ${unit}, from ${formatWeight(record.oneRepMax.weight)} × ${record.oneRepMax.reps}`, record.oneRepMax.date]);
-    if (record.reps) lines.push(['Most reps', plural(record.reps.value, 'rep'), record.reps.date]);
-    if (record.hold) lines.push(['Longest hold', `${record.hold.value} s`, record.hold.date]);
-    return { key:record.key, name:record.name, lines, latest:record.latest };
-  });
+  const strength = recordsOf(allWorkouts).map(record => ({ key:record.key, name:record.name, lines:strengthRecordLines(record, unit), latest:record.latest }));
   // The most recent record first, whichever kind it is.
   const records = [...strength, ...cardioRecordsOf(allWorkouts)].filter(record => record.lines.length).sort((a, b) => b.latest - a.latest);
   $('recordsList').innerHTML = records.length ? records.map(record => `<li><button class="record" type="button" data-exercise="${escapeHTML(record.key)}">`
-    + `<strong>${escapeHTML(record.name)}</strong>${record.lines.map(([label, value, date]) =>
-      `<span><span class="record-label">${label}</span> ${escapeHTML(value)} <span class="record-date">· ${escapeHTML(longDate(date))}</span></span>`).join('')}</button></li>`).join('')
+    + `<strong>${escapeHTML(record.name)}</strong>${record.lines.map(recordLineHTML).join('')}</button></li>`).join('')
     : '<li class="empty">Your records appear once you have saved a workout.</li>';
   $('recordsState').textContent = records.length ? `${plural(records.length, 'exercise')} · latest ${records[0].name}` : 'None yet';
 }
@@ -576,6 +657,16 @@ function goalDeadline(by) {
   return `by ${date}, ${left}`;
 }
 
+// Where a goal stands against the heaviest weight lifted (in the unit shown): its target in that unit, whether it is reached,
+// how full its bar is, and how it reads ("50 lbs to go · by Dec 1, 50 days left"). The goal list and the This exercise card say it alike.
+function goalStanding(goal, best, unit) {
+  const target = convertWeight(goal.target, goal.unit || 'lbs', unit);
+  const reached = best >= target;
+  const status = reached ? 'Reached' : `${formatWeight(Math.round((target - best) * 100) / 100)} ${unit} to go`;
+  const deadline = goal.by && !reached ? ` · ${goalDeadline(goal.by)}` : '';
+  return { target, reached, percent:Math.min(100, Math.round(best / target * 100)), text:status + deadline };
+}
+
 function renderGoals() {
   applyUnitLabels();
   const unit = weightUnit();
@@ -583,25 +674,23 @@ function renderGoals() {
   const heaviest = new Map(records.map(record => [record.key, record.heaviest ? record.heaviest.value : 0]));
   $('goalExercises').innerHTML = records.filter(record => record.heaviest).map(record => `<option value="${escapeHTML(record.name)}"></option>`).join('');
   const items = Object.entries(goals).map(([key, goal]) => {
-    const target = convertWeight(goal.target, goal.unit || 'lbs', unit);
     const best = heaviest.get(key) || 0;
-    return { key, goal, target, best, reached:best >= target };
+    return { key, goal, best, ...goalStanding(goal, best, unit) };
   // Goals still to reach first, the nearest deadline first, then the ones reached.
   }).sort((a, b) => a.reached - b.reached || (a.goal.by || '9999').localeCompare(b.goal.by || '9999') || a.goal.name.localeCompare(b.goal.name));
-  $('goalList').innerHTML = items.length ? items.map(({ key, goal, target, best, reached }) => {
-    const percent = Math.min(100, Math.round(best / target * 100));
-    const status = reached ? 'Reached' : `${formatWeight(Math.round((target - best) * 100) / 100)} ${unit} to go`;
-    const deadline = goal.by && !reached ? ` · ${goalDeadline(goal.by)}` : '';
-    return `<li class="goal${reached ? ' reached' : ''}"><div class="goal-head"><strong>${escapeHTML(goal.name)}</strong>`
+  $('goalList').innerHTML = items.length ? items.map(({ key, goal, target, best, reached, percent, text }) =>
+    `<li class="goal${reached ? ' reached' : ''}"><div class="goal-head"><strong>${escapeHTML(goal.name)}</strong>`
       + `<span>${formatWeight(best)} of ${formatWeight(target)} ${unit}</span></div>`
       + `<div class="goal-bar" role="progressbar" aria-label="${escapeHTML(goal.name)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}"><span></span></div>`
-      + `<div class="goal-foot"><span>${escapeHTML(status + deadline)}</span>`
-      + `<button class="link-button" type="button" data-goal-remove="${escapeHTML(key)}" aria-label="Remove the goal for ${escapeHTML(goal.name)}">Remove</button></div></li>`;
-  }).join('') : '<li class="empty">No goals yet. Set one below.</li>';
+      + `<div class="goal-foot"><span>${escapeHTML(text)}</span>`
+      + `<button class="link-button" type="button" data-goal-remove="${escapeHTML(key)}" aria-label="Remove the goal for ${escapeHTML(goal.name)}">Remove</button></div></li>`
+  ).join('') : '<li class="empty">No goals yet. Set one below.</li>';
   // Set through the DOM: the Content-Security-Policy refuses style="" attributes written into markup, which left every
   // bar full whatever the goal's progress.
   $('goalList').querySelectorAll('.goal-bar').forEach(bar => { bar.firstElementChild.style.width = `${bar.getAttribute('aria-valuenow')}%`; });
   $('goalsState').textContent = items.length ? `${plural(items.length, 'goal')} · ${items.filter(item => item.reached).length} reached` : 'None yet';
+  // The exercise being looked at shows its own goal, so a goal set or removed here changes it.
+  renderExerciseCard();
 }
 
 function showGoalFeedback(message, isError = false) {
@@ -663,10 +752,11 @@ async function loadProgress() {
     selectedMetric = $('metricFilter').value;
     $('workoutTypeFilter').disabled = chartingCardio();
     chartedDistanceUnit = distanceUnitOf();
+    // Before the first draw, which the This exercise card's goal is drawn in.
+    loadGoals();
     renderProgress(allWorkouts);
     renderRecords();
     renderStalls();
-    loadGoals();
     renderGoals();
     // muscles.js, loaded after this, counts the same workouts.
     renderMuscles();

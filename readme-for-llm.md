@@ -655,6 +655,16 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
   week, Oct 5 – Oct 11 · 33 sets", "180.5 lbs on Oct 9 · down 2 lbs", "3 goals · 1 reached", "2 lifts stalled:
   Bench Press, Squat", "15 exercises · latest Rowing machine"), which it stops saying once it is open. A link
   that needs one (Give them a muscle) opens it.
+- With one strength exercise chosen, a card for it above its sessions (hidden across all exercises and for a cardio
+  activity), titled with its name and saying its muscle and equipment, and which were guessed from the name, as the
+  Exercises list does. It is figured over every saved workout whatever the filters, as Personal records are, and holds a
+  tile for each of: its records (the same lines as Personal records); the heaviest weight it has done for 1, 3, 5, 8 and
+  10 reps, each with the day it was first reached ("1 rep 150 lbs", "5+ reps 150 lbs"); its goal, if it has one, with
+  the heaviest weight so far against the target; and, if it has stalled, how long and the lighter week to try, as Stalled
+  lifts says it. The rep counts are at least that many, so a set of 8 counts for 5 and the weights never rise as the reps do,
+  and one nobody has done (10 reps at any weight) is left out. A timed exercise and sets without weight have none, so a
+  plank shows its longest hold and a chin-up its most reps. It follows a goal set or removed, a unit change, and a muscle or
+  equipment chosen under Exercises.
 - With one exercise chosen, every session of it, newest first, with its sets, the reps they had left,
   and the note kept with it, in years and months as History's list is: the latest year and month open, the rest folded,
   and what you open kept while you look at that exercise. History's exercise names, and a workout's Past sessions, link here.

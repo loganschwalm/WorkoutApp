@@ -81,6 +81,8 @@ see a program working over the weeks.
 - Charts of heaviest weight, estimated one-rep max, best reps or volume, per exercise and over time, and of each
   cardio activity's distance, time, pace or speed, calories and heart rate.
 - Personal records, goals to aim for, and a bodyweight log.
+- Pick one exercise on Progress for its card: its records, the heaviest weight it has done for 1, 3, 5, 8 and 10
+  reps, its goal, whether it has stalled, and its muscle, above every session of it.
 - Sets per muscle each week against your recent average, and your exercises' muscles and equipment, guessed from
   their names until you choose (which also decides which lifts get plates). Add exercises of your own.
 

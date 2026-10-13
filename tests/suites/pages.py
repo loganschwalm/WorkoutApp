@@ -643,6 +643,43 @@ def run(t):
     shown = cdp.ev("[document.getElementById('metricFilter').value, document.getElementById('exerciseFilter').value]")
     check('Clear filters goes back to how the page opened', shown == ['weight', 'bench press'], shown)
 
+    # The This exercise card: one exercise's records, rep maxes, goal, stall and muscle in one place, over every workout.
+    print('P8a Progress has a card for the exercise chosen: its records, the heaviest weight for 1 to 10 reps, its goal and its muscle')
+    facts = ("[...document.querySelectorAll('#exerciseFacts > li')].map(li => [li.querySelector('strong').textContent, "
+             "[...li.querySelectorAll(':scope > span')].map(s => s.textContent)])")
+
+    def bench_day(n):
+        return cdp.ev(f'longDate({start + n * 86400000})')
+
+    check('it shows for the exercise chosen, under its name, muscle and equipment guessed from it',
+          cdp.ev("document.getElementById('exerciseCard').hidden") is False and cdp.ev("document.getElementById('exerciseTitle').textContent") == 'Bench Press'
+          and cdp.ev("document.getElementById('exerciseDetails').textContent") == 'Chest · Barbell · guessed from its name',
+          cdp.ev("document.getElementById('exerciseDetails').textContent"))
+    tiles = dict(cdp.ev(facts) or [])
+    check('its records are those of Personal records', tiles.get('Records', [None])[0] == f'Heaviest 150 lbs × 5 · {bench_day(32)}', tiles.get('Records'))
+    # 150 × 3, 145 × 8 and 150 × 5 are the heavy sets: at least 8 reps is 145, at least 5 is 150 from the day it was done for 5, and no set had 10.
+    check('the heaviest weight for at least 1, 3, 5 and 8 reps, each with the day it was first done, and none for 10',
+          tiles.get('Heaviest weight for reps') == [f'1 rep 150 lbs · {bench_day(30)}', f'3+ reps 150 lbs · {bench_day(30)}',
+                                                    f'5+ reps 150 lbs · {bench_day(32)}', f'8+ reps 145 lbs · {bench_day(31)}'],
+          tiles.get('Heaviest weight for reps'))
+    check('with no goal and no stall, there are no tiles for them', set(tiles) == {'Records', 'Heaviest weight for reps'}, list(tiles))
+    pick('exerciseFilter', 'plank')
+    tiles = dict(cdp.ev(facts) or [])
+    check('a timed exercise has its longest hold and no rep maxes', set(tiles) == {'Records'} and tiles['Records'][0].startswith('Longest hold 90 s'), tiles)
+    pick('exerciseFilter', 'chin-up')
+    check('and a bodyweight one its most reps and none', set(dict(cdp.ev(facts) or [])) == {'Records'})
+    pick('exerciseFilter', 'all')
+    check('across all exercises there is no card', cdp.ev("document.getElementById('exerciseCard').hidden") is True)
+    pick('exerciseFilter', 'bench press')
+    check('and it is back for an exercise', cdp.ev("document.getElementById('exerciseCard').hidden") is False)
+    cdp.ev("document.getElementById('exercisesFold').open = true")
+    cdp.ev("""(e => { e.value = 'shoulders'; e.dispatchEvent(new Event('change', { bubbles: true })); })
+             (document.querySelector('#libraryList li[data-key="bench press"] select[data-field="muscle"]'))""")
+    check('choosing its muscle in Exercises changes it on the card, which then says only the equipment was guessed',
+          cdp.ev("document.getElementById('exerciseDetails').textContent") == 'Shoulders · Barbell · equipment guessed from its name',
+          cdp.ev("document.getElementById('exerciseDetails').textContent"))
+    cdp.ev("document.getElementById('exercisesFold').open = false")
+
     records = cdp.ev("[...document.querySelectorAll('#recordsList .record')].map(r => ({ name: r.querySelector('strong').textContent, "
                      "lines: [...r.querySelectorAll(':scope > span')].map(s => s.textContent) }))") or []
     names = [record['name'] for record in records]
@@ -689,6 +726,13 @@ def run(t):
     check('a goal shows the heaviest weight so far against the target, under the exercise as it was written',
           cdp.ev(goal_items) == ['Bench Press | 150 of 200 lbs | 50 lbs to go | 75 | false'], cdp.ev(goal_items))
     check('and says so', cdp.ev("document.getElementById('goalFeedback').textContent") == 'Goal set for Bench Press.')
+    goal_tile = ("[...document.querySelectorAll('#exerciseFacts > li')].filter(li => li.querySelector('strong').textContent === 'Goal')"
+                 ".map(li => [...li.querySelectorAll(':scope > span')].map(s => s.textContent))")
+    check("the exercise's card shows its goal as it is set", cdp.ev(goal_tile) == [['150 of 200 lbs', '50 lbs to go']], cdp.ev(goal_tile))
+    settle('/progress.html', "document.querySelectorAll('#recordsList .record').length > 0")
+    check('and when the page opens, which is before the rows below it are drawn', cdp.ev(goal_tile) == [['150 of 200 lbs', '50 lbs to go']], cdp.ev(goal_tile))
+    # The page was opened again, with its rows folded, and the goals that follow are set by someone who has them open.
+    cdp.ev("document.getElementById('goalsFold').open = true")
     drawn = cdp.ev("(bar => bar.firstElementChild.getBoundingClientRect().width / bar.clientWidth)(document.querySelector('#goalList .goal-bar'))")
     check('its bar is drawn three quarters full, not full (the CSP refuses widths written into markup)', drawn is not None and abs(drawn - 0.75) < 0.01, drawn)
     check('the form is cleared for the next', cdp.ev("document.getElementById('goalTarget').value") == '')
@@ -895,6 +939,8 @@ def run(t):
           len(sessions['years']) == 2 and sessions['years'][0][1] is True and sessions['years'][1][1] is False
           and sessions['months'][0][1] is True and not any(m[1] for m in sessions['months'][1:]) and len(sessions['months']) >= 3,
           sessions)
+    stalled = cdp.ev("[...document.querySelectorAll('#exerciseFacts > li')].filter(li => li.querySelector('strong').textContent === 'Stalled').map(li => li.textContent)")
+    check('the exercise card says it has stalled, and what to try', len(stalled) == 1 and 'No new best since ' in stalled[0] and 'a week at 120 lbs' in stalled[0], stalled)
     # The three of this month are the ones showing; the rest are one tap each away, and a tap is remembered.
     check('so only the latest month shows, which is no more than the recent ones', 1 <= sessions['shown'] <= 3, sessions['shown'])
     cdp.ev("document.querySelectorAll('#sessionList .history-month > details > summary')[1].click()")

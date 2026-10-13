@@ -172,6 +172,7 @@ $('libraryList').addEventListener('change', event => {
   setExerciseDetails(name, { [field]:select.value });
   renderLibrary();
   renderMuscles();
+  renderExerciseCard();
   // The list is drawn again, so the keyboard carries on from the same choice.
   $('libraryList').querySelector(`li[data-key="${CSS.escape(key)}"] select[data-field="${field}"]`)?.focus();
   showLibraryFeedback(field === 'muscle' ? `${name} counts for ${muscleLabel(select.value)}.` : `${name} is done with: ${equipmentLabel(select.value)}.`);
@@ -205,6 +206,7 @@ $('libraryForm').onsubmit = event => {
   renderLibraryForm();
   renderLibrary();
   renderMuscles();
+  renderExerciseCard();
   const { muscle } = exerciseDetails(name);
   showLibraryFeedback(known ? `Updated ${name}.` : `Added ${name}${muscle ? `, for ${muscleLabel(muscle)}` : ''}. It is suggested wherever you type an exercise.`);
 };
@@ -214,5 +216,5 @@ renderLibraryForm();
 window.serverStateReady.then(() => {
   exerciseLibrary = loadExerciseLibrary();
   renderLibrary();
-  if (allWorkouts.length) renderMuscles();
+  if (allWorkouts.length) { renderMuscles(); renderExerciseCard(); }
 });
