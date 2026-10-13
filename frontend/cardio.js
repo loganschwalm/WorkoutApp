@@ -415,6 +415,7 @@ function showCardioSummary(workout, records) {
   $('cardioSummaryRecords').hidden = !records.length;
   $('cardioSummaryRecordList').innerHTML = records.map(record => `<li>${escapeHTML(record)}</li>`).join('');
   $('cardioSummaryProgress').href = `progress.html?exercise=${encodeURIComponent(cardioKey(workout))}`;
+  offerActivityExport($('cardioSummaryExport'), workout);
   $('cardioSummary').hidden = false;
   $('cardioSummary').scrollIntoView({ behavior:'smooth', block:'start' });
   if (records.length) celebrate($('cardioSummaryTitle'), 40, 1.2);

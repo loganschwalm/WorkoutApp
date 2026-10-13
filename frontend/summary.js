@@ -124,6 +124,7 @@ function showWorkoutSummary(workout, records, before = {}) {
   $('summaryExercises').hidden = !rows.length;
   $('summaryExerciseList').innerHTML = rows.map(row => `<li><div><strong>${escapeHTML(row.name)}</strong><span>${escapeHTML(`${plural(row.sets, 'set')} · top ${row.top}`)}</span></div>`
     + `<span class="summary-change ${row.change.kind}">${symbols[row.change.kind] ? `<span aria-hidden="true">${symbols[row.change.kind]}</span> ` : ''}${escapeHTML(row.change.text)}</span></li>`).join('');
+  offerActivityExport($('summaryExport'), workout);
   $('workoutSummary').hidden = false;
   $('workoutSummary').scrollIntoView({ behavior:'smooth', block:'start' });
 }

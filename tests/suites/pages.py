@@ -1099,7 +1099,8 @@ def run(t):
     # The ⋯ menu: copying and editing open the Tracker's form; deleting happens here.
     cdp.ev(f"{row(legs)}.querySelector('.row-menu summary').click()")
     items = cdp.ev(f"[...{row(legs)}.querySelectorAll('.row-menu-items button')].filter(b => b.checkVisibility()).map(b => b.textContent)")
-    check("each workout's menu holds Copy as new, Edit and Delete", items == ['Copy as new', 'Edit', 'Delete'], items)
+    # Legs was saved with a time, so it can be downloaded for Strava (activity_export covers the file); a workout with none cannot.
+    check("each workout's menu holds Copy as new, Edit, Download .tcx and Delete", items == ['Copy as new', 'Edit', 'Download .tcx', 'Delete'], items)
     cdp.ev(f"{row(legs)}.querySelector('[data-action=edit]').click()")
     cdp.pause(0.3)
     opened = cdp.wait("location.pathname === '/index.html' && !document.getElementById('workoutBuilderCard').hidden", timeout=10)

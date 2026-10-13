@@ -96,6 +96,8 @@ see a program working over the weeks.
 - Pounds or kilograms, your own bar and plates, 10 colour themes (light, dark, and colourful ones), four text sizes, and a clear
   focus ring for keyboard users.
 - Export everything as JSON, or your sets and sessions as CSV, and import a JSON export into another account or server.
+- Download a finished workout or session as a .tcx file, from its summary or History's ⋯ menu, to upload to Strava on its
+  website or to open in an app such as HealthFit that adds it to Apple Health (which cannot read a file itself).
 - Accounts with email or username sign-in (a username works in any capitals, and one that differs from another only in capitals
   is refused), "Remember me", and password reset by command or by email.
 

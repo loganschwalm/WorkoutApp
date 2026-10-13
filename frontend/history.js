@@ -51,6 +51,7 @@ function historyRow(workout) {
     + `<div class="row-actions"><a class="button-link primary" href="${page}?start=${encodeURIComponent(workout.id)}">Start</a>`
     + `<details class="row-menu"><summary class="secondary" aria-label="More for ${escapeHTML(workout.name)}">&middot;&middot;&middot;</summary>`
     + '<div class="row-menu-items"><button type="button" data-action="copy">Copy as new</button><button type="button" data-action="edit">Edit</button>'
+    + (canExportActivity(workout) ? '<button type="button" data-action="export">Download .tcx</button>' : '')
     + '<button class="danger" type="button" data-action="delete">Delete</button></div></details></div></div>'
     + `<div class="workout-details"${open ? '' : ' hidden'}>${workout.notes ? `<p class="workout-note">${escapeHTML(workout.notes)}</p>` : ''}`
     + `<ul>${workoutLines(workout)}</ul></div></li>`;
@@ -158,6 +159,7 @@ $('historyList').onclick = event => {
   if (menu) menu.open = false;
   if (action === 'view') showWorkoutDetails(row, row.querySelector('.workout-details').hidden);
   if (action === 'copy' || action === 'edit') location.href = `${isCardio(workout) ? 'cardio' : 'index'}.html?${action}=${encodeURIComponent(workout.id)}`;
+  if (action === 'export') showHistoryFeedback(activitySavedMessage(saveActivityFile(workout)));
   if (action === 'delete') deleteHistoryWorkout(workout);
 };
 $('historySearch').oninput = () => { if (historyWorkouts) renderHistory(historyWorkouts); };

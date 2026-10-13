@@ -823,6 +823,22 @@ Everything in your account can be saved to a file from Settings, and brought bac
   left out. Dates are the days in your own time zone, and a name that starts like a formula (`=`, `+`,
   `-`, `@`) is kept as text rather than run.
 - Workouts still waiting on the device upload first, so both files include them.
+- **Download for Strava (.tcx)** saves one workout or cardio session as a TCX file (Garmin's Training Center XML). It is
+  on the summary shown when a workout or a cardio session is finished, and in a History row's ⋯ menu as Download .tcx
+  (`activity-export.js`); a workout saved with no time (from the form, without the timer) has none, so it is not offered.
+  It is made on the device from the workout as it is, so it works offline and before the workout has reached the server.
+  The file is one activity of one lap with two trackpoints, at the start and the end: the start is the session's time
+  less its duration, since a timed session is saved at its end. The lap has the time, the distance in metres (from the
+  unit it was entered in, whatever Settings shows), the calories (0 when none) and the average heart rate when there is
+  one. There is no route and no heart-rate stream, because none was recorded, and the average is on the lap only (a
+  stream of the average would invent a maximum), so a site that works heart rate out from a stream does not show it.
+  A run is Running, cycling and the exercise bike Biking, and everything else, a
+  strength workout included, Other; Strava lets you change the type on its upload page. The format has no title, so the
+  notes hold the name, then what was done (a cardio session's line, or each exercise's sets, a skipped one left out),
+  then the workout's own notes. Strava takes a TCX file on its website's upload page (strava.com/upload). **Apple
+  Health cannot read a file itself**: an app such as HealthFit opens the .tcx and writes it to Health. The format cannot
+  hold a strength workout's sets, so a site shows one as a workout with a time, its sets only in the notes. The file
+  has not been checked against Strava's own importer, only against the schema's element order and an XML parser.
 - **Import** reads a JSON export back, into this account or into one on another server. It only ever
   adds. Workouts already in the account are skipped, so importing the same file twice changes nothing,
   and templates you already have stay as they are. Settings and a training program come in only if the

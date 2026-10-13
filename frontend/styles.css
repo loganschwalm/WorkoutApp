@@ -622,6 +622,7 @@ html[data-theme="dark"] .progression-hint.stalled { color:#f5c97a; }
 .past-sessions li { display:grid; gap:2px; }
 .past-sessions li span:first-child { color:var(--muted); font-size:.82rem; }
 .past-sessions-link { color:var(--accent); font-weight:600; }
+.summary-export { display:block; margin-top:6px; padding:12px 0; }
 /* Reps left in the tank, tapped before Complete set. */
 .effort-choices { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:10px; color:var(--muted); font-size:.85rem; }
 .effort-choices span { flex-basis:100%; }
