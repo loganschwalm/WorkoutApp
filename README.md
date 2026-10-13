@@ -56,6 +56,9 @@ library, with SQLite for storage, so there is no build step, no package manager 
 - Cancel a workout started by mistake: nothing is saved and no stats change, with Undo in case the tap was the slip.
 - Finishing shows a summary with any new personal records, achievements unlocked, the weekly goal and your streak, and a line
   to cheer it; records, goals and achievements set off fireworks across the whole screen.
+- While you train, it says what is within reach: the reps at this weight that would be a record, a plate milestone close by,
+  and what finishing the workout earns.
+- Share an achievement as a picture for social media, drawn in your theme.
 
 **Training programs**
 - **Wendler 5/3/1**: four days a week, with training maxes that go up each cycle, and Boring But Big or First Set Last.
@@ -65,7 +68,8 @@ library, with SQLite for storage, so there is no build step, no package manager 
 
 Every set is planned for you, weights progress on their own, and the plan shows what's next. Its Progress
 charts each lift's training max (or working weight) against the one-rep max your sets estimate, so you can
-see a program working over the weeks.
+see a program working over the weeks. A + set past its plan, every planned rep made, and a finished cycle are
+celebrated.
 
 **Cardio**, a tab of its own
 - Walks and runs, cycling, an exercise bike, the elliptical, a rowing machine, a stair climber, or anything else

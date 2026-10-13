@@ -72,6 +72,10 @@ function renderBigView() {
   const numbers = state.finished || state.holding ? '' : bigViewNumbers(state);
   setBigText('bigViewNumbers', numbers);
   setBigHidden('bigViewNumbers', !numbers);
+  // What the set would be a record of (reach.js), as the page says it under the exercise.
+  const reach = state.finished || state.holding || $('reachHint').hidden ? '' : $('reachHint').textContent;
+  setBigText('bigViewReach', reach);
+  setBigHidden('bigViewReach', !reach);
   const primary = $('bigViewPrimary');
   primary.dataset.kind = state.kind;
   setBigText('bigViewPrimary', state.kind === 'hold' ? $('holdBtn').textContent : state.kind === 'next' ? $('nextExerciseBtn').textContent : 'Complete set');

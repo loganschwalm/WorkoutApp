@@ -426,7 +426,7 @@ function showCardioSummary(workout, records, history = null) {
   $('cardioSummaryRecordList').innerHTML = records.map(record => `<li>${escapeHTML(record)}</li>`).join('');
   $('cardioSummarySplash').textContent = splashLine(rewardSplashKind(rewards, records));
   $('cardioSummaryAchievements').hidden = !rewards.earned.length;
-  renderEarnedAchievements($('cardioSummaryAchievementList'), rewards.earned);
+  renderEarnedAchievements($('cardioSummaryAchievementList'), rewards.earned, rewards.after);
   $('cardioSummaryStreak').textContent = streakLine;
   $('cardioSummaryStreak').hidden = !streakLine;
   $('cardioSummaryProgress').href = `progress.html?exercise=${encodeURIComponent(cardioKey(workout))}`;

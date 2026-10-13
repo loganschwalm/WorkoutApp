@@ -474,4 +474,4 @@ $('weightStepper').onclick = e => {
   input.value = String(Math.max(0, (Number(input.value) || 0) + step));
   input.dispatchEvent(new Event('input', { bubbles:true }));
 };
-$('activeWeight').oninput = () => { markInvalid($('activeWeight'), false); showPlates(); };
+$('activeWeight').oninput = () => { markInvalid($('activeWeight'), false); showPlates(); renderReach(); };

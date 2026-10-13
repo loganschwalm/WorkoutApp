@@ -213,6 +213,25 @@ own workouts, templates, and settings.
   whether it reached the weekly goal and the streak it leaves ("Weekly goal reached: that's a 4-week streak."). An
   achievement sets off the biggest fireworks, and reaching the weekly goal a goal's; records and goals reached had theirs
   on their set.
+- **Within reach** (`reach.js`): during a workout, what is a step away is said while there is time to go for it.
+  - Under the exercise, for the weight in the field (it follows the field, the −5/+5 buttons and every set logged, edited
+    or removed): the reps at that weight that would be a record ("6 reps at 185 lbs would be a record.", or "Any set at
+    190 lbs would be a record." for a weight heavier than ever, or "13 reps would be a record." without weight), a goal
+    from Progress the weight reaches ("A set at 225 lbs reaches your goal of 225 lbs."), a plate tier of the bench press,
+    squat or deadlift reached for the first time ("225 lbs puts 2 plates a side on the bar for the first time. It is
+    yours when you finish."), or one close by, within a tenth of it ("20 lbs from 2 plates a side (225 lbs).").
+    A goal comes first, then a first plate tier, then a record, then a plate tier close by.
+  - A record is said only when it is one: the next set is tried at each rep count from 1 to 15 through `newRecords`, as
+    logging it would be, and the fewest reps that give a different record from the workout's so far are said. So a set
+    of the reps it says sets off a record's fireworks, and one fewer does not. An exercise done for the first time has
+    nothing to beat, so it gets no record line.
+  - The plate tiers count every name for the lift (Bench Press and Barbell Bench Press are one), from the history and the
+    workout so far, in the workout's unit, and are earned when the workout is saved.
+  - It says nothing for a timed exercise, a warm-up set, or while the stall hint suggests a lighter week, which a nudge
+    to go heavier would argue with. The big view shows the line too, under the set's numbers.
+  - Under the workout's heading, what finishing it earns, worked out as a finish with nothing more logged would be: the
+    weekly goal and the streak it makes, and any achievement the count alone earns ("Finishing this workout reaches your
+    weekly goal (a 4-week streak) and earns “50 workouts”."). It waits for the saved workouts to load, as the summary does.
 - Add notes while training; they fold away until you open them, unless the workout already has some.
 - Keep a note with an exercise ("seat on 4", "grip on the rings"): Add note, in the exercise's ⋯ menu,
   saves it to your account, and it shows under that exercise whenever it comes up, in any workout.
@@ -379,6 +398,11 @@ up another replaces it, and the workouts you finished stay in your history. They
   the main lift ends with a "+" set of as many reps as you can, and the app turns it into an estimated
   one-rep max.
 - Finishing a program workout marks its day done. A day can also be skipped, or done again.
+- A program's moments are celebrated. A "+" set that goes past its planned reps is said as it is logged ("+ set: 8 reps,
+  3 more than the 5 planned!"), with a goal's fireworks, and with any record it also set. The summary of a program
+  workout lists, under Your program: the cycle or week it finished ("Cycle 3 of Wendler 5/3/1 complete. New training
+  maxes: …", with the biggest fireworks), the + set past its plan, and every planned rep of the main lift made. They
+  come from `completeProgramDay` (`program.js`), which also gives the sentence the banner says after saving.
 - Each program exercise has its own rest: 3 minutes after the main lift in 5/3/1 and PPL (2 minutes
   in Apartment Gym, whose main lifts are sets of 6 to 12), 90 seconds after compound accessories and
   Boring But Big, and a minute after small single-joint and core work such as curls, raises and face
@@ -777,6 +801,15 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
 - **Progress** has an Achievements row, first of the folding rows: a box for each kind, with the best tier earned and its day
   ("Squat: 2 plates · Earned Oct 3, 2026"), gold once one is earned, a mark for each tier, a bar to the next, and what that is
   ("Next: 25 workouts · now 12 workouts"). Its folded line says how many are earned and the latest.
+- **Share** (`achievement-card.js`): an achievement in a summary's list, and the best of each kind on Progress, can be
+  shared as a picture, 1080 by 1350 (a portrait post), drawn in the colours of the theme in use. On the card: a gold
+  emblem over its top right corner, a bumper plate stamped with the milestone ("50 / workouts") or, for a plate
+  achievement, the bar loaded with that many plates; the achievement's name, as large as fits in up to three lines, what
+  it took, a mark for each tier of its kind, the day it was earned, how many workouts there are so far (or, for a workout
+  milestone, the month training began), and the app's name under the card. It is drawn in the tap, so the phone's share
+  sheet still counts as its answer. The share sheet takes files only over HTTPS; at a plain `http://` address, and where
+  the share sheet is refused, the picture is saved as a file instead, and the page says so. Closing the share sheet does
+  nothing more.
 - **Encouraging lines** (`splashLine`): plain, picked at random when something happens (never while drawing), and not the same
   twice running in a tab. The Tracker has one under its status between workouts, picked once a visit and gone while a workout
   is on; the summaries of a finished workout and session pick one for the biggest thing they did (an achievement, a record,

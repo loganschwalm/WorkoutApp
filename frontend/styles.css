@@ -629,6 +629,13 @@ html[data-theme="dark"] .progression-hint.stalled { color:#f5c97a; }
 .summary-achievements li span { font-size:.85rem; }
 html[data-theme="dark"] .summary-achievements li { color:#ffe2a0; background:#3a2e10; border-color:#6b5520; }
 .summary-streak { color:var(--ink); font-weight:700; }
+/* A program day's moments in the summary (the block done, a + set past its plan, every planned rep made), in the accent. */
+.summary-program li { color:var(--ink); background:var(--accent-soft); border-color:var(--accent-line); }
+/* Share, under an achievement in a summary or on Progress: draws it as a picture (achievement-card.js). */
+.achievement-share { justify-self:start; min-width:44px; min-height:44px; margin:2px 0 -8px -10px; padding:4px 10px; font-size:.9rem; }
+/* Within reach (reach.js): what finishing the workout earns, under its heading, and what the next set would be a record of. */
+.reach-line { margin:6px 0 0; color:var(--accent); font-size:.92rem; font-weight:700; }
+.reach-hint { margin:8px 0 0; padding:8px 12px; color:var(--ink); background:var(--accent-soft); border-left:3px solid var(--accent); border-radius:8px; font-size:.92rem; font-weight:600; }
 /* The Tracker's line to start on, under the page's status, between workouts only. */
 .splash { margin:2px 0 0; color:var(--accent); font-size:.95rem; font-weight:600; font-style:italic; }
 body.training .splash { display:none; }
@@ -1071,6 +1078,7 @@ body.big-view-open .form-feedback { z-index:60; }
 .big-view-numbers { font-size:clamp(2.4rem, min(14vw, 17vh), 7.5rem); overflow-wrap:anywhere; }
 .big-view.resting .big-view-numbers { font-size:clamp(1.8rem, min(8vw, 9.5vh), 3.8rem); }
 .big-view.go .big-view-label, .big-view.go .big-view-numbers { color:var(--big-go); }
+.big-view-reach { max-width:34rem; color:var(--big-go); font-size:clamp(1.05rem, min(4.4vw, 5vh), 1.9rem); font-weight:700; text-wrap:balance; }
 .big-view-actions { display:grid; gap:10px; }
 .big-view-rest { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
 .big-view .big-view-primary { min-height:clamp(72px, 14vh, 120px); color:#000; background:#fff; box-shadow:none; font-size:clamp(1.4rem, min(6vw, 7vh), 2.4rem); }

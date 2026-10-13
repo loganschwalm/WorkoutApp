@@ -44,13 +44,14 @@
 
     <section class="card active-workout" id="activeWorkout" hidden>
       <div class="section-heading"><div><h2 id="activeWorkoutTitle">Active workout</h2><button class="progress-toggle" id="activeWorkoutProgress" type="button" aria-expanded="false" aria-controls="exerciseJump"></button></div><div class="section-heading-actions"><button class="secondary" id="bigViewBtn" type="button">Big view</button><button class="secondary" id="endWorkoutBtn" type="button">Cancel workout</button></div></div>
+      <p class="reach-line" id="workoutReach" hidden></p>
       <ol class="exercise-jump" id="exerciseJump" aria-label="Go to an exercise" hidden></ol>
       <div class="active-exercise"><div class="active-exercise-heading"><h3 id="activeExerciseName"></h3><details class="row-menu exercise-menu" id="exerciseMenu"><summary class="secondary" aria-label="More for this exercise">&middot;&middot;&middot;</summary><div class="row-menu-items"><button type="button" id="swapToggle" aria-expanded="false" aria-controls="swapPanel">Swap exercise</button><button type="button" id="guideToggle" aria-expanded="false" aria-controls="guidePanel">How to do it</button><button type="button" id="noteToggle" aria-expanded="false" aria-controls="notePanel">Add note</button><button type="button" id="supersetToggle">Superset with next</button></div></details></div>
         <div class="swap-panel" id="swapPanel" hidden><label for="swapName">Do this instead</label><div class="swap-fields"><input id="swapName" type="text" list="exerciseNames" autocomplete="off" placeholder="e.g. Dumbbell Bench Press" /><button class="primary" id="swapBtn" type="button">Swap</button><button class="secondary" id="swapCancel" type="button">Cancel</button></div><p class="subtitle" id="swapHelp"></p></div>
         <div class="swap-panel guide-panel" id="guidePanel" hidden><h4 id="guideTitle"></h4><p class="subtitle guide-for" id="guideFor" hidden></p><ol class="guide-steps" id="guideSteps"></ol><p class="guide-mistake" id="guideMistake" hidden></p><p class="guide-none subtitle" id="guideNone" hidden></p><div class="note-actions"><a class="guide-video" id="guideVideo" href="#" target="_blank" rel="noopener noreferrer">Find a video demo</a><button class="secondary" id="guideClose" type="button">Close</button></div></div>
         <div class="swap-panel" id="notePanel" hidden><label for="noteText">Note for this exercise</label><textarea class="notes-input" id="noteText" rows="2" maxlength="2000" placeholder="e.g. Seat on 4, grip on the rings"></textarea><div class="note-actions"><button class="primary" id="noteSave" type="button">Save note</button><button class="secondary" id="noteCancel" type="button">Cancel</button></div><p class="subtitle">Shown whenever you do this exercise, in any workout. Save it empty to remove it.</p></div>
         <p class="exercise-note" id="exerciseNote" hidden></p><p class="subtitle superset-line" id="supersetLine" hidden></p>
-        <p id="activeExerciseTarget" class="exercise-context target"></p><p id="activeExerciseLast" class="exercise-context" hidden></p><p class="progression-hint" id="progressionHint" hidden><span id="progressionText"></span> <button class="link-button" id="progressionUse" type="button"></button></p><details class="past-sessions" id="pastSessions" hidden><summary>Past sessions</summary><ul id="pastSessionList"></ul><a class="past-sessions-link" id="exerciseHistoryLink" href="progress.html">Every session, chart and records</a></details><ol class="plan-sets" id="activePlan" aria-label="Planned sets" hidden></ol></div>
+        <p id="activeExerciseTarget" class="exercise-context target"></p><p id="activeExerciseLast" class="exercise-context" hidden></p><p class="progression-hint" id="progressionHint" hidden><span id="progressionText"></span> <button class="link-button" id="progressionUse" type="button"></button></p><p class="reach-hint" id="reachHint" hidden></p><details class="past-sessions" id="pastSessions" hidden><summary>Past sessions</summary><ul id="pastSessionList"></ul><a class="past-sessions-link" id="exerciseHistoryLink" href="progress.html">Every session, chart and records</a></details><ol class="plan-sets" id="activePlan" aria-label="Planned sets" hidden></ol></div>
       <div class="set-entry">
         <div class="weight-entry"><label for="activeWeight">Weight (<span class="unit-label">lbs</span>)</label><div class="weight-stepper" id="weightStepper"><button class="secondary" type="button" data-weight-step="-5" aria-label="5 lbs lighter">&minus;5</button><input id="activeWeight" type="number" inputmode="decimal" min="0" step="0.5" placeholder="0" /><button class="secondary" type="button" data-weight-step="5" aria-label="5 lbs heavier">+5</button></div></div>
         <div class="reps-entry"><label for="completedReps" id="completedRepsLabel">Reps completed</label><input id="completedReps" type="number" inputmode="numeric" min="1" step="1" placeholder="0" /></div>
@@ -77,6 +78,7 @@
       <div class="section-heading"><div><h2 id="summaryTitle">Workout complete</h2><p class="subtitle" id="summaryName"></p></div><button class="secondary" id="summaryDone" type="button">Done</button></div>
       <p class="summary-splash" id="summarySplash" hidden></p>
       <div class="summary-records summary-achievements" id="summaryAchievements" hidden><h3>Achievements unlocked</h3><ul id="summaryAchievementList"></ul></div>
+      <div class="summary-records summary-program" id="summaryProgram" hidden><h3>Your program</h3><ul id="summaryProgramList"></ul></div>
       <p class="summary-headline" id="summaryCompare" hidden></p>
       <div class="summary-goals summary-records" id="summaryGoals" hidden><h3>Goals reached</h3><ul id="summaryGoalList"></ul></div>
       <div class="summary-records" id="summaryRecords" hidden><h3>New personal records</h3><ul id="summaryRecordList"></ul></div>
@@ -125,6 +127,7 @@
       <div class="big-view-bar" id="bigViewBar" aria-hidden="true" hidden><span></span></div>
       <p class="big-view-set" id="bigViewSet"></p>
       <p class="big-view-numbers" id="bigViewNumbers" hidden></p>
+      <p class="big-view-reach" id="bigViewReach" hidden></p>
     </div>
     <div class="big-view-actions">
       <div class="big-view-rest" id="bigViewRest" hidden><button type="button" data-big-rest="-30" aria-label="30 seconds less rest">&minus;30s</button><button type="button" data-big-rest="30" aria-label="30 seconds more rest">+30s</button><button type="button" id="bigViewToggle"></button><button type="button" id="bigViewSkip">Skip rest</button></div>
@@ -182,6 +185,8 @@
   <script src="records.js"></script>
   <script src="cardio-activities.js"></script>
   <script src="achievements.js"></script>
+  <script src="reach.js"></script>
+  <script src="achievement-card.js"></script>
   <script src="summary.js"></script>
   <script src="activity-export.js"></script>
   <script src="templates.js"></script>

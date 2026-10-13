@@ -244,17 +244,47 @@ function recordProgramDay(program, week, day, entry) {
 }
 
 // Called by finishWorkout for a workout started from the program with at least one set logged. A workout from a
-// program that has since been ended, restarted or moved on to its next block is saved, but marks nothing done.
+// program that has since been ended, restarted or moved on to its next block is saved, but marks nothing done. Returns the
+// sentence saying what comes next.
 function completeProgramWorkout(session) {
+  return completeProgramDay(session).note;
+}
+
+// The same, with what the day did for the summary to celebrate (null when it marked nothing done): the + set beating its
+// plan, every planned rep of the main lift made, and the block it finished, with the numbers it moved on to.
+function completeProgramDay(session) {
   const { programDay } = session;
   const program = currentProgram;
-  if (!programDay || !program || program.startedAt !== programDay.startedAt || program.cycle !== programDay.cycle || !programWeeks(program)[programDay.week] || !programDays(program)[programDay.day]) return '';
+  if (!programDay || !program || program.startedAt !== programDay.startedAt || program.cycle !== programDay.cycle || !programWeeks(program)[programDay.week] || !programDays(program)[programDay.day]) return { note:'', outcome:null };
   const entry = { at:Date.now(), skipped:false, amrap:amrapResult(session.exercises), hit:mainLiftHit(session.exercises) };
   const definition = programDefinition(program);
   const progress = definition.afterWorkout ? definition.afterWorkout(program, programDay.day, entry, session.exercises) : { program, note:'' };
   const main = session.exercises[0];
   const swapped = main && (isSwappedIn(main) || main.swappedOut) ? `${isSwappedIn(main) ? main.swappedFrom.name : main.name} was swapped out, so this workout does not count toward its progress.` : '';
-  return [swapped, progress.note, recordProgramDay(progress.program, programDay.week, programDay.day, entry)].filter(Boolean).join(' ');
+  const note = [swapped, progress.note, recordProgramDay(progress.program, programDay.week, programDay.day, entry)].filter(Boolean).join(' ');
+  // The block moved on with this day if the program is now the next run of the same one; only then is lastRollover this day's.
+  const rolledOver = Boolean(currentProgram) && currentProgram.startedAt === programDay.startedAt && currentProgram.cycle === programDay.cycle + 1;
+  const changes = rolledOver && currentProgram.lastRollover && currentProgram.lastRollover.changes && currentProgram.lastRollover.changes.length
+    ? describeChanges(currentProgram, currentProgram.lastRollover.changes) : '';
+  return { note, outcome:{ main:main && !swapped ? String(main.name).trim() : '', hit:entry.hit === true && !swapped,
+    beat:entry.amrap && entry.amrap.reps > entry.amrap.target ? entry.amrap : null,
+    completed:rolledOver ? { block:capitalize(definition.block), number:programDay.cycle, name:definition.name, changes, numbersLabel:definition.numbersLabel || '' } : null } };
+}
+
+// The summary's lines for a program day's outcome (completeProgramDay), the biggest first.
+function programOutcomeLines(outcome) {
+  if (!outcome) return [];
+  const lines = [];
+  if (outcome.completed) {
+    const { block, number, name, changes, numbersLabel } = outcome.completed;
+    lines.push(`${block} ${number} of ${name} complete.${changes ? ` New ${numbersLabel.toLowerCase()}: ${changes}.` : ''}`);
+  }
+  if (outcome.beat) {
+    const { weight, reps, target } = outcome.beat;
+    lines.push(`+ set: ${plural(reps, 'rep')}${weight ? ` at ${formatWeight(weight)} ${weightUnit()}` : ''}, ${reps - target} more than the ${target} planned.`);
+  }
+  if (outcome.hit && outcome.main) lines.push(`Every planned rep of ${outcome.main} made.`);
+  return lines;
 }
 
 // ---- Progress over the program --------------------------------------------

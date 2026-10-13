@@ -211,4 +211,161 @@ def run(t):
         check('a streak this week has yet to keep says what it takes', text('streakNote') == '3 more workouts by Sunday keeps your 1-week streak going.', text('streakNote'))
     else:
         check('with too few days left to keep it, nothing is said', ev("document.getElementById('streakNote').hidden") is True, text('streakNote'))
+
+    # ------------------------------------------------------------------ R within reach
+    print('R   during a workout, what the next set or the finish is a step away from')
+    reacher = account('reacher')
+    api('POST', '/api/workouts', {'name': 'Old', 'notes': '', 'createdAt': now - 20 * DAY_MS, 'exercises': [ex('Barbell Bench Press', 205, 1, [(1, 205)])]}, reacher)
+    api('POST', '/api/workouts', {'name': 'Push Day', 'notes': '', 'createdAt': now - 10 * DAY_MS, 'exercises': [ex('Bench Press', 185, 5, [(5, 185)])]}, reacher)
+    t.set_cookie(reacher)
+    t.open_tracker()
+    t.start(0)
+    cdp.pause(0.4)
+
+    def weigh(value):
+        ev(f"(e => {{ e.value = '{value}'; e.dispatchEvent(new Event('input', {{ bubbles: true }})); }})(document.getElementById('activeWeight'))")
+
+    def hint():
+        return text('reachHint') if ev("!document.getElementById('reachHint').hidden") else ''
+
+    def fireworks():
+        return ev("document.querySelector('.firework')?.dataset.size || ''")
+
+    check('the workout starts on the bench press, at last time’s 185 lbs', text('activeExerciseName') == 'Bench Press' and t.field('activeWeight') == '185', text('activeExerciseName'))
+    check('the reps at this weight that would be a record are said: 185 x 5 was the best, so 6', hint() == '6 reps at 185 lbs would be a record.', hint())
+    t.log_set(5)
+    cdp.pause(0.3)
+    check('one fewer sets off nothing', fireworks() == '' and hint() == '6 reps at 185 lbs would be a record.', [fireworks(), hint()])
+    cdp.pause(2.0)
+    t.log_set(6)
+    cdp.pause(0.3)
+    check('the reps it said set off the fireworks of a record', fireworks() == 'record', fireworks())
+    check('and the next record is a rep past the one just set', hint() == '7 reps at 185 lbs would be a record.', hint())
+    weigh(190)
+    check('a weight heavier than ever is a record at any reps', hint() == 'Any set at 190 lbs would be a record.', hint())
+    ev("document.getElementById('bigViewBtn').click()")
+    cdp.pause(0.4)
+    check('the big view says it too', ev("document.getElementById('bigViewReach').textContent") == 'Any set at 190 lbs would be a record.'
+          and ev("!document.getElementById('bigViewReach').hidden") is True, ev("document.getElementById('bigViewReach').textContent"))
+    ev("document.getElementById('bigViewClose').click()")
+    weigh('')
+    check('close to a plate tier, from any name for the lift: 205 lbs on the barbell bench press is 20 lbs from two plates',
+          hint() == '20 lbs from 2 plates a side (225 lbs).', hint())
+    weigh(225)
+    check('and a weight that reaches it for the first time says so, and when it is earned',
+          hint() == '225 lbs puts 2 plates a side on the bar for the first time. It is yours when you finish.', hint())
+    check('without the whole history, nothing is said of the finish',
+          ev("(() => { savedWorkoutsLoaded = false; reachBase = null; renderReach(); const hidden = document.getElementById('workoutReach').hidden; savedWorkoutsLoaded = true; reachBase = null; renderReach(); return hidden; })()") is True)
+    check('a timed exercise is left in peace', ev("(() => { activeSession.exercises[0].timed = true; renderActiveWorkout(); const quiet = document.getElementById('reachHint').hidden; activeSession.exercises[0].timed = false; renderActiveWorkout(); return quiet; })()") is True)
+    t.end_workout()
+
+    almost = account('almost')
+    monday = ev("startOfWeek(new Date()).getTime()")
+    for n in range(47):
+        api('POST', '/api/workouts', {'name': 'Old', 'notes': '', 'createdAt': monday - (60 - n) * DAY_MS, 'clientId': f'almost-{n}', 'exercises': [ex('Curl', 20, 10, [(10, 20)])]}, almost)
+    for n in range(2):
+        api('POST', '/api/workouts', {'name': 'W', 'notes': '', 'createdAt': monday + (n + 1) * 1000, 'clientId': f'week-{n}', 'exercises': [ex('Curl', 20, 10, [(10, 20)])]}, almost)
+    t.set_cookie(almost)
+    t.open_tracker()
+    t.start(0)
+    cdp.pause(0.4)
+    check('the workout says what finishing it earns: the weekly goal, and the fiftieth workout',
+          text('workoutReach').startswith('Finishing this workout reaches your weekly goal') and text('workoutReach').endswith('and earns “50 workouts”.'), text('workoutReach'))
+    t.end_workout()
+
+    # ------------------------------------------------------------------ M a program's moments
+    print('M   a program day: a + set past its plan, every planned rep made, and the week it finishes')
+    programmer = account('programmer')
+    last_day = {'definition': 'reddit-ppl', 'startedAt': 1000, 'cycle': 1, 'lastRollover': None,
+                'trainingMaxes': {'deadlift': 225, 'row': 115, 'bench': 135, 'press': 85, 'squat': 185}, 'options': {'rounding': 5},
+                'done': {f'0-{day}': {'at': 2000 + day, 'skipped': False, 'amrap': None, 'hit': None} for day in range(5)}}
+    api('PUT', '/api/state', {'program': last_day}, programmer)
+    t.set_cookie(programmer)
+    t.open_tracker()
+    ev("document.querySelector('#programNext [data-program-action=start]').click()")
+    cdp.wait("!document.getElementById('activeWorkout').hidden")
+    cdp.pause(0.4)
+    planned = ev('activeSession.exercises[0].plan.map(set => set.reps)')
+    for reps in planned[:-1]:
+        t.log_set(reps)
+        cdp.pause(0.3)
+    cdp.pause(2.0)
+    t.log_set(8)
+    cdp.pause(0.3)
+    check('a + set past its plan is said and celebrated as it is logged', '+ set: 8 reps, 3 more than the 5 planned!' in text('formFeedback') and fireworks() == 'goal',
+          [text('formFeedback'), fireworks()])
+    cdp.pause(2.8)
+    t.finish_all()
+    cdp.wait("!document.getElementById('workoutSummary').hidden", timeout=10)
+    cdp.pause(0.3)
+    lines = ev("[...document.querySelectorAll('#summaryProgramList li')].map(li => li.textContent)")
+    check('the summary says the week of the program is done, the + set, and every planned rep of the main lift made',
+          ev("!document.getElementById('summaryProgram').hidden") is True and lines and lines[0] == 'Week 1 of Reddit PPL complete.'
+          and any(line.startswith('+ set: 8 reps at 185 lbs, 3 more than the 5 planned.') for line in lines)
+          and any(line.startswith('Every planned rep of ') for line in lines), lines)
+    check('with the biggest fireworks', fireworks() == 'achievement', fireworks())
+    check('and the program moved on to its next week', ev('currentProgram.cycle') == 2)
+
+    # ------------------------------------------------------------------ K the card to share
+    print('K   an achievement drawn as a picture to share, and saved where it cannot be')
+    t.set_cookie(almost)
+    cdp.goto('/progress.html')
+    cdp.wait("document.querySelectorAll('#achievementList .achievement').length > 0")
+    cdp.pause(0.5)
+    fitted = ev("""(() => {
+      const result = achievementsOf(loadedWorkouts), problems = [];
+      const fill = CanvasRenderingContext2D.prototype.fillText;
+      const footer = 64 + 1130 - 214;
+      achievementFamilies.forEach(family => family.tiers(result.context).forEach(tier => {
+        const item = { id: family.id + ':' + tier, family: family.id, tier, name: family.name(tier, result.context), detail: family.detail(tier, result.context), at: Date.now() };
+        const drawn = [];
+        CanvasRenderingContext2D.prototype.fillText = function (text, x, y) { drawn.push({ text, x, y, width: this.measureText(text).width }); };
+        let canvas;
+        try { canvas = drawAchievementCard(item, result); } finally { CanvasRenderingContext2D.prototype.fillText = fill; }
+        if (canvas.width !== 1080 || canvas.height !== 1350) problems.push(item.id + ' size');
+        // The name and what it took: inside the card's margins, and above the line over the date.
+        const body = drawn.filter(line => line.x === 144 && line.y < footer);
+        body.forEach(line => {
+          if (line.x + line.width > 937) problems.push(item.id + ' too wide: ' + line.text);
+          if (line.y > footer - 20 || line.y < 64 + 470) problems.push(item.id + ' out of its room: ' + line.text);
+        });
+        if (body.map(line => line.text).join(' ').replace(/\\u00a0/g, ' ').indexOf(item.name) !== 0) problems.push(item.id + ' name not drawn whole');
+      }));
+      return problems;
+    })()""")
+    check('every tier of every kind fits its card: its name and what it took within the margins, under the emblem and above the date', fitted == [], fitted[:5])
+
+    share = ev("""(async () => {
+      const result = achievementsOf(loadedWorkouts), item = result.earned[result.earned.length - 1];
+      const saved = [], shared = [];
+      const click = HTMLAnchorElement.prototype.click;
+      HTMLAnchorElement.prototype.click = function () { saved.push(this.download); };
+      const real = { share: navigator.share, canShare: navigator.canShare };
+      const outcome = {};
+      try {
+        navigator.canShare = () => true;
+        navigator.share = data => { shared.push(data.files.map(file => [file.name, file.type, file.size > 1000])); return Promise.resolve(); };
+        outcome.shared = await shareAchievementCard(item, result);
+        navigator.share = () => Promise.reject(new DOMException('closed', 'AbortError'));
+        outcome.cancelled = await shareAchievementCard(item, result);
+        navigator.share = () => Promise.reject(new DOMException('no', 'NotAllowedError'));
+        outcome.refused = await shareAchievementCard(item, result);
+        navigator.canShare = () => false;
+        outcome.unshareable = await shareAchievementCard(item, result);
+      } finally {
+        HTMLAnchorElement.prototype.click = click;
+        navigator.share = real.share; navigator.canShare = real.canShare;
+      }
+      return { outcome, shared, saved, name: item.name };
+    })()""")
+    check('where the share sheet takes a picture, it is given the card as a PNG and nothing is saved',
+          share['shared'] and share['shared'][0][0][1] == 'image/png' and share['shared'][0][0][2] is True and share['outcome']['shared'] == '', share)
+    check('closing the share sheet does nothing more', share['outcome']['cancelled'] == '' and len(share['saved']) == 2, share)
+    check('a share refused, or no share sheet at all (a plain http:// address), saves the picture and says so',
+          share['outcome']['refused'].startswith('Saved ') and share['outcome']['unshareable'].startswith('Saved ') and all(name.endswith('.png') for name in share['saved']), share)
+    check('Progress offers Share on each kind earned', ev("document.querySelectorAll('#achievementList .achievement.earned [data-share]').length") == ev("document.querySelectorAll('#achievementList .achievement.earned').length") > 0)
+    ev("navigator.canShare = () => false; HTMLAnchorElement.prototype.click = function () { window.__savedCard = this.download; }")
+    ev("document.querySelector('#achievementList [data-share]').click()")
+    cdp.pause(0.6)
+    check('and tapping it saves the card where it cannot be shared, saying so', ev("window.__savedCard || ''").endswith('.png') and text('achievementFeedback').startswith('Saved '), text('achievementFeedback'))
     t.set_cookie(t.token)

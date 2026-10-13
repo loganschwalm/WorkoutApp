@@ -100,7 +100,7 @@ function summaryBefore(workout) {
 // How long it took, how much was done, how that compares, any new personal records, and what it earned: achievements, the
 // weekly goal, the streak, with a line to cheer it and fireworks for the big things (each record had its own on its set). It
 // stays until Done or the next workout starts. `before` is summaryBefore's, from before the workout was added to the history.
-function showWorkoutSummary(workout, records, before = {}) {
+function showWorkoutSummary(workout, records, before = {}, programOutcome = null) {
   const shown = inUnit(workout);
   const rows = summaryExercises(shown, before.last || {});
   const sets = rows.reduce((total, row) => total + row.sets, 0);
@@ -121,11 +121,15 @@ function showWorkoutSummary(workout, records, before = {}) {
   $('summaryCompare').textContent = compared;
   $('summaryCompare').hidden = !compared;
   // Something to lead with (a comparison, a goal reached, a record) makes the totals a quiet line; without, they are the summary.
-  $('workoutSummary').classList.toggle('has-lead', Boolean(compared || goals.length || records.length || rewards.earned.length));
-  $('summarySplash').textContent = splashLine(rewardSplashKind(rewards, records));
+  $('workoutSummary').classList.toggle('has-lead', Boolean(compared || goals.length || records.length || rewards.earned.length || (programOutcome && (programOutcome.completed || programOutcome.beat || programOutcome.hit))));
+  $('summarySplash').textContent = splashLine(rewardSplashKind(rewards, records, programOutcome));
   $('summarySplash').hidden = false;
   $('summaryAchievements').hidden = !rewards.earned.length;
-  renderEarnedAchievements($('summaryAchievementList'), rewards.earned);
+  renderEarnedAchievements($('summaryAchievementList'), rewards.earned, rewards.after);
+  // A program day's moments: the block finished and its new numbers, a + set past its plan, every planned rep made.
+  const programLines = programOutcomeLines(programOutcome);
+  $('summaryProgram').hidden = !programLines.length;
+  $('summaryProgramList').innerHTML = programLines.map(line => `<li>${escapeHTML(line)}</li>`).join('');
   $('summaryStreak').textContent = streakLine;
   $('summaryStreak').hidden = !streakLine;
   $('summaryWeek').textContent = before.week ? weekGoalLine(before.week, weeklyGoalFrom(getWorkoutSettings().weeklyGoal)) : '';
@@ -140,7 +144,7 @@ function showWorkoutSummary(workout, records, before = {}) {
   offerActivityExport($('summaryExport'), workout);
   $('workoutSummary').hidden = false;
   $('workoutSummary').scrollIntoView({ behavior:'smooth', block:'start' });
-  if (rewards.earned.length) celebrate($('summaryTitle'), 'achievement');
+  if (rewards.earned.length || (programOutcome && programOutcome.completed)) celebrate($('summaryTitle'), 'achievement');
   else if (rewards.weekReached) celebrate($('summaryTitle'), 'goal');
 }
 

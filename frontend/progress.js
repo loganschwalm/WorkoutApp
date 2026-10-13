@@ -541,8 +541,12 @@ function renderExerciseCard() {
 // ---- Achievements --------------------------------------------------------------
 // A row for each kind (achievements.js): the best tier earned and its day, a mark for each tier, and a bar to the next. From the
 // workouts as they were logged (not converted), so a plate counts in the unit it was loaded in.
+// The achievements as last drawn, which a row's Share draws its card from.
+let shownAchievements = null;
+
 function renderAchievements() {
-  const { families, earned } = achievementsOf(loadedWorkouts);
+  shownAchievements = achievementsOf(loadedWorkouts);
+  const { families, earned } = shownAchievements;
   const total = families.reduce((sum, family) => sum + family.tiers.length, 0);
   const latest = earned.reduce((newest, item) => !newest || item.at >= newest.at ? item : newest, null);
   $('achievementsState').textContent = earned.length ? `${earned.length} of ${total} earned · latest ${latest.name}` : `0 of ${total} earned`;
@@ -557,11 +561,20 @@ function renderAchievements() {
       + `<span class="achievement-marks" role="img" aria-label="${family.earned.length} of ${family.tiers.length} earned">${marks}</span></div>`
       + `<span>${escapeHTML(top ? `Earned ${longDate(top.at)}` : 'Not earned yet')}</span>`
       + `<div class="goal-bar achievement-bar" role="progressbar" aria-label="${escapeHTML(`${family.title}, toward the next`)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}"><span></span></div>`
-      + `<span class="achievement-next">${escapeHTML(next)}</span></li>`;
+      + `<span class="achievement-next">${escapeHTML(next)}</span>`
+      + (top ? `<button class="link-button achievement-share" type="button" data-share="${escapeHTML(top.id)}" aria-label="Share ${escapeHTML(top.name)} as a picture">Share</button>` : '') + '</li>';
   }).join('');
   // Through the DOM, as the goals' bars are: the Content-Security-Policy refuses style="" written into markup.
   $('achievementList').querySelectorAll('.achievement-bar').forEach(bar => { bar.firstElementChild.style.width = `${bar.getAttribute('aria-valuenow')}%`; });
 }
+
+// Share draws the row's best achievement as a card (achievement-card.js), and says so when it was saved rather than shared.
+$('achievementList').onclick = event => {
+  const button = event.target.closest('[data-share]');
+  const item = button && shownAchievements && shownAchievements.earned.find(entry => entry.id === button.dataset.share);
+  if (!item) return;
+  shareAchievementCard(item, shownAchievements).then(said => { $('achievementFeedback').textContent = said; });
+};
 
 // ---- Personal records -----------------------------------------------------
 // Each exercise's best, from every saved workout whatever the filters: the heaviest weight (with the most reps done at

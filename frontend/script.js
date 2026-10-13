@@ -329,6 +329,8 @@ function renderActiveWorkout() {
     + (lastSet ? ` · last ${describeLoggedSets([lastSet], timed)}` : '');
   syncHoldDisplay();
   $('activeSyncNotice').hidden = !activeSyncFailed;
+  // What the next set or the finish is a step away from (reach.js), now the stall hint has had its say.
+  renderReach();
 }
 
 // Going to another exercise, ending a workout or starting one closes whatever was open for the exercise before.
@@ -453,9 +455,10 @@ async function finishWorkout() {
   rememberBests(workout);
   queuePendingWorkout(workout);
   // Marks the program's day done (and may start its next cycle); says what comes next.
-  const programNote = activeSession.programDay ? completeProgramWorkout(activeSession) : '';
+  const programDay = activeSession.programDay ? completeProgramDay(activeSession) : { note:'', outcome:null };
+  const programNote = programDay.note;
   closeActiveWorkout();
-  showWorkoutSummary(workout, records, before);
+  showWorkoutSummary(workout, records, before, programDay.outcome);
   const synced = await flushPendingWorkouts();
   const note = (skipped ? ` ${skipped} exercise${skipped === 1 ? '' : 's'} with no sets ${skipped === 1 ? 'was' : 'were'} left out.` : '')
     + (programNote ? ` ${programNote}` : '');
@@ -490,6 +493,8 @@ async function loadSavedWorkouts() {
     // The program card's Progress is drawn from the workouts, which have only now arrived.
     renderProgram();
     renderScheduleNudge();
+    // A workout already under way can say what finishing it earns, now the whole history is here.
+    if (activeSession) renderReach();
     workoutsReachable = true;
     renderStorageStatus();
     return workouts;
@@ -710,14 +715,16 @@ function recordSet(exercise, { weightValue, reps }) {
   // A goal reached gets a bigger firework than a record, and the record's would only sit on top of it.
   // The fireworks go up from the button that was tapped: the big view's, when it is open over the page.
   const tapped = bigViewIsOpen() ? $('bigViewPrimary') : $('completeSetBtn');
-  let said = '';
-  if (goalReached) {
-    celebrate(tapped, 'goal');
-    said = `Goal reached: ${goalReached.name}, ${formatWeight(goalReached.target)} ${goalReached.unit || 'lbs'}!`;
-  } else if (recordNow && recordNow !== recordBefore) {
-    celebrate(tapped, 'record');
-    said = `New record! ${recordNow}.`;
-  }
+  // A program's + set (as many reps as you can) that went past its planned reps.
+  const planned = Array.isArray(exercise.plan) ? exercise.plan[exercise.sets.length - 1] : null;
+  const beatBy = planned && planned.amrap && !isSwappedIn(exercise) ? reps - (Number(planned.reps) || 0) : 0;
+  const record = recordNow && recordNow !== recordBefore ? `New record! ${recordNow}.` : '';
+  const goal = goalReached ? `Goal reached: ${goalReached.name}, ${formatWeight(goalReached.target)} ${goalReached.unit || 'lbs'}!` : '';
+  const plus = beatBy > 0 ? `+ set: ${plural(reps, 'rep')}, ${beatBy} more than the ${planned.reps} planned!` : '';
+  // One message saying all of it, and one show, the size of the biggest. A goal reached says it was the heaviest yet already.
+  const said = (goal ? [goal, plus] : [plus, record]).filter(Boolean).join(' ');
+  if (goal || plus) celebrate(tapped, 'goal');
+  else if (record) celebrate(tapped, 'record');
   if (said) showFeedback(said, 'success');
   unlockAudio();
   // A tap: the moment a phone that refused the keep-awake video (see syncWakeLock) is asked again.
@@ -873,6 +880,7 @@ $('completedSets').onchange = e => {
   set[field] = Number(value) || 0;
   clearFeedback();
   persistActiveSession();
+  renderReach();
 };
 // Remove takes the set away at once, with no question asked mid-workout, and the banner offers it back for a few
 // seconds in case the tap was a slip. Undo puts it back in its place, even after moving on to another exercise.

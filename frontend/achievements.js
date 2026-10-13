@@ -79,6 +79,12 @@ const plateLifts = {
   squat:['squat', 'back squat', 'barbell squat', 'barbell back squat', 'high bar squat', 'low bar squat'],
   deadlift:['deadlift', 'barbell deadlift', 'conventional deadlift', 'sumo deadlift']
 };
+// Which of plateLifts an exercise is, or null.
+function plateLiftOf(name) {
+  const key = exerciseKey(name ?? '');
+  return Object.keys(plateLifts).find(lift => plateLifts[lift].includes(key)) || null;
+}
+
 // A 45 lb or 20 kg bar with one, two, three and four big plates a side, in the unit a set was logged in.
 const plateWeights = { lbs:[135, 225, 315, 405], kg:[60, 100, 140, 180] };
 const achievementDay = 86400000;
@@ -152,7 +158,6 @@ function achievementsOf(sessions, options = {}) {
   const weeks = new Map(), weekDays = new Map(), exercises = new Set();
   const cardioBestsSoFar = new Map();
   let bests = {}, previousAt = null;
-  const plateFamily = new Map(Object.entries(plateLifts).flatMap(([lift, names]) => names.map(name => [name, lift])));
   [...uniqueSessions(sessions)].sort((a, b) => a.createdAt - b.createdAt).forEach(session => {
     metrics.workouts += 1;
     if (previousAt !== null && session.createdAt - previousAt >= 14 * achievementDay) metrics.comeback = 1;
@@ -187,7 +192,7 @@ function achievementsOf(sessions, options = {}) {
         if (!key || !sets.length) return;
         exercises.add(key);
         if (isTimed(item)) return;
-        const lift = plateFamily.get(key);
+        const lift = plateLiftOf(key);
         sets.forEach(set => {
           const weight = Number(set.weight) || 0, reps = Number(set.reps) || 0;
           if (!(weight > 0) || reps < 1) return;
@@ -219,15 +224,18 @@ function achievementsEarnedBy(history, session, options = {}) {
 }
 
 // Everything a finished workout or session is rewarded with, against the history before it (null when that is not all in
-// hand, which earns nothing): what it earned, whether it took the week to the goal, and the streak it leaves.
+// hand, which earns nothing): what it earned, whether it took the week to the goal, the streak it leaves, and the
+// achievements as they stand after it (`after`, achievementsOf's, null without the history), which a shared card draws on.
 function finishRewards(history, session) {
-  if (!history) return { earned:[], weekReached:false, streak:0 };
+  if (!history) return { earned:[], weekReached:false, streak:0, after:null };
   const before = uniqueSessions(history).filter(other => achievementSessionKey(other) !== achievementSessionKey(session));
   const goal = weeklyGoalFrom(getWorkoutSettings().weeklyGoal);
   const monday = startOfWeek(new Date(session.createdAt));
   const weeks = weekCountsOf([...before, session]);
-  return { earned:achievementsEarnedBy(before, session), weekReached:weeks.get(calendarDayKey(monday)) === goal,
-    streak:weeklyStreaks(weeks, goal, startOfWeek(new Date())).current };
+  const had = new Set(achievementsOf(before).earned.map(item => item.id));
+  const after = achievementsOf([...before, session]);
+  return { earned:after.earned.filter(item => !had.has(item.id)), weekReached:weeks.get(calendarDayKey(monday)) === goal,
+    streak:weeklyStreaks(weeks, goal, startOfWeek(new Date())).current, after };
 }
 
 // The line about the week and the streak, after a workout: '' when there is nothing to say.
@@ -236,9 +244,17 @@ function rewardStreakLine(rewards) {
   return rewards.streak >= 2 ? `${rewards.streak}-week streak, and counting.` : '';
 }
 
-// A summary's list of achievements earned: a name and what it took, each.
-function renderEarnedAchievements(list, earned) {
-  list.innerHTML = earned.map(item => `<li><strong>${escapeHTML(item.name)}</strong><span>${escapeHTML(item.detail)}</span></li>`).join('');
+// A summary's list of achievements earned: a name and what it took, each, and a button to share it as a card
+// (achievement-card.js) where the page has the cards and the achievements as they stand (`after`, finishRewards').
+function renderEarnedAchievements(list, earned, after = null) {
+  const sharing = Boolean(after) && typeof shareAchievementCard === 'function';
+  list.innerHTML = earned.map((item, index) => `<li><strong>${escapeHTML(item.name)}</strong><span>${escapeHTML(item.detail)}</span>`
+    + (sharing ? `<button class="link-button achievement-share" type="button" data-share="${index}" aria-label="Share ${escapeHTML(item.name)} as a picture">Share</button>` : '') + '</li>').join('');
+  list.onclick = event => {
+    const button = event.target.closest('[data-share]');
+    if (!button || !sharing) return;
+    shareAchievementCard(earned[Number(button.dataset.share)], after).then(said => { if (said) showFeedback(said, 'success'); });
+  };
 }
 
 // ---- Encouraging lines --------------------------------------------------------------
@@ -278,6 +294,11 @@ const splashLines = {
     'That one is going on the wall.',
     'Look at you, collecting milestones.'
   ],
+  cycle:[
+    'A whole block done. The numbers go up from here.',
+    'Cycle complete. That is planned, honest progress.',
+    'Another block in the books. On to the next one.'
+  ],
   streak:[
     'Weekly goal reached. That is how streaks are made.',
     'Another week at your goal. Keep the chain going.',
@@ -296,7 +317,8 @@ function splashLine(kind, random = Math.random) {
   return line;
 }
 
-// What a finished workout's line is about: the biggest thing it did.
-function rewardSplashKind(rewards, records) {
-  return rewards.earned.length ? 'achievement' : records.length ? 'record' : rewards.weekReached ? 'streak' : 'finish';
+// What a finished workout's line is about: the biggest thing it did. `program` is a program day's outcome (program.js), if any.
+function rewardSplashKind(rewards, records, program = null) {
+  return rewards.earned.length ? 'achievement' : program && program.completed ? 'cycle' : records.length || (program && program.beat) ? 'record'
+    : rewards.weekReached ? 'streak' : 'finish';
 }
