@@ -92,7 +92,11 @@ own workouts, templates, and settings.
 - Complete set is answered with the one motion in the app: the next planned set pops in and the rest time settles. It is off for
   anyone who has asked for less motion, and moves no box, so a measure taken as it appears is unaffected.
 - Finish early, beside Next exercise until the last, ends the workout there: the exercises with sets are saved and the
-  rest left out, after asking first.
+  rest left out, after asking first. Finish workout, which Next exercise becomes in the same place on the last exercise, asks
+  the same while any exercise has no sets, so a double tap on Next before the last cannot finish without it.
+- A thumb that bounces logs one set. A tap on Complete set, Same as last set or the big view's button within 0.6 seconds
+  of a set being logged is ignored (`bouncedTap` in `script.js`), since the button is still under the thumb once the set
+  is in. Only real taps are judged: a click the page makes itself is not.
 - Move through exercises one at a time, or go straight to any of them: tap "Exercise 2 of 6" for a
   list of every exercise and how many sets each has, and tap one to go there. Handy when a machine is
   taken and you do the next free one first.
@@ -397,7 +401,10 @@ up another replaces it, and the workouts you finished stay in your history. They
   what was lifted (a + set's reps, a weight changed on the day). In 5/3/1 and PPL
   the main lift ends with a "+" set of as many reps as you can, and the app turns it into an estimated
   one-rep max.
-- Finishing a program workout marks its day done. A day can also be skipped, or done again.
+- Finishing a program workout marks its day done. A day can also be skipped, or done again. Skip says so in the banner with
+  Undo for ten seconds, which puts the program back as it was: skipping a block's last day starts the next block with new
+  numbers, so a stray tap beside Start workout would otherwise raise every training max. Undo refuses once the program has
+  changed since (another day done, the program edited or ended).
 - A program's moments are celebrated. A "+" set that goes past its planned reps is said as it is logged ("+ set: 8 reps,
   3 more than the 5 planned!"), with a goal's fireworks, and with any record it also set. The summary of a program
   workout lists, under Your program: the cycle or week it finished ("Cycle 3 of Wendler 5/3/1 complete. New training

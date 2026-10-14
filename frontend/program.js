@@ -651,11 +651,27 @@ $('programCard').addEventListener('click', event => {
   if (!programWeeks(currentProgram)[week] || !programDays(currentProgram)[day]) return;
   if (button.dataset.programAction === 'start') startWorkout(programWorkout(currentProgram, week, day));
   // A skipped day counts as done, so the program moves on, but it changes no weights; Redo on its row still starts it.
+  // Skip is beside Start workout, and skipping a block's last day starts the next with new training maxes, so the banner
+  // offers it back for a few seconds, in case the tap was the slip.
   if (button.dataset.programAction === 'skip') {
+    const before = currentProgram;
     const label = dayLabel(currentProgram, week, day);
-    showFeedback(`Skipped ${label}. ${recordProgramDay(currentProgram, week, day, { at:Date.now(), skipped:true, amrap:null, hit:null })}`, 'success');
+    const said = recordProgramDay(currentProgram, week, day, { at:Date.now(), skipped:true, amrap:null, hit:null });
+    const skipped = currentProgram;
+    showFeedback(`Skipped ${label}. ${said}`, 'success', { label:'Undo', run:() => undoSkip(before, skipped, label) });
   }
 });
+
+// Puts the program back as it was before a day was skipped, unless it has changed since (another day done, the program
+// edited or ended), when going back would undo that too.
+function undoSkip(before, skipped, label) {
+  if (currentProgram !== skipped) {
+    showFeedback(`Skipping ${label} cannot be undone: the program has changed since.`);
+    return;
+  }
+  saveProgram(before);
+  showFeedback(`${label} is back on the plan.`, 'success');
+}
 $('editProgramBtn').onclick = () => {
   if (!currentProgram) return;
   if (programDefinition(currentProgram).custom) openProgramBuilder(currentProgram);

@@ -774,3 +774,59 @@ def run(t):
     cdp.ev("document.getElementById('finishEarlyBtn').click()")
     cdp.pause(0.3)
     check('with nothing logged it asks as Finish does, not twice', len(cdp.dialogs) == 1 and 'No sets were logged' in cdp.dialogs[0], cdp.dialogs)
+
+    # ---- B: a thumb that bounces
+    print('B   a tap that bounces logs one set, and Next becoming Finish asks before leaving an exercise out')
+
+    def tap(idn):
+        # A real tap at the middle of the button, as a finger gives one; a click made by the page is not judged as a bounce.
+        # Where the button is is read again for every tap, since logging a set moves things.
+        x, y = cdp.ev(f"(() => {{ const b = document.getElementById('{idn}'); b.scrollIntoView({{ block: 'center' }}); const r = b.getBoundingClientRect(); "
+                      "return [r.x + r.width / 2, r.y + r.height / 2]; })()")
+        for kind in ('mousePressed', 'mouseReleased'):
+            cdp.send('Input.dispatchMouseEvent', type=kind, x=x, y=y, button='left', clickCount=1)
+
+    def entry(weight, reps):
+        cdp.ev(f"document.getElementById('activeWeight').value = '{weight}'; document.getElementById('completedReps').value = '{reps}'")
+
+    open_tracker()
+    start(0)
+    cdp.pause(0.4)
+    cdp.dialogs.clear()
+    entry(135, 5)
+    tap('completeSetBtn')
+    tap('completeSetBtn')
+    cdp.pause(0.3)
+    check('Complete set tapped twice at once logs the set once', sets_of(0) == [[135, 5]], sets_of(0))
+    cdp.pause(0.7)
+    entry(145, 5)
+    tap('completeSetBtn')
+    cdp.pause(0.3)
+    check('a tap once the moment has passed logs the next set', sets_of(0) == [[135, 5], [145, 5]], sets_of(0))
+    cdp.pause(0.7)
+    tap('repeatSetBtn')
+    tap('repeatSetBtn')
+    cdp.pause(0.3)
+    check('so does Same as last set', sets_of(0) == [[135, 5], [145, 5], [145, 5]], sets_of(0))
+    cdp.pause(0.7)
+    cdp.ev('openBigView()')
+    cdp.pause(0.3)
+    entry(150, 3)
+    tap('bigViewPrimary')
+    tap('bigViewPrimary')
+    cdp.pause(0.3)
+    check('and the big view’s button', sets_of(0) == [[135, 5], [145, 5], [145, 5], [150, 3]], sets_of(0))
+    cdp.ev('closeBigView()')
+
+    cdp.answer = False
+    cdp.dialogs.clear()
+    waiting = cdp.ev('activeSession.exercises.length') - 1
+    cdp.ev('goToExercise(activeSession.exercises.length - 2)')
+    cdp.pause(0.2)
+    cdp.ev("document.getElementById('nextExerciseBtn').click(); document.getElementById('nextExerciseBtn').click()")
+    cdp.pause(0.3)
+    check('Next tapped twice on the exercise before the last asks before finishing, since the last has no sets yet',
+          cdp.dialogs == [f'Finish Push Day now? {waiting} exercises with no sets will be left out.'] and cdp.ev(ACTIVE) is True
+          and text('nextExerciseBtn') == 'Finish workout', cdp.dialogs)
+    cdp.answer = True
+    end_workout()

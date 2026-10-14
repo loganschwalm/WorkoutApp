@@ -756,6 +756,16 @@ function restAfterSet(said = '') {
   if (getWorkoutSettings().bigViewOnRest === true) openBigView();
 }
 
+// A thumb that lands twice on Complete set, which is still under it once the set is logged, would log the set twice. A tap
+// this soon after a set was logged is taken as that bounce rather than another set, since no set takes under a second. Only
+// real taps are judged: the big view passes its own on as a click of the page's button, and judges the tap itself.
+const SET_BOUNCE_MS = 600;
+let setLoggedAt = -Infinity;
+
+function bouncedTap(event) {
+  return event.isTrusted && event.timeStamp - setLoggedAt < SET_BOUNCE_MS;
+}
+
 // Logs a set: the one in the entry fields (Complete set), or the entry given (Same as last set), after the checks and
 // questions that either gets.
 function logSet(entry = null) {
@@ -782,10 +792,12 @@ function logSet(entry = null) {
     return;
   }
   clearFeedback();
+  // performance.now() is the clock a tap's timeStamp is on.
+  setLoggedAt = performance.now();
   restAfterSet(recordSet(exercise, entry));
 }
 
-$('completeSetBtn').onclick = () => logSet();
+$('completeSetBtn').onclick = event => { if (!bouncedTap(event)) logSet(); };
 
 // Logs the set before this one again: the weight, reps or seconds are as it was, whatever the fields say, and the usual
 // checks and rest follow, as for Complete set. A hold being timed is stopped first, so its seconds do not replace the set's.
@@ -796,7 +808,7 @@ function repeatLastSet() {
   stopHold();
   logSet({ weightValue:String(last.weight || 0), reps:Number(last.reps) });
 }
-$('repeatSetBtn').onclick = repeatLastSet;
+$('repeatSetBtn').onclick = event => { if (!bouncedTap(event)) repeatLastSet(); };
 $('completedReps').oninput = () => { markInvalid($('completedReps'), false); syncHoldDisplay(); };
 $('activeWorkoutProgress').onclick = () => showExerciseJump($('exerciseJump').hidden);
 $('otherCardsToggle').onclick = () => showOtherCards(!document.body.classList.contains('showing-all'));
@@ -807,24 +819,28 @@ $('exerciseJump').onclick = e => {
   showExerciseJump(false);
   if (index !== activeSession.currentIndex && activeSession.exercises[index]) goToExercise(index);
 };
+// Finishing saves the exercises with sets and leaves the rest out. With some of them still to do, it asks first, since a
+// stray tap would end the workout: Finish early is beside Next exercise, and Next exercise becomes Finish workout in the same
+// place on the last exercise, so a double tap on the one before would reach it before the last had a set. With nothing
+// logged at all, finishWorkout asks its own question.
+function finishWorkoutAsking() {
+  const logged = activeSession.exercises.some(item => item.sets && item.sets.length);
+  const waiting = activeSession.exercises.filter(item => !(item.sets && item.sets.length)).length;
+  if (logged && waiting && !confirm(`Finish ${activeSession.name} now? ${plural(waiting, 'exercise')} with no sets will be left out.`)) return;
+  finishWorkout();
+}
+
 // Next goes on past the superset the current exercise is in, which is done as rounds rather than one exercise at a time.
 // On the last exercise it is Finish, so a second tap can arrive after the workout has closed: that one does nothing.
 $('nextExerciseBtn').onclick = () => {
   if (!activeSession) return;
   const members = supersetMembers(activeSession, activeSession.currentIndex);
   const after = members[members.length - 1] + 1;
-  if (after >= activeSession.exercises.length) finishWorkout();
+  if (after >= activeSession.exercises.length) finishWorkoutAsking();
   else goToExercise(after);
 };
-// Finish early ends the workout from any exercise, as Finish does on the last: the exercises with sets are saved and the
-// rest left out. With some of them still to do, it asks first, since a stray tap would end the workout.
-$('finishEarlyBtn').onclick = () => {
-  if (!activeSession) return;
-  const logged = activeSession.exercises.some(item => item.sets && item.sets.length);
-  const waiting = activeSession.exercises.filter(item => !(item.sets && item.sets.length)).length;
-  if (logged && waiting && !confirm(`Finish ${activeSession.name} now? ${plural(waiting, 'exercise')} with no sets will be left out.`)) return;
-  finishWorkout();
-};
+// Finish early ends the workout from any exercise, as Finish does on the last.
+$('finishEarlyBtn').onclick = () => { if (activeSession) finishWorkoutAsking(); };
 $('prevExerciseBtn').onclick = () => { if (activeSession && activeSession.currentIndex > 0) goToExercise(activeSession.currentIndex - 1); };
 // Cancel takes the workout away without saving it, as if it had never been started: nothing joins History, last time's
 // numbers, the records or Progress, a program's day stays to do, and the server is told it ended. One started by mistake,

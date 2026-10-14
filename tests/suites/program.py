@@ -204,6 +204,11 @@ def run(t):
     skip_next()
     check('a skipped day counts as done', 'Skipped' in week_rows(0)[1] and 'Bench Day' in text('programNext'), week_rows(0))
     check('and says so', 'Skipped Deadlift Day, week 1.' in text('formFeedback'), text('formFeedback'))
+    check('offering Undo', cdp.ev("document.querySelector('#formFeedback .feedback-action')?.textContent") == 'Undo')
+    click('#formFeedback .feedback-action')
+    check('Undo puts the day back to do', 'Deadlift Day' in text('programNext') and 'Skipped' not in week_rows(0)[1]
+          and text('formFeedback') == 'Deadlift Day, week 1 is back on the plan.', [text('programNext'), week_rows(0), text('formFeedback')])
+    skip_next()
     for _ in range(2):
         skip_next()
     check('a finished week moves on to the next', cdp.ev("[...document.querySelectorAll('.program-week')].map(d => d.open)") == [False, True, False, False]
@@ -224,6 +229,7 @@ def run(t):
     for _ in range(8):
         if (program() or {}).get('cycle') != 1:
             break
+        prior = program()
         skip_next()
     state = program() or {}
     check('the last day of the cycle starts the next one', state.get('cycle') == 2 and state.get('done') == {}, state)
@@ -233,6 +239,13 @@ def run(t):
     check('the card says how they moved', visible('programNotice') and 'Cycle 1 complete' in notice
           and 'Overhead Press 105 lbs (+5)' in notice and 'Back Squat 225 lbs (reset after a missed + set)' in notice, notice)
     check('so does the message', 'Cycle 1 of Wendler 5/3/1 is complete' in text('formFeedback'), text('formFeedback'))
+    # The skip that ended the cycle is the slip Undo is there for: it raised every training max.
+    click('#formFeedback .feedback-action')
+    check('Undo on that skip puts cycle 1 back, its last day to do and the training maxes as they were', program() == prior, [program(), prior])
+    check('on the server too', wait_for(lambda: (server_program() or {}).get('cycle') == 1 and server_program().get('trainingMaxes') == prior['trainingMaxes']), server_program())
+    skip_next()
+    check('and skipping it again starts cycle 2 once more', (program() or {}).get('cycle') == 2
+          and (program() or {}).get('trainingMaxes') == state.get('trainingMaxes'), program())
     check('and every weight follows (70% x 5, 80% x 5, 90% x 5+ of 105, to the nearest 5)',
           'Overhead Press 70 × 5 · 80 × 5 · 90 × 5+' in text('programNext'), text('programNext'))
     check('the server has cycle 2', wait_for(lambda: (server_program() or {}).get('cycle') == 2), server_program())
