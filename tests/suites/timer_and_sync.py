@@ -1,5 +1,6 @@
 """Rest timer accuracy, the screen wake lock, and saving through a network drop."""
 
+import datetime
 import json
 import time
 
@@ -541,4 +542,48 @@ def run(t):
                  "return [...document.querySelectorAll('#restPanel button')].every(b => { const r = b.getBoundingClientRect(); return r.left >= panel.left && r.right <= panel.right + 0.5; }); })()")
     check('on a phone every rest button still fits in the panel', fit is True)
     cdp.send('Emulation.clearDeviceMetricsOverride')
+    end_workout()
+
+    # ------------------------------------------------------------------ R3 the rest comes back with the page
+    print('R3  a rest comes back when the page does, as a phone that closed the app opens it again')
+
+    def reload():
+        cdp.send('Page.reload')
+        time.sleep(0.4)
+        cdp.wait("document.readyState === 'complete'")
+        cdp.wait(ACTIVE, 6)
+        cdp.pause(0.4)
+
+    def rest_shown():
+        return cdp.ev("!document.getElementById('restPanel').hidden")
+
+    open_tracker()
+    start(0)
+    cdp.pause(0.5)
+    log_set(8)
+    cdp.pause(1.2)
+    before = seconds(cdp.ev(DISPLAY))
+    reload()
+    d = seconds(safe_ev(DISPLAY, '0:00'))
+    check('a running rest is back, still running, with the time it has left', rest_shown() and cdp.ev(TOGGLE) == 'Pause rest' and before - 3 <= d <= before,
+          f'{rest_shown()} {cdp.ev(TOGGLE)} {d} vs {before}')
+    cdp.ev("document.getElementById('restToggleBtn').click()")
+    paused = seconds(cdp.ev(DISPLAY))
+    reload()
+    check('a paused one is back paused, at the time it was paused at', rest_shown() and cdp.ev(TOGGLE) == 'Start rest' and seconds(cdp.ev(DISPLAY)) == paused,
+          f'{rest_shown()} {cdp.ev(TOGGLE)} {cdp.ev(DISPLAY)} vs {paused}')
+    cdp.ev("document.getElementById('restToggleBtn').click()")
+    cdp.pause(0.3)
+    # The page is away for longer than the rest: it comes back over, as a page left open would show it.
+    t.pin_clock(datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=5))
+    reload()
+    check('one that ran out while the page was gone is back at 0:00, over', rest_shown() and cdp.ev(DISPLAY) == '0:00' and cdp.ev(TOGGLE) == 'Start rest',
+          f'{rest_shown()} {cdp.ev(DISPLAY)} {cdp.ev(TOGGLE)}')
+    cdp.unpin_clock()
+    reload()
+    cdp.ev("document.getElementById('nextExerciseBtn').click()")
+    cdp.pause(0.3)
+    reload()
+    check('moving on to the next exercise leaves no rest to bring back', not rest_shown() and cdp.ev("document.getElementById('activeExerciseName').textContent") != 'Bench Press',
+          cdp.ev("document.getElementById('activeExerciseName').textContent"))
     end_workout()

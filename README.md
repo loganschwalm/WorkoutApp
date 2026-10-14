@@ -45,7 +45,8 @@ library, with SQLite for storage, so there is no build step, no package manager 
 - Log each set's weight and reps, with last time's numbers filled in and −5/+5 buttons beside the weight.
 - See the plates to load for barbell lifts, warm-up sets, and a "go heavier" prompt when you've earned it, or a lighter
   week to try when a lift has stalled for three weeks (listed on Progress too).
-- A rest timer starts after each set, with a sound and vibration when it's over (−30s/+30s, pause, skip).
+- A rest timer starts after each set, with a sound and vibration when it's over (−30s/+30s, pause, skip), and is still
+  there if the phone closes the app mid-rest.
 - Big view, a button in the workout, shows the set to do and the rest clock in very large type, to read from a few feet away
   on a bench, and can open itself for each rest if you choose.
 - Swap an exercise when the equipment is taken, add one mid-workout, superset two, or hold a timed one like a plank.

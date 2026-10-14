@@ -548,6 +548,8 @@ function showSavedSession(savedSession) {
   restRemaining = restDuration();
   updateRestTimer();
   $('restPanel').hidden = true;
+  // A rest this device was showing when the page went away comes back with it (see rememberRest in rest-timer.js).
+  restoreRest();
   renderActiveWorkout();
   $('activeNotesToggle').open = Boolean(activeSession.notes);
   showActiveCard(true);

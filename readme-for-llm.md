@@ -153,6 +153,10 @@ own workouts, templates, and settings.
   End rest skips what is left of it, and the screen flashes green, softly and once, when a rest is over,
   whether it ran out or you ended it (not with reduced motion on).
 - Keep accurate rest time even when the screen locks or the tab is in the background; the timer alerts you with a sound and vibration when rest is over (configurable in Settings).
+- The rest comes back with the page. A phone often closes an app left locked through a rest, so whenever the page is put
+  away the rest on show is kept on the device (`rememberRest` in `rest-timer.js`; it is not uploaded), with the workout and
+  set it follows. When the same workout comes back with nothing logged since, so does the rest: running on to the same end
+  time, paused at the time it had, or at 0:00 if it ran out meanwhile, without an alert that would come late.
 - Keep the screen awake during a workout. A page cannot run while the phone is locked, so a rest that outlasts
   the phone's auto-lock would end without its alert (the time is still right when you look again). Over HTTPS (or
   `localhost`) the browser's Wake Lock does it. A browser only offers that there, so at a plain `http://` address,

@@ -258,7 +258,49 @@ $('restAdjust').onclick = e => {
   adjustRest(Number(button.dataset.restAdjust));
 };
 
+// A phone often closes an app left locked through a rest, and the page that opens again would have no rest on show: the
+// countdown lives in this page. So whenever the page is put away, the rest on show is kept on this device (it is this
+// device's, so it is not uploaded with the workout), with which workout and set it follows; showSavedSession puts it back
+// when the same workout comes back with nothing logged since. The end time is a clock time, so a rest that ran on while
+// the page was gone comes back with the time it has left, or over.
+function restSetCount(session) {
+  return session.exercises.reduce((total, item) => total + (item.sets?.length || 0), 0);
+}
+
+function rememberRest() {
+  if (typeof activeSession === 'undefined') return;
+  const shown = activeSession && !$('restPanel').hidden;
+  writeLocal(localKey('rest'), shown ? {
+    startedAt:activeSession.startedAt, index:activeSession.currentIndex, sets:restSetCount(activeSession),
+    endsAt:restInterval ? restEndsAt : null, remaining:restRemaining, total:restTotal,
+  } : null);
+}
+
+// Puts back the rest kept by rememberRest, if it follows the last set of the workout now on show. Running, it runs on to its
+// end time; paused, it keeps the time it had; over while the page was gone, it shows 0:00, as a page left open would have,
+// without an alert that would come late.
+function restoreRest() {
+  const saved = readLocal(localKey('rest'));
+  if (!saved || !activeSession || saved.startedAt !== activeSession.startedAt || saved.index !== activeSession.currentIndex
+    || saved.sets !== restSetCount(activeSession)) return;
+  restTotal = Number(saved.total) || 0;
+  $('restPanel').hidden = false;
+  if (saved.endsAt) {
+    restRemaining = Math.max(0, Math.ceil((saved.endsAt - Date.now()) / 1000));
+    if (restRemaining > 0) {
+      runRestTimer();
+      restEndsAt = saved.endsAt;
+    }
+  } else {
+    restRemaining = Math.max(0, Number(saved.remaining) || 0);
+  }
+  updateRestTimer();
+}
+
+window.addEventListener('pagehide', rememberRest);
+
 document.addEventListener('visibilitychange', () => {
+  if (document.hidden) rememberRest();
   // Back from a locked screen or another app, an iPhone's sound is interrupted; it is woken before the rest catches up.
   if (!document.hidden) wakeAudio();
   if (!document.hidden && restInterval) tickRest();

@@ -15,6 +15,9 @@ let pendingRetryCount = 0;
 let stateSyncTimer = null;
 let stateSyncing = false;
 let stateRetryCount = 0;
+// Set once the account has been deleted (forgetLocalAccount): what the page still saves on its way out, such as the rest on
+// show (rememberRest in rest-timer.js), is of nothing, and would be left behind on the device.
+let localAccountForgotten = false;
 
 // Falls back to memory when localStorage is unavailable, so syncing still works (it just cannot survive a reload).
 function readLocal(key) {
@@ -24,6 +27,7 @@ function readLocal(key) {
 }
 
 function writeLocal(key, value) {
+  if (localAccountForgotten) return;
   try {
     localStorage.setItem(key, JSON.stringify(value));
     memoryStore.delete(key);
@@ -342,6 +346,7 @@ async function loadAccountState() {
 // Everything kept on this device for the signed-in account, once that account has been deleted: its copies are of
 // nothing now, and anything still waiting to upload has nowhere to go.
 function forgetLocalAccount() {
+  localAccountForgotten = true;
   [activeSyncTimer, pendingRetryTimer, stateSyncTimer].forEach(clearTimeout);
   const suffix = `-${localUserId}`;
   [...memoryStore.keys()].filter(key => key.endsWith(suffix)).forEach(key => memoryStore.delete(key));
