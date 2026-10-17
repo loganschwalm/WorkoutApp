@@ -36,7 +36,14 @@ function writeLocal(key, value) {
       try { localStorage.setItem(heldKey, JSON.stringify(held)); memoryStore.delete(heldKey); } catch (error) { /* still held */ }
     });
   } catch (error) {
-    memoryStore.set(key, value);
+    // Out of room, the copies of the saved workouts (only copies: the server has them) give way to what is kept nowhere else.
+    try {
+      if (!dropSavedWorkoutsCopies()) throw error;
+      localStorage.setItem(key, JSON.stringify(value));
+      memoryStore.delete(key);
+    } catch (again) {
+      memoryStore.set(key, value);
+    }
   }
   syncStorageWarning();
 }
@@ -60,6 +67,43 @@ function localKey(name) {
   return `workout-tracker-${name}-${localUserId ?? 'unknown'}`;
 }
 
+// ---- The saved workouts, as last loaded -----------------------------------
+// A copy of the account's saved workouts as the server last sent them, so a page opened offline still lists them (the
+// Tracker's recent workouts, History, Progress, Cardio) instead of saying there are none. It is kept apart from writeLocal:
+// it is only a copy, so it never takes the room that work not yet uploaded needs (writeLocal drops it first), is never held
+// in memory, and never brings up the storage warning. Written only once the server has said whose page this is, so one
+// account's list is never kept as another's, and dropped on signing out, since unlike work waiting to upload it is not needed
+// to come back to. It can be one page load behind: a workout deleted just before going offline is listed until the next load.
+
+const savedWorkoutsCopyPrefix = 'workout-tracker-workouts-';
+let localUserConfirmed = false;
+
+function keepSavedWorkoutsCopy(workouts) {
+  if (localAccountForgotten || !localUserConfirmed) return;
+  try { localStorage.setItem(localKey('workouts'), JSON.stringify(workouts)); }
+  catch (error) { dropSavedWorkoutsCopies(); }
+}
+
+function readSavedWorkoutsCopy() {
+  try {
+    const copy = JSON.parse(localStorage.getItem(localKey('workouts')));
+    return Array.isArray(copy) ? copy : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+// Every account's copy on this device: whether any was there to drop.
+function dropSavedWorkoutsCopies() {
+  try {
+    const keys = Object.keys(localStorage).filter(key => key.startsWith(savedWorkoutsCopyPrefix));
+    keys.forEach(key => localStorage.removeItem(key));
+    return keys.length > 0;
+  } catch (error) {
+    return false;
+  }
+}
+
 function syncFetch(path, options = {}, timeout = 10000) {
   const signal = typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(timeout) : undefined;
   return fetch(path, { ...options, signal });
@@ -80,6 +124,7 @@ window.localReady = syncFetch('/api/auth/me', {}, 4000).then(response => respons
   localUserId = result.user ? result.user.id : null;
   window.localUsername = result.user ? result.user.username : null;
   window.localEmail = result.user ? result.user.email : null;
+  localUserConfirmed = localUserId !== null;
   if (localUserId !== null) writeLocal(lastUserStorageKey, localUserId);
 }).catch(() => {});
 

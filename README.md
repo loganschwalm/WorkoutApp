@@ -103,7 +103,8 @@ celebrated.
 
 **Everywhere**
 - Works through network drops: everything saves on the phone first and uploads when the server is back, and a change
-  made on one device never undoes one made on another meanwhile.
+  made on one device never undoes one made on another meanwhile. Opened offline, the Tracker, History, Progress and
+  Cardio show your workouts as the phone last loaded them.
 - Add it to your phone's home screen to open it like an app.
 - Pick the days you train: the Tracker says what is planned today (and nudges you when you missed a day), History marks
   the planned days on the calendar, and your phone can remind you on training days, even with the app closed.

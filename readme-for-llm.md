@@ -297,6 +297,14 @@ Logged sets, notes, finished workouts, settings, custom templates, and your trai
   server, so it is back on screen even on a connection that stalls rather than fails, as in a basement gym. If the
   workout changed or ended on another device meanwhile, the server's copy replaces it once it answers.
 - Finishing a workout while offline queues it locally and shows how many workouts are waiting to sync. The History and Progress pages upload anything queued before they load your workouts.
+- A page opened while the server is out of reach lists the saved workouts as the device last loaded them: the Tracker's
+  recent workouts, last time's numbers and records, History (which says they are the device's copy), Progress and
+  Cardio, while the status line still says the server is unreachable. Each load keeps that copy (`getSavedWorkouts` in
+  `common.js`, `keepSavedWorkoutsCopy` in `offline.js`), so it can be one load behind: a workout deleted just before going
+  offline is listed until the next load. It is only a copy, so it never costs anything that is not uploaded yet: when the
+  browser's storage is full, it is dropped to make room rather than a set being held only in memory. It is written only once
+  the server has said whose page it is, goes on signing out (work not uploaded yet stays for the next sign-in), and goes with
+  the rest of the device's copy when the account is deleted. Signed out, a page shows nothing from it.
 - A workout written down in the Tracker's form (Create a workout, or Copy as new) is queued the same way, so it saves
   offline too, and a double tap on Save stores it once. Changing a saved workout (Edit) needs the server: offline,
   the form says so and keeps what was typed for another go.
@@ -1826,7 +1834,8 @@ in `cardio` but the activity optional (`floors` for the stair climber, and the m
 workout from before cardio is.
 
 The browser keeps a working copy in `localStorage`, separately for each account that signs in on it:
-the in-progress workout, finished workouts still waiting to upload (and any the server refused), last
+the in-progress workout, finished workouts still waiting to upload (and any the server refused), a copy of the saved
+workouts as last loaded (to list offline; dropped first when storage is full, and on signing out), last
 time's numbers for each exercise, settings, custom templates, the training program, and a cardio session being timed
 (which is only ever kept there). That copy is what lets you keep
 training through a network drop; it uploads when the server is reachable again, and clearing the

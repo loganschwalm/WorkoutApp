@@ -320,6 +320,8 @@ getSettingElement('signOutButton').onclick = async () => {
     alert('Could not sign out. Check your connection and try again.');
     return;
   }
+  // The copy of the saved workouts goes (the server has them); work not uploaded yet stays, for the next sign-in.
+  if (typeof dropSavedWorkoutsCopies === 'function') dropSavedWorkoutsCopies();
   location.href = '/login.html';
 };
 getSettingElement('exportButton').onclick = () => exportAccount(false);

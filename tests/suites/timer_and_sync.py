@@ -440,6 +440,50 @@ def run(t):
     # than the 10 the list shows since then.
     check('and the page has it without a reload', wait_for(lambda: safe_ev("savedWorkouts.some(w => w.name === 'Form Online')", False) is True))
 
+    print('P15 opened offline, the pages list the saved workouts as this device last loaded them')
+    me_id = api('GET', '/api/auth/me', token=token)[0]['user']['id']
+    copy_key = f'workout-tracker-workouts-{me_id}'
+    recent = "[...document.querySelectorAll('#savedWorkoutList .saved-workout strong')].map(name => name.textContent)"
+    status = "document.getElementById('storageStatus').textContent"
+    on_server = workouts()
+    open_tracker()
+    online = cdp.ev(recent)
+    check('a load keeps a copy of the saved workouts on the device', len(json.loads(cdp.ev(f"localStorage.getItem('{copy_key}')") or '[]')) == len(on_server),
+          len(on_server))
+    cdp.block_api = True
+    cdp.goto('/index.html')
+    cdp.wait('initialLoadDone === true', timeout=12)
+    cdp.pause(0.4)
+    check('offline, the Tracker lists the recent workouts from it', online and cdp.ev(recent) == online, (cdp.ev(recent), online))
+    check('and still says the server is out of reach', 'unreachable' in (cdp.ev(status) or '').lower(), cdp.ev(status))
+    cdp.goto('/history.html')
+    check('History lists every workout from it', cdp.wait(f"document.querySelectorAll('.history-workout').length === {len(on_server)}"),
+          cdp.ev("document.querySelectorAll('.history-workout').length"))
+    check('and says they are as this device last loaded them', 'last loaded' in (cdp.ev("document.getElementById('historyFeedback').textContent") or ''),
+          cdp.ev("document.getElementById('historyFeedback').textContent"))
+    cdp.goto('/progress.html')
+    cdp.pause(1.0)
+    check('Progress draws its chart from it', cdp.ev("document.getElementById('chartEmpty').hidden") is True
+          and cdp.ev("document.getElementById('exerciseFilter').options.length") > 1, cdp.ev("document.getElementById('chartEmpty').textContent"))
+    cdp.goto('/cardio.html')
+    cdp.pause(1.0)
+    check('Cardio lists from it, saying the server is out of reach', 'could not be loaded' not in (cdp.ev("document.getElementById('cardioList').textContent") or '')
+          and 'unreachable' in (cdp.ev("document.getElementById('cardioStatus').textContent") or '').lower(), cdp.ev("document.getElementById('cardioList').textContent"))
+    cdp.block_api = False
+    # Only a copy, so it makes room for work kept nowhere else: with the storage full until it goes, a set is stored, not held.
+    open_tracker()
+    had_copy = cdp.ev(f"localStorage.getItem('{copy_key}') !== null")
+    cdp.ev(f"""(() => {{ window.__setItem = Storage.prototype.setItem;
+      Storage.prototype.setItem = function (key, value) {{
+        if (localStorage.getItem('{copy_key}') !== null) throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+        return window.__setItem.call(this, key, value); }}; }})()""")
+    cdp.ev("writeLocal('workout-tracker-held-test', 'kept')")
+    check('storage full, the copy gives way to what is not uploaded', had_copy and cdp.ev("localStorage.getItem('workout-tracker-held-test')") == '"kept"'
+          and cdp.ev(f"localStorage.getItem('{copy_key}')") is None and cdp.ev('memoryStore.size') == 0
+          and cdp.ev("!!document.getElementById('storageWarning')") is False, cdp.ev("localStorage.getItem('workout-tracker-held-test')"))
+    cdp.ev("Storage.prototype.setItem = window.__setItem; localStorage.removeItem('workout-tracker-held-test')")
+    cdp.ev("dropSavedWorkoutsCopies()")
+
     print('R2  30 seconds more or less rest')
     open_tracker()
     cdp.ev("""window.__offset = 0; const realNow = Date.now.bind(Date); Date.now = () => realNow() + window.__offset;

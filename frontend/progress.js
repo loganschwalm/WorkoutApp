@@ -778,7 +778,12 @@ async function loadProgress() {
   try {
     await window.localReady;
     await flushPendingWorkouts();
-    loadedWorkouts = await getSavedWorkouts();
+    // Offline, the charts are drawn from the copy on this device from the last load (see getSavedWorkouts).
+    loadedWorkouts = await getSavedWorkouts().catch(error => {
+      if (!error.copy) throw error;
+      console.error('Unable to load progress; showing the copy on this device.', error);
+      return error.copy;
+    });
     allWorkouts = loadedWorkouts.map(workout => inUnit(workout));
     populateWorkoutTypes(allWorkouts);
     populateExercises(allWorkouts);

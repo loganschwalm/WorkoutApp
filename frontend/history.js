@@ -339,6 +339,13 @@ window.addEventListener('settingschange', () => {
 });
 
 window.localReady.then(flushPendingWorkouts).then(getSavedWorkouts).then(showHistory).catch(error => {
+  // Offline, the copy on this device from the last load is shown instead, and said to be one (see getSavedWorkouts).
+  if (error.copy) {
+    console.error('Unable to load workout history; showing the copy on this device.', error);
+    showHistory(error.copy);
+    showHistoryFeedback('Can’t reach the server. These are your workouts as this device last loaded them.', true);
+    return;
+  }
   $('historySummary').textContent = 'Unable to load workouts.';
   $('calendarSummary').textContent = 'The calendar shows once your workouts load.';
   console.error('Unable to load workout history.', error);

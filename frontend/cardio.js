@@ -520,11 +520,19 @@ function renderCardio() {
 
 async function loadCardioSessions() {
   try {
-    const everything = await getSavedWorkouts();
+    // Offline, the copy on this device from the last load stands in (see getSavedWorkouts), and the status line still says
+    // the server is out of reach.
+    let reached = true;
+    const everything = await getSavedWorkouts().catch(error => {
+      if (!error.copy) throw error;
+      console.error('Unable to load cardio sessions; showing the copy on this device.', error);
+      reached = false;
+      return error.copy;
+    });
     cardioEverything = everything;
     cardioSessions = everything.filter(isCardio).sort((a, b) => b.createdAt - a.createdAt);
     cardioLoaded = true;
-    cardioReachable = true;
+    cardioReachable = reached;
   } catch (error) {
     cardioReachable = false;
     console.error('Unable to load cardio sessions.', error);

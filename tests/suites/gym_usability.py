@@ -287,6 +287,8 @@ def run(t):
     check('a failed save says what to do', 'connection' in fb and 'on this device' not in fb, fb)
     check('and the button works again for another go', cdp.ev("document.getElementById('saveBtn').disabled") is False)
     cdp.ev("document.getElementById('clearBtn').click()")
+    # With no copy of the workouts on the device to show instead (timer_and_sync's P15), as on a device that never loaded them.
+    cdp.ev("dropSavedWorkoutsCopies()")
     cdp.goto('/history.html')
     cdp.pause(1.0)
     check('history says it could not load', text('historySummary') == 'Unable to load workouts.', text('historySummary'))
@@ -408,6 +410,7 @@ def run(t):
     cdp.pause(0.6)
     log(100, 8)
     known = ids()
+    check('signed in, the saved workouts are copied to the device', bool(cdp.ev("Object.keys(localStorage).some(k => k.startsWith('workout-tracker-workouts-'))")))
     cdp.block_paths = ['/api/workouts']
     cdp.ev("document.getElementById('nextExerciseBtn').click(); document.getElementById('nextExerciseBtn').click(); document.getElementById('nextExerciseBtn').click();")
     cdp.pause(0.8)
@@ -423,6 +426,8 @@ def run(t):
     pending_key = cdp.ev("Object.keys(localStorage).find(k => k.startsWith('workout-tracker-pending-'))")
     kept = safe_ev(f"JSON.parse(localStorage.getItem('{pending_key}') || '[]').length", -1) if pending_key else -1
     check('the unsent workout stays on this device', kept == 1 and len(ids() - known) == 0, f'pending={kept}, on server={len(ids() - known)}')
+    copies = "Object.keys(localStorage).filter(k => k.startsWith('workout-tracker-workouts-'))"
+    check('but the copy of the saved workouts goes: the server has them', cdp.ev(copies) == [], cdp.ev(copies))
     cdp.block_paths = []
     ui_login()
     check('and uploads when the same account signs back in', wait_for(lambda: len(ids() - known) == 1), f'{len(ids() - known)} new')

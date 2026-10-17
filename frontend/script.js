@@ -478,8 +478,16 @@ function renderStorageStatus() {
 
 async function loadSavedWorkouts() {
   try {
+    // Offline, the copy kept on this device from the last load stands in (see getSavedWorkouts), and the line under the
+    // list still says the server is out of reach.
+    let reached = true;
+    const everything = await getSavedWorkouts().catch(error => {
+      if (!error.copy) throw error;
+      console.error('Unable to load saved workouts; showing the copy on this device.', error);
+      reached = false;
+      return error.copy;
+    });
     // Strength workouts only: cardio sessions have the Cardio page, and no exercises for last time or the records.
-    const everything = await getSavedWorkouts();
     const workouts = everything.filter(workout => !isCardio(workout));
     savedWorkouts = workouts;
     savedSessions = everything;
@@ -498,7 +506,7 @@ async function loadSavedWorkouts() {
     if (activeSession) renderReach();
     renderRecap();
     renderWhatsNew();
-    workoutsReachable = true;
+    workoutsReachable = reached;
     renderStorageStatus();
     return workouts;
   } catch (error) {
