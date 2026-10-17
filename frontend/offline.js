@@ -111,12 +111,17 @@ function dropSavedWorkoutsCopies() {
 }
 
 // Each request says which account the page is for (the one its copies on this device are kept under), and the server refuses
-// it if the browser is now signed in as another (see accountSignedInElsewhere).
+// it if the browser is now signed in as another (see accountSignedInElsewhere). Only once the page has asked whose it is
+// (localReady, which asks through here), so it never says it is for the account last seen here when that is not the one
+// signed in: one brought back into view before the answer came would otherwise stop itself for nothing.
 function syncFetch(path, options = {}, timeout = 10000) {
-  if (localAccountElsewhere) return Promise.reject(new Error('Another account is signed in on this browser.'));
-  const signal = typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(timeout) : undefined;
-  const headers = localUserId === null ? options.headers : { ...options.headers, 'X-Workout-Account':String(localUserId) };
-  return fetch(path, { ...options, headers, signal }).then(response => {
+  const asked = path === '/api/auth/me' || !window.localReady ? Promise.resolve() : window.localReady;
+  return asked.then(() => {
+    if (localAccountElsewhere) throw new Error('Another account is signed in on this browser.');
+    const signal = typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(timeout) : undefined;
+    const headers = localUserId === null ? options.headers : { ...options.headers, 'X-Workout-Account':String(localUserId) };
+    return fetch(path, { ...options, headers, signal });
+  }).then(response => {
     if (response.status === 409 && response.headers.get('X-Workout-Account-Mismatch')) {
       accountSignedInElsewhere();
       throw new Error('Another account is signed in on this browser.');

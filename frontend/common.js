@@ -134,18 +134,20 @@ function isCardio(workout) {
 // Longer than its default, since years of workouts are a bigger download than anything else the pages ask for. Each load
 // is kept as the device's copy (offline.js). When the server cannot be reached, or fails, the error still comes, so a page
 // says it is offline, but carries that copy as `copy` for the page to show meanwhile. Not when signed out: the list is
-// not this page's to show then.
+// not this page's to show then. Guarded, since for one load after an update an older offline.js, without the copy, can be
+// served from the cache beside this.
 function getSavedWorkouts() {
+  const copy = () => (typeof readSavedWorkoutsCopy === 'function' ? readSavedWorkoutsCopy() : null);
   return syncFetch('/api/workouts', {}, 15000).then(response => {
     if (response.ok) return response.json();
     const error = new Error('Unable to load workouts.');
-    if (response.status >= 500) error.copy = readSavedWorkoutsCopy();
+    if (response.status >= 500) error.copy = copy();
     throw error;
   }, error => {
-    error.copy = readSavedWorkoutsCopy();
+    error.copy = copy();
     throw error;
   }).then(result => {
-    keepSavedWorkoutsCopy(result.workouts);
+    if (typeof keepSavedWorkoutsCopy === 'function') keepSavedWorkoutsCopy(result.workouts);
     return result.workouts;
   });
 }
