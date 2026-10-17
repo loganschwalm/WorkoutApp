@@ -1357,8 +1357,9 @@ What is already in place:
 - Hashing a password costs a good part of a second of a core, and signing in, signing up and resetting a
   password all do it before anyone is signed in. At most two run at once (`PASSWORD_HASHERS`), so a flood
   of them cannot take every core, and pages for signed-in accounts stay quick; a request kept waiting 5
-  seconds is told the server is busy. A reset code is checked before the new password is hashed, and a
-  username or email already taken is refused before it, so neither costs a hash.
+  seconds is told the server is busy. A reset code is checked before the new password is hashed, as is
+  the current password when changing it in Settings, and a username or email already taken is refused
+  before it, so none of those costs a hash.
 - After 5 failed sign-ins for one account from one address, that pair has to wait until the oldest
   failure is 15 minutes old, even with the right password. Signing in by email and by username count
   toward the same limit, and so do wrong passwords given in Settings to change the email or password,
@@ -1836,7 +1837,8 @@ changed part as `{"value": ..., "base": ...}`, the part as changed and the copy 
 loaded or uploaded, kept beside the change in `localStorage` until it is uploaded), with `"sent": [...]`, any copies
 uploaded since whose answer never came back (the page closed, or the connection dropped on the way back), which the server
 may have stored: a value that differs from any of them is this device's change, so a setting changed and changed back
-before an answer arrived still goes up. The server merges the change into
+before an answer arrived still goes up. A page keeps the last 5 of those, and the server refuses more than 10
+(`MAX_UNANSWERED_COPIES`), since the merge compares every key with every copy while it holds the lock. The server merges the change into
 its own copy in one locked transaction (`merge_part` in `state.py`), so two devices sending at once both keep their
 changes, and answers with the merged state. A part sent without `base` replaces the stored one whole, as `PUT
 /api/state` does for pages from before.

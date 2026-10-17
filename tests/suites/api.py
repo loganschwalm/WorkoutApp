@@ -378,6 +378,31 @@ def run_security(t, check, request):
           busy and (busy[0][1].get('retry-after'), busy[0][2]))
     check('a signed-in page answers meanwhile, without waiting on the hashing', quick[0][0] == 200 and quick[0][1] < 0.5, quick)
     check('and once the flood is over, signing in works', login(capped, 'regular', 'chalk-and-plates-42')[0] == 200)
+
+    # A guess at the current password past the limit is turned away before anything is hashed. The new password used to be
+    # hashed first, so a signed-in page could keep the hasher busy with guesses the limit refused anyway. The hasher is held
+    # here by a sign-in to an account whose hash takes ten times the usual iterations, a second or more on any machine.
+    _, cookie = capped.api('POST', '/api/auth/register', {'username': 'guesser', 'email': 'guesser@example.test', 'password': 'chalk-and-plates-42'})
+    guesser = cookie.split('session=')[1].split(';')[0]
+
+    def change_password(current):
+        body = json.dumps({'currentPassword': current, 'newPassword': 'rowing-machine-17'}).encode()
+        return capped.request('POST', '/api/account/password', body, {'Content-Type': 'application/json'}, token=guesser)[0]
+
+    guesses = [change_password(f'guess-{n}') for n in range(5)]
+    salt = 'slowsalt0123456789ab'
+    slow = f"pbkdf2_sha256$6000000${salt}${hashlib.pbkdf2_hmac('sha256', b'slow-password', salt.encode(), 1).hex()}"
+    db = sqlite3.connect(t.db_path('capped.db'))
+    db.execute("INSERT INTO users (username, password_hash, created_at) VALUES ('slowpoke', ?, 0)", (slow,))
+    db.commit()
+    db.close()
+    holding = threading.Thread(target=login, args=(capped, 'slowpoke', 'not-the-password'))
+    holding.start()
+    time.sleep(0.2)
+    status = change_password('guess-5')
+    holding.join()
+    check('a guess at the current password past the limit is refused while the hasher is busy, not kept waiting for it',
+          guesses == [403] * 5 and status == 429, (guesses, status))
     capped.stop()
 
     # ------------------------------------------------------------------ A7 password hashes
@@ -2373,9 +2398,12 @@ def run_state_merge(t, check, request):
     refused = [('a part that is not one', {'diary': {'value': {}}}), ('a part that is not an object', {'settings': 5}),
                ('a part without its value', {'settings': {'base': {}}}), ('a value that is not valid', {'settings': {'base': {}, 'value': []}}),
                ('copies sent that are not a list', {'settings': {'base': {}, 'sent': {}, 'value': {}}}),
-               ('copies sent without the base they followed', {'settings': {'sent': [{}], 'value': {}}})]
+               ('copies sent without the base they followed', {'settings': {'sent': [{}], 'value': {}}}),
+               # Each copy is another pass over every key inside the lock, so thousands of tiny ones held the database.
+               ('more copies sent than a page keeps', {'settings': {'base': {}, 'sent': [{}] * 11, 'value': {}}})]
     for label, body in refused:
         check(f'PATCH refuses {label}', status_of(body) == 400, status_of(body))
+    check('but takes as many as it allows', status_of({'settings': {'base': {}, 'sent': [{}] * 10, 'value': {}}}) == 200)
     check('and a change sent from another site', status_of({'settings': {'value': {}}}, {'Sec-Fetch-Site': 'cross-site'}) == 403)
 
 

@@ -7,7 +7,7 @@ import time
 from http import HTTPStatus
 from urllib.parse import urlparse
 
-from config import EXPORT_FORMAT, MAX_IMPORT, MAX_IMPORTS_AT_ONCE, MAX_STATE_CHANGE
+from config import EXPORT_FORMAT, MAX_IMPORT, MAX_IMPORTS_AT_ONCE, MAX_STATE_CHANGE, MAX_UNANSWERED_COPIES
 from database import connection, workout_tag
 from state import STATE_PARTS, load_state, merge_part, store_state, validate_state
 from validation import (
@@ -150,6 +150,8 @@ class DataApi:
                 raise BadRequest(f'{part} must be an object with its value, and the base it was changed from.')
             if not isinstance(change.get('sent', []), list) or ('sent' in change and 'base' not in change):
                 raise BadRequest(f'{part}.sent must be a list of copies sent since its base.')
+            if len(change.get('sent', [])) > MAX_UNANSWERED_COPIES:
+                raise BadRequest(f'{part}.sent may hold at most {MAX_UNANSWERED_COPIES} copies.')
             changes[part] = change
         validate_state({part: change['value'] for part, change in changes.items()})
         with connection() as database:

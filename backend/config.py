@@ -32,6 +32,10 @@ MAX_STATE_CHANGE = 4 * MAX_BODY
 # without end, and with it the time every change to the state spends reading and writing all of it, holding the database
 # for everyone. A lifetime of daily weigh-ins, the largest a real part comes to, is about 2 MB.
 MAX_STATE_PART_BYTES = MAX_STATE_CHANGE // 2
+# The most copies of a part a change may say were sent without an answer (offline.js keeps the last 5). A merge compares every
+# key with every copy, inside the lock every change to the state takes, so a change of thousands of tiny copies held the
+# database for everyone for as long as the body limit allowed: minutes, or hours.
+MAX_UNANSWERED_COPIES = 10
 # What an export file says it is, so an import can tell one from any other JSON.
 EXPORT_FORMAT = 'workout-tracker-export'
 # What one account may keep, so no one account (or a flood of them) can fill the disk. A workout is a few kilobytes: ten years of

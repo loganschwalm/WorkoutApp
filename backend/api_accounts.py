@@ -270,9 +270,11 @@ class AccountApi:
         data = self.read_json()
         current = str(data.get('currentPassword', ''))
         new = new_password(str(data.get('newPassword', '')), user['username'], user['email'] or '')
-        stored_hash = password_hash(new)
         with connection() as database:
             self.confirm_password(database, user, current, 'Your current password is not right.')
+            # Hashed only once the current password is known to be right: hashed first, every guess the limit refuses would
+            # still take a turn at the hasher, and one signed-in page could keep sign-ins everywhere waiting.
+            stored_hash = password_hash(new)
             database.execute('UPDATE users SET password_hash = ? WHERE id = ?', (stored_hash, user['id']))
             # Whoever knew the old password is signed out everywhere but here, and a reset code sent for it stops working.
             signed_out = self.sign_out_others_rows(database, user)
