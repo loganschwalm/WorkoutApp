@@ -281,7 +281,11 @@ def run(t):
     click('testReminderButton')
     check('a push service that refuses it is said to', wait_for(lambda: 'did not take it' in text('remindStatus')), text('remindStatus'))
     click('remindSetting')
-    check('turning them off removes this device from the server', wait_for(lambda: subscriptions() == []) and 'unsubscribe' in cdp.ev('window.__calls') and cdp.ev('window.__sub') is None, subscriptions())
+    # The server forgets the device first and the browser unsubscribes only once that answer is back, so the row can be gone a
+    # moment before the browser has done its part: wait for both, or a slow machine sees the gap.
+    check('turning them off removes this device from the server',
+          wait_for(lambda: subscriptions() == [] and 'unsubscribe' in cdp.ev('window.__calls') and cdp.ev('window.__sub') is None),
+          (subscriptions(), cdp.ev('window.__calls'), cdp.ev('window.__sub')))
     cdp.pause(0.3)
     check('the box is clear, with no test to send', not cdp.ev("document.getElementById('remindSetting').checked") and not visible('testReminderButton'))
     check('the days stay chosen: they belong to the account, not the device', cdp.ev("[...document.querySelectorAll('#scheduleDays input:checked')].map(input => input.value)") == ['1'])
