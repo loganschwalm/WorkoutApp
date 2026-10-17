@@ -9,6 +9,8 @@ RUN mkdir -p /app/data && chown workout:workout /app/data
 ENV PORT=6769
 ENV APP_ROOT=/app/frontend
 ENV WORKOUT_DB=/app/data/workouts.db
+# What the server prints reaches `docker logs` as it is printed, not once a buffer fills (or never, if it stops first).
+ENV PYTHONUNBUFFERED=1
 EXPOSE 6769
 # Answered by every running server, signed in or not, so a hung or crashed one shows as unhealthy in `docker ps`. Python is what
 # the slim image has: it carries no curl.

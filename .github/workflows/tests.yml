@@ -51,15 +51,27 @@ jobs:
       # settings are in .shellcheckrc. The runner has ShellCheck already.
       - name: Check the shell scripts
         run: |
-          for script in ct/workout-tracker.sh scripts/docker-backup.sh; do bash -n "$script"; done
-          shellcheck ct/workout-tracker.sh scripts/docker-backup.sh
+          for script in ct/workout-tracker.sh scripts/docker-backup.sh tests/as-root.sh; do bash -n "$script"; done
+          shellcheck ct/workout-tracker.sh scripts/docker-backup.sh tests/as-root.sh
 
       # Four suites at a time on the runner's four cores, so timing checks are not starved.
       - name: Run the tests
         run: python tests/run.py --jobs 4
 
+  # What only root can check, on the runner, which is thrown away afterwards: the installer updating a server (and going back
+  # when the new version does not start), and the Docker entrypoint handing over the data directory. See tests/as-root.sh.
+  as-root:
+    name: as root (installer updates, Docker entrypoint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install, update, go back from a failed update, and hand over a data directory
+        run: sudo bash tests/as-root.sh
+
   promote:
-    needs: test
+    needs: [test, as-root]
     if: >-
       github.ref == 'refs/heads/main' && (
         (github.event_name == 'push' && vars.HOLD_STABLE != 'true') ||

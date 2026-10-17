@@ -142,7 +142,9 @@ as a service, waits until it answers, and prints its address, such as `http://19
    ```
 
 **Updating:** run the same command again and choose *Update an existing container*. Installs follow the
-`stable` branch, which only moves once every test has passed, and your data is kept.
+`stable` branch, which only moves once every test has passed, and your data is kept. Each update backs the
+database up first, and if the new version does not start, it goes back to the one before, with the database
+as it was.
 
 **Day to day:**
 
@@ -176,8 +178,9 @@ docker compose up -d --build
 ```
 
 Open `http://YOUR_SERVER_IP:6769`, create your accounts, then set `ALLOW_REGISTRATION: "0"` in
-`docker-compose.yml` and run `docker compose up -d`. Back up with `scripts/docker-backup.sh`. See the
-[full reference](readme-for-llm.md#docker-compose) for updating and daily backups.
+`docker-compose.yml` and run `docker compose up -d`. Back up with `scripts/docker-backup.sh`, before every
+update too. See the [full reference](readme-for-llm.md#docker-compose) for updating (and going back) and daily
+backups.
 
 **Any Linux host:** Python 3.9 or newer is all it needs. The
 [manual install](readme-for-llm.md#manual-install-on-any-linux-host) is a git clone and a systemd unit.

@@ -21,8 +21,12 @@ python tests/run.py --list           # suite names
 
 GitHub Actions runs them all on every push and pull request (`.github/workflows/tests.yml`),
 four suites at a time, on Python 3.9 (the oldest the README says the server runs on) and 3.12, and moves the `stable`
-branch that installs follow once both pass on `main`. Before them it runs pyflakes, `tests/lint.py` and ShellCheck (on the two shell
-scripts, settings in `.shellcheckrc`):
+branch that installs follow once both pass on `main`. Before them it runs pyflakes, `tests/lint.py` and ShellCheck (on the shell
+scripts, settings in `.shellcheckrc`). A job of its own runs `tests/as-root.sh` as root on a runner that is thrown away afterwards,
+and `stable` waits for it too: the Proxmox installer installing, an update to a version that upgrades the database and then fails
+to start being undone (the previous version running again, with the database as it was, and the failed one's kept), a working
+update and one with nothing new, and the Docker entrypoint handing over a data directory (and saying what it cannot, rather than
+stopping). Never run it on a computer you use: it installs a service and writes to `/etc`, `/opt` and `/var`.
 
 ```bash
 python -m pyflakes backend tests scripts docker-entrypoint.py   # slips in the Python (needs the requirements above)

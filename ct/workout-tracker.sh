@@ -192,10 +192,45 @@ if [[ "$BRANCH" == stable ]]; then
   fi
 fi
 
+# --- safe update (begin) ---
+# An update can be undone. The commit running now is kept (under a ref of its own, so git keeps it however shallow the
+# fetch), and the new one is fetched while the server still runs. The server is then stopped and the database backed up,
+# so the backup holds every change up to the moment the old version stopped. If the new version does not answer (below),
+# it is stopped, the database goes back to that backup (the new version may have migrated it, and an older build refuses a
+# newer database), and the previous commit runs again. Nothing a failed update left is thrown away: its database is moved
+# aside, beside the backups. The newest few backups taken before an update are kept; each is a whole copy of the database.
+BACKUP_DIR=/var/backups/workout-tracker
+PRE_UPDATE_KEEP=3
+DB_FILE="$DATA_DIR/workouts.db"
+previous=""
+pre_update_backup=""
+# --- safe update (end) ---
+
 step "fetching source from $REPO_URL ($BRANCH)"
 if [[ -d "$APP_DIR/.git" ]]; then
+  previous="$(git -C "$APP_DIR" rev-parse --verify --quiet HEAD || true)"
+  [[ -z "$previous" ]] || git -C "$APP_DIR" update-ref refs/workout-tracker/previous "$previous"
   git -C "$APP_DIR" remote set-url origin "$REPO_URL"
   git -C "$APP_DIR" fetch --quiet --force --depth 1 origin "$BRANCH:refs/remotes/origin/$BRANCH"
+  if [[ -n "$previous" && -f "$DB_FILE" && "$(git -C "$APP_DIR" rev-parse "refs/remotes/origin/$BRANCH")" != "$previous" ]]; then
+    step "stopping the server and backing up the database before updating"
+    systemctl stop workout-tracker 2>/dev/null || true
+    pre_update_backup="$BACKUP_DIR/pre-update-$(date +%Y%m%d-%H%M%S)-${previous:0:7}.db"
+    # Every account's workouts are in here: readable by root only.
+    if ! (umask 077 && mkdir -p "$BACKUP_DIR" && chmod 0700 "$BACKUP_DIR" &&
+      sqlite3 "$DB_FILE" ".timeout 10000" ".backup '$pre_update_backup.partial'" &&
+      mv "$pre_update_backup.partial" "$pre_update_backup"); then
+      rm -f "$pre_update_backup.partial"
+      systemctl start workout-tracker 2>/dev/null || true
+      echo "Could not back up $DB_FILE to $BACKUP_DIR, so nothing was updated: ${previous:0:7} is still running." >&2
+      exit 1
+    fi
+    # The timestamp in each name sorts oldest to newest, so everything past the newest $PRE_UPDATE_KEEP goes.
+    find "$BACKUP_DIR" -maxdepth 1 -name 'pre-update-*.db' -printf '%f\n' | sort -r | tail -n +"$((PRE_UPDATE_KEEP + 1))" | while read -r old; do
+      rm -f -- "$BACKUP_DIR/$old"
+    done
+    step "database backed up to $pre_update_backup"
+  fi
   git -C "$APP_DIR" checkout --quiet -f -B "$BRANCH" "refs/remotes/origin/$BRANCH"
   git -C "$APP_DIR" clean -qfd
 else
@@ -373,17 +408,66 @@ systemctl enable --quiet workout-tracker
 systemctl enable --quiet --now workout-tracker-backup.timer
 systemctl restart workout-tracker
 
-for _attempt in $(seq 1 30); do
-  if curl -fsS -o /dev/null "http://127.0.0.1:${APP_PORT}/login.html"; then
-    step "answering on port $APP_PORT"
-    exit 0
-  fi
-  sleep 1
-done
+# Where the server answers: the address HOST names in its settings, unless that is every address. Asked for /api/auth/me,
+# which only a server that has opened (and migrated) the database answers, not a page any static file server could send.
+probe_host="$(sed -n 's/^[[:space:]]*HOST=//p' /etc/workout-tracker/workout-tracker.env 2>/dev/null | tail -n 1 | tr -d "\"' \t\r" || true)"
+case "$probe_host" in
+  '' | 0.0.0.0 | '::') probe_host=127.0.0.1 ;;
+  *:*) probe_host="[$probe_host]" ;;
+esac
+answering() {
+  for _attempt in $(seq 1 30); do
+    if curl -fsS -o /dev/null "http://$probe_host:${APP_PORT}/api/auth/me"; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+if answering; then
+  step "answering on port $APP_PORT"
+  exit 0
+fi
 
 echo "workout-tracker did not answer on port $APP_PORT" >&2
 systemctl status workout-tracker --no-pager --lines=0 >&2 || true
 journalctl -u workout-tracker --no-pager --lines=40 >&2 || true
+
+# Back to the version that ran before, with the database as it was then (see "safe update" above). Not for a new install,
+# nor an update that had nothing new to run.
+current="$(git -C "$APP_DIR" rev-parse HEAD)"
+if [[ -z "$previous" || "$current" == "$previous" ]]; then
+  exit 1
+fi
+step "going back to ${previous:0:7}, the version that ran before this update"
+systemctl stop workout-tracker || true
+failed=""
+if [[ -n "$pre_update_backup" ]]; then
+  failed="$BACKUP_DIR/failed-update-$(date +%Y%m%d-%H%M%S)-${current:0:7}"
+  (umask 077 && mkdir -p "$failed")
+  # The write-ahead log goes too: left beside the restored file, it would be replayed onto it.
+  for suffix in '' -wal -shm -journal; do
+    if [[ -e "$DB_FILE$suffix" ]]; then
+      mv "$DB_FILE$suffix" "$failed/"
+    fi
+  done
+  cp "$pre_update_backup" "$DB_FILE"
+  chown "$SERVICE_USER":"$SERVICE_USER" "$DB_FILE"
+  chmod 0600 "$DB_FILE"
+fi
+git -C "$APP_DIR" checkout --quiet -f -B "$BRANCH" "$previous"
+git -C "$APP_DIR" clean -qfd
+# The failed version was restarted over and over, which can leave systemd refusing another start for a while.
+systemctl reset-failed workout-tracker 2>/dev/null || true
+systemctl start workout-tracker || true
+if answering; then
+  echo "The update to ${current:0:7} did not start, so ${previous:0:7} is running again, with the database as it was before the update." >&2
+  [[ -z "$failed" ]] || echo "What the failed update left of the database is in $failed." >&2
+else
+  echo "Going back to ${previous:0:7} did not start either." >&2
+  [[ -z "$pre_update_backup" ]] || echo "The database from before the update is $pre_update_backup." >&2
+fi
 exit 1
 PAYLOAD
 }

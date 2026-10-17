@@ -1228,8 +1228,25 @@ type. A template cannot live on `local-lvm`, so it is normally `local` even when
 #### Updating
 
 Run the same command again on the Proxmox host and choose **Update an existing container**. That
-fetches the latest commit on the `stable` branch, rewrites the systemd unit, restarts the service, and
-prints the URL.
+fetches the latest commit on the `stable` branch while the app keeps running, then stops the app, backs the
+database up, switches to the new commit, rewrites the systemd unit, starts the service again, and prints
+the URL.
+
+An update can be undone, and undoes itself if the new version does not start:
+
+- The backup is taken after the app stops, so it holds every change up to the update. It goes in
+  `/var/backups/workout-tracker` inside the container, named `pre-update-<date>-<time>-<commit>.db` after the
+  version that was running. The newest 3 are kept, apart from the daily ones. No backup is taken when there
+  is nothing new to update to, and if the backup cannot be taken, nothing is updated and the app starts again
+  as it was.
+- The new version has 30 seconds to answer `/api/auth/me`, which only a server that has opened (and
+  upgraded) the database answers. It is asked on the address `HOST` names in
+  `/etc/workout-tracker/workout-tracker.env`, or `127.0.0.1` without one.
+- If it does not answer, the update puts things back: the app is stopped, the database the failed version
+  left (with its `-wal` and `-shm` files) is moved to `/var/backups/workout-tracker/failed-update-<date>-<time>-<commit>/`,
+  the backup from before the update is put back, and the previous commit starts again. The update then
+  fails, saying so, with the journal's last lines. Anything written between the backup and the failure is
+  only in that moved database; a version that never answered has normally written nothing.
 
 Installs follow `stable` rather than `main`: every push lands on `main` at once, but `stable` only moves to
 a commit after every test has passed on it (see [Tests](#tests)), so a half-finished change never reaches
@@ -1242,9 +1259,11 @@ A
 container still on the old default port 8000 moves to 6769 on this update (see
 [Upgrading](#upgrading-an-install-from-before-september-2026)). Your data is kept:
 if a release changes the database layout, the server upgrades it in place when it starts, and the
-journal shows `Database upgraded to schema version N`. Take a backup first if you might want to go
-back, because an older release refuses to open a database a newer one has upgraded. You can also
-update from inside the container:
+journal shows `Database upgraded to schema version N`. An older release refuses to open a database a newer
+one has upgraded, which is why going back puts the backup from before the update in place too. To go back
+by hand from an update that did start, restore its `pre-update-` backup as below and check out the commit
+in its name in `/opt/workout-tracker` (`git checkout -f -B stable <commit>`) before starting the app. You
+can also update from inside the container:
 
 ```bash
 pct enter <CTID>
@@ -1663,8 +1682,33 @@ to that user (volumes made by older images are owned by root).
 
 ```bash
 docker compose logs -f                      # logs
-docker compose down && git pull && docker compose up -d --build   # update
 ```
+
+To update, back up first, then rebuild from the new commit. Note the commit you are on, to come back to:
+
+```bash
+git rev-parse --short HEAD                  # the version running now
+scripts/docker-backup.sh                    # a backup from before the update
+git pull && docker compose up -d --build
+docker compose ps                           # "healthy" within a minute or so
+```
+
+If the new version does not become healthy (`docker compose logs` says why), go back. An older version refuses a
+database a newer one has upgraded, so the backup goes back too:
+
+```bash
+docker compose stop workout-tracker
+docker compose cp /var/backups/workout-tracker/workouts-<newest>.db workout-tracker:/app/data/workouts.db
+docker compose run --rm --no-deps --entrypoint rm workout-tracker -f /app/data/workouts.db-wal /app/data/workouts.db-shm
+git checkout <the commit noted above>
+docker compose up -d --build
+```
+
+The `-wal` and `-shm` files go because, left beside the restored database, they would be replayed onto it. The copy
+is owned by root until the container starts, which hands it to the `workout` user.
+
+`git checkout <commit>` leaves the checkout on that commit rather than a branch; `git checkout stable` (or `main`)
+goes back to following one.
 
 `git clone` gets `main`, which takes every push as it lands. To only update to commits whose tests have
 passed, switch the checkout to `stable` once with `git checkout stable`; `git pull` then follows it.
@@ -1826,7 +1870,10 @@ suite breakdown and for how to add a test.
 GitHub Actions runs every suite on each push and pull request (`.github/workflows/tests.yml`), on Python 3.9 (the
 oldest this README says the server runs on) and 3.12, after pyflakes and `tests/lint.py` (which checks that the lists kept
 by hand agree with the files: what the service worker precaches, the names scripts share, the documented environment
-variables and the registered suites). When they all pass on `main`, it moves the `stable` branch to that commit, and that
+variables and the registered suites). Beside them, a job runs `tests/as-root.sh` as root on its own runner, which is
+thrown away afterwards: the installer installing from a copy of the checkout, an update to a version that upgrades the
+database and then fails to start being undone (the previous version running again on the database as it was), a working
+update and one with nothing new, and the Docker entrypoint handing over a data directory. When they all pass on `main`, it moves the `stable` branch to that commit, and that
 is the branch installs and updates follow. To hold releases back for a while, set the repository variable `HOLD_STABLE` to
 `true` (Settings, Secrets and variables, Actions, Variables): pushes are still tested, but `stable` stays where it is. To
 release what is on `main` meanwhile, run the *Tests* workflow by hand on `main` with *Move stable* ticked (it tests `main`
