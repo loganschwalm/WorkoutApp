@@ -18,6 +18,10 @@ let stateRetryCount = 0;
 // Set once the account has been deleted (forgetLocalAccount): what the page still saves on its way out, such as the rest on
 // show (rememberRest in rest-timer.js), is of nothing, and would be left behind on the device.
 let localAccountForgotten = false;
+// Set once another account has signed in on this browser while this page was open (accountSignedInElsewhere).
+let localAccountElsewhere = false;
+// The stamp of each part of the account state as this page last knew it, by its key (see takeOtherTabsChanges).
+const knownStateStamps = new Map();
 
 // Falls back to memory when localStorage is unavailable, so syncing still works (it just cannot survive a reload).
 function readLocal(key) {
@@ -28,6 +32,8 @@ function readLocal(key) {
 
 function writeLocal(key, value) {
   if (localAccountForgotten) return;
+  // This page's own change to a part of the account state is not another tab's (see takeOtherTabsChanges).
+  if (knownStateStamps.has(key)) knownStateStamps.set(key, value?.stamp);
   try {
     localStorage.setItem(key, JSON.stringify(value));
     memoryStore.delete(key);
@@ -104,10 +110,52 @@ function dropSavedWorkoutsCopies() {
   }
 }
 
+// Each request says which account the page is for (the one its copies on this device are kept under), and the server refuses
+// it if the browser is now signed in as another (see accountSignedInElsewhere).
 function syncFetch(path, options = {}, timeout = 10000) {
+  if (localAccountElsewhere) return Promise.reject(new Error('Another account is signed in on this browser.'));
   const signal = typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(timeout) : undefined;
-  return fetch(path, { ...options, signal });
+  const headers = localUserId === null ? options.headers : { ...options.headers, 'X-Workout-Account':String(localUserId) };
+  return fetch(path, { ...options, headers, signal }).then(response => {
+    if (response.status === 409 && response.headers.get('X-Workout-Account-Mismatch')) {
+      accountSignedInElsewhere();
+      throw new Error('Another account is signed in on this browser.');
+    }
+    return response;
+  });
 }
+
+// The cookie is the browser's, not the page's: signing in to another account in another tab signs this page in to it too.
+// What this page has not uploaded is its own account's, so nothing more goes up from it (syncFetch refuses, and the server
+// would too), and it stays on this device for the next time that account signs in. A banner says so, and reloading takes the
+// page to the account now signed in. Seen as soon as the other tab signs in (it writes the last account seen here), and
+// otherwise by the server's answer.
+function accountSignedInElsewhere() {
+  if (localAccountElsewhere || localAccountForgotten) return;
+  localAccountElsewhere = true;
+  [activeSyncTimer, pendingRetryTimer, stateSyncTimer].forEach(clearTimeout);
+  const banner = document.createElement('div');
+  banner.id = 'accountElsewhere';
+  banner.className = 'session-banner';
+  banner.setAttribute('role', 'alert');
+  const message = document.createElement('span');
+  message.textContent = 'Another account has signed in on this browser, so this page has stopped saving to the server. '
+    + 'Anything it had not uploaded stays on this device until this account signs in again.';
+  const reload = document.createElement('button');
+  reload.type = 'button';
+  reload.className = 'primary';
+  reload.textContent = 'Reload';
+  reload.onclick = () => location.reload();
+  banner.append(message, reload);
+  document.body.prepend(banner);
+}
+
+window.addEventListener('storage', event => {
+  if (event.key !== lastUserStorageKey || localUserId === null || event.newValue === null) return;
+  let signedIn = null;
+  try { signedIn = JSON.parse(event.newValue); } catch (error) { return; }
+  if (signedIn !== null && signedIn !== localUserId) accountSignedInElsewhere();
+});
 
 function newClientId() {
   const bytes = new Uint8Array(16);
@@ -385,8 +433,34 @@ async function loadAccountState() {
     }
   });
   syncAccountState();
+  noteStateStamps();
   return state;
 }
+
+// ---- Changes from another tab ---------------------------------------------
+// Each page keeps the parts it shows in memory (customTemplates, goals, the notes...) and saves a change from there, while
+// the base the change goes up with is read from the stored copy. Another tab (or the installed app beside a browser tab)
+// storing a change meanwhile left this page's copy without it and the base with it, so the server took the gap as this page
+// deleting it (merge_values). So when the stored copy changes under a page, the page is told, with an 'accountstatechange'
+// naming the parts, and takes them in as it takes the server's copy on loading: at once, on the browser's storage event,
+// and on coming back into view, for a page the browser froze in the background meanwhile. A stamp is a stored copy's
+// identity (a new one with every change), so a part counts as changed when its stamp is not the one this page last knew:
+// written here (writeLocal notes those) or taken in. knownStateStamps is declared at the top, as writeLocal reads it.
+
+function noteStateStamps() {
+  accountStateParts.forEach(part => knownStateStamps.set(localKey(part), readLocalState(part)?.stamp));
+}
+
+function takeOtherTabsChanges() {
+  if (localAccountForgotten) return;
+  const parts = accountStateParts.filter(part => knownStateStamps.has(localKey(part)) && knownStateStamps.get(localKey(part)) !== readLocalState(part)?.stamp);
+  if (!parts.length) return;
+  noteStateStamps();
+  window.dispatchEvent(new CustomEvent('accountstatechange', { detail:{ parts } }));
+}
+
+window.addEventListener('storage', event => { if (event.key === null || event.key.startsWith('workout-tracker-')) takeOtherTabsChanges(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) takeOtherTabsChanges(); });
 
 // Everything kept on this device for the signed-in account, once that account has been deleted: its copies are of
 // nothing now, and anything still waiting to upload has nowhere to go.

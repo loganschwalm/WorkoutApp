@@ -186,6 +186,8 @@ document.fonts.ready.then(drawBodyweight);
 // The row is folded to start with, and a canvas drawn in a folded row has no width: it is drawn when the row opens.
 $('bodyweightFold').addEventListener('toggle', () => { if ($('bodyweightFold').open) drawBodyweight(); });
 // The server's copy replaces this device's once it answers, unless a weight logged here is still uploading.
+// So does another tab's, once it changes it (accountstatechange in offline.js).
 window.serverStateReady.then(() => { loadBodyweights(); renderBodyweight(); });
+window.addEventListener('accountstatechange', () => { loadBodyweights(); renderBodyweight(); });
 // The unit changes the numbers; the theme, the colours.
 window.addEventListener('settingschange', renderBodyweight);

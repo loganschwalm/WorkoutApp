@@ -2502,6 +2502,21 @@ def run_routes(t, check, request):
     check('a change from another page of the site is refused before the route is looked at, whether the route exists or not',
           ask('POST', '/api/nothing', token=token, headers={'Sec-Fetch-Site': 'same-site'})[0] == 403 and ask('POST', '/api/workouts', token=token, headers={'Sec-Fetch-Site': 'cross-site'})[0] == 403)
 
+    # ------------------------------------------------------------------ P a page for another account
+    print('P   a page left open for another account than the one now signed in')
+    mine = str(request('GET', '/api/auth/me', token=token)[2]['user']['id'])
+    workout = json.dumps({'name': 'Not Mine', 'clientId': 'other-account', 'exercises': [{'name': 'Squat', 'reps': 5}]}).encode()
+    status, headers, reply = request('POST', '/api/workouts', workout, {**json_headers, 'X-Workout-Account': str(int(mine) + 1)}, token=token)
+    check('an upload from a page that says it is for another account is refused, saying so', status == 409 and headers.get('x-workout-account-mismatch') == '1'
+          and 'another account' in reply.get('error', ''), (status, reply))
+    listed = request('GET', '/api/workouts', None, {'X-Workout-Account': str(int(mine) + 1)}, token=token)
+    check('as is a read, so that page keeps no copy of this account under its own', listed[0] == 409, listed[0])
+    check('and nothing was stored', all(w['name'] != 'Not Mine' for w in request('GET', '/api/workouts', token=token)[2]['workouts']))
+    check('a page that says it is for this account is answered as usual', request('POST', '/api/workouts', workout, {**json_headers, 'X-Workout-Account': mine}, token=token)[0] == 201)
+    check('and so is one that does not say (an older page)', request('GET', '/api/workouts', None, None, token=token)[0] == 200)
+    check('who is signed in is answered whatever a page says, since a page asks that to find out',
+          request('GET', '/api/auth/me', None, {'X-Workout-Account': str(int(mine) + 1)}, token=token)[0] == 200)
+
 
 def api_token(t, name):
     """A new account's session, for a check that may do things that count against an account."""

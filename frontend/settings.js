@@ -48,6 +48,13 @@ window.serverStateReady = loadAccountState().then(async state => {
   window.dispatchEvent(new Event('settingschange'));
   return state;
 });
+// Settings another tab changes are taken in the same way (accountstatechange in offline.js), the dialog's fields with them if
+// it is open, since saving reads every field and would put back what the other tab changed.
+window.addEventListener('accountstatechange', event => {
+  if (!event.detail.parts.includes('settings')) return;
+  applySettings(getWorkoutSettings());
+  window.dispatchEvent(new Event('settingschange'));
+});
 
 function getWorkoutSettings() {
   const stored = readLocalState('settings');

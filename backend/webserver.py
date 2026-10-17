@@ -348,6 +348,14 @@ class WebHandler(http.server.SimpleHTTPRequestHandler):
             if handler is None:
                 self.send_json(HTTPStatus.NOT_FOUND, {'error': 'Endpoint not found.'})
                 return
+            # A page says which account it is for (syncFetch in offline.js), since the cookie is the browser's, not the page's:
+            # a tab left open while another account signed in on the same browser would otherwise upload its account's
+            # workouts, settings and workout in progress into the one now signed in. Refused, it keeps them for its own.
+            page_account = self.headers.get('X-Workout-Account')
+            if page_account is not None and page_account != str(user['id']):
+                self.send_json(HTTPStatus.CONFLICT, {'error': 'This page is for another account than the one signed in. Reload it.'},
+                               headers={'X-Workout-Account-Mismatch': '1'})
+                return
             getattr(self, handler)(user)
         except BadRequest as error:
             self.send_json(error.status, {'error': str(error)}, headers=error.headers)

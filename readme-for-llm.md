@@ -323,7 +323,18 @@ Logged sets, notes, finished workouts, settings, custom templates, and your trai
   started the next cycle, converted it to the other unit, or switched or ended it wins whole, and a change to a cycle
   another device has since moved on from is dropped rather than carried into the new one. A page open since before
   another device's change keeps it too, and shows it from its next load.
+- Two tabs of the same browser (or the installed app beside a tab) share the device's copy, so each takes in what the
+  other stores: at once, when the browser says its storage changed, and when it comes back into view, for a tab the browser
+  froze meanwhile (`accountstatechange` in `offline.js`; each page takes it in as it takes the server's copy on loading,
+  the Settings dialog's fields too). A change made in one is then never sent up as if it had removed what the other added.
 - Local copies are kept per account, so another account signed in on the same browser never sees them.
+- A page left open while another account signs in on the same browser (in another tab) keeps its account's work to itself.
+  The cookie is the browser's, not the page's, so every request a page sends to sync says which account it is for
+  (`X-Workout-Account`, from `syncFetch`), and the server answers one for another account than the session's 409 with
+  `X-Workout-Account-Mismatch`. The page then stops sending and says so with a banner offering a reload; what it had not
+  uploaded stays on the device until its own account signs in again. It notices before anything goes up, too, when the
+  other tab's sign-in writes the last account seen on this device. A request without the header (an older page) is
+  answered as before, and so is `GET /api/auth/me`, which a page asks to find out whose it is.
 - If your sign-in expires while a page is open, a banner offers to sign in again and returns you to the same page; nothing on screen is discarded, and a workout in progress stays on the device.
 
 A service worker caches the app's own files, so reloading with no connection still opens the

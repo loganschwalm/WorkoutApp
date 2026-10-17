@@ -851,10 +851,14 @@ window.addEventListener('resize', drawChart);
 // A canvas only draws in Figtree once it has loaded, and the labels' spacing is measured in it.
 document.fonts.ready.then(drawChart);
 // The note kept with an exercise may only arrive from the server once the page has drawn.
-window.serverStateReady.then(() => {
+// And another tab's goals or notes once it changes them (accountstatechange in offline.js), so a goal set here never goes up
+// without one set there.
+function takeGoals() {
   loadGoals();
   if (allWorkouts.length) { renderSessions(allWorkouts); renderGoals(); }
-});
+}
+window.serverStateReady.then(takeGoals);
+window.addEventListener('accountstatechange', takeGoals);
 // The theme changes the chart's colours; the weight unit changes its numbers, and the distance unit a cardio chart's and
 // the cardio records.
 window.addEventListener('settingschange', () => {

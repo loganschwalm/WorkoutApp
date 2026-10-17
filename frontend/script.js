@@ -1045,7 +1045,9 @@ $('saveBtn').onclick = async () => {
 };
 
 renderTemplates();
-window.serverStateReady.then(() => {
+// The account's templates, notes, library and program as stored: the server's once it answers, and another tab's once it
+// changes them (accountstatechange in offline.js), so a change made here never goes up without one made there.
+function takeAccountState() {
   customTemplates = loadCustomTemplates();
   exerciseNotes = loadExerciseNotes();
   exerciseLibrary = loadExerciseLibrary();
@@ -1055,7 +1057,9 @@ window.serverStateReady.then(() => {
   if (activeSession) showPlates();
   reloadProgram();
   renderTemplates();
-});
+}
+window.serverStateReady.then(takeAccountState);
+window.addEventListener('accountstatechange', takeAccountState);
 // A change of unit shows everything in the new one. The workout in progress is converted and saved that way; logged
 // workouts are only converted for showing (see inUnit), so switching back and forth never changes them.
 function applyUnit() {

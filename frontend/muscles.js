@@ -213,8 +213,11 @@ $('libraryForm').onsubmit = event => {
 
 renderLibraryForm();
 // The library on the server replaces this device's once it answers, unless a choice made here is still uploading.
-window.serverStateReady.then(() => {
+// So does another tab's, once it changes it (accountstatechange in offline.js).
+function takeLibrary() {
   exerciseLibrary = loadExerciseLibrary();
   renderLibrary();
   if (allWorkouts.length) { renderMuscles(); renderExerciseCard(); }
-});
+}
+window.serverStateReady.then(takeLibrary);
+window.addEventListener('accountstatechange', takeLibrary);

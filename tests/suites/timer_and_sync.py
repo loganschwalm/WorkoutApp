@@ -484,6 +484,54 @@ def run(t):
     cdp.ev("Storage.prototype.setItem = window.__setItem; localStorage.removeItem('workout-tracker-held-test')")
     cdp.ev("dropSavedWorkoutsCopies()")
 
+    print('P16 a page left open while another account signs in on this browser keeps its own account’s work')
+    other_id = api('GET', '/api/auth/me', token=other_token)[0]['user']['id']
+    other_names = lambda: [w['name'] for w in api('GET', '/api/workouts', token=other_token)[0]['workouts']]
+    banner = "!!document.getElementById('accountElsewhere')"
+    open_tracker()
+    left = {'name': 'Left Open', 'notes': '', 'createdAt': int(time.time() * 1000), 'clientId': 'left-open',
+            'exercises': [{'name': 'Squat', 'weight': 100, 'reps': 5, 'sets': [{'weight': 100, 'reps': 5}]}]}
+    cdp.ev(f"queuePendingWorkout({json.dumps(left)})")
+    # Another tab signing in to the other account: the cookie is the browser's, so this page now sends that account's.
+    cdp.send('Network.setCookie', name='session', value=other_token, domain='127.0.0.1', path='/')
+    cdp.ev('flushPendingWorkouts()')
+    check("its waiting workout is not uploaded into the account now signed in", 'Left Open' not in other_names(), other_names()[:5])
+    check('it stays on this device, for its own account', safe_ev("readPendingWorkouts().some(w => w.clientId === 'left-open')", False) is True)
+    check('and the page says what happened, offering a reload', cdp.ev(banner) is True
+          and 'Another account' in cdp.ev("document.getElementById('accountElsewhere').textContent"), safe_ev("document.body.firstElementChild.outerHTML", ''))
+    cdp.send('Network.setCookie', name='session', value=token, domain='127.0.0.1', path='/')
+    cdp.goto('/index.html')
+    check('signed in to its own account again, it uploads there', wait_for(lambda: any(w['name'] == 'Left Open' for w in workouts())))
+    check('once', [w['name'] for w in workouts()].count('Left Open') == 1)
+    open_tracker()
+    # The other tab writes the last account seen on signing in, which this page hears before anything goes up.
+    cdp.ev(f"window.dispatchEvent(new StorageEvent('storage', {{ key: 'workout-tracker-last-user', newValue: '{other_id}' }}))")
+    check('a sign-in in another tab is noticed before anything goes up', cdp.ev(banner) is True)
+    sent = safe_ev("syncFetch('/api/workouts').then(() => 'sent', error => error.message)", '') or ''
+    check('and nothing more is sent from this page', 'another account' in sent.lower(), sent)
+
+    print('P17 a change made in another tab is not undone by one made here')
+    open_tracker()
+    key = f'workout-tracker-templates-{me_id}'
+    names = lambda: [x.get('name') for x in api('GET', '/api/state', token=token)[0]['templates']]
+    before = json.loads(cdp.ev("JSON.stringify(readLocalState('templates')?.value || [])"))
+    theirs = {'id': 'other-tab', 'name': 'Other Tab Template', 'exercises': [{'name': 'Row', 'reps': '10'}]}
+    # Stands in for another tab adding a template and uploading it: the server has it, this device's stored copy has it, and
+    # the browser tells this page its storage changed. This page's own copy is the one it loaded, without it.
+    api('PATCH', '/api/state', {'templates': {'value': before + [theirs], 'base': before}}, token)
+    cdp.ev(f"""localStorage.setItem('{key}', JSON.stringify({{ value: {json.dumps(before + [theirs])}, dirty: false, stamp: 'other-tab-1' }}));
+      window.dispatchEvent(new StorageEvent('storage', {{ key: '{key}' }}))""")
+    check('the page takes in the other tab’s template', cdp.wait("customTemplates.some(template => template.id === 'other-tab')"))
+    mine = {'id': 'this-tab', 'name': 'This Tab Template', 'exercises': [{'name': 'Curl', 'reps': '12'}]}
+    cdp.ev(f"customTemplates = [...customTemplates, {json.dumps(mine)}]; saveCustomTemplates()")
+    check('a template added here afterwards keeps it on the server', wait_for(lambda: 'This Tab Template' in names()) and 'Other Tab Template' in names(), names())
+    # A page the browser froze in the background hears nothing, so coming back into view looks again.
+    cdp.ev(f"""localStorage.setItem('{key}', JSON.stringify({{ value: {json.dumps([theirs])}, dirty: false, stamp: 'other-tab-2' }}));
+      document.dispatchEvent(new Event('visibilitychange'))""")
+    check('and one changed while the page was frozen is taken in when it is seen again', cdp.wait("customTemplates.length === 1"),
+          cdp.ev("customTemplates.map(template => template.name)"))
+    api('PATCH', '/api/state', {'templates': {'value': before}}, token)
+
     print('R2  30 seconds more or less rest')
     open_tracker()
     cdp.ev("""window.__offset = 0; const realNow = Date.now.bind(Date); Date.now = () => realNow() + window.__offset;
