@@ -252,6 +252,9 @@ fi
 mkdir -p "$DATA_DIR"
 chown -R "$SERVICE_USER":"$SERVICE_USER" "$DATA_DIR"
 chmod 750 "$DATA_DIR"
+# The database holds every account's workouts, and a database made before the unit set its UMask is readable by anyone who can
+# reach the directory: the service's user alone reads it (and its write-ahead log) from here on.
+find "$DATA_DIR" -maxdepth 1 -name 'workouts.db*' -exec chmod 0600 {} +
 
 # Settings for the server itself. Created once and never overwritten, so an update keeps what you set here.
 if [[ ! -f /etc/workout-tracker/workout-tracker.env ]]; then
@@ -286,7 +289,7 @@ if [[ ! -f /etc/workout-tracker/workout-tracker.env ]]; then
 # Workouts one account may keep (0 for no limit), accounts one address may make in an hour (0 for no limit), and reset emails
 # one address may ask for in an hour (0 for no limit):
 #MAX_WORKOUTS=50000
-#REGISTRATIONS_PER_HOUR=5
+#REGISTRATIONS_PER_HOUR=10
 #RESET_ADDRESS_EMAILS=10
 #
 # Passwords hashed at once, so a flood of sign-ins cannot take every core, and how long (seconds) one waits its turn:
@@ -308,7 +311,12 @@ fi
 chmod 0600 /etc/workout-tracker/workout-tracker.env
 
 step "writing systemd unit"
-cat >/etc/systemd/system/workout-tracker.service <<UNIT
+# The unit as it was, so going back from a failed update (below) can put it back too: an update that adds to the unit and
+# then fails to start would otherwise leave the version that ran before with a unit it may not start under either.
+unit_file=/etc/systemd/system/workout-tracker.service
+unit_before=""
+[[ ! -f "$unit_file" ]] || unit_before="$(cat "$unit_file")"
+cat >"$unit_file" <<UNIT
 [Unit]
 Description=Workout Tracker
 Documentation=https://github.com/loganschwalm/WorkoutApp
@@ -330,9 +338,19 @@ Restart=always
 RestartSec=3
 NoNewPrivileges=yes
 PrivateTmp=yes
-ProtectSystem=full
+# Everything but the data directory is read-only to the server (it writes nothing else), and what it makes there is its own.
+ProtectSystem=strict
 ProtectHome=yes
 ReadWritePaths=$DATA_DIR
+UMask=0077
+# Sockets over the network and to local programs only, none of the others; no new namespaces, real-time scheduling or
+# personality changes; and only the machine's own system calls. Each is a filter on the server's calls, so none of it changes
+# how it is set up or what it can reach in the container.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+SystemCallArchitectures=native
 
 [Install]
 WantedBy=multi-user.target
@@ -458,6 +476,11 @@ if [[ -n "$pre_update_backup" ]]; then
 fi
 git -C "$APP_DIR" checkout --quiet -f -B "$BRANCH" "$previous"
 git -C "$APP_DIR" clean -qfd
+if [[ -n "$unit_before" ]]; then
+  printf '%s
+' "$unit_before" >"$unit_file"
+  systemctl daemon-reload
+fi
 # The failed version was restarted over and over, which can leave systemd refusing another start for a while.
 systemctl reset-failed workout-tracker 2>/dev/null || true
 systemctl start workout-tracker || true

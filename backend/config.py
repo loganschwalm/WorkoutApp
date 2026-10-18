@@ -123,7 +123,7 @@ RESET_GUESSES = int(os.environ.get('RESET_GUESSES', '10'))
 RESET_ADDRESS_EMAILS = int(os.environ.get('RESET_ADDRESS_EMAILS', '10'))
 RESET_EMAILS_DAILY = 10
 # New accounts per address in an hour, so a script cannot fill the database with them. 0 turns it off.
-REGISTRATIONS_PER_HOUR = int(os.environ.get('REGISTRATIONS_PER_HOUR', '5'))
+REGISTRATIONS_PER_HOUR = int(os.environ.get('REGISTRATIONS_PER_HOUR', '10'))
 
 # OWASP's recommendation for PBKDF2-HMAC-SHA256. Hashes record their own count, so raising it later only
 # needs this number changed: each account is rehashed the next time it signs in.

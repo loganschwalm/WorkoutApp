@@ -25,8 +25,9 @@ four suites at a time, on Python 3.9 (the oldest the README says the server runs
 branch that installs follow once both pass on `main`. Before them it runs pyflakes, `tests/lint.py` and ShellCheck (on the shell
 scripts, settings in `.shellcheckrc`). A job of its own runs `tests/as-root.sh` as root on a runner that is thrown away afterwards,
 and `stable` waits for it too: the Proxmox installer installing, an update to a version that upgrades the database and then fails
-to start being undone (the previous version running again, with the database as it was, and the failed one's kept), a working
-update and one with nothing new, and the Docker entrypoint handing over a data directory (and saying what it cannot, rather than
+to start being undone (the previous version running again, with the database as it was and the unit it had, and the failed
+one's kept), the unit's sandbox and the database being readable by the service alone (and an update closing one that was not),
+a working update and one with nothing new, and the Docker entrypoint handing over a data directory (and saying what it cannot, rather than
 stopping). Never run it on a computer you use: it installs a service and writes to `/etc`, `/opt` and `/var`.
 
 ```bash

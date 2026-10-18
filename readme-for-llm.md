@@ -1171,7 +1171,11 @@ script then:
    itself unless you give root a password (see [Managing the container](#managing-the-container)).
 3. Installs `python3`, `git`, and `sqlite3` inside it.
 4. Clones this repository's `stable` branch to `/opt/workout-tracker` (see [Updating](#updating)).
-5. Creates a `workout` system user and a `workout-tracker` systemd service that starts on boot.
+5. Creates a `workout` system user and a `workout-tracker` systemd service that starts on boot, sandboxed: the server
+   can write only to its data directory (`ProtectSystem=strict`, `ReadWritePaths`), creates files only its own user
+   reads (`UMask=0077`; an update also closes a database an older install left readable), opens only network and local
+   sockets, and gets no new privileges, namespaces, real-time scheduling or foreign system-call architectures. An update
+   that fails to start puts the unit back as it was, with the code and the database.
 6. Creates `/etc/workout-tracker/workout-tracker.env` for [server settings](#server-settings), with
    every option commented out. Updates never overwrite it.
 7. Waits until the app actually answers on its port, then prints the URL.
@@ -1276,6 +1280,13 @@ your server. An install from before October 2026 that followed `main` moves to `
 update, once. To follow `main` anyway, set `BRANCH='main'` in `/etc/workout-tracker/install.conf` inside
 the container after that update; later updates keep it. While a repository has no `stable` branch (a fork,
 say), installs and updates use `main`.
+
+Whoever can push to the branch an install follows can run code as root in its container on the next update, so protect
+`stable` on GitHub (Settings, Branches): block force pushes and deletion, and nothing else is needed, since the workflow
+moves it with a plain fast-forward push. To read before you run, download the script, read it, then run it; its URL can
+name a commit instead of `stable` to fix the script itself. That fixes only the script: updates fetch the branch in
+`install.conf`, so a server that should change only when you say so follows a fork and a branch of your own (`REPO_URL`
+and `BRANCH`, below) that you move by hand.
 
 A
 container still on the old default port 8000 moves to 6769 on this update (see
@@ -1430,6 +1441,10 @@ What is already in place:
   meanwhile does not start the count again, or an account of one's own would let the guessing go on. Behind a reverse
   proxy every request shares the proxy's address, so one person's guessing would make everyone wait: name the proxy in
   `TRUSTED_PROXIES`, or set `LOGIN_ADDRESS_ATTEMPTS=0` to turn this limit off (the one per account stays).
+- The limits by address (failed sign-ins, accounts made, reset emails) count an IPv6 client by its /64, the network an ISP
+  gives one home or phone, so rotating through the addresses inside it meets one limit (`throttle_address` in
+  `accounts.py`). An IPv4 address, or one written the IPv6 way (`::ffff:192.0.2.1`), is counted as itself. The log and a
+  session's device list keep the full address.
 - **Behind a reverse proxy, set `TRUSTED_PROXIES` to the proxy's address**: `127.0.0.1` for one on the same machine, its
   LAN address for one elsewhere, or for one in Docker the network it reaches the app over (Docker's own are within
   `172.16.0.0/12`, which is fine as long as nothing else on that network is untrusted). A request from that address is
@@ -1445,8 +1460,10 @@ What is already in place:
   many codes were sent, none is tried until the oldest of those is a day old. The replies and limits
   are the same whether or not an account uses the address, so the reset form cannot be used to find
   out who has an account. A successful reset signs the account out everywhere else.
-- One client address can make 5 accounts an hour (`REGISTRATIONS_PER_HOUR`), counted when one is made, so a refused
-  sign-up (a name taken, a weak password) costs nothing, and a script cannot fill the database with accounts. A limit
+- One client address can make 10 accounts an hour (`REGISTRATIONS_PER_HOUR`), so a script cannot fill the database with
+  accounts. An attempt is counted when it is made, and a sign-up refused for a name or email already taken stays counted:
+  that refusal says which are taken, so asking has to cost something. One refused before that (a weak password, a bad
+  email) costs nothing, and neither does one that failed because the server was too busy. A limit
   per address needs the real address: behind a reverse proxy, see `TRUSTED_PROXIES` above, or everyone behind it shares
   one limit, and `REGISTRATIONS_PER_HOUR=0` and `RESET_ADDRESS_EMAILS=0` turn them off.
 - An account keeps at most 50,000 workouts (`MAX_WORKOUTS`, 0 for no limit), taking at most 100 MB altogether
@@ -1513,7 +1530,7 @@ The server reads these environment variables:
 | `HOST` | `0.0.0.0` | The address to listen on; `127.0.0.1` for a reverse proxy on the same machine (not under Docker: publish the port to `127.0.0.1` instead, see [Before you expose it](#before-you-expose-it)) |
 | `MAX_WORKOUTS` | `50000` | Workouts one account may keep; `0` takes the limit off |
 | `MAX_WORKOUTS_MB` | `100` | How much one account's workouts may take altogether, in MB as stored (ten years of training is about 10 MB); `0` takes the limit off |
-| `REGISTRATIONS_PER_HOUR` | `5` | Accounts one client address may make in an hour; `0` turns it off |
+| `REGISTRATIONS_PER_HOUR` | `10` | Accounts one client address may make in an hour; `0` turns it off |
 | `RESET_ADDRESS_EMAILS` | `10` | Reset emails one client address may ask for in an hour, whichever addresses it names; `0` turns it off |
 | `TRUSTED_PROXIES` | *(none)* | Reverse proxies whose `X-Forwarded-For` is believed, as addresses or networks separated by commas (`127.0.0.1, 172.16.0.0/12`), so the sign-in limits count each person behind them apart. See [Before you expose it](#before-you-expose-it) |
 | `REQUEST_TIMEOUT` | `30` | Seconds a connection may send nothing before it is closed |
@@ -1777,6 +1794,18 @@ Environment=APP_ROOT=/opt/workout-tracker/frontend
 Environment=WORKOUT_DB=/var/lib/workout-tracker/workouts.db
 ExecStart=/usr/bin/python3 /opt/workout-tracker/backend/server.py
 Restart=always
+# The server writes only its database, in this directory, and makes files only its own user reads.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/workout-tracker
+UMask=0077
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+SystemCallArchitectures=native
 
 [Install]
 WantedBy=multi-user.target
@@ -1895,7 +1924,9 @@ by hand agree with the files: what the service worker precaches, the names scrip
 variables and the registered suites). Beside them, a job runs `tests/as-root.sh` as root on its own runner, which is
 thrown away afterwards: the installer installing from a copy of the checkout, an update to a version that upgrades the
 database and then fails to start being undone (the previous version running again on the database as it was), a working
-update and one with nothing new, and the Docker entrypoint handing over a data directory. When they all pass on `main`, it moves the `stable` branch to that commit, and that
+update and one with nothing new (and, in each, the unit's sandbox and the database's permissions), and the Docker entrypoint handing over a data directory. The workflow's
+token can only read, except in the job that moves `stable`, and its actions are pinned to the commit of a release (the version is
+in a comment on each line; to move one, take the commit its tag points at from the action's repository, not the tag). When they all pass on `main`, it moves the `stable` branch to that commit, and that
 is the branch installs and updates follow. To hold releases back for a while, set the repository variable `HOLD_STABLE` to
 `true` (Settings, Secrets and variables, Actions, Variables): pushes are still tested, but `stable` stays where it is. To
 release what is on `main` meanwhile, run the *Tests* workflow by hand on `main` with *Move stable* ticked (it tests `main`

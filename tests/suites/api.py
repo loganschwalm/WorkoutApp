@@ -555,8 +555,11 @@ def run_limits(t, check):
           statuses == [200] * 3 + [429] * 9, statuses)
     rush.stop()
     taken = t.start_server('registrations-taken.db', {'REGISTRATIONS_PER_HOUR': '2'})
-    statuses = [make(taken, 'first')[0], make(taken, 'first')[0], make(taken, 'second')[0], make(taken, 'third')[0]]
-    check("a sign-up refused because the name is taken does not use up one of the address's accounts", statuses == [200, 409, 200, 429], statuses)
+    weak = post(taken, '/api/auth/register', {'username': 'weakling', 'email': 'weakling@example.test', 'password': 'short'})[0]
+    statuses = [weak, make(taken, 'first')[0], make(taken, 'first')[0], make(taken, 'second')[0]]
+    # The refusal says which names are taken, so a script asking would otherwise be told for nothing.
+    check("a sign-up refused because the name is taken is counted, one refused for its password is not", statuses == [400, 200, 409, 429], statuses)
+    check('and the wait is the usual one', make(taken, 'third')[0] == 429)
     taken.stop()
     crowd = t.start_server('registrations-unlimited.db', {'REGISTRATIONS_PER_HOUR': '0'})
     check('REGISTRATIONS_PER_HOUR=0 turns it off', [make(crowd, f'crowd{n}')[0] for n in range(8)] == [200] * 8)
@@ -569,6 +572,26 @@ def run_limits(t, check):
         statuses.append(status)
     check('behind a trusted proxy each person has a limit of their own', statuses == [200, 200, 429], statuses)
     behind.stop()
+    # An IPv6 client is counted by its /64, the network one home or phone is given, so rotating inside it is one client.
+    def register_from(server, name, forwarded):
+        return server.request('POST', '/api/auth/register', json.dumps({'username': name, 'email': f'{name}@example.test', 'password': 'chalk-and-plates-42'}).encode(),
+                              {**json_headers, 'X-Forwarded-For': forwarded})[0]
+
+    sixty_four = t.start_server('registrations-ipv6.db', {'REGISTRATIONS_PER_HOUR': '1', 'TRUSTED_PROXIES': '127.0.0.1'})
+    statuses = [register_from(sixty_four, f'six{n}', where) for n, where in enumerate(
+        ('2001:db8:1:2::1', '2001:db8:1:2:aaaa:bbbb:cccc:dddd', '2001:db8:1:3::1', '203.0.113.7', '203.0.113.8', '::ffff:203.0.113.7'))]
+    check('addresses in one IPv6 /64 share a limit, another /64 has its own, and IPv4 addresses are counted one by one',
+          statuses == [200, 429, 200, 200, 200, 429], statuses)
+    sixty_four.stop()
+    guessing = t.start_server('guessing-ipv6.db', {'LOGIN_ADDRESS_ATTEMPTS': '3', 'TRUSTED_PROXIES': '127.0.0.1'})
+
+    def sign_in_from(server, name, forwarded):
+        return server.request('POST', '/api/auth/login', json.dumps({'login': name, 'password': 'not-the-password-1'}).encode(), {**json_headers, 'X-Forwarded-For': forwarded})[0]
+
+    statuses = [sign_in_from(guessing, f'nobody{n}', where) for n, where in enumerate(
+        ('2001:db8:9:9::1', '2001:db8:9:9::2', '2001:db8:9:9:ffff::3', '2001:db8:9:9::4', '2001:db8:9:a::1'))]
+    check('failed sign-ins from one IPv6 /64 add up, and another /64 is not held up by them', statuses == [401, 401, 401, 429, 401], statuses)
+    guessing.stop()
 
     # ------------------------------------------------------------------ A41 reset emails
     print('A41 reset emails are limited per address that asks, and per email in a day, whether or not an account uses it')

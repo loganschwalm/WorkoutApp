@@ -10,7 +10,7 @@ from http import HTTPStatus
 from accounts import (
     DUMMY_HASH, address_throttle, device_label, email_address, email_reset_code, find_account, login_key, login_throttle, needs_rehash, new_password,
     new_username, password_hash, password_matches, public_user, register_throttle, reset_address_throttle, reset_code_hash,
-    reset_daily_throttle, reset_guess_throttle, reset_throttle, username_taken, wait_words
+    reset_daily_throttle, reset_guess_throttle, reset_throttle, throttle_address, username_taken, wait_words
 )
 from config import ALLOW_REGISTRATION, RESET_CODE_ATTEMPTS, RESET_CODE_TTL, SESSION_TTL, SHORT_SESSION_TTL, SMTP_HOST
 from database import connection, delete_account_rows, forget_reminders, session_hash, username_key
@@ -67,7 +67,7 @@ class AccountApi:
         username = new_username(data.get('username'))
         password = new_password(str(data.get('password', '')), username, email)
         remember = self.wants_remembering(data)
-        address = self.client_ip()
+        address = throttle_address(self.client_ip())
         # Asked before anything is looked up or hashed, so a script gets nothing for its tries. Counted at once, so sign-ups sent
         # together cannot all pass before any is counted, and taken back if no account is made after all.
         wait, moment = register_throttle.take(address) if register_throttle else (0, None)
@@ -91,8 +91,11 @@ class AccountApi:
                     taken = 'username' if username_taken(database, username, key) else 'email'
                     raise BadRequest(f'That {taken} is already registered.', HTTPStatus.CONFLICT)
                 cookie = self.start_session(database, user_id, remember)
-        except BaseException:
-            if moment is not None:
+        except BaseException as error:
+            # A name or email already taken stays counted: the refusal says which are, and a script asking costs the limit as an
+            # account made would. Anything else (too busy to hash) made nothing, so the attempt is handed back.
+            conflict = isinstance(error, BadRequest) and error.status == HTTPStatus.CONFLICT
+            if moment is not None and not conflict:
                 register_throttle.release(address, moment)
             raise
         self.send_json(HTTPStatus.OK, {'user': {'id': user_id, 'username': username, 'email': email}}, [cookie])
@@ -110,7 +113,7 @@ class AccountApi:
         with connection() as database:
             row = find_account(database, login, key)
             # Keyed by the account rather than what was typed, so its email and its username share one limit (see login_key).
-            address = self.client_ip()
+            address = throttle_address(self.client_ip())
             throttle_key = login_key(address, login, row['id'] if row else None, key)
             # Refused before the password is even checked, so guessing cannot continue during the wait. Each try is counted as a
             # failure before its password is checked, which takes a good part of a second: counted after, tries sent at once all
@@ -155,7 +158,7 @@ class AccountApi:
         # for this client address comes first: it is the one a person spraying addresses meets, and says so.
         # Each is checked and counted in one go, so requests sent at once cannot all pass before any is counted; one that is
         # refused takes back what the limits before it counted.
-        address = self.client_ip()
+        address = throttle_address(self.client_ip())
         taken = []
         for throttle, key, message in ((reset_address_throttle, address, 'Too many codes asked for from this address.'),
                                        (reset_throttle, email, 'Too many codes asked for.'),
@@ -229,13 +232,13 @@ class AccountApi:
             database.execute('DELETE FROM push_subscriptions WHERE user_id = ?', (user['id'],))
             cookie = self.start_session(database, user['id'])
         reset_guess_throttle.clear(email)
-        login_throttle.clear(login_key(self.client_ip(), user['username'], user['id']))
+        login_throttle.clear(login_key(throttle_address(self.client_ip()), user['username'], user['id']))
         self.send_json(HTTPStatus.OK, {'user': public_user(user)}, [cookie])
 
     def confirm_password(self, database, user, password, wrong='That password is not right.'):
         """Check the signed-in account's password, asked again before a change only its owner should make: a signed-in
         page may not be its owner's. Wrong ones count as failed sign-ins, and the same wait applies."""
-        throttle_key = login_key(self.client_ip(), user['username'], user['id'])
+        throttle_key = login_key(throttle_address(self.client_ip()), user['username'], user['id'])
         # Counted as wrong before it is checked, and taken back if it is right, as signing in does.
         wait, moment = login_throttle.take(throttle_key)
         if wait:

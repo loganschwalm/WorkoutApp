@@ -2,6 +2,7 @@
 on failed sign-ins and reset codes, finding an account, and the email a reset code is sent in."""
 
 import hashlib
+import ipaddress
 import math
 import re
 import secrets
@@ -175,6 +176,23 @@ def needs_rehash(stored):
 
 # Checked against when the username does not exist, so a wrong username takes as long as a wrong password.
 DUMMY_HASH = password_hash(secrets.token_hex(16))
+
+
+def throttle_address(address):
+    """What the limits count a client by. An IPv4 address is its own; an IPv6 one is its /64, the smallest network an ISP gives a
+    home or a phone, so a person with a /64 of addresses to rotate through meets one limit rather than 2^64 of them. An IPv4
+    address written the IPv6 way (::ffff:192.0.2.1) is the IPv4 one, and text that is no address (a link-local one with its
+    interface, fe80::1%eth0) is counted as it is."""
+    try:
+        parsed = ipaddress.ip_address(str(address))
+    except ValueError:
+        return str(address)
+    mapped = getattr(parsed, 'ipv4_mapped', None)
+    if mapped:
+        return str(mapped)
+    if parsed.version == 6:
+        return f'{ipaddress.IPv6Address(int(parsed) >> 64 << 64)}/64'
+    return str(parsed)
 
 
 class Throttle:

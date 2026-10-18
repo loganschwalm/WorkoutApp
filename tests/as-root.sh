@@ -5,7 +5,8 @@
 # Updating an install made by ct/workout-tracker.sh, end to end. It installs from a copy of this checkout and keeps a
 # workout there, then updates to a version that migrates the database and then fails to start. That update must fail, put
 # the previous version back with the database as it was before (the previous version refuses one a newer version
-# migrated, so it only starts if the database really went back), and keep what the failed one left. A working update
+# migrated, so it only starts if the database really went back) and the systemd unit it had, and keep what the failed one
+# left. The unit's sandbox is checked on the way, and that a database left readable by others is closed. A working update
 # afterwards must go through with the workout still there, and one with nothing new must take no backup.
 #
 # The Docker image's entrypoint handing the data directory to its user: what it can, saying what it cannot rather than
@@ -74,8 +75,15 @@ curl -fsS -c "$cookies" -H 'Content-Type: application/json' "$base/api/auth/regi
 curl -fsS -b "$cookies" -H 'Content-Type: application/json' "$base/api/workouts" \
   -d '{"name":"Before The Update","clientId":"before-update","exercises":[{"name":"Squat","reps":5}]}' >/dev/null || fail 'could not save a workout'
 check 'installed, with a workout saved' 'not listed' has_workout
+unit=/etc/systemd/system/workout-tracker.service
+check 'the unit makes what the service writes private to it' "$(systemctl show -p UMask --value workout-tracker)" same "$(systemctl show -p UMask --value workout-tracker)" 0077
+check 'and keeps all but the data directory read-only to it' "$(systemctl show -p ProtectSystem --value workout-tracker)" same "$(systemctl show -p ProtectSystem --value workout-tracker)" strict
+check 'so the database it made is readable by it alone' "$(stat -c '%U %a' "$db")" same "$(stat -c '%U %a' "$db")" 'workout 600'
 
 echo 'F   an update to a version that migrates the database and then does not start'
+# The unit as this install left it, marked, so that going back is seen to put the unit back as well as the code and the database.
+echo '# the unit from before the update' >>"$unit"
+systemctl daemon-reload
 python3 - "$repo" <<'EOF'
 import pathlib
 import sys
@@ -99,6 +107,7 @@ pass 'the update says it failed'
 check 'the version from before is checked out again' "$(git -C "$app" rev-parse HEAD)" same "$(git -C "$app" rev-parse HEAD)" "$first"
 check 'and answering' 'no answer' curl -fsS -o /dev/null "$base/api/auth/me"
 check 'with the workout and the session from before the update' 'gone' has_workout
+check 'and the unit is the one from before the update' 'the failed update left its own' grep -q 'the unit from before the update' "$unit"
 check 'the database is back as it was before the update' 'it still has what the failed update added' not broken_table_in "$db"
 check 'owned by the service, readable by it alone' "$(stat -c '%U %a' "$db")" same "$(stat -c '%U %a' "$db")" 'workout 600'
 check 'the backup taken before the update is kept' "$(pre_update_backups) of them" same "$(pre_update_backups)" 1
@@ -108,7 +117,11 @@ check 'and what the failed update left is kept beside it' "${failed_db:-none}" b
 echo 'U   an update that works, then one with nothing new'
 git -C "$repo" -c user.name=Test -c user.email=test@example.test revert --quiet --no-edit HEAD
 fixed="$(git -C "$repo" rev-parse HEAD)"
+# A database from before the unit set its UMask is readable by anyone who can reach the directory; an update closes it.
+chmod 0644 "$db"
 bash ct/workout-tracker.sh || fail 'a working update failed'
+check 'an update closes a database left open to others' "$(stat -c '%U %a' "$db")" same "$(stat -c '%U %a' "$db")" 'workout 600'
+check 'a working update writes the unit again' 'it kept the old one' not grep -q 'the unit from before the update' "$unit"
 check 'a working update goes through' "$(git -C "$app" rev-parse HEAD)" same "$(git -C "$app" rev-parse HEAD)" "$fixed"
 check 'with the workout still there' 'gone' has_workout
 check 'having backed the database up first' "$(pre_update_backups) of them" same "$(pre_update_backups)" 2

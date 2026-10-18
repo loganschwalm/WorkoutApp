@@ -15,6 +15,11 @@ on:
         type: boolean
         default: false
 
+# Nothing here needs more than reading the repository; the one job that moves `stable` asks for write access itself (promote).
+# The actions are pinned to the commit a release points at, so a tag moved later cannot change what runs with that access.
+permissions:
+  contents: read
+
 jobs:
   test:
     name: test (Python ${{ matrix.python }})
@@ -27,9 +32,9 @@ jobs:
         # The oldest Python the README says the server runs on, and a current one (what a new Debian container has).
         python: ['3.9', '3.12']
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python }}
 
@@ -65,7 +70,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install, update, go back from a failed update, and hand over a data directory
         run: sudo bash tests/as-root.sh
@@ -82,7 +87,7 @@ jobs:
     # One promotion at a time, so an older run finishing late cannot move stable back.
     concurrency: promote-stable
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
