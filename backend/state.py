@@ -74,6 +74,8 @@ def validate_settings(settings):
 def validate_templates(templates):
     for index, template in enumerate(listed(templates, 'templates', MAX_TEMPLATES)):
         text(template.get('name'), f'templates[{index}].name', 1000)
+        # Told apart by it (a set of them, a key), so a list or an object there would not even be hashable.
+        text(template.get('id'), f'templates[{index}].id', 200)
         validate_exercises(template.get('exercises'), f'templates[{index}].exercises')
 
 
@@ -102,14 +104,21 @@ def check_goal(key, goal):
         raise BadRequest(f'goals[{key!r}].target must be a weight above zero.')
     weight_unit(goal.get('unit'), f'goals[{key!r}].unit')
     by = goal.get('by')
-    if by not in (None, '') and not (isinstance(by, str) and re.fullmatch(r'\d{4}-\d{2}-\d{2}', by)):
+    if by not in (None, '') and not (isinstance(by, str) and is_calendar_date(by)):
         raise BadRequest(f'goals[{key!r}].by must be a date as YYYY-MM-DD, or empty.')
 
 
-def check_weigh_in_day(day):
+def is_calendar_date(day):
+    """Whether the text is a day that exists, as YYYY-MM-DD (not 9999-99-99, nor the same written in other scripts' digits)."""
     try:
-        datetime.date.fromisoformat(day if re.fullmatch(r'\d{4}-\d{2}-\d{2}', day) else '')
+        datetime.date.fromisoformat(day if re.fullmatch(r'\d{4}-\d{2}-\d{2}', day, re.ASCII) else '')
     except ValueError:
+        return False
+    return True
+
+
+def check_weigh_in_day(day):
+    if not is_calendar_date(day):
         raise BadRequest(f'bodyweight key {day!r} must be a date as YYYY-MM-DD.')
 
 

@@ -12,7 +12,7 @@ from database import connection, workout_tag
 from state import STATE_PARTS, load_state, merge_part, store_state, validate_state
 from validation import (
     BadRequest, check_workout_room, check_workout_space, listed, stored_size, validate_workout, weight_unit, workout_bytes_held,
-    workout_payload, workouts_held
+    validate_exercises, workout_payload, workouts_held
 )
 from workouts import etag_matches, export_zone, exported_workouts, stored_workout_keys, workout_id, workout_key, workouts_csv
 
@@ -125,6 +125,10 @@ class DataApi:
             raise BadRequest('session must be an object or null.')
         if session is not None:
             weight_unit(session.get('unit'), 'session.unit')
+            # Its exercises and sets are checked as a finished workout's are, which is what they become; one that would be refused
+            # then is refused now, rather than held until the workout is finished.
+            if session.get('exercises') is not None:
+                validate_exercises(session['exercises'])
         with connection() as database:
             database.execute('INSERT INTO active_sessions (user_id, payload, updated_at) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET payload=excluded.payload, updated_at=excluded.updated_at', (user['id'], json.dumps(session), int(time.time() * 1000)))
         self.send_json(HTTPStatus.OK, {'ok': True})
@@ -256,6 +260,10 @@ class DataApi:
                     if key in seen:
                         continue
                     seen.add(key)
+                elif database.execute('SELECT 1 FROM workouts WHERE user_id = ? AND client_id = ?', (user['id'], client_id)).fetchone():
+                    # Already here, or earlier in the file: nothing to store, so no room to ask for (an account at its limit can
+                    # import its own export again).
+                    continue
                 # Past the account's limits, the whole file is refused and nothing is stored (the block raises, and is rolled back).
                 check_workout_room(held + added)
                 size = stored_size(name, notes, payload)

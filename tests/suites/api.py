@@ -207,6 +207,7 @@ def run(t):
     run_compression(t, check, request)
     run_deletion(t, check, request)
     run_state_merge(t, check, request)
+    run_odd_input(t, check, request)
     run_routes(t, check, request)
     run_bursts(t, check)
 
@@ -634,6 +635,10 @@ def run_limits(t, check):
     status, _, reply = post(small, '/api/import', {'format': 'workout-tracker-export', 'workouts': new_ones}, token)
     check('an import that would pass the limit is refused whole', status == 400 and 'at most 5' in reply.get('error', ''), f'{status} {reply}')
     check('and added none of its workouts', len(kept()) == 5, len(kept()))
+    exported = small.api('GET', '/api/export', token=token)[0]
+    status, _, reply = post(small, '/api/import', exported, token)
+    check('an account at its limit can import its own export again, since there is nothing in it to add',
+          status == 200 and reply.get('workouts') == 0 and reply.get('alreadyHere') == 5 and len(kept()) == 5, f'{status} {reply}')
     small.stop()
 
     big = t.start_server('workout-size.db')
@@ -1744,7 +1749,14 @@ def run_admin(t, check, request):
     other_session = session_of(headers)
     post('/api/auth/forgot-password', {'email': 'tester@example.test'})
     code = mail.code(mail.wait('tester@example.test', 1))
+    tester_id = me(t.token)['id']
+    store = sqlite3.connect(t.db_path('test.db'))
+    store.execute("INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, created_at) VALUES (?, 'https://fcm.googleapis.com/send/admin-reset', 'k', 'a', 0)", (tester_id,))
+    store.commit()
     status, out, err = main.admin('reset-password', 'tester', stdin='admin-chosen-1\n')
+    check('a phone subscribed to reminders for the account is forgotten with its sessions',
+          store.execute('SELECT COUNT(*) FROM push_subscriptions WHERE user_id = ?', (tester_id,)).fetchone()[0] == 0)
+    store.close()
     check('reset-password sets the password typed in', status == 0 and 'tester' in out, f'{status} {out!r} {err!r}')
     check('the old password no longer signs in', sign_in('tester', 'chalk-and-plates-42')[0] == 401)
     check('the new one does', sign_in('tester', 'admin-chosen-1')[0] == 200)
@@ -2321,6 +2333,48 @@ def run_deletion(t, check, request):
     check('and the account is gone', 'removable2' not in main.admin('users')[1])
     code, _, err = main.admin('delete-user', 'nobody-here', '--yes')
     check('an account that does not exist -> an error', code == 1 and 'No account' in err, err)
+
+
+def run_odd_input(t, check, request):
+    """Input a page would not send, or only an old or hand-made one: each is answered with a refusal or ignored, never with a 500."""
+    print('A48 odd input is refused cleanly rather than failing')
+    main = t.server
+    json_headers = {'Content-Type': 'application/json'}
+    cookie = main.api('POST', '/api/auth/register', {'username': 'oddball', 'email': 'oddball@example.test', 'password': 'chalk-and-plates-42'})[1]
+    token = cookie.split('session=')[1].split(';')[0]
+
+    def send(method, path, body=None, headers=None):
+        return request(method, path, json.dumps(body).encode() if body is not None else None, {**json_headers, **(headers or {})}, token=token)
+
+    # A request line is read as Latin-1, where the byte B2 is a superscript two: text that isdigit() calls a digit and int() cannot read.
+    host, port = main.base_url.replace('http://', '').split(':')
+    answered = []
+    for method in ('GET', 'DELETE'):
+        with socket.create_connection((host, int(port)), timeout=10) as raw_socket:
+            raw_socket.sendall(f'{method} /api/workouts/'.encode() + b'\xb2' + f' HTTP/1.1\r\nHost: x\r\nCookie: session={token}\r\nConnection: close\r\n\r\n'.encode())
+            answered.append(raw_socket.recv(200).split(b'\r\n')[0])
+    check('a workout address whose number is in other digits (a superscript two) is not found', all(line.endswith(b'404 Not Found') for line in answered), answered)
+    status, _, _ = request('GET', '/media/keep-awake.mp4', None, {'Range': 'bytes=' + '9' * 5000 + '-'})
+    check('a range with thousands of digits is ignored (the whole video is sent), not a crash', status == 200, status)
+    check('while an ordinary one is still answered', request('GET', '/media/keep-awake.mp4', None, {'Range': 'bytes=0-9'})[0] == 206)
+    status, _, reply = send('POST', '/api/account/sessions/revoke', {'id': 2 ** 70})
+    check('a device id too big for the database is refused', status == 400 and reply.get('error'), f'{status} {reply}')
+    check('as is one that is not a positive number', send('POST', '/api/account/sessions/revoke', {'id': -1})[0] == 400)
+    status, _, reply = send('PUT', '/api/state', {'templates': [{'id': [1], 'name': 'Odd', 'exercises': []}]})
+    check('a template whose id is a list is refused', status == 400 and 'id' in reply.get('error', ''), f'{status} {reply}')
+    status, _, reply = send('POST', '/api/import', {'format': 'workout-tracker-export', 'workouts': [], 'templates': [{'id': {'a': 1}, 'name': 'Odd', 'exercises': []}]})
+    check('and so is one in an import', status == 400, f'{status} {reply}')
+    check('a template with a text id is fine', send('PUT', '/api/state', {'templates': [{'id': 'custom-1', 'name': 'Fine', 'exercises': []}]})[0] == 200)
+    for day in ('9999-99-99', '2026-02-30', '2026-13-01', '٢٠٢٦-٠١-٠١'):
+        status, _, reply = send('PUT', '/api/state', {'goals': {'bench press': {'name': 'Bench Press', 'target': 225, 'by': day}}})
+        check(f'a goal date of {day!r} is refused', status == 400 and 'date' in reply.get('error', ''), f'{status} {reply}')
+    check('a goal date that exists is fine', send('PUT', '/api/state', {'goals': {'bench press': {'name': 'Bench Press', 'target': 225, 'by': '2099-12-31'}}})[0] == 200)
+    sets = lambda rir: {'session': {'name': 'Going', 'currentIndex': 0, 'exercises': [{'name': 'Squat', 'reps': 5, 'sets': [{'weight': 100, 'reps': 5, 'rir': rir}]}]}}
+    for rir in (99, '<img src=x>', -1):
+        check(f'a workout in progress with a set that had {rir!r} reps left is refused', send('POST', '/api/active-session', sets(rir))[0] == 400)
+    check('one with a number of reps left from 0 to 10 is kept', send('POST', '/api/active-session', sets(2))[0] == 200
+          and main.api('GET', '/api/active-session', token=token)[0]['session']['exercises'][0]['sets'][0]['rir'] == 2)
+    check('and so is one that is only begun, with no sets', send('POST', '/api/active-session', {'session': {'name': 'New', 'exercises': [{'name': 'Row', 'reps': 8}], 'currentIndex': 0}})[0] == 200)
 
 
 def run_state_merge(t, check, request):

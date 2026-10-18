@@ -305,7 +305,8 @@ class AccountApi:
     def revoke_session(self, user):
         """Signs one of the account's other devices out. Asking again for one already gone is fine: nothing is left to do."""
         wanted = self.read_json().get('id')
-        if isinstance(wanted, bool) or not isinstance(wanted, int):
+        # Within what the database stores as a number (a rowid is a 64-bit integer): a larger one raises OverflowError in its binding.
+        if isinstance(wanted, bool) or not isinstance(wanted, int) or not 0 < wanted < 2 ** 63:
             raise BadRequest('id must be the id of a signed-in device.')
         with connection() as database:
             row = database.execute('SELECT token FROM sessions WHERE rowid = ? AND user_id = ?', (wanted, user['id'])).fetchone()

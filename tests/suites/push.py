@@ -391,6 +391,11 @@ def run(t):
     service.answers['/push/retry'] = [500, 500]
     service.answers['/push/gone'] = [410]
     retry_token, retrying = account('retry', [today], now_minutes - 1)
+    # A refusal the same message would get every time is not sent again; a request to slow down is.
+    service.answers['/push/refused'] = [403, 403, 403]
+    service.answers['/push/busy'] = [429]
+    refused_token, refused = account('refused', [today], now_minutes - 1)
+    busy_token, busy = account('busy', [today], now_minutes - 1)
     gone_token, gone = account('gone', [today], now_minutes - 1)
 
     check('on a training day, from the time chosen, the phone is reminded', wait_until(lambda: len(ready.messages()) >= 1), len(service.received))
@@ -408,6 +413,8 @@ def run(t):
     check('not after a workout is saved that day', trained.messages() == [], len(trained.messages()))
     check('though one from the day before is no reason not to', len(yesterday.messages()) == 1, len(yesterday.messages()))
     check('a push service that fails is tried again on the next look, until it takes it', len(retrying.messages()) == 3, len(retrying.messages()))
+    check('one the service refuses for good (403) is not sent the same message again every minute', len(refused.messages()) == 1, len(refused.messages()))
+    check('though one told to slow down (429) is tried again', len(busy.messages()) == 2, len(busy.messages()))
     check('and one that says the phone is gone has it forgotten', wait_until(lambda: database("SELECT COUNT(*) FROM push_subscriptions WHERE endpoint LIKE '%/gone'")[0][0] == 0))
     database("UPDATE push_subscriptions SET last_sent = '2000-01-01' WHERE endpoint LIKE '%/ready'")
     check('the next training day it is reminded again', wait_until(lambda: len(ready.messages()) == 2), len(ready.messages()))

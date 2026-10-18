@@ -172,6 +172,8 @@ def run(t):
     cdp.pause(0.4)
     cdp.ev("document.getElementById('signOutButton').click()")
     cdp.wait("location.pathname.endsWith('login.html')", timeout=10)
+    check('and the device no longer says whose it last was, so a page opened offline does not show their account',
+          cdp.ev("localStorage.getItem('workout-tracker-last-user')") is None and cdp.ev("Object.keys(localStorage).some(key => key.startsWith('workout-tracker-settings-'))") is True)
     t.set_cookie(api('POST', '/api/auth/login', {'login': 'tester', 'password': PASSWORD})[1].split('session=')[1].split(';')[0])
     open_history()
     after = workouts_request()

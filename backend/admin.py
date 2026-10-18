@@ -73,6 +73,8 @@ def admin_reset_password(args):
         database.execute('UPDATE users SET password_hash = ? WHERE id = ?', (stored_hash, user_id))
         database.execute('DELETE FROM password_resets WHERE user_id = ?', (user_id,))
         database.execute('DELETE FROM sessions WHERE user_id = ?', (user_id,))
+        # Whoever had the old password is signed out everywhere, and no phone keeps reminders for an account it is not signed in to.
+        database.execute('DELETE FROM push_subscriptions WHERE user_id = ?', (user_id,))
     print(f'Set a new password for {username}, and signed the account out everywhere.')
     # The sign-in limit lives in the running server's memory, which this command cannot reach.
     print(f'If failed sign-ins had made it wait, that wait still runs out on its own (up to {LOGIN_WINDOW // 60} minutes), '

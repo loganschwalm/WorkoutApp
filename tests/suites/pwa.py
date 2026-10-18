@@ -10,6 +10,8 @@ from ..harness import PLAIN_HTTP_HOST
 # The service worker must see the real network. Fetch interception would sit in front of it.
 INTERCEPT = False
 
+CR, LF, BACKSLASH = chr(13), chr(10), chr(92)
+
 
 def run(t):
     cdp, check = t.cdp, t.check
@@ -27,6 +29,21 @@ def run(t):
         cdp.ev('navigator.serviceWorker.ready.then(() => true)')
         cdp.goto('/index.html')
         return cdp.wait('navigator.serviceWorker.controller !== null', timeout=15)
+
+    # ------------------------------------------------------------------ S0 where a reminder opens
+    print('S0  a reminder opens a page of this site, however its address is written')
+    # The worker's own function, run in a page (where `self` is the window, so its origin is this site's).
+    cdp.goto('/index.html')
+    worker = cdp.ev("fetch('/sw.js').then(response => response.text())").replace(CR, '')
+    start = worker.index('function pushTarget')
+    source = worker[start:worker.index(LF + '}', start) + 2]
+    cdp.ev(f"window.__pushTarget = (0, eval)({json.dumps('(' + source + ')')})")
+    asked = ['/progress.html?exercise=squat#top', '/history.html', 'https://evil.example/', '//evil.example/x', '/' + BACKSLASH + 'evil.example/x',
+             '/' + BACKSLASH + '/evil.example', 'javascript:alert(1)', '', None, 5, f"{cdp.ev('location.origin')}/cardio.html"]
+    opened = cdp.ev(f"{json.dumps(asked)}.map(url => window.__pushTarget(url))")
+    check('a path on this site is kept, and anything that leads elsewhere (a backslash is a slash) opens the Tracker',
+          opened == ['/progress.html?exercise=squat#top', '/history.html', '/index.html', '/index.html', '/index.html', '/index.html',
+                     '/index.html', '/index.html', '/index.html', '/index.html', '/cardio.html'], opened)
 
     # ------------------------------------------------------------------ S1 served correctly
     print('S1  the manifest, worker and icons are served')

@@ -150,7 +150,7 @@ class WebHandler(http.server.SimpleHTTPRequestHandler):
             body = handle.read()
         size = len(body)
         start, end, status = 0, size - 1, HTTPStatus.OK
-        asked = re.fullmatch(r'\s*bytes\s*=\s*(\d*)\s*-\s*(\d*)\s*', self.headers.get('Range', ''))
+        asked = re.fullmatch(r'\s*bytes\s*=\s*(\d{0,18})\s*-\s*(\d{0,18})\s*', self.headers.get('Range', ''))
         if asked and (asked.group(1) or asked.group(2)):
             if asked.group(1):
                 start = int(asked.group(1))

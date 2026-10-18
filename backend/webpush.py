@@ -217,12 +217,21 @@ def send_due_reminders():
         push_pool.submit(send_safely, subscription, REMINDER_MESSAGE).add_done_callback(lambda future, subscription=subscription: reminder_answered(subscription, future))
 
 
+def worth_retrying(status):
+    """Whether a push that came to nothing may succeed if sent again: the service could not be reached, said to slow down (429), or
+    failed on its side (5xx). Any other refusal (400, 401, 403, 413) is about the message or this server's key, and the same
+    message sent every minute for the rest of the grace period would be refused the same way each time."""
+    return status is None or status == 429 or status >= 500
+
+
 def reminder_answered(subscription, future):
     """What came of one reminder: a phone the push service says is gone is forgotten, and one that could not be reached is tried
-    again on the next look, while it is still worth it (its day is not counted as reminded)."""
+    again on the next look, while it is still worth it (its day is not counted as reminded). One the service refused for good is
+    not: it is logged, and counted as reminded for the day."""
     try:
+        status = future.result()
         with connection() as database:
-            if settle_pushes(database, [subscription], [future.result()])[2]:
+            if settle_pushes(database, [subscription], [status])[2] and worth_retrying(status):
                 database.execute('UPDATE push_subscriptions SET last_sent = ? WHERE id = ?', (subscription['last_sent'], subscription['id']))
     except Exception:
         traceback.print_exc()

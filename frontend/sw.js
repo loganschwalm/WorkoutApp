@@ -120,6 +120,16 @@ self.addEventListener('message', (event) => {
   if (event.data === 'skip-waiting') self.skipWaiting();
 });
 
+// Where a reminder opens: a path on this site, or the Tracker. Read as a browser reads it (a backslash is a slash in a web address,
+// so "/\example.com" leads to another site, which looking for "//" at the start does not see), and kept only if it is still here.
+function pushTarget(url) {
+  try {
+    const parsed = new URL(url, self.location.origin);
+    if (typeof url === 'string' && url !== '' && parsed.origin === self.location.origin) return parsed.pathname + parsed.search + parsed.hash;
+  } catch (error) { /* not an address */ }
+  return '/index.html';
+}
+
 // A reminder from the server (see the reminder loop in server.py): { title, body, url, tag }. A push with nothing in it still
 // shows a notification, since a browser may refuse to show none.
 self.addEventListener('push', (event) => {
@@ -129,7 +139,7 @@ self.addEventListener('push', (event) => {
   } catch (error) {
     message = { body: event.data ? event.data.text() : '' };
   }
-  const url = typeof message.url === 'string' && message.url.startsWith('/') && !message.url.startsWith('//') ? message.url : '/index.html';
+  const url = pushTarget(message.url);
   event.waitUntil(self.registration.showNotification(message.title || 'Workout Tracker', {
     body: message.body || '',
     icon: '/icons/icon-192.png',

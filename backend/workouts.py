@@ -11,7 +11,8 @@ from urllib.parse import parse_qs
 def workout_id(path):
     """The id in /api/workouts/<id>, or None if it is not a plain number (answered as not found)."""
     tail = path[len('/api/workouts/'):]
-    return int(tail) if tail.isdigit() and len(tail) < 19 else None
+    # isdigit() alone also takes the digits of other scripts and superscripts ('²'), which int() then refuses or reads as another number.
+    return int(tail) if tail.isascii() and tail.isdigit() and len(tail) < 19 else None
 
 
 def etag_matches(header, etag):

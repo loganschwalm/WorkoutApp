@@ -261,7 +261,9 @@ function planChipsHtml(exercise, plan) {
 // The sets logged so far, each with its weight and reps to correct in place.
 function completedSetsHtml(exercise, timed) {
   const count = timed ? { unit:'s', label:'seconds' } : { unit:'reps', label:'reps' };
-  const effort = set => set.rir !== undefined && set.rir !== null ? `<small class="set-effort">${Number(set.rir) >= 4 ? '4+' : set.rir} left</small>` : '';
+  // What was typed or sent can be any text (an imported file, an older version): only a number is shown, never the text itself.
+  const effort = set => Number.isFinite(Number(set.rir)) && set.rir !== null && set.rir !== '' && set.rir !== undefined
+    ? `<small class="set-effort">${Number(set.rir) >= 4 ? '4+' : Number(set.rir)} left</small>` : '';
   return exercise.sets.map((set, index) => `<li><span class="set-number">Set ${index + 1}${effort(set)}</span>`
     + `<div class="set-field"><input class="set-edit" type="number" inputmode="decimal" min="0" step="0.5" value="${escapeHTML(set.weight || '')}"`
     + ` data-set="${index}" data-field="weight" aria-label="Set ${index + 1} weight in ${weightUnit()}"><span>${weightUnit()}</span></div>`

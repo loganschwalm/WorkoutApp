@@ -594,7 +594,9 @@ A day with no program is just "a training day". The pieces:
   the server its subscription and its clock (time zone and offset from UTC). The server's reminder loop (every
   `REMINDER_TICK_SECONDS`, 60 by default) sends a notification to each subscribed device on each training day, once, from the
   time chosen until three hours later (a server that was down, or a phone that was off, still sends it), by that phone's own
-  clock, and not on a day a workout has been saved. A push service that cannot be reached is tried again on the next look.
+  clock, and not on a day a workout has been saved. A push service that cannot be reached, says to slow down (429) or fails
+  on its side (5xx) is tried again on the next look; one that refuses for good (400, 401, 403, 413) is logged and not sent the
+  same message again that day (`worth_retrying` in `webpush.py`).
   One that says the phone is gone (404 or 410) has its subscription forgotten. The messages go at once, up to 8 at a time
   (`PUSH_WORKERS`), and the loop does not wait for them: a push service that has stopped answering holds up only its own
   phones, for the 10 seconds it is waited for, and not the reminders that fall due meanwhile. The same goes for the
@@ -1006,7 +1008,7 @@ the button that opened them. Settings include:
 - A Test alert button plays the alert with the current choices.
 - Show the welcome tour again, last in General: the welcome a new account gets, from its first step. See [The welcome](#the-welcome).
 - Your data: Export, Export sets as CSV, and Import. See [Exporting and importing](#exporting-and-importing).
-- The signed-in account name and a Sign out button. Signing out warns first if a workout has not finished syncing; it stays on the device and uploads the next time you sign in to the same account.
+- The signed-in account name and a Sign out button. Signing out warns first if a workout has not finished syncing; it stays on the device and uploads the next time you sign in to the same account. Signing out also forgets which account was last here (`forgetLastUser`), so a page opened without the server does not show the account just signed out of; its copies stay under its id. The request gives up after 10 seconds.
 - The account's email, with a button to add or change it. Changing it asks for your password.
 - Change password: asks for the current password and a new one of 8+ characters, keeps this device signed in, and
   signs the account out everywhere else.
@@ -1487,7 +1489,9 @@ What is already in place:
   and the total, and 413 for the size, each of which the phone takes to mean the server will never accept it, so it
   stays on the device rather than being sent again. A change to a workout that makes it bigger is refused the same way
   when the account is full, and one that makes it smaller never is. A retry of a workout already kept is still answered.
-  An import that would pass the count or the total is refused whole, with nothing stored. Only one import runs at a time, since each reads and parses a body of up to
+  An import that would pass the count or the total is refused whole, with nothing stored; workouts in the file that are already
+  here (the same `clientId`, or the same name, time and exercises) are skipped before the limit is asked, so an account at its limit
+  can import its own export again and add nothing. Only one import runs at a time, since each reads and parses a body of up to
   32 MB; a second is answered 503 with `Retry-After`. The other synced data has limits of its own (templates, goals,
   weigh-ins, notes and the exercise library each have a count), and each part of it is at most 2 MB as stored (a lifetime
   of daily weigh-ins, the largest a real one comes to, is about that). A change that would take a part past it is refused
@@ -1524,6 +1528,19 @@ What is already in place:
   so a flood cannot run the server out of threads and memory for the connections already being served. A reverse proxy in
   front is still the better defence against a determined flood; this is what the server does alone.
 - The `Server` header says only `workout-tracker`, not which Python this is, so a scanner is not told which of its flaws apply.
+
+What it does not do, which a reverse proxy or the host is the place for:
+
+- **No limit of connections per address.** The ceiling above is for all of them together, so one address can use every slot
+  until the proxy limits it (Caddy, Nginx and Traefik all can).
+- **Anyone who knows an account's email can use up its reset codes.** The limits on reset emails and wrong codes (per email, per
+  address) apply whoever asks, so that the form cannot tell who has an account; the cost is that someone can keep the owner from
+  getting a code for a while. An administrator can always set a password (`reset-password`, above).
+- **The key the server signs push messages with is in the database,** as plain text, like the rest of it, so a copy of the database is a copy of
+  the key. Backups are made readable by root only (a directory of 0700), and the key only lets someone send reminders to phones
+  that subscribed to this server.
+- **The installer's secrets are briefly on a command line:** the container's root password (`pct create --password`) and
+  Tailscale's key (`tailscale up --auth-key`), visible to other users of the Proxmox host for the moment each command runs.
 
 Keep it on a trusted LAN, or put it behind a reverse proxy such as Caddy, Nginx Proxy Manager, or
 Traefik that terminates TLS and adds authentication. Do not forward the port straight to the internet.
@@ -1601,7 +1618,8 @@ account wait, that wait still runs its course (up to 15 minutes), or restart the
 Without a mail server, "Forgot password?" on the sign-in page tells people to ask you.
 
 If you set a temporary password, tell its owner to change it in Settings (Change password) after
-signing in.
+signing in. It also forgets the account's push subscriptions, as changing the password in Settings does, so no phone keeps
+getting reminders for an account it is no longer signed in to.
 
 ### Password reset emails
 
@@ -1956,7 +1974,11 @@ checks the shape of everything it stores, so a malformed upload is refused rathe
 body (`read_json`): beyond valid JSON, it refuses `NaN`, `Infinity` and numbers too big for a float (Python's parser takes them,
 and one stored would make a list of workouts or the state invalid JSON for the browser), text that cannot be encoded (half of a
 surrogate pair, which would fail on being stored, as a 500 the page retried every minute), and nesting too deep to parse, each
-with a 400. A cardio session is a
+with a 400. The same goes for the rest of what a page could not send: a workout address with a number in other digits (a
+superscript two) is not found, a `Range` header with thousands of digits is ignored, a device id past what the database holds is
+refused, a template `id` must be text, a goal's `by` must be a day that exists (`is_calendar_date`), and the exercises and sets of
+the workout in progress are checked as a finished workout's are (so a set's `rir`, its reps left, is a number from 0 to 10).
+A reminder opens a path on this site and nothing else (`pushTarget` in `sw.js` reads the address as a browser does). A cardio session is a
 workout of its own kind: `{"kind": "cardio", "name": "Run", "exercises": [], "duration": 1680, "cardio": {"activity": "run",
 "distance": 3.1, "distanceUnit": "mi", "calories": 310, "heartRate": 152, "incline": 2}}`, its time in seconds and everything
 in `cardio` but the activity optional (`floors` for the stair climber, and the machine settings `incline`, `resistance`,

@@ -322,7 +322,9 @@ getSettingElement('signOutButton').onclick = async () => {
   // This browser stops being sent the account's reminders (reminders.js), before the session that says whose they are goes.
   if (typeof unsubscribePushDevice === 'function') await unsubscribePushDevice();
   try {
-    const response = await fetch('/api/auth/logout', { method:'POST' });
+    // Not through syncFetch, which refuses while another account is signed in here: this one should still be signed out. But it
+    // gives up, as the rest do, rather than waiting on a connection that has stalled.
+    const response = await fetch('/api/auth/logout', { method:'POST', signal:typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(10000) : undefined });
     if (!response.ok) throw new Error('Sign out failed.');
   } catch (error) {
     alert('Could not sign out. Check your connection and try again.');
@@ -330,6 +332,10 @@ getSettingElement('signOutButton').onclick = async () => {
   }
   // The copy of the saved workouts goes (the server has them); work not uploaded yet stays, for the next sign-in.
   if (typeof dropSavedWorkoutsCopies === 'function') dropSavedWorkoutsCopies();
+  // Nobody is signed in on this device now, so a page opened without the server (offline) does not guess who it is for from the
+  // last account: that account's settings, templates and goals would be shown to whoever picks the device up. What it kept is
+  // under its own id, and is there again when that account signs in (login.js).
+  if (typeof forgetLastUser === 'function') forgetLastUser();
   location.href = '/login.html';
 };
 getSettingElement('exportButton').onclick = () => exportAccount(false);

@@ -85,4 +85,10 @@ def run(t):
     check('markup in a weight or a number is text, not markup', call("""(() => { const holder = document.createElement('ul');
       holder.innerHTML = completedSetsHtml({ sets: [{ weight: '"><b>x</b>', reps: '<i>1</i>' }] }, false);
       return holder.querySelectorAll('b, i').length === 0 && holder.children.length === 1; })()""") is True)
+    effort = call("""(() => { const holder = document.createElement('ul');
+      holder.innerHTML = completedSetsHtml({ sets: [{ weight: 1, reps: 1, rir: '<img src=x onerror=alert(1)>' }, { weight: 1, reps: 1, rir: '' }, { weight: 1, reps: 1, rir: null },
+                                                    { weight: 1, reps: 1, rir: '3' }, { weight: 1, reps: 1, rir: 0 }] }, false);
+      return { images: holder.querySelectorAll('img').length, shown: [...holder.querySelectorAll('li')].map(li => (li.querySelector('.set-effort') || {}).textContent || '') }; })()""")
+    check('what was left in a set that is not a number is not shown, and is never taken for markup',
+          effort == {'images': 0, 'shown': ['', '', '', '3 left', '0 left']}, effort)
     check('no page errors along the way', not [line for line in cdp.console if line.startswith('exceptionThrown')], [line for line in cdp.console if line.startswith('exceptionThrown')][:3])

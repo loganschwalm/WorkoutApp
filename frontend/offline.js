@@ -509,6 +509,13 @@ function takeOtherTabsChanges() {
 window.addEventListener('storage', event => { if (event.key === null || event.key.startsWith('workout-tracker-')) takeOtherTabsChanges(); });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) takeOtherTabsChanges(); });
 
+// Who this device last had signed in is forgotten when they sign out; their copies stay, under their id, for their next sign-in.
+function forgetLastUser() {
+  localUserId = null;
+  memoryStore.delete(lastUserStorageKey);
+  try { localStorage.removeItem(lastUserStorageKey); } catch (error) { /* no storage: nothing was kept */ }
+}
+
 // Everything kept on this device for the signed-in account, once that account has been deleted: its copies are of
 // nothing now, and anything still waiting to upload has nowhere to go.
 function forgetLocalAccount() {
