@@ -72,11 +72,30 @@ def find_chrome():
     )
 
 
+# Ports this process has handed out. The OS gives a port back to the next to ask once the socket that found it is closed, which
+# is before the server or browser that was told it has bound it.
+_handed_out = set()
+
+
 def free_port():
-    """Ask the OS for an unused port. Racy in principle, fine for a local test run."""
-    with socket.socket() as sock:
-        sock.bind(('127.0.0.1', 0))
-        return sock.getsockname()[1]
+    """An unused port, for a server or browser about to bind it. Found by the OS, then claimed so that no other asker gets it too:
+    in this process by remembering it, and across the suites a run starts side by side (tests/run.py names a directory for them
+    in WORKOUT_TEST_PORTS) by a file named for it, made so that only one can. Without that, forty suites starting at once now and
+    then had two given the same port, and one of them talked to the other's server."""
+    claims = os.environ.get('WORKOUT_TEST_PORTS')
+    while True:
+        with socket.socket() as sock:
+            sock.bind(('127.0.0.1', 0))
+            port = sock.getsockname()[1]
+        if port in _handed_out:
+            continue
+        if claims:
+            try:
+                os.close(os.open(os.path.join(claims, str(port)), os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+            except FileExistsError:
+                continue
+        _handed_out.add(port)
+        return port
 
 
 class Chrome:

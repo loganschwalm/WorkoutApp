@@ -13,9 +13,10 @@ browser.
 ```bash
 pip install -r tests/requirements.txt
 
-python tests/run.py                  # every suite, in parallel (about 90 seconds)
+python tests/run.py                  # every suite, four at a time (about six minutes)
 python tests/run.py gym_usability    # one suite, in this process
 python tests/run.py --jobs 1         # one at a time, for a quieter machine
+python tests/run.py --timeout 300    # stop a suite that runs longer than this many seconds (900 unless told)
 python tests/run.py --list           # suite names
 ```
 
@@ -192,8 +193,11 @@ honoured every time.
 - The suites are sequential inside a single browser page and depend on the order
   of their own sections; they are not individually runnable.
 - Timing-sensitive checks use fixed pauses (about 470, in `t.cdp.pause`). On a heavily loaded machine, prefer
-  `--jobs 1`. A pause that guards something that arrives, rather than a moment to be let pass, is better as
+  `--jobs 1`, or fewer than the four it runs at once. A pause that guards something that arrives, rather than a moment to be let pass, is better as
   `t.cdp.wait(...)` on what arrives.
+- The runner fails a suite that ran no checks, stops one still running after `--timeout` seconds (with its server and browser, which
+  would otherwise be left holding a port), and stops them all on Ctrl-C. It gives each suite its ports from `free_port`, which
+  claims each (a file named for it, in a directory the run makes) so two suites starting together are not given the same one.
 - `pwa` relies on `127.0.0.1` counting as a secure context, which is how the
   browser is willing to run a service worker over plain HTTP. It therefore proves
   the worker behaves, not that any particular deployment is a secure context.
