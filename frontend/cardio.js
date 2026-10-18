@@ -111,7 +111,7 @@ function startCardio(activityId, name = '') {
   cardioActive = { activity:activity.id, name:name || activity.name, startedAt:Date.now(), pausedAt:null, pausedTotal:0 };
   saveCardioActive();
   renderCardioActive();
-  $('cardioActive').scrollIntoView({ behavior:'smooth', block:'start' });
+  scrollToCard($('cardioActive'), 'start');
 }
 
 // A cancelled session is gone as if never started; nothing is saved. One timed for under a minute (started by mistake)
@@ -238,7 +238,7 @@ function openCardioForm(mode, draft, workout = null) {
   $('cardioSummary').hidden = true;
   $('cardioFormCard').hidden = false;
   renderCardioActive();
-  $('cardioFormCard').scrollIntoView({ behavior:'smooth', block:'start' });
+  scrollToCard($('cardioFormCard'), 'start');
   // A timed session already has its time and activity: what is left to enter is the distance (or floors).
   const first = mode !== 'finish' ? $('cardioActivity') : activity.floors ? $('cardioFloors') : activity.distance ? $('cardioDistance') : $('cardioCalories');
   first.focus({ preventScroll:true });
@@ -432,7 +432,8 @@ function showCardioSummary(workout, records, history = null) {
   $('cardioSummaryProgress').href = `progress.html?exercise=${encodeURIComponent(cardioKey(workout))}`;
   offerActivityExport($('cardioSummaryExport'), workout);
   $('cardioSummary').hidden = false;
-  $('cardioSummary').scrollIntoView({ behavior:'smooth', block:'start' });
+  scrollToCard($('cardioSummary'), 'start');
+  focusHeading($('cardioSummaryTitle'));
   if (rewards.earned.length) celebrate($('cardioSummaryTitle'), 'achievement');
   else if (rewards.weekReached) celebrate($('cardioSummaryTitle'), 'goal');
   else if (records.length) celebrate($('cardioSummaryTitle'), 'record');
@@ -596,7 +597,7 @@ $('cardioForm').onsubmit = event => { event.preventDefault(); saveCardioForm(); 
   syncCardioForm();
 }));
 $('cardioFormCancel').onclick = closeCardioForm;
-$('cardioSummaryDone').onclick = () => { $('cardioSummary').hidden = true; };
+$('cardioSummaryDone').onclick = () => { $('cardioSummary').hidden = true; focusFirstShown(['cardioModeTimer', 'settingsButton']); };
 $('formFeedback').onclick = clearFeedback;
 $('settingsButton').addEventListener('click', clearFeedback);
 $('cardioList').onclick = event => {

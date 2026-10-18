@@ -390,7 +390,7 @@ function renderProgress(workouts) {
   }
   $('legend').innerHTML = chartData.types.map(type => `<div class="legend-item"><span class="legend-swatch"></span><span>${escapeHTML(type.name)}</span></div>`).join('');
   $('progressChart').setAttribute('aria-label', describeChart());
-  $('chartDetail').textContent = chartData.points.length ? 'Tap a point to see its value.' : '';
+  $('chartDetail').textContent = chartData.points.length ? 'Tap a point, or use the arrow keys, to see its value.' : '';
   drawChart();
   renderExerciseCard();
   renderSessions(workouts);
@@ -843,13 +843,14 @@ $('progressChart').addEventListener('click', event => {
   const nearest = drawnPoints.reduce((best, point) => !best || distance(point) < distance(best) ? point : best, null);
   if (nearest && distance(nearest) <= 40) $('chartDetail').textContent = nearest.text;
 });
+chartKeyboard($('progressChart'), () => drawnPoints, point => { $('chartDetail').textContent = point.text; });
 $('stallList').onclick = event => $('recordsList').onclick(event);
 $('recordsList').onclick = event => {
   const record = event.target.closest('[data-exercise]');
   if (!record) return;
   $('exerciseFilter').value = record.dataset.exercise;
   applyFilters();
-  document.querySelector('.progress-card').scrollIntoView({ behavior:'smooth', block:'start' });
+  scrollToCard(document.querySelector('.progress-card'), 'start');
 };
 window.addEventListener('resize', drawChart);
 // A canvas only draws in Figtree once it has loaded, and the labels' spacing is measured in it.

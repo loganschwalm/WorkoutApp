@@ -301,6 +301,7 @@ getSettingElement('settingsButton').onclick = openSettings;
 getSettingElement('closeSettings').onclick = closeSettings;
 getSettingElement('settingsModal').onclick = event => { if (event.target === getSettingElement('settingsModal')) closeSettings(); };
 document.addEventListener('keydown', event => { if (event.key === 'Escape' && !getSettingElement('settingsModal').hidden) closeSettings(); });
+trapFocus(getSettingElement('settingsModal'));
 ['input', 'change'].forEach(type => getSettingElement('settingsForm').addEventListener(type, () => { syncSoundControls(); syncPlateControls(); }));
 // A setting is kept as soon as it changes: a box ticked, a choice picked, the volume let go, the rest duration's field left.
 // The account's fields and the import's file belong to forms of their own, and are left out.

@@ -187,7 +187,9 @@ def run(t):
           and bike['cardio'] == {'activity': 'bike', 'distance': 9, 'distanceUnit': 'mi', 'calories': 250, 'resistance': 8, 'cadence': 85}, bike)
     stats = cdp.ev("[...document.querySelectorAll('#cardioSummaryStats li')].map(li => li.textContent)")
     check('which the summary says too', '8Resistance level' in stats and '85 rpmCadence' in stats, stats)
+    check('the keyboard is on the summary’s heading', cdp.ev("document.activeElement.id") == 'cardioSummaryTitle', cdp.ev("document.activeElement.id"))
     click('#cardioSummaryDone')
+    check('and goes on to the page’s buttons when it is closed', cdp.ev("document.activeElement.id") in ('cardioModeTimer', 'settingsButton'), cdp.ev("document.activeElement.id"))
     click("#cardioActivityGrid [data-activity=bike]")
     check("the next bike starts from last time's settings", cdp.ev("document.getElementById('cardioSetting-resistance').value") == '8'
           and cdp.ev("document.getElementById('cardioSetting-cadence').value") == '85')

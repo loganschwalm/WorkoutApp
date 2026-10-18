@@ -191,6 +191,8 @@ $('createTemplateBtn').onclick = () => openTemplateEditor();
 $('closeTemplate').onclick = closeTemplateEditor;
 $('cancelTemplate').onclick = closeTemplateEditor;
 $('templateModal').onclick = event => { if (event.target === $('templateModal') && !formEdited($('templateForm'))) closeTemplateEditor(); };
+document.addEventListener('keydown', event => { if (event.key === 'Escape' && !$('templateModal').hidden) closeTemplateEditor(); });
+trapFocus($('templateModal'));
 $('templateForm').onsubmit = event => {
   event.preventDefault();
   const name = $('templateName').value.trim();

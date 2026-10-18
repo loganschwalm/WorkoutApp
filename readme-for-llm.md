@@ -156,7 +156,9 @@ own workouts, templates, and settings.
   running or paused. Taking it down to nothing ends the rest quietly.
   A thin bar along the bottom of the timer drains as the rest runs out.
   End rest skips what is left of it, and the screen flashes green, softly and once, when a rest is over,
-  whether it ran out or you ended it (not with reduced motion on).
+  whether it ran out or you ended it (not with reduced motion on). A rest that runs out is also said to a screen reader
+  ("Rest over", in a status line that stays in the page, emptied when a rest runs; the big view, a modal dialog, has one of
+  its own); ending a rest or taking it to nothing yourself says nothing.
 - Keep accurate rest time even when the screen locks or the tab is in the background; the timer alerts you with a sound and vibration when rest is over (configurable in Settings).
 - The rest comes back with the page. A phone often closes an app left locked through a rest, so whenever the page is put
   away the rest on show is kept on the device (`rememberRest` in `rest-timer.js`; it is not uploaded), with the workout and
@@ -754,7 +756,9 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
 - Dates and values are written only where they have room, so they never overlap, however many
   workouts the chart shows; the latest value is always written. Tap any point to see its value.
 - The chart is described in words for screen readers: what it shows, over how many workouts, and the
-  lowest and highest values.
+  lowest and highest values. It is a stop for the keyboard too: the Left and Right arrows step through its points, earliest
+  first and in order across the chart whatever order the lines were drawn in, and Home and End go to the ends; each point is
+  said in the line under the chart, as a tap on it is (`chartKeyboard` in `chart-parts.js`, which the Bodyweight chart uses too).
 - The page is the chart and what it needs: under it, Achievements, Sets per muscle, Bodyweight, Goals, Stalled lifts,
   Personal records and Exercises are rows that fold open, folded to start with. Each says in a line where it stands
   ("12 of 49 earned · latest Squat: 2 plates", "This week, Oct 5 – Oct 11 · 33 sets", "180.5 lbs on Oct 9 · down 2 lbs", "3 goals · 1 reached", "2 lifts stalled:
@@ -952,6 +956,17 @@ the button that opened them. Settings include:
 - Keyboard focus: whatever is reached with the keyboard shows a two-pixel ring in the theme's accent, set clear of the control
   (`:focus-visible` in `styles.css`), including fields, which otherwise only change their border. A tap or a click leaves no ring.
   The theme swatches and training days, whose real inputs are hidden, draw it on the box beside them.
+- Dialogs keep the Tab key: in Settings, the template editor, the program setup and builder, the big view and the welcome, Tab
+  past the last control goes to the first and Shift+Tab before the first goes to the last, so the page behind is not walked into
+  (`trapTab` and `trapFocus` in `common.js`; what counts as a stop is what has a box, so a folded section's controls do not, and
+  of a group of radios the chosen one). Escape closes each, the template editor included. The `accessibility` suite presses real
+  Tab keys round each of them.
+- A button is named with the words on it (WCAG 2.5.3), so saying "0" for the reps-left button, or "30s" for the rest's, works for
+  voice control: the suite checks every button with an `aria-label` on every page and dialog.
+- Less motion: scrolling to a card (`scrollToCard` in `common.js`) is a jump, not a glide, when the device asks for less motion.
+- When what had the keyboard goes away, it is put somewhere: the workout's summary takes it on its heading when a workout is
+  finished, and the Tracker's buttons take it back when the summary is closed or a workout is ended or cancelled (Cardio's
+  summary likewise), rather than it falling to the top of the page.
 - Tap targets: every button, tab, link styled as a button, disclosure heading and tick box row is at least 44px tall (and 44px wide
   where it stands alone), the size of a fingertip, at any text size. Two things are held to what they can fit: History's calendar
   days (12 weeks across a phone, 24px, the least WCAG 2.5.8 allows) and the seven training days in Settings (44px tall, 36px wide;

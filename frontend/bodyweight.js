@@ -110,7 +110,7 @@ function renderBodyweight() {
     ? `Bodyweight: ${plural(entries.length, 'weigh-in')} from ${longDate(entries[0].time)} to ${longDate(latest.time)}, lowest ${formatBodyweight(Math.min(...entries.map(entry => entry.weight)))} ${unit}, `
       + `highest ${formatBodyweight(Math.max(...entries.map(entry => entry.weight)))} ${unit}, latest ${formatBodyweight(latest.weight)} ${unit}.`
     : 'No bodyweight logged yet.');
-  $('bodyweightDetail').textContent = entries.length > 1 ? 'Tap a point to see its value.' : '';
+  $('bodyweightDetail').textContent = entries.length > 1 ? 'Tap a point, or use the arrow keys, to see its value.' : '';
   $('bodyweightList').innerHTML = [...entries].reverse().slice(0, bodyweightListed).map(entry => '<li>'
     + `<span>${escapeHTML(longDate(entry.time))}</span><strong>${escapeHTML(formatBodyweight(entry.weight))} ${unit}</strong>`
     + `<button class="link-button" type="button" data-bodyweight-remove="${escapeHTML(entry.day)}" aria-label="Remove the weight for ${escapeHTML(longDate(entry.time))}">Remove</button>`
@@ -179,6 +179,7 @@ $('bodyweightChart').addEventListener('click', event => {
   if (nearest && distance(nearest) <= 40) $('bodyweightDetail').textContent = nearest.text;
 });
 
+chartKeyboard($('bodyweightChart'), () => bodyweightPoints, point => { $('bodyweightDetail').textContent = point.text; });
 loadBodyweights();
 renderBodyweight();
 window.addEventListener('resize', drawBodyweight);

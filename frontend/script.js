@@ -24,7 +24,7 @@ function showWorkoutBuilder(editing = false) {
   $('workoutBuilderIntro').textContent = editing ? 'Change any set, add one you missed, or take one away, then update the workout.'
     : 'Add each exercise with its weight and reps, then save it to your history.';
   $('workoutBuilderCard').hidden = false;
-  $('workoutBuilderCard').scrollIntoView({ behavior:'smooth', block:'start' });
+  scrollToCard($('workoutBuilderCard'), 'start');
 }
 
 // The banner (showFeedback, clearFeedback) is common.js's, shared with the Cardio page.
@@ -371,12 +371,15 @@ function showOtherCards(open) {
 
 // Takes the workout off the screen. closeActiveWorkout also records that it ended, for the server to be told.
 function hideActiveWorkout() {
+  // The keyboard was on one of its buttons, which go with it; a workout ended on another device leaves it where it was.
+  const hadFocus = $('activeWorkout').contains(document.activeElement);
   closeExercisePanels();
   activeSession = null;
   stopRestTimer();
   $('restPanel').hidden = true;
   showActiveCard(false);
   syncWakeLock();
+  if (hadFocus) focusFirstShown(['templatesToggle', 'settingsButton']);
 }
 
 function closeActiveWorkout() {
@@ -418,7 +421,7 @@ function startWorkout(stored) {
   $('completedSetsToggle').open = false;
   showActiveCard(true);
   syncWakeLock();
-  $('activeWorkout').scrollIntoView({ behavior:'smooth', block:'start' });
+  scrollToCard($('activeWorkout'), 'start');
 }
 
 // The finished workout goes into the local upload queue first, so nothing can lose it after this point;

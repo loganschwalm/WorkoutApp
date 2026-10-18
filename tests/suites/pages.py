@@ -628,6 +628,40 @@ def run(t):
     detail = cdp.ev("document.getElementById('chartDetail').textContent")
     check('tapping a point says what it is', detail == point['text'] and detail.startswith('Upper, ') and detail.endswith(': 150 lbs'), detail)
 
+    # The same from the keyboard: the chart is a stop, and the arrows step through the points from the earliest, in the order across it.
+    chart_key = lambda key: cdp.ev(f"document.activeElement.dispatchEvent(new KeyboardEvent('keydown', {{ key: '{key}', bubbles: true, cancelable: true }}))")
+    detail_text = lambda: cdp.ev("document.getElementById('chartDetail').textContent")
+
+    def step_through(what):
+        spots = cdp.ev("[...drawnPoints].sort((a, b) => a.x - b.x || a.y - b.y).map(p => p.text)")
+        cdp.ev("document.activeElement.blur(); document.getElementById('progressChart').focus()")
+        seen = []
+        for key in ('ArrowRight', 'ArrowRight', 'End', 'ArrowRight', 'ArrowLeft', 'Home'):
+            chart_key(key)
+            seen.append(detail_text())
+        check(f'{what}: Right steps from the earliest point in order across the chart, End and Home go to the ends, and the ends are not passed',
+              len(spots) >= 3 and seen == [spots[0], spots[1], spots[-1], spots[-1], spots[-2], spots[0]], [spots, seen])
+        return spots
+
+    check('the chart can be reached with the keyboard', (cdp.ev("document.getElementById('progressChart').focus()") or True) and cdp.ev("document.activeElement.id") == 'progressChart')
+    step_through('one exercise')
+    check('an arrow does not scroll the page', chart_key('ArrowRight') is False)
+    # Several workout types are drawn a line at a time, not in date order across the chart; the arrows go by position.
+    shown = cdp.ev("""(() => {
+      const canvas = document.createElement('canvas'), said = [];
+      document.body.appendChild(canvas);
+      const points = [{ x: 90, y: 10, text: 'c' }, { x: 10, y: 50, text: 'a' }, { x: 50, y: 20, text: 'b' }, { x: 10, y: 5, text: 'a first' }];
+      chartKeyboard(canvas, () => points, point => said.push(point.text));
+      canvas.focus();
+      for (const key of ['ArrowRight', 'ArrowRight', 'ArrowRight', 'ArrowRight', 'ArrowRight', 'Home', 'ArrowLeft', 'End']) {
+        canvas.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+      }
+      canvas.remove();
+      return said;
+    })()""")
+    check('points drawn line by line are stepped through in order across the chart, and the ends are not passed',
+          shown == ['a first', 'a', 'b', 'c', 'c', 'a first', 'a first', 'c'], shown)
+
     pick('metricFilter', 'oneRepMax')
     values = cdp.ev('[...chartData.types[0].values.values()]')
     check("the estimated one-rep max is charted from each workout's best set", [round(v, 2) for v in values] == [157.5, 163.33, 165, 183.67, 175], values)
@@ -924,6 +958,10 @@ def run(t):
     painted = cdp.ev("""(canvas => ({ width: canvas.clientWidth,
         ink: canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data.some(value => value !== 0) }))(document.getElementById('bodyweightChart'))""")
     check('and opening it draws the chart', painted['width'] > 100 and painted['ink'] is True, painted)
+    cdp.ev("document.getElementById('bodyweightChart').focus()")
+    cdp.ev("document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }))")
+    check('the bodyweight chart is a stop for the keyboard too, and an arrow says the weigh-in', cdp.ev("document.activeElement.id") == 'bodyweightChart'
+          and cdp.ev("document.getElementById('bodyweightDetail').textContent").endswith(': 186.6 lbs'), cdp.ev("document.getElementById('bodyweightDetail').textContent"))
     cdp.send('Emulation.setDeviceMetricsOverride', width=375, height=800, deviceScaleFactor=1, mobile=True)
     cdp.pause(0.3)
     fits = cdp.ev("(f => f.scrollWidth <= f.clientWidth && document.documentElement.scrollWidth <= innerWidth)(document.getElementById('bodyweightForm'))")

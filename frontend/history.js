@@ -321,7 +321,7 @@ function goToDay(key) {
     row.classList.add('picked');
   });
   found[0].querySelector('.saved-workout-toggle').focus({ preventScroll:true });
-  found[0].scrollIntoView({ behavior:'smooth', block:'center' });
+  scrollToCard(found[0], 'center');
 }
 
 $('trainingCalendar').onclick = event => {

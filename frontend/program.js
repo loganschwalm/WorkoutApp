@@ -624,7 +624,7 @@ $('programForm').onsubmit = event => {
   closeProgramForm();
   if (settled.rolledOver) showFeedback(nextUpMessage(settled.program, true), 'success');
   else showFeedback(editing ? `${definition.name} updated. The rest of this ${definition.block} uses the new weights.` : `${definition.name} is set up. ${nextUpMessage(settled.program, false)}`, 'success');
-  $('programCard').scrollIntoView({ behavior:'smooth', block:'start' });
+  scrollToCard($('programCard'), 'start');
 };
 ['input', 'change'].forEach(type => $('programForm').addEventListener(type, event => {
   if (event.target.matches('.program-max-row input')) markInvalid(event.target, false);
@@ -634,6 +634,7 @@ $('closeProgram').onclick = closeProgramForm;
 $('cancelProgram').onclick = closeProgramForm;
 $('programModal').onclick = event => { if (event.target === $('programModal') && !formEdited($('programForm'))) closeProgramForm(); };
 document.addEventListener('keydown', event => { if (event.key === 'Escape' && !$('programModal').hidden) closeProgramForm(); });
+trapFocus($('programModal'));
 
 $('templateList').addEventListener('click', event => {
   const button = event.target.closest('[data-program-action]');
@@ -643,7 +644,7 @@ $('templateList').addEventListener('click', event => {
     if (definition) openProgramForm(definition);
   }
   if (button.dataset.programAction === 'build') openProgramBuilder();
-  if (button.dataset.programAction === 'view') $('programCard').scrollIntoView({ behavior:'smooth', block:'start' });
+  if (button.dataset.programAction === 'view') scrollToCard($('programCard'), 'start');
 });
 $('programCard').addEventListener('click', event => {
   const button = event.target.closest('[data-program-action]');

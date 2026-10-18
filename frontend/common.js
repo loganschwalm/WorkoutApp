@@ -34,6 +34,53 @@ function formEdited(form) {
   return form.dataset.opened !== formValues(form);
 }
 
+// A dialog keeps the Tab key to itself: past its last control the keyboard goes back to its first, and before its first, to its last,
+// so the page behind (which a backdrop hides) is not walked into. What Tab stops at is what is on the screen: a control in a folded
+// section has no box and is not one, and of a group of radios only the one chosen is (or the first, while none is).
+function tabStops(container) {
+  const stops = [...container.querySelectorAll('a[href], button, input, select, textarea, summary, [tabindex]')]
+    .filter(element => !element.disabled && element.tabIndex >= 0 && element.getClientRects().length > 0);
+  return stops.filter(element => {
+    if (element.type !== 'radio' || element.checked) return true;
+    const group = stops.filter(other => other.type === 'radio' && other.name === element.name && other.form === element.form);
+    return !group.some(other => other.checked) && group[0] === element;
+  });
+}
+
+// Call it from a keydown on the page: it does something for the Tab key, and only while the dialog is open.
+function trapTab(event, container) {
+  if (event.key !== 'Tab' || container.hidden) return;
+  const stops = tabStops(container);
+  if (!stops.length) { event.preventDefault(); return; }
+  const first = stops[0], last = stops[stops.length - 1];
+  if (!container.contains(document.activeElement)) { event.preventDefault(); first.focus(); }
+  else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+}
+
+function trapFocus(container) {
+  document.addEventListener('keydown', event => trapTab(event, container));
+}
+
+// When what had the keyboard goes away (the workout's buttons once it is finished, a summary once it is closed), the keyboard is
+// put somewhere: on the heading of what takes its place, which is made focusable for the purpose, or on the first of some
+// controls that is on the screen.
+function focusHeading(heading) {
+  heading.tabIndex = -1;
+  heading.focus({ preventScroll:true });
+}
+
+function focusFirstShown(ids) {
+  const target = ids.map(id => $(id)).find(element => element && element.getClientRects().length);
+  if (target) target.focus({ preventScroll:true });
+}
+
+// Brings a card into view, gliding there unless the person has asked their device for less motion, when it is a jump.
+function scrollToCard(element, block = 'start') {
+  const glide = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+  element.scrollIntoView({ behavior:glide ? 'smooth' : 'auto', block });
+}
+
 function escapeHTML(value) {
   return String(value).replace(/[&<>'"]/g, character => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[character]));
 }

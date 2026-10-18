@@ -97,7 +97,7 @@ $('musclesUncountedLink').onclick = () => {
   $('libraryDetails').open = true;
   $('librarySearch').value = '';
   renderLibrary();
-  $('exercisesCard').scrollIntoView({ behavior:'smooth', block:'start' });
+  scrollToCard($('exercisesCard'), 'start');
   [...$('libraryList').querySelectorAll('select[data-field="muscle"]')].find(select => !select.value)?.focus({ preventScroll:true });
 };
 

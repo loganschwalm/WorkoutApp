@@ -117,6 +117,7 @@ def run(t):
 
     first = {'name': 'First Ever', 'unit': 'lbs', 'duration': 1500, 'exercises': [{'name': 'Squat', 'sets': [{'weight': 135, 'reps': 5}, {'weight': 135, 'reps': 5}]}]}
     shown = show(first)
+    check('the keyboard goes to the summary’s heading, not to nothing', cdp.ev("document.activeElement.id") == 'summaryTitle', cdp.ev("document.activeElement.id"))
     check('a first workout has no comparison and no goals, only its exercises, as firsts',
           shown['shown'] and shown['compare'] is None and shown['goals'] is None and shown['week'] is None and shown['exercises'] == ['Squat | 2 sets · top 135 lbs × 5 | First time'], shown)
     check('and the usual numbers', shown['stats'] == ['25 min', '1', '2', '1,350 lbs'], shown['stats'])
@@ -131,3 +132,11 @@ def run(t):
     check('and the workout’s name too', cdp.ev("document.getElementById('summaryName').textContent") == '<b>Bold</b>' and cdp.ev("document.querySelectorAll('#summaryName b').length") == 0)
     cdp.ev("document.getElementById('summaryDone').click()")
     check('Done puts it away', cdp.ev("document.getElementById('workoutSummary').hidden") is True)
+    check('and the keyboard goes on to the Tracker’s buttons, not the page', cdp.ev("document.activeElement.id") in ('templatesToggle', 'settingsButton'), cdp.ev("document.activeElement.id"))
+    # A workout ended without a summary (nothing was logged, or it was cancelled) takes its buttons, and the keyboard, away too.
+    t.start(0)
+    cdp.pause(0.4)
+    cdp.ev("document.getElementById('completeSetBtn').focus()")
+    t.end_workout()
+    check('ending a workout from its own button leaves the keyboard on the Tracker', cdp.ev("document.getElementById('activeWorkout').hidden") is True
+          and cdp.ev("document.activeElement.id") in ('templatesToggle', 'settingsButton'), cdp.ev("document.activeElement.id"))

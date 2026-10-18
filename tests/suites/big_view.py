@@ -90,6 +90,12 @@ def run(t):
     check('Skip rest ends it, and the view goes to "go": the rest is over and the next set is waiting',
           cdp.ev('restRemaining') == 0 and over['label'] == 'Rest over' and over['go'] is True and over['clock'] == '' and over['rest'] is False
           and over['set'] == 'Set 2', over)
+    check('which says nothing aloud, the rest having been ended by hand', cdp.ev("document.getElementById('bigViewAnnouncement').textContent + document.getElementById('restAnnouncement').textContent") == '')
+    # A rest that runs out while the view is open is told in the view, since the page behind a modal dialog is not read.
+    cdp.ev("startRestTimer(); restEndsAt = Date.now() + 400")
+    cdp.pause(1.0)
+    said = cdp.ev("[document.getElementById('bigViewAnnouncement').textContent, document.getElementById('restAnnouncement').textContent]")
+    check('a rest that runs out with the view open is announced inside it, and not twice', said == ['Rest over', ''], said)
 
     # What it looks like.
     colours = cdp.ev(f"""(() => {{ const contrast = {CONTRAST}; const style = id => getComputedStyle(document.getElementById(id));

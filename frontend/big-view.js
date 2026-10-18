@@ -144,11 +144,5 @@ $('bigViewClose').onclick = () => closeBigView();
 document.addEventListener('keydown', event => {
   if (!bigViewIsOpen()) return;
   if (event.key === 'Escape') { closeBigView(); return; }
-  if (event.key !== 'Tab') return;
-  const buttons = [...$('bigView').querySelectorAll('button')].filter(button => !button.disabled && !button.closest('[hidden]'));
-  if (!buttons.length) return;
-  const first = buttons[0], last = buttons[buttons.length - 1];
-  if (!$('bigView').contains(document.activeElement)) { event.preventDefault(); first.focus(); }
-  else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  trapTab(event, $('bigView'));
 });

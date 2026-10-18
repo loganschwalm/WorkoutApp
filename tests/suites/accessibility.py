@@ -1,4 +1,5 @@
-"""Ease of access: the keyboard focus ring on everything that can take focus, the Text size setting, and the size of what is tapped."""
+"""Ease of access: the keyboard focus ring on everything that can take focus, the Text size setting, the size of what is tapped, buttons named
+with the words on them, less motion, and the Tab key kept inside each dialog."""
 
 import json
 
@@ -251,3 +252,85 @@ def run(t):
             check(f'{size}: {label}: nothing to press is smaller than 44px (a calendar day 24px, a training day 36 wide)', small == [], small)
     api('PUT', '/api/state', {'settings': {}}, token)
     cdp.send('Emulation.clearDeviceMetricsOverride')
+
+    # ------------------------------------------------------------------ F7 a name that holds the words on the button
+    print('F7  what a button is called holds the words on it, so saying them (voice control) or hearing them match')
+    # WCAG 2.5.3: a button that shows "0" and is named "None left" cannot be pressed by saying "0". Only the letters and digits are
+    # compared (the minus of "-5" and the × of a close button are pictures), in lower case.
+    MISNAMED = """(() => {
+      const words = text => text.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      return [...document.querySelectorAll('button[aria-label], a[aria-label], summary[aria-label], [role=button][aria-label]')]
+        .filter(element => words(element.textContent) && !words(element.getAttribute('aria-label')).includes(words(element.textContent)))
+        .map(element => `${element.tagName.toLowerCase()}#${element.id} "${element.textContent.trim().slice(0, 20)}" is named "${element.getAttribute('aria-label')}"`);
+    })()"""
+    for label, path, ready in PAGES + [('the sign-in page', '/login.html', "!!document.getElementById('authForm')")]:
+        settle(path, ready)
+        check(f'{label}: every button is named with the words on it', cdp.ev(MISNAMED) == [], cdp.ev(MISNAMED))
+    open_settings()
+    check('Settings: every button is named with the words on it', cdp.ev(MISNAMED) == [], cdp.ev(MISNAMED))
+    cdp.ev("document.getElementById('closeSettings').click()")
+    open_tracker()
+    cdp.ev("openTemplateEditor({ id: 'f7', name: 'F7', exercises: [{ name: 'Bench Press', reps: '8' }, { name: 'Plank', reps: '30', timed: true }] })")
+    cdp.ev("openProgramBuilder()")
+    check('the template editor and the program builder: every button is named with the words on it', cdp.ev(MISNAMED) == [], cdp.ev(MISNAMED))
+
+    # ------------------------------------------------------------------ F8 less motion
+    print('F8  a device set to less motion is not glided across the page')
+    WATCH_SCROLL = "window.__scrolls = []; const real = Element.prototype.scrollIntoView; Element.prototype.scrollIntoView = function (options) { window.__scrolls.push(options && options.behavior); return real.call(this, options); }"
+    for reduced, expected in ((True, 'auto'), (False, 'smooth')):
+        cdp.send('Emulation.setEmulatedMedia', features=[{'name': 'prefers-color-scheme', 'value': 'light'},
+                                                          {'name': 'prefers-reduced-motion', 'value': 'reduce' if reduced else 'no-preference'}])
+        open_tracker()
+        cdp.ev(WATCH_SCROLL)
+        cdp.ev("document.getElementById('createWorkoutBtn').click()")
+        seen = cdp.ev('window.__scrolls')
+        check(f'{"with less motion asked for" if reduced else "otherwise"}, the form opens with a {"jump" if reduced else "glide"}', seen == [expected], seen)
+    cdp.send('Emulation.setEmulatedMedia', features=[{'name': 'prefers-color-scheme', 'value': 'light'}])
+
+    # ------------------------------------------------------------------ F9 a dialog keeps the Tab key
+    print('F9  Tab and Shift+Tab go round inside an open dialog, and never out into the page behind it')
+
+    def press(key, code, vk, modifiers=0):
+        for kind in ('rawKeyDown', 'keyUp'):
+            cdp.send('Input.dispatchKeyEvent', type=kind, key=key, code=code, windowsVirtualKeyCode=vk, nativeVirtualKeyCode=vk, modifiers=modifiers)
+
+    def walked(container, presses, shift):
+        """Real Tab presses, one after another: where the keyboard was after each, and whether that was inside the dialog."""
+        inside = []
+        for _ in range(presses):
+            press('Tab', 'Tab', 9, 8 if shift else 0)
+            inside.append(cdp.ev(f"document.getElementById('{container}').contains(document.activeElement)"))
+        return inside
+
+    def goes_round(label, container):
+        # More presses than the dialog has controls, so every end of it is passed at least once.
+        count = cdp.ev(f"[...document.getElementById('{container}').querySelectorAll('a[href], button, input, select, textarea, summary')]"
+                       ".filter(e => !e.disabled && e.getClientRects().length).length")
+        for shift in (False, True):
+            inside = walked(container, count + 6, shift)
+            check(f'{label}: {"Shift+Tab" if shift else "Tab"} stays inside it, {count + 6} presses', all(inside), inside.index(False) if False in inside else '')
+
+    open_tracker()
+    cdp.ev("openTemplateEditor({ id: 'f9', name: 'F9', exercises: [{ name: 'Bench Press', reps: '8' }, { name: 'Plank', reps: '30', timed: true }] })")
+    goes_round('the template editor', 'templateModal')
+    press('Escape', 'Escape', 27)
+    check('Escape closes the template editor', cdp.ev("document.getElementById('templateModal').hidden") is True)
+    open_tracker()
+    cdp.ev("openProgramForm(programDefinitions[0])")
+    goes_round('the program setup', 'programModal')
+    open_tracker()
+    cdp.ev("openProgramBuilder()")
+    goes_round('the program builder', 'builderModal')
+    open_settings()
+    goes_round('Settings', 'settingsModal')
+    cdp.ev("document.getElementById('settingsModal').querySelectorAll('details').forEach(details => { details.open = true; })")
+    goes_round('Settings with every section open', 'settingsModal')
+    cdp.ev("document.getElementById('closeSettings').click()")
+    open_tracker()
+    start(0)
+    cdp.pause(0.4)
+    cdp.ev("openBigView()")
+    cdp.pause(0.3)
+    goes_round('the big view', 'bigView')
+    cdp.ev("closeBigView()")
+    end_workout()

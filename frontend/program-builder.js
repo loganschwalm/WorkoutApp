@@ -119,10 +119,11 @@ $('builderForm').onsubmit = event => {
   closeProgramBuilder();
   if (settled.rolledOver) showFeedback(nextUpMessage(settled.program, true), 'success');
   else showFeedback(editing ? `${name} updated. ${nextUpMessage(settled.program, false)}` : `${name} is set up. ${nextUpMessage(settled.program, false)}`, 'success');
-  $('programCard').scrollIntoView({ behavior:'smooth', block:'start' });
+  scrollToCard($('programCard'), 'start');
 };
 
 $('closeBuilder').onclick = closeProgramBuilder;
 $('cancelBuilder').onclick = closeProgramBuilder;
 $('builderModal').onclick = event => { if (event.target === $('builderModal') && !formEdited($('builderForm'))) closeProgramBuilder(); };
 document.addEventListener('keydown', event => { if (event.key === 'Escape' && !$('builderModal').hidden) closeProgramBuilder(); });
+trapFocus($('builderModal'));

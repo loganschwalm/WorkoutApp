@@ -3,6 +3,30 @@
 // the dots on it. Each takes a canvas context, and sets what it needs of it, so none depends on what another left behind.
 // Loaded before both.
 
+// A chart can be explored with the keyboard as well as by tapping: it is focusable, the Left and Right arrows step through its
+// points from the earliest (the first press starts at the end Left or Right came from), and Home and End jump to the ends. The
+// points are `pointsOf()`, drawn as { x, y, text }, taken in the order across the chart whatever order they were drawn in; each
+// one stepped to is handed to `show`. The points are asked for at every press, so a chart drawn again (a filter, a resize)
+// is stepped through as it now is.
+function chartKeyboard(canvas, pointsOf, show) {
+  let at = -1;
+  canvas.tabIndex = 0;
+  canvas.addEventListener('blur', () => { at = -1; });
+  canvas.addEventListener('keydown', event => {
+    const keys = { ArrowRight:1, ArrowLeft:-1, Home:'first', End:'last' };
+    const key = keys[event.key];
+    if (key === undefined || event.altKey || event.ctrlKey || event.metaKey) return;
+    const points = [...pointsOf()].sort((a, b) => a.x - b.x || a.y - b.y);
+    if (!points.length) return;
+    event.preventDefault();
+    if (key === 'first') at = 0;
+    else if (key === 'last') at = points.length - 1;
+    else if (at < 0 || at >= points.length) at = key > 0 ? 0 : points.length - 1;
+    else at = Math.min(points.length - 1, Math.max(0, at + key));
+    show(points[at]);
+  });
+}
+
 // Sizes the canvas to its box, sharp on a dense screen, clears it, and says what to draw with.
 function prepareChart(canvas, height) {
   const width = canvas.clientWidth;

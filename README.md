@@ -113,7 +113,8 @@ celebrated.
   the planned days on the calendar, and your phone can remind you on training days, even with the app closed.
 - Add a training program's remaining workouts to your own calendar app as an .ics file, one event on each training day.
 - Pounds or kilograms, your own bar and plates, 10 colour themes (light, dark, and colourful ones), four text sizes, and a clear
-  focus ring for keyboard users.
+  focus ring for keyboard users. Dialogs keep the Tab key, the charts can be stepped through with the arrow keys, the end of a
+  rest is said to a screen reader, and a device set to less motion is not scrolled with a glide.
 - Export everything as JSON, or your sets and sessions as CSV, and import a JSON export into another account or server.
 - Download a finished workout or session as a .tcx file, from its summary or History's ⋯ menu, to upload to Strava on its
   website or to open in an app such as HealthFit that adds it to Apple Health (which cannot read a file itself).

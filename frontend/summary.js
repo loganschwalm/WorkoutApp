@@ -143,9 +143,10 @@ function showWorkoutSummary(workout, records, before = {}, programOutcome = null
     + `<span class="summary-change ${row.change.kind}">${symbols[row.change.kind] ? `<span aria-hidden="true">${symbols[row.change.kind]}</span> ` : ''}${escapeHTML(row.change.text)}</span></li>`).join('');
   offerActivityExport($('summaryExport'), workout);
   $('workoutSummary').hidden = false;
-  $('workoutSummary').scrollIntoView({ behavior:'smooth', block:'start' });
+  scrollToCard($('workoutSummary'), 'start');
+  focusHeading($('summaryTitle'));
   if (rewards.earned.length || (programOutcome && programOutcome.completed)) celebrate($('summaryTitle'), 'achievement');
   else if (rewards.weekReached) celebrate($('summaryTitle'), 'goal');
 }
 
-$('summaryDone').onclick = () => { $('workoutSummary').hidden = true; };
+$('summaryDone').onclick = () => { $('workoutSummary').hidden = true; focusFirstShown(['templatesToggle', 'settingsButton']); };

@@ -41,7 +41,17 @@ function tickRest() {
     stopRestTimer();
     playRestAlert(getWorkoutSettings());
     flashRestOver();
+    announceRestOver();
   }
+}
+
+// For anyone who cannot see the flash or hear the sound: a line a screen reader says, which stays in the page (a region that was
+// hidden when its words changed is not read) and is emptied when a rest runs, so the same words change again. The
+// big view is a modal dialog, so the page behind it is not read while it is open: it has a line of its own. Only the countdown
+// reaching nothing says it; ending a rest, or taking it to nothing, is something the person just did.
+function announceRestOver() {
+  const inBigView = typeof bigViewIsOpen === 'function' && bigViewIsOpen();
+  $(inBigView ? 'bigViewAnnouncement' : 'restAnnouncement').textContent = 'Rest over';
 }
 
 // A soft green wash over the whole screen, once, so the end of the rest shows even with the sound off. Skipped for anyone
@@ -67,6 +77,7 @@ function endRest() {
 
 function runRestTimer() {
   clearInterval(restInterval);
+  $('restAnnouncement').textContent = $('bigViewAnnouncement').textContent = '';
   restEndsAt = Date.now() + restRemaining * 1000;
   $('restToggleBtn').textContent = 'Pause rest';
   restInterval = setInterval(tickRest, 250);

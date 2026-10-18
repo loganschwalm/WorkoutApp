@@ -293,14 +293,7 @@ function onboardingKey(event) {
     finishOnboarding('skipped');
     return;
   }
-  if (event.key !== 'Tab') return;
-  const controls = [...dialog.querySelectorAll('button, input, select')].filter(control => !control.disabled && !control.closest('[hidden]'));
-  if (!controls.length) return;
-  // The first and last are always buttons (Skip or Back, then Next or Start), so a radio group in between does not matter.
-  const first = controls[0], last = controls[controls.length - 1];
-  if (!dialog.contains(document.activeElement)) { event.preventDefault(); first.focus(); }
-  else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  trapTab(event, dialog);
 }
 
 // ---- Finishing ------------------------------------------------------------
@@ -352,8 +345,7 @@ function finishOnboarding(reason) {
 
 function onboardingShowTemplates() {
   if ($('templateArea').hidden) $('templatesToggle').click();
-  const smooth = matchMedia('(prefers-reduced-motion: no-preference)').matches;
-  $('templateArea').closest('section').scrollIntoView({ behavior:smooth ? 'smooth' : 'auto', block:'start' });
+  scrollToCard($('templateArea').closest('section'), 'start');
 }
 
 // Whatever goes wrong, the person gets into the app: the welcome closes as if skipped. Each part is tried on its own, so one
