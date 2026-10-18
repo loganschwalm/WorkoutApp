@@ -638,6 +638,14 @@ def run(t):
           cdp.ev('chartData.points.length') == 0 and empty.startswith('Nothing to chart: a one-rep max needs'), empty)
     pick('exerciseFilter', 'chin-up')
     check('nor does a bodyweight exercise, rather than a line of zeros', cdp.ev('chartData.points.length') == 0)
+    for metric in ('weight', 'volume'):
+        pick('metricFilter', metric)
+        empty = cdp.ev("document.getElementById('chartEmpty').textContent")
+        check(f'a bodyweight exercise has no line of zeros for its {metric} either, and the empty chart says what to choose',
+              cdp.ev('chartData.points.length') == 0 and cdp.ev("document.getElementById('chartEmpty').hidden") is False
+              and empty == 'Nothing to chart: no weight was logged for these. Choose Best reps to chart how it went.', empty)
+    pick('metricFilter', 'reps')
+    check('while its reps are charted', cdp.ev('chartData.points.length') == 2, cdp.ev('chartData.points.length'))
     cdp.ev("document.getElementById('clearFilters').click()")
     cdp.pause(0.2)
     shown = cdp.ev("[document.getElementById('metricFilter').value, document.getElementById('exerciseFilter').value]")

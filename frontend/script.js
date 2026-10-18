@@ -606,15 +606,30 @@ async function resumeOrStartWorkout(workouts) {
   else loadWorkoutIntoForm(workout, requested.action === 'edit');
 }
 
+// What is wrong with an exercise written down by hand: [the field, what to tell the person], or null. `when` ends the sentence
+// about the name ("before adding it"). An exercise with sets takes its weight and reps from them, so those two are not asked of it.
+function exerciseFault(name, weight, reps, when) {
+  if (!name.trim()) return ['name', `Enter an exercise name before ${when}.`];
+  if (reps === null) return null;
+  if (reps === '' || Number(reps) < 1) return ['reps', 'Enter at least 1 rep for this exercise.'];
+  if (!Number.isInteger(Number(reps))) return ['reps', 'Reps must be a whole number.'];
+  if (weight !== '' && Number(weight) < 0) return ['weight', 'Weight cannot be negative.'];
+  return null;
+}
+
 $('addBtn').onclick = () => {
   const name = $('exercise').value.trim(), weight = $('weight').value, reps = $('reps').value;
   markInvalid($('exercise'), !name);
   markInvalid($('reps'), !reps || Number(reps) < 1);
   markInvalid($('weight'), weight !== '' && Number(weight) < 0);
-  if (!name) { showFeedback('Enter an exercise name before adding it.'); $('exercise').focus(); return; }
-  if (!reps || Number(reps) < 1) { showFeedback('Enter at least 1 rep for this exercise.'); $('reps').focus(); return; }
-  if (!Number.isInteger(Number(reps))) { markInvalid($('reps'), true); showFeedback('Reps must be a whole number.'); $('reps').focus(); return; }
-  if (weight !== '' && Number(weight) < 0) { showFeedback('Weight cannot be negative.'); $('weight').focus(); return; }
+  const fault = exerciseFault(name, weight, reps, 'adding it');
+  if (fault) {
+    const input = $({ name:'exercise', reps:'reps', weight:'weight' }[fault[0]]);
+    markInvalid(input, true);
+    showFeedback(fault[1]);
+    input.focus();
+    return;
+  }
   const doubt = implausibleSet({ name }, { weight:Number(weight) || 0, reps:Number(reps) });
   if (doubt && !confirm(doubt.message)) { markInvalid($(doubt.field), true); $(doubt.field).focus(); return; }
   clearFeedback();
@@ -630,7 +645,7 @@ $('reps').oninput = () => markInvalid($('reps'), false);
 $('exerciseList').oninput = e => {
   const index = e.target.dataset.index;
   const field = e.target.dataset.field;
-  if (index !== undefined && field) exercises[+index][field] = e.target.value;
+  if (index !== undefined && field) { exercises[+index][field] = e.target.value; markInvalid(e.target, false); }
 };
 // A set changed in place, during a workout or in a saved one, is asked about as a new set is when it looks like a slip
 // (see implausibleSet in records.js), against the exercise's other sets and its bests. Declining puts back what it was.
@@ -814,6 +829,19 @@ function logSet(entry = null) {
 }
 
 $('completeSetBtn').onclick = event => { if (!bouncedTap(event)) logSet(); };
+// Enter on the keyboard that is up moves on: from the weight to the reps, and from the reps it logs the set, as Complete set does
+// (with the same guard, so a key held down logs one). The keyboard's own key says so (enterkeyhint in the page).
+$('activeWeight').addEventListener('keydown', event => {
+  if (event.key !== 'Enter' || event.isComposing) return;
+  event.preventDefault();
+  $('completedReps').focus();
+  $('completedReps').select();
+});
+$('completedReps').addEventListener('keydown', event => {
+  if (event.key !== 'Enter' || event.isComposing) return;
+  event.preventDefault();
+  if (activeSession && !event.repeat && !bouncedTap(event)) logSet();
+});
 
 // Logs the set before this one again: the weight, reps or seconds are as it was, whatever the fields say, and the usual
 // checks and rest follow, as for Complete set. A hold being timed is stopped first, so its seconds do not replace the set's.
@@ -1014,6 +1042,15 @@ $('savedWorkoutList').onclick = async e => {
 $('saveBtn').onclick = async () => {
   if (!exercises.length) { showFeedback('Add at least one exercise before saving the workout.'); return; }
   if (!$('workoutDate').value) { showFeedback('Choose a workout date before saving.'); $('workoutDate').focus(); return; }
+  // The rows can be changed after they were added, to nothing: a nameless exercise or one with no reps is not a workout to keep.
+  for (const [index, item] of exercises.entries()) {
+    const fault = exerciseFault(String(item.name ?? ''), String(item.weight ?? ''), item.sets?.length ? null : String(item.reps ?? ''), 'saving');
+    if (!fault) continue;
+    const input = document.querySelector(`#exerciseList [data-index="${index}"][data-field=${fault[0]}]`);
+    if (input) { markInvalid(input, true); input.focus(); }
+    showFeedback(fault[1]);
+    return;
+  }
   // An exercise with sets takes its weight and reps from them, as finishing a workout gives them: the heaviest set, and
   // the last set's reps (or the reps a template planned, which it progresses from).
   const savedExercises = exercises.map(item => item.sets?.length
@@ -1071,11 +1108,19 @@ window.addEventListener('accountstatechange', takeAccountState);
 function applyUnit() {
   applyUnitLabels();
   applyWeightStepper();
+  // Any setting can change while a set is half typed (Settings, What's new, onboarding, another device's change arriving), and
+  // drawing the workout again starts the entry fields over, so what was typed is put back, in the new unit if that changed.
+  const typed = activeSession ? { weight:$('activeWeight').value, reps:$('completedReps').value, unit:recordUnit(activeSession) } : null;
   if (activeSession && recordUnit(activeSession) !== weightUnit()) {
     activeSession = inUnit(activeSession);
     persistActiveSession();
   }
-  if (activeSession) renderActiveWorkout();
+  if (activeSession) {
+    renderActiveWorkout();
+    $('activeWeight').value = convertWeight(typed.weight, typed.unit, weightUnit());
+    $('completedReps').value = typed.reps;
+    showPlates();
+  }
   // Once the list has loaded, whenever that was: the unit can arrive from the server while the page is still loading.
   if (savedWorkoutsLoaded) renderSavedWorkouts(savedWorkouts);
   renderTemplates();

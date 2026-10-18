@@ -54,7 +54,8 @@ library, with SQLite for storage, so there is no build step, no package manager 
 - Same as last set logs the previous set again in one tap, and How to do it, in an exercise's ⋯ menu, gives a few
   written cues for it and a link to a video demo.
 - A typo like 1355 lbs for 135 is asked about before it's logged, and Finish early ends a workout from any exercise.
-- A double tap logs one set, finishing with an exercise still empty asks first, and a skipped program day has Undo.
+- A double tap logs one set, finishing with an exercise still empty asks first, and a skipped program day has Undo. Enter
+  moves from the weight to the reps and logs the set, and a set half typed survives a change of setting.
 - Cancel a workout started by mistake: nothing is saved and no stats change, with Undo in case the tap was the slip.
 - Finishing shows a summary with any new personal records, achievements unlocked, the weekly goal and your streak, and a line
   to cheer it; records, goals and achievements set off fireworks across the whole screen.

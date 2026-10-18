@@ -378,6 +378,26 @@ def run(t):
     cdp.pause(0.3)
     check('any whole number of seconds up to it is kept', not visible('templateModal') and cdp.ev("customTemplates.find(item => item.name === 'Rest Test').exercises[1].rest") == 100)
 
+    # ------------------------------------------------------------------ B a tap beside a form
+    print('B   a tap beside a form that has been filled in')
+    # Each dialog is opened and tapped beside as it is (that closes it), then opened again, changed and tapped beside (it stays), then
+    # closed by its own button. The tap is on the backdrop itself, as a finger beside the dialog would be.
+    tap_beside = lambda idn: cdp.ev(f"document.getElementById('{idn}').dispatchEvent(new MouseEvent('click', {{ bubbles: true }}))")
+    for label, modal, opener, field_id, close in (
+        ('template editor', 'templateModal', 'openTemplateEditor()', 'templateName', 'closeTemplate'),
+        ('program setup', 'programModal', 'openProgramForm(programDefinitions[0])', 'programMax-' + cdp.ev('programDefinitions[0].lifts[0].key'), 'closeProgram'),
+        ('program builder', 'builderModal', 'openProgramBuilder()', 'builderName', 'closeBuilder'),
+    ):
+        cdp.ev(opener)
+        tap_beside(modal)
+        check(f'a tap beside the {label}, nothing changed, closes it', not visible(modal))
+        cdp.ev(opener)
+        set_field(field_id, '42')
+        tap_beside(modal)
+        check(f'a tap beside the {label} once something was typed in it does not', visible(modal))
+        click(close)
+        check('and its own button still closes it', not visible(modal))
+
     # ------------------------------------------------------------------ T timed exercises
     print('T   timed exercises')
     card = cdp.ev("[...document.querySelectorAll('#templateList .template-card')].find(c => c.querySelector('h3').textContent === 'Full Body').textContent")

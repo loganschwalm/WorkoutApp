@@ -149,6 +149,15 @@ def run(t):
     choose('Incline Dumbbell Press', 'muscle', 'shoulders')
     check('a guess can be changed', cdp.ev(rows)[:3] == [['Chest', '3 sets · avg 1.5'], ['Back', '4 sets · avg 0'], ['Shoulders', '2 sets · avg 0']]
           and row('Incline Dumbbell Press')['note'] == 'Equipment guessed from its name', [cdp.ev(rows), row('Incline Dumbbell Press')])
+    options = lambda name, which: cdp.ev(f"""(li => [...li.querySelector('[data-field={which}]').options].map(o => o.textContent))
+        ([...document.querySelectorAll('#libraryList li[data-key]')].find(li => li.dataset.name === {json.dumps(name)}))""")
+    check('a choice made can be taken back, the blank one saying what the guess is', options('Incline Dumbbell Press', 'muscle')[0] == 'Guess: Chest'
+          and options('Thruster', 'muscle')[0] == 'Not set' and options('Bench Press', 'muscle')[0] == 'Chest', [options('Incline Dumbbell Press', 'muscle'), options('Thruster', 'muscle')])
+    choose('Incline Dumbbell Press', 'muscle', '')
+    check('and is, going back to the guess from the name', row('Incline Dumbbell Press')['muscle'] == 'chest'
+          and row('Incline Dumbbell Press')['note'] == 'Guessed from its name'
+          and field('libraryFeedback') == 'Incline Dumbbell Press goes back to the guess from its name: Chest.', [row('Incline Dumbbell Press'), field('libraryFeedback')])
+    choose('Incline Dumbbell Press', 'muscle', 'shoulders')
     choose('Squat', 'equipment', 'machine')
     kept = t.wait_for(lambda: len(t.api('GET', '/api/state', token=counter)[0].get('exerciseLibrary', {})) == 3) \
         and t.api('GET', '/api/state', token=counter)[0]['exerciseLibrary']

@@ -110,6 +110,8 @@ function buildChartData(workouts) {
     if (!matchingExercises.length) return;
     // A workout with no set that gives a one-rep max (bodyweight, or only long sets) has nothing to plot, not a zero.
     if (selectedMetric === 'oneRepMax' && !(metricValue > 0)) return;
+    // Likewise a workout with no weight in it (a bodyweight exercise) has no heaviest weight and lifted no volume.
+    if ((selectedMetric === 'weight' || selectedMetric === 'volume') && !(metricValue > 0)) return;
     if (!types.has(name)) types.set(name, new Map());
     const entries = types.get(name);
     const key = String(workout.id ?? `${workout.createdAt}-${index}`);
@@ -382,7 +384,9 @@ function renderProgress(workouts) {
   } else if (!chartData.points.length && allWorkouts.length) {
     $('chartEmpty').textContent = selectedMetric === 'oneRepMax'
       ? 'Nothing to chart: a one-rep max needs a set with weight, of 12 reps or fewer.'
-      : 'Nothing to chart for these filters.';
+      : selectedMetric === 'weight' || selectedMetric === 'volume'
+        ? `Nothing to chart: no weight was logged for these. Choose ${chartingTimed() ? 'Longest hold' : 'Best reps'} to chart how it went.`
+        : 'Nothing to chart for these filters.';
   }
   $('legend').innerHTML = chartData.types.map(type => `<div class="legend-item"><span class="legend-swatch"></span><span>${escapeHTML(type.name)}</span></div>`).join('');
   $('progressChart').setAttribute('aria-label', describeChart());

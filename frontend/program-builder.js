@@ -57,6 +57,7 @@ function openProgramBuilder(program = null) {
   $('builderError').hidden = true;
   renderBuilderDays();
   $('builderModal').hidden = false;
+  rememberForm($('builderForm'));
   $('builderName').focus();
 }
 
@@ -123,5 +124,5 @@ $('builderForm').onsubmit = event => {
 
 $('closeBuilder').onclick = closeProgramBuilder;
 $('cancelBuilder').onclick = closeProgramBuilder;
-$('builderModal').onclick = event => { if (event.target === $('builderModal')) closeProgramBuilder(); };
+$('builderModal').onclick = event => { if (event.target === $('builderModal') && !formEdited($('builderForm'))) closeProgramBuilder(); };
 document.addEventListener('keydown', event => { if (event.key === 'Escape' && !$('builderModal').hidden) closeProgramBuilder(); });

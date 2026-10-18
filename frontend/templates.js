@@ -134,6 +134,7 @@ function openTemplateEditor(template = null) {
     : [{ name:'', reps:'8' }];
   renderTemplateExerciseEditor();
   $('templateModal').hidden = false;
+  rememberForm($('templateForm'));
   $('templateName').focus();
 }
 
@@ -189,7 +190,7 @@ $('addTemplateExercise').onclick = () => { templateDraftExercises.push({ name:''
 $('createTemplateBtn').onclick = () => openTemplateEditor();
 $('closeTemplate').onclick = closeTemplateEditor;
 $('cancelTemplate').onclick = closeTemplateEditor;
-$('templateModal').onclick = event => { if (event.target === $('templateModal')) closeTemplateEditor(); };
+$('templateModal').onclick = event => { if (event.target === $('templateModal') && !formEdited($('templateForm'))) closeTemplateEditor(); };
 $('templateForm').onsubmit = event => {
   event.preventDefault();
   const name = $('templateName').value.trim();

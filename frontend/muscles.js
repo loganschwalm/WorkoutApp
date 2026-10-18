@@ -119,6 +119,7 @@ function libraryExercises() {
 }
 
 // The options of a muscle or equipment choice, with a blank one first when there is a label for it.
+// A choice made can be taken back: its blank option says what the guess from the name would be, or that there is none.
 function libraryOptions(kinds, chosen, blank) {
   return (blank ? `<option value="">${escapeHTML(blank)}</option>` : '')
     + kinds.map(([value, label]) => `<option value="${value}"${value === chosen ? ' selected' : ''}>${label}</option>`).join('');
@@ -143,10 +144,11 @@ function renderLibrary() {
     else if (details.equipmentGuessed) notes.push('Equipment guessed from its name');
     if (!details.muscle) notes.push('Its sets are not counted until it has a muscle');
     const name = escapeHTML(exercise.name);
+    const blank = (value, guessed, guess, labelOf) => !value ? 'Not set' : guessed ? '' : guess ? `Guess: ${labelOf(guess)}` : 'Not set';
     return `<li data-key="${escapeHTML(exercise.key)}" data-name="${name}"><div class="library-name">`
       + `<strong>${name}</strong>${notes.length ? `<span>${escapeHTML(notes.join(' · '))}</span>` : ''}</div>`
-      + `<select data-field="muscle" aria-label="Muscle for ${name}">${libraryOptions(muscleGroups, details.muscle, details.muscle ? '' : 'Not set')}</select>`
-      + `<select data-field="equipment" aria-label="Equipment for ${name}">${libraryOptions(equipmentKinds, details.equipment, details.equipment ? '' : 'Not set')}</select>`
+      + `<select data-field="muscle" aria-label="Muscle for ${name}">${libraryOptions(muscleGroups, details.muscle, blank(details.muscle, details.muscleGuessed, guessMuscle(exercise.name), muscleLabel))}</select>`
+      + `<select data-field="equipment" aria-label="Equipment for ${name}">${libraryOptions(equipmentKinds, details.equipment, blank(details.equipment, details.equipmentGuessed, guessEquipment(exercise.name), equipmentLabel))}</select>`
       + (exercise.logged ? '' : `<button class="link-button" type="button" data-library-remove aria-label="Remove ${name}">Remove</button>`) + '</li>';
   }).join('') : `<li class="empty">${exercises.length ? 'No exercise has those words in its name.' : 'The exercises you log or add appear here.'}</li>`;
 }
@@ -167,7 +169,7 @@ function renderLibraryForm() {
 $('libraryList').addEventListener('change', event => {
   const select = event.target.closest('select[data-field]');
   const row = select && select.closest('li[data-key]');
-  if (!row || !select.value) return;
+  if (!row) return;
   const { field } = select.dataset, { key, name } = row.dataset;
   setExerciseDetails(name, { [field]:select.value });
   renderLibrary();
@@ -175,7 +177,10 @@ $('libraryList').addEventListener('change', event => {
   renderExerciseCard();
   // The list is drawn again, so the keyboard carries on from the same choice.
   $('libraryList').querySelector(`li[data-key="${CSS.escape(key)}"] select[data-field="${field}"]`)?.focus();
-  showLibraryFeedback(field === 'muscle' ? `${name} counts for ${muscleLabel(select.value)}.` : `${name} is done with: ${equipmentLabel(select.value)}.`);
+  const now = exerciseDetails(name)[field];
+  const labelOf = field === 'muscle' ? muscleLabel : equipmentLabel;
+  showLibraryFeedback(select.value ? (field === 'muscle' ? `${name} counts for ${muscleLabel(select.value)}.` : `${name} is done with: ${equipmentLabel(select.value)}.`)
+    : now ? `${name} goes back to the guess from its name: ${labelOf(now)}.` : `${name} has no ${field} the name says anything of.`);
 });
 
 $('libraryList').addEventListener('click', event => {

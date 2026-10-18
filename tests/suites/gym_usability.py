@@ -823,6 +823,24 @@ def run(t):
     check('and the big view’s button', sets_of(0) == [[135, 5], [145, 5], [145, 5], [150, 3]], sets_of(0))
     cdp.ev('closeBigView()')
 
+    # The Enter key of the keyboard that is up: on the weight it goes on to the reps, on the reps it logs the set, once however fast.
+    def enter():
+        cdp.send('Input.dispatchKeyEvent', type='rawKeyDown', key='Enter', code='Enter', windowsVirtualKeyCode=13, nativeVirtualKeyCode=13)
+        cdp.send('Input.dispatchKeyEvent', type='keyUp', key='Enter', code='Enter', windowsVirtualKeyCode=13, nativeVirtualKeyCode=13)
+
+    cdp.pause(0.7)
+    check('the weight and reps ask for Next and Done on the phone’s keyboard',
+          cdp.ev("[activeWeight.enterKeyHint, completedReps.enterKeyHint]") == ['next', 'done'])
+    entry(155, 4)
+    cdp.ev("document.getElementById('activeWeight').focus()")
+    enter()
+    check('Enter on the weight goes on to the reps, without logging anything',
+          cdp.ev("document.activeElement.id") == 'completedReps' and sets_of(0) == [[135, 5], [145, 5], [145, 5], [150, 3]], sets_of(0))
+    enter()
+    enter()
+    cdp.pause(0.3)
+    check('and Enter on the reps logs the set, once for two presses at once', sets_of(0) == [[135, 5], [145, 5], [145, 5], [150, 3], [155, 4]], sets_of(0))
+
     cdp.answer = False
     cdp.dialogs.clear()
     waiting = cdp.ev('activeSession.exercises.length') - 1

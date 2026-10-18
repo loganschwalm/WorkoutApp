@@ -20,6 +20,20 @@ function returnFocus(dialog) {
   if (opener && opener !== document.body && opener.isConnected) opener.focus({ preventScroll:true });
 }
 
+// A form that takes some effort to fill in (a template, a program) is not thrown away by a tap beside it: the form's values are
+// noted as it opens, and a tap on the backdrop closes it only while they are still those. The buttons and Escape are deliberate.
+function formValues(form) {
+  return [...form.elements].map(element => element.type === 'checkbox' || element.type === 'radio' ? String(element.checked) : element.value).join('');
+}
+
+function rememberForm(form) {
+  form.dataset.opened = formValues(form);
+}
+
+function formEdited(form) {
+  return form.dataset.opened !== formValues(form);
+}
+
 function escapeHTML(value) {
   return String(value).replace(/[&<>'"]/g, character => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[character]));
 }

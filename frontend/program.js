@@ -588,6 +588,7 @@ function openProgramForm(definition) {
   $('programFormError').hidden = true;
   syncProgramForm();
   $('programModal').hidden = false;
+  rememberForm($('programForm'));
   $(`programMax-${definition.lifts[0].key}`).focus();
 }
 
@@ -631,7 +632,7 @@ $('programForm').onsubmit = event => {
 }));
 $('closeProgram').onclick = closeProgramForm;
 $('cancelProgram').onclick = closeProgramForm;
-$('programModal').onclick = event => { if (event.target === $('programModal')) closeProgramForm(); };
+$('programModal').onclick = event => { if (event.target === $('programModal') && !formEdited($('programForm'))) closeProgramForm(); };
 document.addEventListener('keydown', event => { if (event.key === 'Escape' && !$('programModal').hidden) closeProgramForm(); });
 
 $('templateList').addEventListener('click', event => {

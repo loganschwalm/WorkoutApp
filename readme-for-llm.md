@@ -97,6 +97,11 @@ own workouts, templates, and settings.
 - A thumb that bounces logs one set. A tap on Complete set, Same as last set or the big view's button within 0.6 seconds
   of a set being logged is ignored (`bouncedTap` in `script.js`), since the button is still under the thumb once the set
   is in. Only real taps are judged: a click the page makes itself is not.
+- Enter on the keyboard does the same as the buttons: on the weight it goes to the reps, and on the reps it logs the set,
+  with the same guard (a key held down logs one, and `enterkeyhint` makes the phone's key say Next and Done).
+- A set half typed is kept when a setting changes. Any `settingschange` (the Settings dialog, What's new, onboarding, or
+  settings arriving from another device) draws the workout again, and `applyUnit` in `script.js` puts the weight and reps
+  back after it, the weight converted if the unit was what changed.
 - Move through exercises one at a time, or go straight to any of them: tap "Exercise 2 of 6" for a
   list of every exercise and how many sets each has, and tap one to go there. Handy when a machine is
   taken and you do the next free one first.
@@ -307,7 +312,9 @@ Logged sets, notes, finished workouts, settings, custom templates, and your trai
   the rest of the device's copy when the account is deleted. Signed out, a page shows nothing from it.
 - A workout written down in the Tracker's form (Create a workout, or Copy as new) is queued the same way, so it saves
   offline too, and a double tap on Save stores it once. Changing a saved workout (Edit) needs the server: offline,
-  the form says so and keeps what was typed for another go.
+  the form says so and keeps what was typed for another go. Save checks every row first (`exerciseFault`, the rules Add
+  uses): an exercise whose name or reps were emptied after it was added is refused with the cursor on it, and nothing is
+  queued or sent. A workout already saved with an empty name or reps has to be given one before an edit of it saves.
 - Uploads are safe to retry: each finished workout carries a unique `clientId`, and the server stores it once however many copies arrive, even at the same moment. Two open tabs (or the installed app and a browser tab) uploading the same queue never lose a workout between them.
   Nor does a retry bring back a workout deleted since: the `clientId` of each deleted workout is kept (`deleted_workouts`,
   migration 16, the newest 5,000 per account), and an upload of one is answered as done and not stored again. Importing a
@@ -735,7 +742,9 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
 - Track heaviest weight, estimated one-rep max, best reps, or total volume. The one-rep max is each
   workout's best set as a one-rep max (Epley's formula, from sets of up to 12 reps), so more reps at a
   weight count as well as more weight. For a timed exercise, best reps is its longest hold and volume
-  its total time held; across all exercises, holds are left out, since seconds are not reps.
+  its total time held; across all exercises, holds are left out, since seconds are not reps. A workout with no weight in
+  it (a bodyweight exercise) has no point for the heaviest weight, the one-rep max or the volume rather than a zero, and
+  the empty chart says to choose Best reps.
 - Filter by exercise. Names typed differently ("Bench press", "Bench Press ") count as one exercise.
 - Filter by workout type.
 - Filter by start and end date.
@@ -802,7 +811,8 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
   away (Thruster) has none until you choose. Choosing applies to that exercise in every workout, past and to come, and
   the equipment decides the plates and warm-ups during a workout: a Bench Press marked Machine gets neither, and a
   Landmine Press marked Barbell gets both. The list folds away under how many exercises there are and how many have no
-  muscle, and can be searched. Add exercise adds one of your own, with a muscle and equipment or left to the guess
+  muscle, and can be searched. A choice can be taken back: the first option of a chosen exercise says what the guess is
+  (Guess: Chest), or Not set when the name gives none. Add exercise adds one of your own, with a muscle and equipment or left to the guess
   (shown as you type the name); it is then suggested wherever an exercise is typed, and can be removed until it is
   logged. Adding one already there changes only what was chosen for it. Kept with your account like notes and goals.
 
@@ -919,6 +929,9 @@ changed most and the keyboard focus goes to it; the rest are folded. The line of
 `summary` in the table (`settings-fields.js`), so a section added to the table has its own. Each change is saved as you
 make it, so there is no Save button, just Done; closing it any other way (the ×, Escape, or a tap outside) keeps your
 changes too.
+The template editor, the program setup and the program builder are not saved as you go, so a tap beside one closes it only
+while nothing in it has been changed (`rememberForm` when it opens, `formEdited` at the tap, in `common.js`); the ×, Cancel
+and Escape are deliberate and close it as they always did.
 Closing it puts the keyboard focus back on the gear button, as the template and program editors do on
 the button that opened them. Settings include:
 

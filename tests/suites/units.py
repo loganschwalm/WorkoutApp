@@ -107,7 +107,21 @@ def run(t):
     # ------------------------------------------------------------------ K5 changing unit mid-workout
     print('K5  changing the unit in the middle of a workout')
     complete_set(100, 5)
+    # A set half typed survives a setting that has nothing to do with the unit, however the page hears of it, and is converted by one.
+    set_field('activeWeight', '112.5')
+    set_field('completedReps', '7')
+    cdp.ev("window.dispatchEvent(new Event('settingschange'))")
+    typed = [field('activeWeight'), field('completedReps')]
+    check('a settings change from elsewhere leaves a set being typed alone', typed == ['112.5', '7'], typed)
+    cdp.ev("document.getElementById('settingsButton').click()")
+    cdp.ev("const box = document.getElementById('confirmEndSetting'); box.checked = !box.checked; box.dispatchEvent(new Event('change', { bubbles: true }));"
+           "document.getElementById('settingsForm').requestSubmit()")
+    cdp.pause(0.5)
+    typed = [field('activeWeight'), field('completedReps')]
+    check('so does one made in Settings', typed == ['112.5', '7'], typed)
     choose_unit('kg')
+    typed = [field('activeWeight'), field('completedReps')]
+    check('a change of unit converts the weight being typed and keeps its reps', typed == [str(kg(112.5)), '7'], typed)
     row = cdp.ev("(() => { const li = document.querySelector('#completedSets li'); return [li.querySelector('[data-field=weight]').value, li.querySelector('.set-field span').textContent]; })()")
     check('the logged set is converted', row == [str(kg(100)), 'kg'], row)
     check('and the workout in progress is saved in kilograms', safe_ev('readLocalActive().session.unit') == 'kg'

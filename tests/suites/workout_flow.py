@@ -103,6 +103,37 @@ def run(t):
           and cdp.ev("document.querySelectorAll('#exerciseList > li')[1].querySelector(':scope > .remove').textContent") == 'Remove exercise')
     check('and no weight or reps for the exercise as a whole', cdp.ev("document.querySelectorAll('#exerciseList input[data-index][data-field=weight]').length") == 0)
     check('the form says what it is for', cdp.ev("document.getElementById('workoutBuilderIntro').textContent").startswith('Change any set'))
+    # A row changed after it was added can be changed to nothing; saving says so, at the row, and saves nothing.
+    row_input = lambda index, field: f"document.querySelector('#exerciseList [data-index=\"{index}\"][data-field={field}]')"
+
+    def type_row(index, field, value):
+        cdp.ev(f"(i => {{ i.value = {json.dumps(value)}; i.dispatchEvent(new Event('input', {{ bubbles: true }})); }})({row_input(index, field)})")
+
+    kept = workout(W1)['exercises'][0]['name']
+    type_row(0, 'name', '  ')
+    cdp.ev("document.getElementById('saveBtn').click()")
+    cdp.pause(0.6)
+    feedback = cdp.ev("document.getElementById('formFeedback').textContent")
+    check('a name blanked in a saved workout is refused, saying so', feedback == 'Enter an exercise name before saving.', feedback)
+    check('at the name, which is marked and has the cursor', cdp.ev(f"{row_input(0, 'name')}.getAttribute('aria-invalid') === 'true' && document.activeElement === {row_input(0, 'name')}") is True)
+    check('and the saved workout is as it was', workout(W1)['exercises'][0]['name'] == kept, workout(W1)['exercises'][0]['name'])
+    type_row(0, 'name', kept)
+    check('typing again takes the mark off', cdp.ev(f"{row_input(0, 'name')}.getAttribute('aria-invalid')") == 'false')
+    cdp.ev("document.getElementById('clearBtn').click()")
+    before_new = len(workouts())
+    cdp.ev("document.getElementById('createWorkoutBtn').click()")
+    for field, value in (('exercise', 'Curl'), ('weight', '20'), ('reps', '8')):
+        cdp.ev(f"document.getElementById('{field}').value = '{value}'")
+    cdp.ev("document.getElementById('addBtn').click()")
+    type_row(0, 'reps', '')
+    cdp.ev("document.getElementById('saveBtn').click()")
+    cdp.pause(0.8)
+    feedback = cdp.ev("document.getElementById('formFeedback').textContent")
+    check('a new workout whose reps were emptied is refused, at the reps', feedback == 'Enter at least 1 rep for this exercise.'
+          and cdp.ev(f"document.activeElement === {row_input(0, 'reps')}") is True, feedback)
+    check('and nothing was queued or saved', len(workouts()) == before_new and cdp.ev("exercises.length") == 1, len(workouts()))
+    cdp.ev("document.getElementById('clearBtn').click()")
+    edit()
     change_set(0, 1, 'reps', '0')
     check('a set’s reps below 1 snap back, and say why', set_rows(0)[1][1] == '8' and cdp.ev("document.getElementById('formFeedback').textContent") == 'Reps must be at least 1.', set_rows(0))
     change_set(0, 1, 'reps', '7.5')
