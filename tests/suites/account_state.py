@@ -277,9 +277,18 @@ def run(t):
     sent = cdp.ev('window.__patches')
     cdp.pause(3)
     check('and it is not sent again and again', cdp.ev('window.__patches') == sent, f"{sent} then {cdp.ev('window.__patches')}")
+    check('the Tracker says so beside the workouts the server refused', cdp.ev("renderStorageStatus(), document.getElementById('storageStatus').textContent") == 'goals refused by the server (kept on this device)',
+          cdp.ev("document.getElementById('storageStatus').textContent"))
+    # What the server refused was never stored, so taking the entry out again here is no deletion of anything it has: another
+    # device may since have added one of that name, and that stays.
+    api('PATCH', '/api/state', {'goals': {'value': {'broken': {'name': 'S11 Other', 'target': 80, 'unit': 'lbs'}}}}, token)
+    cdp.ev("saveLocalState('goals', {})")
+    check("taking the refused entry out here leaves another device's of the same name",
+          cdp.wait("!readLocalState('goals').dirty") and 'broken' in server_state()['goals'], server_state()['goals'])
     cdp.ev("saveLocalState('goals', { fixed: { name: 'S11 Lift', target: 100, unit: 'lbs' } })")
-    check('a change to it afterwards is tried afresh', wait_for(lambda: 'fixed' in server_state()['goals']), server_state()['goals'])
-    check('and clears it', cdp.wait("!readLocalState('goals').dirty && !readLocalState('goals').rejected"), cdp.ev("JSON.stringify(readLocalState('goals'))"))
+    check('a change to it afterwards is tried afresh, and arrives', wait_for(lambda: 'fixed' in server_state()['goals']), server_state()['goals'])
+    check('and clears it, and what the status line said', cdp.wait("!readLocalState('goals').dirty && !readLocalState('goals').rejected && (renderStorageStatus(), document.getElementById('storageStatus').textContent === '')"),
+          cdp.ev("JSON.stringify(readLocalState('goals'))"))
     # One set aside by an earlier visit is tried again when a page opens, in case the server has since been changed to take it.
     cdp.ev("writeLocal(localKey('goals'), { value: { again: { name: 'S11 Again', target: 50, unit: 'kg' } }, dirty: true, rejected: true, base: readLocalState('goals').value, stamp: 'set-aside' })")
     loaded()

@@ -104,7 +104,8 @@ celebrated.
 **Everywhere**
 - Works through network drops: everything saves on the phone first and uploads when the server is back, and a change
   made on one device (or in one tab) never undoes one made on another meanwhile. Opened offline, the Tracker, History,
-  Progress and Cardio show your workouts as the phone last loaded them. A tab left open while someone else signs in on
+  Progress and Cardio show your workouts as the phone last loaded them. Anything the server refuses stays on the phone, and
+  the Tracker says so, rather than holding up the rest. A tab left open while someone else signs in on
   the same browser stops saving, says so, and keeps its account's work for that account.
 - Add it to your phone's home screen to open it like an app.
 - Pick the days you train: the Tracker says what is planned today (and nudges you when you missed a day), History marks

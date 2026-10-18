@@ -319,7 +319,8 @@ Logged sets, notes, finished workouts, settings, custom templates, and your trai
   server refuses them (400, or 413 for one too large) they are sent one at a time, so the one it will not take cannot hold up
   the rest. That one is set aside (`rejected` in its stored record): still shown and kept on this device, not sent again and
   again, and tried afresh when a page opens or the part is next changed (`uploadStateParts` in `offline.js`). The name
-  inputs (exercise, template, goal and library names) stop at 100 characters, well inside the 1,000 the server allows.
+  inputs (exercise, template, goal and library names) stop at 100 characters, well inside the 1,000 the server allows. The
+  Tracker's status line names the parts set aside, as it counts the workouts the server refused.
 - If the browser will not let the app save on the device (its storage is full, or blocked), a banner says so: anything
   not uploaded yet is then only kept while the page stays open. It goes once the browser saves again.
 - A setting, template or program change made while offline is kept when the page reloads and uploads once the server is back; it is never replaced by the server's older copy.

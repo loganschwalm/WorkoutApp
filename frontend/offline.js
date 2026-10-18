@@ -169,7 +169,7 @@ function newClientId() {
 }
 
 function reportSyncStatus(uploaded = 0) {
-  window.dispatchEvent(new CustomEvent('syncchange', { detail:{ pendingWorkouts:readPendingWorkouts().length, rejectedWorkouts:readRejectedWorkouts().length, activeOffline:activeSyncFailed, uploaded } }));
+  window.dispatchEvent(new CustomEvent('syncchange', { detail:{ pendingWorkouts:readPendingWorkouts().length, rejectedWorkouts:readRejectedWorkouts().length, refusedParts:refusedStateParts(), activeOffline:activeSyncFailed, uploaded } }));
 }
 
 // The signed-in account decides which local copy is ours; fall back to the last known account when the server is unreachable.
@@ -389,6 +389,11 @@ function waitingToGoUp(record) {
   return !!record && record.dirty && !record.rejected;
 }
 
+// The parts the server has refused and this device keeps, for the Tracker's status line to say so.
+function refusedStateParts() {
+  return accountStateParts.filter(part => readLocalState(part)?.rejected);
+}
+
 // Sends the parts together, and if the server refuses them (400, or 413 for too large) one at a time, so one it will not
 // take cannot hold up the rest: that one is set aside, still shown and kept on this device, and tried again when a page
 // opens or the part is next changed, rather than every minute for ever. Resolves to the server's state after the last
@@ -415,8 +420,13 @@ async function uploadStateParts(dirty) {
     const [part, record] = dirty[0];
     console.error(`The server refused ${part} (${response.status}); it is kept on this device.`, await response.text().catch(() => ''));
     const latest = readLocalState(part);
-    // Changed while it went up: that change is not the one refused, and is sent next.
-    if (latest && latest.stamp === record.stamp) writeLocal(localKey(part), { ...latest, rejected:true });
+    // Changed while it went up: that change is not the one refused, and is sent next. Otherwise the copy noted above as sent
+    // is taken back out: the server answered, and did not store it, so it is not one that may have been stored unheard.
+    if (latest && latest.stamp === record.stamp) {
+      const { sent, ...waiting } = latest;
+      writeLocal(localKey(part), { ...waiting, ...(Array.isArray(record.sent) ? { sent:record.sent } : {}), rejected:true });
+    }
+    reportSyncStatus();
     return null;
   }
   if (!response.ok) throw new Error(`Settings sync failed (${response.status}).`);

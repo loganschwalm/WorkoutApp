@@ -40,7 +40,7 @@ function updateSavedWorkout(workout) {
 }
 
 function deleteWorkout(id) {
-  return fetch(`/api/workouts/${id}`, { method:'DELETE' })
+  return syncFetch(`/api/workouts/${id}`, { method:'DELETE' })
     .then(response => response.ok ? response.json() : Promise.reject(new Error('Unable to delete workout.')));
 }
 
@@ -466,6 +466,9 @@ async function finishWorkout() {
     : `“${workout.name}” is saved on this device and will sync when the server is reachable again.${note}`, 'success');
 }
 
+// What the status line calls each part of the account's state.
+const STATE_PART_NAMES = { settings:'settings', templates:'templates', program:'program', exerciseNotes:'exercise notes', goals:'goals', bodyweight:'weigh-ins', exerciseLibrary:'exercise library' };
+
 function renderStorageStatus() {
   const waiting = readPendingWorkouts().length;
   // Nothing to say while everything is saved to the account; the line only speaks up when something is not.
@@ -473,6 +476,9 @@ function renderStorageStatus() {
   if (waiting) parts.push(`${waiting} workout${waiting === 1 ? '' : 's'} waiting to sync`);
   const refused = readRejectedWorkouts().length;
   if (refused) parts.push(`${refused} workout${refused === 1 ? '' : 's'} refused by the server (kept on this device)`);
+  // A stale offline.js from the cache may not have it yet.
+  const refusedParts = typeof refusedStateParts === 'function' ? refusedStateParts() : [];
+  if (refusedParts.length) parts.push(`${refusedParts.map(part => STATE_PART_NAMES[part] || part).join(', ')} refused by the server (kept on this device)`);
   $('storageStatus').textContent = parts.join(' · ');
 }
 
