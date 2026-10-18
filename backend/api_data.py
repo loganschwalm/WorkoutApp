@@ -7,7 +7,7 @@ import time
 from http import HTTPStatus
 from urllib.parse import urlparse
 
-from config import EXPORT_FORMAT, MAX_IMPORT, MAX_IMPORTS_AT_ONCE, MAX_STATE_CHANGE, MAX_UNANSWERED_COPIES
+from config import DELETED_WORKOUTS_KEPT, EXPORT_FORMAT, MAX_IMPORT, MAX_IMPORTS_AT_ONCE, MAX_STATE_CHANGE, MAX_UNANSWERED_COPIES
 from database import connection, workout_tag
 from state import STATE_PARTS, load_state, merge_part, store_state, validate_state
 from validation import (
@@ -59,13 +59,17 @@ class DataApi:
             stored = client_id and database.execute('SELECT id FROM workouts WHERE user_id = ? AND client_id = ?', (user['id'], client_id)).fetchone()
             if stored:
                 status, stored_id = HTTPStatus.OK, stored['id']
+            elif client_id and database.execute('SELECT 1 FROM deleted_workouts WHERE user_id = ? AND client_id = ?', (user['id'], client_id)).fetchone():
+                # Uploaded, then deleted, and now sent again by a retry or another tab. Answered as done, so the page drops it from
+                # its queue, but not stored again. (An import is how a deleted workout comes back on purpose; it does not ask this.)
+                status, stored_id = HTTPStatus.OK, None
             else:
                 check_workout_room(workouts_held(database, user['id']))
                 check_workout_space(workout_bytes_held(database, user['id']), stored_size(name, notes, payload))
                 status = HTTPStatus.CREATED
                 stored_id = database.execute('INSERT INTO workouts (user_id, name, notes, created_at, payload, client_id) VALUES (?, ?, ?, ?, ?, ?)',
                                              (user['id'], name, notes, created_at, payload, client_id)).lastrowid
-        self.send_json(status, {'id': stored_id})
+        self.send_json(status, {'id': stored_id} if stored_id is not None else {'id': None, 'deleted': True})
 
     def update_workout(self, user):
         target = workout_id(self.api_path)
@@ -96,7 +100,17 @@ class DataApi:
             return
         # Deleting a workout that is already gone (from another tab, say) still leaves what was asked for.
         with connection() as database:
+            database.execute('BEGIN IMMEDIATE')
+            gone = database.execute('SELECT client_id FROM workouts WHERE id=? AND user_id=?', (target, user['id'])).fetchone()
             database.execute('DELETE FROM workouts WHERE id=? AND user_id=?', (target, user['id']))
+            if gone and gone['client_id']:
+                # Remembered, so an upload of it that is still on its way (see create_workout) does not bring it back. Only the
+                # newest are kept, so deleting and uploading again and again cannot grow the database.
+                database.execute('INSERT OR REPLACE INTO deleted_workouts (user_id, client_id, deleted_at) VALUES (?, ?, ?)',
+                                 (user['id'], gone['client_id'], int(time.time() * 1000)))
+                database.execute('DELETE FROM deleted_workouts WHERE user_id = ? AND client_id NOT IN '
+                                 '(SELECT client_id FROM deleted_workouts WHERE user_id = ? ORDER BY deleted_at DESC, client_id LIMIT ?)',
+                                 (user['id'], user['id'], DELETED_WORKOUTS_KEPT))
         self.send_json(HTTPStatus.OK, {'ok': True})
 
     def get_active_session(self, user):

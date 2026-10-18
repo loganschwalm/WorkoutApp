@@ -225,10 +225,22 @@ def migration_15_username_keys(database):
     database.execute('CREATE UNIQUE INDEX users_username_key ON users(username_key)')
 
 
+def migration_16_deleted_workouts(database):
+    # The clientIds of workouts that were deleted, so an upload of one that arrives afterwards (a retry whose first try was
+    # answered too slowly to be heard, or a second tab with the same queue) does not bring it back as a new row. See delete_workout.
+    database.execute('''
+        CREATE TABLE deleted_workouts (
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            client_id TEXT NOT NULL,
+            deleted_at INTEGER NOT NULL,
+            PRIMARY KEY (user_id, client_id)
+        ) WITHOUT ROWID''')
+
+
 MIGRATIONS = [migration_1_tables, migration_2_client_ids, migration_3_programs, migration_4_emails, migration_5_exercise_notes,
               migration_6_hashed_sessions, migration_7_goals, migration_8_bodyweight, migration_9_remembered_sessions,
               migration_10_exercise_library, migration_11_push, migration_12_workout_cache, migration_13_session_details,
-              migration_14_workout_bytes, migration_15_username_keys]
+              migration_14_workout_bytes, migration_15_username_keys, migration_16_deleted_workouts]
 
 
 def init_database():
@@ -278,8 +290,8 @@ def delete_account_rows(database, user_id):
     databases made since those references existed, so each is emptied by name. If the account held a username_key that an older
     account of the same name in other capitals went without (see migration_15_username_keys), the key goes to the oldest of
     those, so its name does not become free to register again in other capitals."""
-    for table in ('sessions', 'workouts', 'workout_versions', 'workout_bytes', 'active_sessions', 'user_state', 'password_resets',
-                  'push_subscriptions'):
+    for table in ('sessions', 'workouts', 'workout_versions', 'workout_bytes', 'deleted_workouts', 'active_sessions', 'user_state',
+                  'password_resets', 'push_subscriptions'):
         database.execute(f'DELETE FROM {table} WHERE user_id = ?', (user_id,))
     row = database.execute('SELECT username_key FROM users WHERE id = ?', (user_id,)).fetchone()
     database.execute('DELETE FROM users WHERE id = ?', (user_id,))

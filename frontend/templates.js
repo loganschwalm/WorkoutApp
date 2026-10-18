@@ -69,7 +69,7 @@ function renderTemplateExerciseEditor() {
     + `<input id="${id}${index}" type="number" inputmode="numeric" ${attributes} value="${escapeHTML(value ?? '')}" data-template-field="${field}" data-index="${index}" /></div>`;
   $('templateExerciseEditor').innerHTML = templateDraftExercises.map((exercise, index) => '<div class="template-exercise-row">'
     + `<div class="template-exercise-name"><label for="templateExercise${index}">Exercise</label>`
-    + `<input id="templateExercise${index}" type="text" list="exerciseNames" autocomplete="off" value="${escapeHTML(exercise.name)}"`
+    + `<input id="templateExercise${index}" type="text" maxlength="100" list="exerciseNames" autocomplete="off" value="${escapeHTML(exercise.name)}"`
     + ` data-template-field="name" data-index="${index}" required /></div>`
     + '<label class="setting-check template-timed">'
     + `<input type="checkbox" data-template-field="timed" data-index="${index}"${exercise.timed ? ' checked' : ''} /> Timed</label>`

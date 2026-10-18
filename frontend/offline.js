@@ -367,37 +367,12 @@ async function syncAccountState() {
   // Only once the signed-in account is known, so a copy kept for another account is never sent to this one.
   await window.localReady;
   if (stateSyncing) return null;
-  const dirty = accountStateParts.map(part => [part, readLocalState(part)]).filter(([, record]) => record && record.dirty);
+  const dirty = accountStateParts.map(part => [part, readLocalState(part)]).filter(([, record]) => waitingToGoUp(record));
   if (!dirty.length) return null;
   stateSyncing = true;
   let merged = null;
   try {
-    const body = Object.fromEntries(dirty.map(([part, record]) => {
-      const fill = accountStateFill[part] || (value => value);
-      // Copies sent before without an answer go too: the server may have stored them (see merge_values in server.py).
-      const unanswered = 'base' in record && Array.isArray(record.sent) && record.sent.length ? { sent:record.sent.map(fill) } : {};
-      return [part, { value:fill(record.value), ...('base' in record ? { base:fill(record.base) } : {}), ...unanswered }];
-    }));
-    // Noted before it goes, since its answer may never come (the page closed, the connection dropped) though the server
-    // stored it: a change made after it, even one back to how things were, is then still told apart from the base.
-    dirty.forEach(([part, record]) => {
-      if ('base' in record) writeLocal(localKey(part), { ...record, sent:[...(Array.isArray(record.sent) ? record.sent : []), record.value].slice(-5) });
-    });
-    const response = await syncFetch('/api/state', { method:'PATCH', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(body) });
-    if (!response.ok) throw new Error(`Settings sync failed (${response.status}).`);
-    merged = await response.json().catch(() => null);
-    dirty.forEach(([part, record]) => {
-      const latest = readLocalState(part);
-      if (!latest) return;
-      // Unchanged since it went up: clean, and what the next change starts from. The copy here stays as this page knows
-      // it, rather than taking the server's merged one under it; the next page load brings that.
-      if (latest.stamp === record.stamp) writeLocal(localKey(part), { value:latest.value, dirty:false, stamp:latest.stamp });
-      // Changed while it went up: still to go, now from what just went, so the next upload carries only what came after.
-      else {
-        const { sent, ...waiting } = latest;
-        writeLocal(localKey(part), { ...waiting, base:record.value });
-      }
-    });
+    merged = await uploadStateParts(dirty);
     stateRetryCount = 0;
   } catch (error) {
     console.error('Unable to sync settings or templates; they are saved on this device and will be retried.', error);
@@ -405,7 +380,59 @@ async function syncAccountState() {
   } finally {
     stateSyncing = false;
   }
-  if (accountStateParts.some(part => readLocalState(part)?.dirty)) scheduleStateSync(stateRetryCount ? Math.min(60000, 2000 * 2 ** (stateRetryCount - 1)) : 0);
+  if (accountStateParts.some(part => waitingToGoUp(readLocalState(part)))) scheduleStateSync(stateRetryCount ? Math.min(60000, 2000 * 2 ** (stateRetryCount - 1)) : 0);
+  return merged;
+}
+
+// A part changed here and not uploaded yet, and not one the server has refused (see uploadStateParts).
+function waitingToGoUp(record) {
+  return !!record && record.dirty && !record.rejected;
+}
+
+// Sends the parts together, and if the server refuses them (400, or 413 for too large) one at a time, so one it will not
+// take cannot hold up the rest: that one is set aside, still shown and kept on this device, and tried again when a page
+// opens or the part is next changed, rather than every minute for ever. Resolves to the server's state after the last
+// part it took, or null; anything else wrong (the network, a 5xx) throws, and the parts still waiting are tried again.
+async function uploadStateParts(dirty) {
+  const body = Object.fromEntries(dirty.map(([part, record]) => {
+    const fill = accountStateFill[part] || (value => value);
+    // Copies sent before without an answer go too: the server may have stored them (see merge_values in server.py).
+    const unanswered = 'base' in record && Array.isArray(record.sent) && record.sent.length ? { sent:record.sent.map(fill) } : {};
+    return [part, { value:fill(record.value), ...('base' in record ? { base:fill(record.base) } : {}), ...unanswered }];
+  }));
+  // Noted before it goes, since its answer may never come (the page closed, the connection dropped) though the server
+  // stored it: a change made after it, even one back to how things were, is then still told apart from the base.
+  dirty.forEach(([part, record]) => {
+    if ('base' in record) writeLocal(localKey(part), { ...record, sent:[...(Array.isArray(record.sent) ? record.sent : []), record.value].slice(-5) });
+  });
+  const response = await syncFetch('/api/state', { method:'PATCH', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(body) });
+  if (response.status === 400 || response.status === 413) {
+    if (dirty.length > 1) {
+      let merged = null;
+      for (const one of dirty) merged = (await uploadStateParts([one])) || merged;
+      return merged;
+    }
+    const [part, record] = dirty[0];
+    console.error(`The server refused ${part} (${response.status}); it is kept on this device.`, await response.text().catch(() => ''));
+    const latest = readLocalState(part);
+    // Changed while it went up: that change is not the one refused, and is sent next.
+    if (latest && latest.stamp === record.stamp) writeLocal(localKey(part), { ...latest, rejected:true });
+    return null;
+  }
+  if (!response.ok) throw new Error(`Settings sync failed (${response.status}).`);
+  const merged = await response.json().catch(() => null);
+  dirty.forEach(([part, record]) => {
+    const latest = readLocalState(part);
+    if (!latest) return;
+    // Unchanged since it went up: clean, and what the next change starts from. The copy here stays as this page knows
+    // it, rather than taking the server's merged one under it; the next page load brings that.
+    if (latest.stamp === record.stamp) writeLocal(localKey(part), { value:latest.value, dirty:false, stamp:latest.stamp });
+    // Changed while it went up: still to go, now from what just went, so the next upload carries only what came after.
+    else {
+      const { sent, ...waiting } = latest;
+      writeLocal(localKey(part), { ...waiting, base:record.value });
+    }
+  });
   return merged;
 }
 
@@ -413,6 +440,11 @@ async function syncAccountState() {
 // local value, anything else takes the server's, and with the server unreachable the local copy (or null) is used.
 async function loadAccountState() {
   await window.localReady;
+  // A part the server refused before is tried again, in case it has been changed since to take it (or the part to fit).
+  accountStateParts.forEach(part => {
+    const record = readLocalState(part);
+    if (record?.rejected) writeLocal(localKey(part), { ...record, rejected:false });
+  });
   const stampsBefore = Object.fromEntries(accountStateParts.map(part => [part, readLocalState(part)?.stamp]));
   // Changes still waiting go up first, so the copy loaded is the server's merge of them with any made elsewhere, rather
   // than this device's, which would hide the other device's until the next load. Its answer is that merged copy.

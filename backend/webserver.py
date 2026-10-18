@@ -7,6 +7,7 @@ import http.server
 import io
 import ipaddress
 import json
+import math
 import os
 import re
 import signal
@@ -69,6 +70,17 @@ def trusted_proxy(address):
         return False
     address = forwarded_address(str(address))
     return address is not None and any(address in network for network in TRUSTED_PROXIES)
+
+
+def refuse_constant(name):
+    raise ValueError(f'{name} is not JSON.')
+
+
+def finite_float(digits):
+    number = float(digits)
+    if not math.isfinite(number):
+        raise ValueError(f'{digits} is too big a number.')
+    return number
 
 
 class WebHandler(http.server.SimpleHTTPRequestHandler):
@@ -322,9 +334,14 @@ class WebHandler(http.server.SimpleHTTPRequestHandler):
             self.close_connection = True
             raise BadRequest('Send the request body as JSON, with Content-Type: application/json.', HTTPStatus.UNSUPPORTED_MEDIA_TYPE)
         try:
-            data = json.loads(self.rfile.read(length) or b'{}')
-        except ValueError:  # includes UnicodeDecodeError
-            raise BadRequest('Request body must be valid JSON.')
+            # Python's parser takes NaN, Infinity and numbers too big for a float (1e999), which JSON does not have: one stored
+            # would make a list of workouts or the account's state invalid JSON for the browser, and so unreadable.
+            data = json.loads(self.rfile.read(length) or b'{}', parse_constant=refuse_constant, parse_float=finite_float)
+            # And half of a surrogate pair, escaped on its own, parses to text that cannot be encoded, which would fail on being
+            # stored, as a 500 the page retries every minute. Written out as UTF-8 once, anything of that kind raises here.
+            json.dumps(data, ensure_ascii=False).encode('utf-8')
+        except (ValueError, RecursionError):  # ValueError includes UnicodeDecodeError and UnicodeEncodeError; nesting can be too deep
+            raise BadRequest('Request body must be valid JSON, without NaN, Infinity or half of a surrogate pair.')
         if not isinstance(data, dict):
             raise BadRequest('Request body must be a JSON object.')
         return data

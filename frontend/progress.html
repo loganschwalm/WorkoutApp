@@ -93,7 +93,7 @@
       <p class="subtitle">A weight to reach in an exercise. Your heaviest set so far is measured against it.</p>
       <ul class="goal-list" id="goalList"><li class="empty">No goals yet. Set one below.</li></ul>
       <form class="goal-form" id="goalForm" novalidate>
-        <div><label for="goalExercise">Exercise</label><input id="goalExercise" list="goalExercises" autocomplete="off" placeholder="Bench Press" /><datalist id="goalExercises"></datalist></div>
+        <div><label for="goalExercise">Exercise</label><input id="goalExercise" maxlength="100" list="goalExercises" autocomplete="off" placeholder="Bench Press" /><datalist id="goalExercises"></datalist></div>
         <div><label for="goalTarget">Target weight (<span class="unit-label">lbs</span>)</label><input id="goalTarget" type="number" inputmode="decimal" min="0" step="any" placeholder="225" /></div>
         <div><label for="goalBy">By (optional)</label><input id="goalBy" type="date" /></div>
         <button class="primary" type="submit">Set goal</button>
@@ -134,7 +134,7 @@
         <ul class="library-list" id="libraryList"></ul>
       </details>
       <form class="goal-form library-form" id="libraryForm" novalidate>
-        <div><label for="libraryName">New exercise</label><input id="libraryName" autocomplete="off" placeholder="Landmine Press" /></div>
+        <div><label for="libraryName">New exercise</label><input id="libraryName" maxlength="100" autocomplete="off" placeholder="Landmine Press" /></div>
         <div><label for="libraryMuscle">Muscle</label><select id="libraryMuscle"></select></div>
         <div><label for="libraryEquipment">Equipment</label><select id="libraryEquipment"></select></div>
         <button class="primary" type="submit">Add exercise</button>

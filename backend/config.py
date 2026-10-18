@@ -36,6 +36,9 @@ MAX_STATE_PART_BYTES = MAX_STATE_CHANGE // 2
 # key with every copy, inside the lock every change to the state takes, so a change of thousands of tiny copies held the
 # database for everyone for as long as the body limit allowed: minutes, or hours.
 MAX_UNANSWERED_COPIES = 10
+# How many deleted workouts' clientIds an account remembers, newest first, so an upload of one that arrives late is not stored
+# again (see delete_workout). An entry is about 100 bytes, and more than a person deletes in years.
+DELETED_WORKOUTS_KEPT = 5000
 # What an export file says it is, so an import can tell one from any other JSON.
 EXPORT_FORMAT = 'workout-tracker-export'
 # What one account may keep, so no one account (or a flood of them) can fill the disk. A workout is a few kilobytes: ten years of

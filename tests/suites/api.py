@@ -68,6 +68,16 @@ def run(t):
         ('an array as a workout', 'POST', '/api/workouts', b'[]', 400),
         ('an array as state', 'PUT', '/api/state', b'[]', 400),
         ('broken JSON as an active session', 'POST', '/api/active-session', b'{{', 400),
+        # Python's parser takes these, which JSON does not have. One stored would make a whole list invalid JSON for the browser.
+        ('NaN', 'POST', '/api/workouts', b'{"name": "x", "exercises": [], "extra": NaN}', 400),
+        ('Infinity', 'PATCH', '/api/state', b'{"settings": {"value": {"restDuration": -Infinity}}}', 400),
+        ('a number too big to be one', 'POST', '/api/workouts', b'{"name": "x", "exercises": [], "extra": 1e999}', 400),
+        # Text that cannot be encoded (half of a pair) failed on being stored, as a 500 the page then retried every minute.
+        ('half of a surrogate pair in a name', 'POST', '/api/workouts', b'{"name": "\ud800", "exercises": []}', 400),
+        ('half of a pair in state', 'PATCH', '/api/state', b'{"exerciseNotes": {"value": {"Squat": "\udc00"}}}', 400),
+        ('half of a pair when signing in', 'POST', '/api/auth/login', b'{"username": "\ud800", "password": "x"}', 400),
+        ('half of a pair in a key', 'POST', '/api/auth/login', b'{"\ud800": 1}', 400),
+        ('nesting far deeper than any page sends', 'POST', '/api/workouts', b'{"a":' * 100000, 400),
     ]
     for label, method, path, body, expected in cases:
         status, _, reply = request(method, path, body, json_headers, token=token)
@@ -80,6 +90,8 @@ def run(t):
     check('a 50 MB body is refused before it is read -> 413', status == 413 and reply.get('error'), f'{status} {reply!r}')
     n = len(t.workouts())
     check('none of that stored anything', n == 3, n)
+    status, _, reply = request('POST', '/api/auth/login', b'{"username": "lifter \ud83c\udfcb", "password": "chalk-and-plates-42"}', json_headers)
+    check('a whole pair (an emoji) is text like any other', status == 401, f'{status} {reply!r}')
     status, _, reply = request('GET', '/api/auth/me', token=token)
     check('the server is still answering normally', status == 200 and reply['user']['username'] == 'tester', f'{status} {reply!r}')
 
@@ -969,7 +981,7 @@ def run_connections(t, check):
 def run_structure(t, check, request):
     token = t.token
     json_headers = {'Content-Type': 'application/json'}
-    tables = ['active_sessions', 'password_resets', 'push_subscriptions', 'server_keys', 'sessions', 'user_state', 'users', 'workout_bytes',
+    tables = ['active_sessions', 'deleted_workouts', 'password_resets', 'push_subscriptions', 'server_keys', 'sessions', 'user_state', 'users', 'workout_bytes',
               'workout_versions', 'workouts']
 
     # ------------------------------------------------------------------ A12 schema at startup
@@ -2240,6 +2252,39 @@ def run_deletion(t, check, request):
     guesses = [post('/api/account/delete', {'password': f'guess-{n}'}, guesser)[0] for n in range(5)]
     status = post('/api/account/delete', {'password': 'chalk-and-plates-42'}, guesser)[0]
     check('guessing the password here is limited like signing in', guesses == [403] * 5 and status == 429 and me(guesser) is not None, f'{guesses} {status}')
+
+    print('A47 a workout that is deleted stays deleted when an upload of it is tried again')
+    keeper = register('keeper')
+    keeper_id = me(keeper)['id']
+    listed = lambda who=keeper: request('GET', '/api/workouts', token=who)[2]['workouts']
+    upload = lambda body, who=keeper: request('POST', '/api/workouts', json.dumps(body).encode(), json_headers, token=who)
+    tombstones = lambda: sqlite3.connect(t.db_path('test.db')).execute('SELECT client_id FROM deleted_workouts WHERE user_id = ?', (keeper_id,)).fetchall()
+    short_lived = {'name': 'Short Lived', 'clientId': 'short-lived', 'exercises': [t.ex('Squat', 100, 5, [(5, 100)])]}
+    status, _, reply = upload(short_lived)
+    check('a workout uploads', status == 201 and len(listed()) == 1, (status, reply))
+    check('and is deleted', request('DELETE', f"/api/workouts/{reply.get('id')}", None, None, token=keeper)[0] == 200 and listed() == [])
+    # A page whose first try was answered too slowly to hear sends it again, as does a second tab with the same queue.
+    status, _, reply = upload(short_lived)
+    check('the same upload arriving again is answered, saying the workout is gone', status == 200 and reply.get('deleted') is True, (status, reply))
+    check('and does not bring it back', listed() == [], listed())
+    check('another workout still uploads', upload({**short_lived, 'name': 'Another', 'clientId': 'another'})[0] == 201 and len(listed()) == 1)
+    bystander = register('bystander')
+    check("one account's deleted workout does not stop another account's with the same clientId", upload(short_lived, bystander)[0] == 201)
+    check('a workout with no clientId is stored as ever', upload({'name': 'Plain', 'exercises': []})[0] == 201 and upload({'name': 'Plain', 'exercises': []})[0] == 201)
+    exported = request('GET', '/api/export', token=keeper)[2]
+    gone = next(w for w in listed() if w['name'] == 'Another')
+    request('DELETE', f"/api/workouts/{gone['id']}", None, None, token=keeper)
+    check('importing a file that has a deleted workout is how it comes back', post('/api/import', exported, keeper)[0] == 200
+          and 'Another' in [w['name'] for w in listed()], [w['name'] for w in listed()])
+    kept = load_server().DELETED_WORKOUTS_KEPT
+    db = sqlite3.connect(t.db_path('test.db'))
+    db.executemany('INSERT INTO deleted_workouts (user_id, client_id, deleted_at) VALUES (?, ?, ?)', [(keeper_id, f'old-{n}', n) for n in range(kept)])
+    db.commit()
+    db.close()
+    request('DELETE', f"/api/workouts/{next(w for w in listed() if w['name'] == 'Another')['id']}", None, None, token=keeper)
+    remembered = {row[0] for row in tombstones()}
+    check('only the newest are kept, so deleting never fills the database', len(remembered) == kept and 'another' in remembered and 'old-0' not in remembered, len(remembered))
+    check('and they go with the account', post('/api/account/delete', {'password': 'chalk-and-plates-42'}, keeper)[0] == 200 and tombstones() == [], len(tombstones()))
 
     print('A31 an admin deletes an account from the command line')
     register('removable')

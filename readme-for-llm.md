@@ -309,9 +309,17 @@ Logged sets, notes, finished workouts, settings, custom templates, and your trai
   offline too, and a double tap on Save stores it once. Changing a saved workout (Edit) needs the server: offline,
   the form says so and keeps what was typed for another go.
 - Uploads are safe to retry: each finished workout carries a unique `clientId`, and the server stores it once however many copies arrive, even at the same moment. Two open tabs (or the installed app and a browser tab) uploading the same queue never lose a workout between them.
+  Nor does a retry bring back a workout deleted since: the `clientId` of each deleted workout is kept (`deleted_workouts`,
+  migration 16, the newest 5,000 per account), and an upload of one is answered as done and not stored again. Importing a
+  file that has it is how it comes back on purpose.
 - If the server ever refuses a queued workout as invalid, it is set aside on the device and the status line says so, so it never holds up the workouts queued after it.
   One the server fails to store (an error on its side, which may pass) stays in the queue and is tried again later,
   while the workouts after it upload.
+- The same for a part of the account's state (settings, templates, goals...): the changed parts go up together, and if the
+  server refuses them (400, or 413 for one too large) they are sent one at a time, so the one it will not take cannot hold up
+  the rest. That one is set aside (`rejected` in its stored record): still shown and kept on this device, not sent again and
+  again, and tried afresh when a page opens or the part is next changed (`uploadStateParts` in `offline.js`). The name
+  inputs (exercise, template, goal and library names) stop at 100 characters, well inside the 1,000 the server allows.
 - If the browser will not let the app save on the device (its storage is full, or blocked), a banner says so: anything
   not uploaded yet is then only kept while the page stays open. It goes once the browser saves again.
 - A setting, template or program change made while offline is kept when the page reloads and uploads once the server is back; it is never replaced by the server's older copy.
@@ -1884,7 +1892,11 @@ again first); delete the variable, or set it to anything else, to go back to eve
 
 The server is the record. Saved workouts and cardio sessions, the in-progress workout, custom templates, the training
 program, and settings are stored per account in SQLite, and every query is scoped to the signed-in account's user ID. The server
-checks the shape of everything it stores, so a malformed upload is refused rather than saved. A cardio session is a
+checks the shape of everything it stores, so a malformed upload is refused rather than saved. That starts with reading the
+body (`read_json`): beyond valid JSON, it refuses `NaN`, `Infinity` and numbers too big for a float (Python's parser takes them,
+and one stored would make a list of workouts or the state invalid JSON for the browser), text that cannot be encoded (half of a
+surrogate pair, which would fail on being stored, as a 500 the page retried every minute), and nesting too deep to parse, each
+with a 400. A cardio session is a
 workout of its own kind: `{"kind": "cardio", "name": "Run", "exercises": [], "duration": 1680, "cardio": {"activity": "run",
 "distance": 3.1, "distanceUnit": "mi", "calories": 310, "heartRate": 152, "incline": 2}}`, its time in seconds and everything
 in `cardio` but the activity optional (`floors` for the stair climber, and the machine settings `incline`, `resistance`,

@@ -261,3 +261,28 @@ def run(t):
           wait_for(lambda: server_state()['settings'].get('weeklyGoal') == before) and cdp.ev('getWorkoutSettings().weeklyGoal') == before,
           f"{server_state()['settings'].get('weeklyGoal')} {cdp.ev('getWorkoutSettings().weeklyGoal')}")
     cdp.drop_method = 'POST'
+
+    # ------------------------------------------------------------------ S11 a part the server refuses
+    print('S11 a part the server refuses does not hold up the others')
+    loaded()
+    goals_before, notes_before = server_state()['goals'], server_state()['exerciseNotes']
+    cdp.ev("""window.__patches = 0; const realSyncFetch = syncFetch;
+      syncFetch = (path, options = {}, timeout) => { if (options.method === 'PATCH') window.__patches += 1; return realSyncFetch(path, options, timeout); };""")
+    # A goal with no name is one the server will not take, whatever the page let through; the note beside it is fine.
+    cdp.ev("saveLocalState('goals', { broken: { name: '', target: 100, unit: 'lbs' } }); saveLocalState('exerciseNotes', { ...(readLocalState('exerciseNotes')?.value || {}), 'S11 Lift': 'kept' })")
+    check("the note goes up though the goal beside it was refused", wait_for(lambda: server_state()['exerciseNotes'].get('S11 Lift') == 'kept'), server_state()['exerciseNotes'])
+    check('the goal the server refused is not stored', server_state()['goals'] == goals_before, server_state()['goals'])
+    check('it is set aside here, still shown, and the note is no longer waiting',
+          cdp.wait("readLocalState('goals').rejected === true && !readLocalState('exerciseNotes').dirty"), cdp.ev("JSON.stringify([readLocalState('goals'), readLocalState('exerciseNotes')])"))
+    sent = cdp.ev('window.__patches')
+    cdp.pause(3)
+    check('and it is not sent again and again', cdp.ev('window.__patches') == sent, f"{sent} then {cdp.ev('window.__patches')}")
+    cdp.ev("saveLocalState('goals', { fixed: { name: 'S11 Lift', target: 100, unit: 'lbs' } })")
+    check('a change to it afterwards is tried afresh', wait_for(lambda: 'fixed' in server_state()['goals']), server_state()['goals'])
+    check('and clears it', cdp.wait("!readLocalState('goals').dirty && !readLocalState('goals').rejected"), cdp.ev("JSON.stringify(readLocalState('goals'))"))
+    # One set aside by an earlier visit is tried again when a page opens, in case the server has since been changed to take it.
+    cdp.ev("writeLocal(localKey('goals'), { value: { again: { name: 'S11 Again', target: 50, unit: 'kg' } }, dirty: true, rejected: true, base: readLocalState('goals').value, stamp: 'set-aside' })")
+    loaded()
+    check('a page opening tries it again', wait_for(lambda: 'again' in server_state()['goals']), server_state()['goals'])
+    api('PATCH', '/api/state', {'goals': {'value': goals_before}, 'exerciseNotes': {'value': notes_before}}, token)
+    loaded()
