@@ -480,7 +480,7 @@ function renderStorageStatus() {
   const parts = workoutsReachable ? [] : ['Server unreachable'];
   if (waiting) parts.push(`${waiting} workout${waiting === 1 ? '' : 's'} waiting to sync`);
   const refused = readRejectedWorkouts().length;
-  if (refused) parts.push(`${refused} workout${refused === 1 ? '' : 's'} refused by the server (kept on this device)`);
+  if (refused) parts.push(`${refused} workout${refused === 1 ? '' : 's'} refused by the server (kept on this device; see Settings, Your data)`);
   // A stale offline.js from the cache may not have it yet.
   const refusedParts = typeof refusedStateParts === 'function' ? refusedStateParts() : [];
   if (refusedParts.length) parts.push(`${refusedParts.map(part => STATE_PART_NAMES[part] || part).join(', ')} refused by the server (kept on this device)`);

@@ -277,6 +277,10 @@ html[data-theme="dark"] .link-button.danger-link { color:#ff9eaa; }
 .device > div { display:grid; justify-items:start; gap:2px; min-width:0; }
 .device .subtitle { margin:0; overflow-wrap:anywhere; }
 .device button { flex:none; }
+.refused-workouts { display:grid; gap:8px; margin-top:6px; padding-top:12px; border-top:1px solid var(--line); }
+.refused-workouts .subtitle, .refused-heading { margin:0; }
+.device.refused { flex-wrap:wrap; }
+.refused-actions { display:flex; flex-wrap:wrap; gap:8px; }
 .account-editor-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:6px; }
 .rest-panel {
   position:sticky; top:12px; bottom:calc(12px + var(--tab-bar)); z-index:4; display:flex; justify-content:space-between; align-items:center; gap:12px;

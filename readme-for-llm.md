@@ -1012,6 +1012,14 @@ the button that opened them. Settings include:
 - The account's email, with a button to add or change it. Changing it asks for your password.
 - Change password: asks for the current password and a new one of 8+ characters, keeps this device signed in, and
   signs the account out everywhere else.
+- Refused workouts (`refused-workouts.js`), in *Your data*: a finished workout the server answers 400 or 413 (over a limit, or
+  not a workout) is kept on the device, out of the upload queue (`rejected` in `offline.js`), and listed here with its name, its
+  day and what the server said (kept under its `clientId` in `refusals`; one from a build before clientIds says only that the
+  server will not accept it). The Tracker's status line points here, and the section's line says how many. *Retry* sends it once
+  now (`retryRefusedWorkout`): it leaves the device only if the server takes it, and otherwise stays with the new reason, or
+  with a note that the server could not be reached. It is not put back in the queue, which would only send it again and
+  again. *Download* saves it as an export file `Import` takes, without its `clientId`, so importing it cannot be mistaken for
+  the original. *Discard* asks first and then removes it for good. Names and reasons are shown as text.
 - Signed-in devices (`devices.js`): lists the browsers and phones signed in to the account, each named by its browser and system
   ("Safari on iPhone", from its User-Agent, as a fixed set of words and never the header itself), with when it was last used (to
   the nearest ten minutes), when it signed in, and the address it signed in from. This device is marked. Each other one has a

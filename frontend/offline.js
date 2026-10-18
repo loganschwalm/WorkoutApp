@@ -246,6 +246,52 @@ function readRejectedWorkouts() {
   return readLocal(localKey('rejected')) || [];
 }
 
+// Why the server refused each of them, by clientId: { status, error } as it answered, so the list in Settings can say. One from a
+// build from before clientIds has no reason kept.
+function readRefusals() {
+  return readLocal(localKey('refusals')) || {};
+}
+
+function noteRefusal(workout, status, answer) {
+  if (!workout.clientId) return;
+  let error = '';
+  try { error = String(JSON.parse(answer).error || ''); } catch (parseError) { /* not what the server's errors look like */ }
+  writeLocal(localKey('refusals'), { ...readRefusals(), [workout.clientId]: { status, error } });
+}
+
+// Taken off the device: the workout, and why it was refused. By clientId, never by position (see withoutQueuedWorkout).
+function removeRefusedWorkout(workout) {
+  writeLocal(localKey('rejected'), withoutQueuedWorkout(readRejectedWorkouts(), workout));
+  const { [workout.clientId]: gone, ...rest } = readRefusals();
+  writeLocal(localKey('refusals'), rest);
+  reportSyncStatus();
+}
+
+// Settings' list of the refused: one upload of one workout, now, whatever else is waiting. It is not put back in the queue, which
+// would only send it again and again: it leaves the device only if the server takes it, and otherwise stays, with what the
+// server said this time. Resolves { outcome: 'saved' | 'refused' | 'signedout' | 'unreachable' }.
+async function retryRefusedWorkout(workout) {
+  let response;
+  try {
+    response = await syncFetch('/api/workouts', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(workout) });
+  } catch (error) {
+    return { outcome:'unreachable' };
+  }
+  // Any success: stored now, already there from an earlier try, or deleted since (it says so), none of which is anything to keep.
+  if (response.ok) {
+    removeRefusedWorkout(workout);
+    reportSyncStatus(1);
+    return { outcome:'saved' };
+  }
+  if (response.status === 400 || response.status === 413) {
+    const answer = await response.text();
+    noteRefusal(workout, response.status, answer);
+    reportSyncStatus();
+    return { outcome:'refused' };
+  }
+  return { outcome:response.status === 401 ? 'signedout' : 'unreachable' };
+}
+
 // Finished workouts carry a clientId; one queued by a build from before that is matched by its contents.
 function sameQueuedWorkout(a, b) {
   return a.clientId || b.clientId ? a.clientId === b.clientId : JSON.stringify(a) === JSON.stringify(b);
@@ -280,7 +326,11 @@ function flushPendingWorkouts() {
         const response = await syncFetch('/api/workouts', { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(workout) });
         // 400 and 413 say this workout can never be accepted as it is; anything else may succeed on a retry.
         rejected = response.status === 400 || response.status === 413;
-        if (rejected) console.error(`The server refused a finished workout (${response.status}); it is kept on this device.`, await response.text());
+        if (rejected) {
+          const answer = await response.text();
+          console.error(`The server refused a finished workout (${response.status}); it is kept on this device.`, answer);
+          noteRefusal(workout, response.status, answer);
+        }
         // A signed-out answer would be the same for every workout, so the rest wait for signing in again.
         else if (response.status === 401) throw new Error('Workout sync failed: signed out.');
         else if (!response.ok) {

@@ -44,6 +44,12 @@ document.body.insertAdjacentHTML('beforeend', `
         </div>
         <input id="importFile" type="file" accept=".json,application/json" hidden />
         <p class="subtitle data-status" id="dataStatus" role="status" hidden></p>
+        <div class="refused-workouts" id="refusedWorkouts" hidden>
+          <h4 class="refused-heading">Refused by the server</h4>
+          <p class="subtitle">These finished workouts are only on this device: the server will not keep them as they are. Try one again once there is room, save it to a file, or discard it.</p>
+          <ul class="device-list" id="refusedList"></ul>
+          <p class="subtitle" id="refusedFeedback" role="status"></p>
+        </div>
       </div>`, { state:'Export or import' })}
       <details class="fold-details settings-fold" id="settings-account">
         <summary class="fold-summary"><h3 class="settings-section">Account</h3><span class="fold-state" id="settings-account-state"></span></summary>

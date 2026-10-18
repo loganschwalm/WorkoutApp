@@ -62,7 +62,7 @@ class AppTest:
     the server emails its password reset codes to `self.mail`, a MailSink.
     """
 
-    def __init__(self, frontend_dir=None, intercept=False, browser=True, mail=False):
+    def __init__(self, frontend_dir=None, intercept=False, browser=True, mail=False, server_env=None):
         wait_for_safe_day()
         self.workdir = tempfile.mkdtemp(prefix='workout-tests-')
         self.frontend_dir = frontend_dir
@@ -76,7 +76,7 @@ class AppTest:
         try:
             if mail:
                 self.mail = MailSink()
-            self.server = AppServer(os.path.join(self.workdir, 'test.db'), frontend_dir, self.mail.env if mail else None)
+            self.server = AppServer(os.path.join(self.workdir, 'test.db'), frontend_dir, {**(self.mail.env if mail else {}), **(server_env or {})} or None)
             self.base_url = self.server.base_url
             self.port = self.server.port
             self.api = self.server.api
