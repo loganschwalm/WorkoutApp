@@ -13,8 +13,9 @@ def run(t):
     STUBS = """window.__osc = 0; window.__gains = []; window.__vib = [];
       const co = AudioContext.prototype.createOscillator; AudioContext.prototype.createOscillator = function () { window.__osc++; return co.call(this); };
       const sv = AudioParam.prototype.setValueAtTime; AudioParam.prototype.setValueAtTime = function (v, t) { window.__gains.push(v); return sv.call(this, v, t); };
-      navigator.vibrate = p => { window.__vib.push(p); return true; };"""
-    RESET = "window.__osc = 0; window.__gains = []; window.__vib = []"
+      navigator.vibrate = p => { window.__vib.push(p); return true; };
+      window.__alerts = 0; const realAlert = window.playRestAlert; window.playRestAlert = (...asked) => { window.__alerts += 1; return realAlert(...asked); };"""
+    RESET = "window.__osc = 0; window.__gains = []; window.__vib = []; window.__alerts = 0"
 
     def counts():
         return cdp.ev('({ osc: window.__osc, vib: window.__vib.length, gain: window.__gains[0] ?? null })')
@@ -41,6 +42,8 @@ def run(t):
     def test_alert():
         cdp.ev(RESET)
         cdp.ev("document.getElementById('testAlertButton').click()")
+        # Looked at once the alert has been asked for, so that "no tone" is a tone not played rather than one not yet.
+        cdp.wait('window.__alerts >= 1')
         cdp.pause(0.2)
         return counts()
 
@@ -121,7 +124,8 @@ def run(t):
         log_set(8)
         cdp.pause(0.3)
         cdp.ev("window.__offset = 200000")
-        cdp.pause(0.8)
+        cdp.wait('window.__alerts >= 1')
+        cdp.pause(0.2)
         result = counts()
         end_workout()
         return result

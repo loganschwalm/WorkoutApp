@@ -67,10 +67,12 @@ def run(t):
     settle('/index.html', "document.querySelectorAll('#templateList [data-template-action=start]').length >= 3")
     cdp.ev("const s = document.createElement('script'); s.textContent = 'window.__inlineRan = true'; document.body.append(s);"
            "const i = document.createElement('img'); i.setAttribute('onerror', 'window.__handlerRan = true'); i.src = '/missing.png'; document.body.append(i);")
-    cdp.pause(0.5)
+    # The handler of an image that fails to load would run after the request fails, so the browser's two reports are waited for first:
+    # both having been made means both were stopped, and only then is it worth looking for what ran.
+    reported = cdp.wait("window.__csp.filter(v => v.includes('script-src')).length >= 2", timeout=10)
+    check('the browser reports both', reported, violations())
     check('an injected inline script is blocked', cdp.ev('window.__inlineRan === undefined') is True)
     check('and so is an inline event handler', cdp.ev('window.__handlerRan === undefined') is True)
-    check('and the browser reports both', len([v for v in violations() if 'script-src' in v]) >= 2, violations())
 
     # ------------------------------------------------------------------ S2 markup in stored data
     print('S2  text that looks like markup is shown as text everywhere')

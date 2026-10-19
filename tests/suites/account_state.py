@@ -275,8 +275,12 @@ def run(t):
     check('it is set aside here, still shown, and the note is no longer waiting',
           cdp.wait("readLocalState('goals').rejected === true && !readLocalState('exerciseNotes').dirty"), cdp.ev("JSON.stringify([readLocalState('goals'), readLocalState('exerciseNotes')])"))
     sent = cdp.ev('window.__patches')
-    cdp.pause(3)
-    check('and it is not sent again and again', cdp.ev('window.__patches') == sent, f"{sent} then {cdp.ev('window.__patches')}")
+    # Not "nothing in three seconds" but: a later change goes up (the loop that would send the goal again has had its turns, since the
+    # upload that carries the note is the one that would carry it), and that is the only thing sent.
+    cdp.ev("saveLocalState('exerciseNotes', { ...(readLocalState('exerciseNotes')?.value || {}), 'S11 Lift': 'kept again' })")
+    check('a later change goes up', wait_for(lambda: server_state()['exerciseNotes'].get('S11 Lift') == 'kept again'), server_state()['exerciseNotes'])
+    cdp.pause(1.5)
+    check('and the goal is not sent again and again', cdp.ev('window.__patches') == sent + 1, f"{sent} then {cdp.ev('window.__patches')}")
     check('the Tracker says so beside the workouts the server refused', cdp.ev("renderStorageStatus(), document.getElementById('storageStatus').textContent") == 'goals refused by the server (kept on this device)',
           cdp.ev("document.getElementById('storageStatus').textContent"))
     # What the server refused was never stored, so taking the entry out again here is no deletion of anything it has: another

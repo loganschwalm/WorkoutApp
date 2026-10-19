@@ -293,9 +293,13 @@ def run(t):
     check('Undo once another workout has started says it cannot, and keeps the new one',
           cdp.ev(feedback) == f'“{started}” cannot come back: another workout has started.' and cdp.ev(TITLE) == 'Push Day', cdp.ev(feedback))
     cdp.ev("document.getElementById('endWorkoutBtn').click()")
-    cdp.pause(1)
+    # The cancel has been heard by the server (its workout in progress is gone) and nothing is waiting to upload: only then is a count of
+    # what it saved a count of what a cancelled workout could have been saved as.
+    check('(the cancel has reached the server, and nothing waits to upload)', t.wait_for(
+        lambda: api('GET', '/api/active-session', token=canceller)[0]['session'] is None and cdp.ev('readPendingWorkouts().length') == 0))
+    cdp.pause(0.3)
 
-    check('nothing cancelled was saved', t.wait_for(lambda: len(api('GET', '/api/workouts', token=canceller)[0]['workouts']) == before_saved),
+    check('nothing cancelled was saved', len(api('GET', '/api/workouts', token=canceller)[0]['workouts']) == before_saved,
           len(api('GET', '/api/workouts', token=canceller)[0]['workouts']))
     check("and last time's numbers, the records, the upload queue and the program's next day are as they were", cdp.ev(stats) == before_stats,
           [cdp.ev(stats), before_stats])

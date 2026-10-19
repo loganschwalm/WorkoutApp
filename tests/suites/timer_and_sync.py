@@ -166,9 +166,9 @@ def run(t):
     check('server has the started workout', server_sets() == 0, server_sets())
     cdp.block_api = True
     log_set(8); log_set(8)
-    cdp.pause(1.5)
+    # The page has tried and failed (it says so) before the server is looked at, so the look is at a server that was asked.
+    check('user is told the sets are saved on this device', wait_for(lambda: safe_ev("!document.getElementById('activeSyncNotice').hidden", False) is True))
     check('server has not seen the offline sets', server_sets() == 0, server_sets())
-    check('user is told the sets are saved on this device', safe_ev("!document.getElementById('activeSyncNotice').hidden", False) is True)
     cdp.block_api = False
     check('sets sync automatically once the server is back', wait_for(lambda: server_sets() == 2), server_sets())
     cdp.pause(0.5)
@@ -185,7 +185,7 @@ def run(t):
     cdp.pause(0.8)
     shown = cdp.ev("document.querySelectorAll('#completedSets li').length")
     check('all three logged sets are still there', shown == 3, shown)
-    check('page says the server is unreachable', 'unreachable' in (cdp.ev("document.getElementById('storageStatus').textContent") or '').lower(), cdp.ev("document.getElementById('storageStatus').textContent"))
+    check('page says the server is unreachable', wait_for(lambda: 'unreachable' in (cdp.ev("document.getElementById('storageStatus').textContent") or '').lower()), cdp.ev("document.getElementById('storageStatus').textContent"))
     check('server still has only the first two sets', server_sets() == 2, server_sets())
     cdp.block_api = False
     check('third set reaches the server later', wait_for(lambda: server_sets() == 3), server_sets())
@@ -198,8 +198,8 @@ def run(t):
     check('workout ends normally', cdp.ev(HIDDEN) is True)
     fb = cdp.ev("document.getElementById('formFeedback').textContent") or ''
     check('user is told it is saved on this device', 'saved on this device' in fb, fb)
-    check('workout is queued locally', safe_ev('readPendingWorkouts().length', -1) == 1, safe_ev('readPendingWorkouts().length', -1))
-    check('page shows a workout waiting to sync', 'waiting to sync' in (cdp.ev("document.getElementById('storageStatus').textContent") or ''), cdp.ev("document.getElementById('storageStatus').textContent"))
+    check('workout is queued locally', wait_for(lambda: safe_ev('readPendingWorkouts().length', -1) == 1), safe_ev('readPendingWorkouts().length', -1))
+    check('page shows a workout waiting to sync', wait_for(lambda: 'waiting to sync' in (cdp.ev("document.getElementById('storageStatus').textContent") or '')), cdp.ev("document.getElementById('storageStatus').textContent"))
     check('server has not got it yet', {w['id'] for w in workouts()} == before_ids)
     cdp.send('Page.reload')
     time.sleep(0.4)
@@ -505,7 +505,7 @@ def run(t):
     cdp.send('Network.setCookie', name='session', value=token, domain='127.0.0.1', path='/')
     cdp.goto('/index.html')
     check('signed in to its own account again, it uploads there', wait_for(lambda: any(w['name'] == 'Left Open' for w in workouts())))
-    check('once', [w['name'] for w in workouts()].count('Left Open') == 1)
+    check('once', wait_for(lambda: safe_ev('readPendingWorkouts().length', -1) == 0) and [w['name'] for w in workouts()].count('Left Open') == 1)
     open_tracker()
     # The other tab writes the last account seen on signing in, which this page hears before anything goes up.
     cdp.ev(f"window.dispatchEvent(new StorageEvent('storage', {{ key: 'workout-tracker-last-user', newValue: '{other_id}' }}))")
