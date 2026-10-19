@@ -16,8 +16,8 @@ python tests/lint.py                     # the lists kept by hand agree with the
 python tests/run.py api                  # one suite (the API one needs no browser); no name runs them all, in parallel
 ```
 
-The browser suites need Chrome, Chromium or Edge and `pip install -r tests/requirements.txt`. CI runs everything on Python 3.9 and
-3.12, and moves the `stable` branch (what installs follow) only once all of it passes on `main`. Run `lint.py` and the suite for
+The browser suites need Chrome, Chromium or Edge and `pip install -r tests/requirements.txt`. CI runs everything on Python 3.9, 3.12 and
+3.13, and moves the `stable` branch (what installs follow) only once all of it passes on `main`. Run `lint.py` and the suite for
 the area you touched before saying something works; a failing check prints the value it observed.
 
 ## Rules that are easy to break

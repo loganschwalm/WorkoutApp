@@ -1,5 +1,8 @@
 # The tests drive a real browser over the Chrome DevTools Protocol.
 # The app itself still needs nothing beyond the Python standard library.
-websocket-client>=1.0
-# Checks the Python for slips (an unused name, a string that was meant to be an f-string); CI runs it beside the tests.
-pyflakes>=3.0
+# A release in the same major version, so a new one is not what breaks a run.
+websocket-client>=1.0,<2
+# Checks the Python for slips (an unused name, a string that was meant to be an f-string); CI runs it beside the tests, and a
+# slip it newly finds stops a release, so it is exactly one version: the newest that installs on Python 3.9 (4.0 needs 3.10), so
+# every job runs the same check. Move it on purpose, after reading what the new version looks for.
+pyflakes==3.4.0

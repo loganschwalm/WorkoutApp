@@ -1963,7 +1963,7 @@ still needs nothing beyond the Python standard library. See `tests/README.md` fo
 suite breakdown and for how to add a test.
 
 GitHub Actions runs every suite on each push and pull request (`.github/workflows/tests.yml`), on Python 3.9 (the
-oldest this README says the server runs on) and 3.12, after pyflakes and `tests/lint.py` (which checks that the lists kept
+oldest this README says the server runs on), 3.12 (the Docker image's) and 3.13, after pyflakes and `tests/lint.py` (which checks that the lists kept
 by hand agree with the files: what the service worker precaches, the names scripts share, the documented environment
 variables and the registered suites). Beside them, a job runs `tests/as-root.sh` as root on its own runner, which is
 thrown away afterwards: the installer installing from a copy of the checkout, an update to a version that upgrades the

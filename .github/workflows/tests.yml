@@ -29,8 +29,9 @@ jobs:
       # Both finish, so a failure on one version shows whether the other has it too.
       fail-fast: false
       matrix:
-        # The oldest Python the README says the server runs on, and a current one (what a new Debian container has).
-        python: ['3.9', '3.12']
+        # The oldest Python the README says the server runs on, the one the Docker image uses, and the newest a Debian ships
+        # (13). 3.14 waits for the pinned pyflakes to say it understands it.
+        python: ['3.9', '3.12', '3.13']
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 

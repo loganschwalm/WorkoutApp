@@ -21,8 +21,8 @@ python tests/run.py --list           # suite names
 ```
 
 GitHub Actions runs them all on every push and pull request (`.github/workflows/tests.yml`),
-four suites at a time, on Python 3.9 (the oldest the README says the server runs on) and 3.12, and moves the `stable`
-branch that installs follow once both pass on `main`. Before them it runs pyflakes, `tests/lint.py` and ShellCheck (on the shell
+four suites at a time, on Python 3.9 (the oldest the README says the server runs on), 3.12 (what the Docker image uses) and 3.13,
+and moves the `stable` branch that installs follow once all pass on `main`. Before them it runs pyflakes, `tests/lint.py` and ShellCheck (on the shell
 scripts, settings in `.shellcheckrc`). A job of its own runs `tests/as-root.sh` as root on a runner that is thrown away afterwards,
 and `stable` waits for it too: the Proxmox installer installing, an update to a version that upgrades the database and then fails
 to start being undone (the previous version running again, with the database as it was and the unit it had, and the failed
@@ -50,7 +50,7 @@ Exit status is 0 only if every check passed. Failures print the reason inline:
 
 ### Requirements
 
-- Python 3 (developed and run on 3.11; older versions are untested)
+- Python 3.9 or newer (CI runs 3.9, 3.12 and 3.13)
 - `websocket-client` (the only dependency; the app itself stays standard-library only)
 - Chrome, Chromium or Edge
 
