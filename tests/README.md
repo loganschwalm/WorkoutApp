@@ -27,7 +27,8 @@ scripts, settings in `.shellcheckrc`). A job of its own runs `tests/as-root.sh` 
 and `stable` waits for it too: the Proxmox installer installing (and, with stand-ins for `pct`, `ACTION` and `CTID` choosing what it does and refusing what is not clear), an update to a version that upgrades the database and then fails
 to start being undone (the previous version running again, with the database as it was and the unit it had, and the failed
 one's kept), the unit's sandbox and the database being readable by the service alone (and an update closing one that was not),
-a working update and one with nothing new, and the Docker entrypoint handing over a data directory (and saying what it cannot, rather than
+a working update and one with nothing new, the daily backup (a database that opens, readable by root alone, pruned to the newest few, the
+backups taken before updates left alone) and putting one back by the steps in the documentation, and the Docker entrypoint handing over a data directory (and saying what it cannot, rather than
 stopping). Never run it on a computer you use: it installs a service and writes to `/etc`, `/opt` and `/var`.
 
 ```bash

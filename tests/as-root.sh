@@ -7,7 +7,8 @@
 # the previous version back with the database as it was before (the previous version refuses one a newer version
 # migrated, so it only starts if the database really went back) and the systemd unit it had, and keep what the failed one
 # left. The unit's sandbox is checked on the way, and that a database left readable by others is closed. A working update
-# afterwards must go through with the workout still there, and one with nothing new must take no backup.
+# afterwards must go through with the workout still there, and one with nothing new must take no backup. The daily backup is run,
+# pruned and then restored by the steps in the documentation.
 #
 # The Docker image's entrypoint handing the data directory to its user: what it can, saying what it cannot rather than
 # stopping the container, and never the whole filesystem.
@@ -180,6 +181,42 @@ check 'with the workout still there' 'gone' has_workout
 check 'having backed the database up first' "$(pre_update_backups) of them" same "$(pre_update_backups)" 2
 bash ct/workout-tracker.sh || fail 'an update with nothing new failed'
 check 'an update with nothing new takes no backup' "$(pre_update_backups) of them" same "$(pre_update_backups)" 2
+
+echo 'B   the daily backup, and putting one back by the steps in the documentation'
+newest_kept() { [[ -f "$snap_after" && -f "$snap" && -f "$backups/workouts-20200104-000000.db" && ! -f "$backups/workouts-20200101-000000.db" ]]; }
+has_after() { [[ "$(curl -fsS -b "$cookies" "$base/api/workouts")" == *'"After The Backup"'* ]]; }
+daily() { find "$backups" -maxdepth 1 -name 'workouts-*.db' | wc -l; }
+snap="$(workout-tracker-backup)"
+check 'a backup made now is a database that opens' "$(sqlite3 "$snap" 'PRAGMA integrity_check')" same "$(sqlite3 "$snap" 'PRAGMA integrity_check')" ok
+check 'with the workout saved before it' 'it is not there' same "$(sqlite3 "$snap" "SELECT COUNT(*) FROM workouts WHERE name = 'Before The Update'")" 1
+check 'readable by root alone, in a directory of root alone' "$(stat -c '%a %a' "$snap" "$backups" | tr '\n' ' ')" same "$(stat -c '%a %a' "$snap" "$backups" | tr '\n' ' ')" '600 700 '
+check 'and the backups taken before the updates are not touched by it' "$(pre_update_backups) of them" same "$(pre_update_backups)" 2
+# Only the newest few are kept: older ones, named as a day's are, go; whatever else is there stays.
+find "$backups" -maxdepth 1 -name 'workouts-*.db' ! -path "$snap" -delete
+for day in 1 2 3 4; do cp "$snap" "$backups/workouts-2020010$day-000000.db"; done
+sleep 1
+cp /etc/workout-tracker/install.conf "$work/install.conf.kept"
+sed -i "s/^BACKUP_KEEP=.*/BACKUP_KEEP='3'/" /etc/workout-tracker/install.conf
+snap_after="$(workout-tracker-backup)"
+cp "$work/install.conf.kept" /etc/workout-tracker/install.conf
+check 'with BACKUP_KEEP at 3, three daily backups are left' "$(daily) of them" same "$(daily)" 3
+check 'the newest ones' 'an old one stayed' newest_kept
+check 'and the ones from before updates are still there' "$(pre_update_backups) of them" same "$(pre_update_backups)" 2
+
+# The documented steps, as written under "Backups": the app is stopped, the backup put in place of the database, and the app started.
+curl -fsS -b "$cookies" -H 'Content-Type: application/json' "$base/api/workouts" \
+  -d '{"name":"After The Backup","clientId":"after-backup","exercises":[{"name":"Row","reps":8}]}' >/dev/null || fail 'could not save a workout after the backup'
+check 'a workout saved after the backup is there' 'it is not' has_after
+systemctl stop workout-tracker
+cp "$snap" /var/lib/workout-tracker/workouts.db
+rm -f /var/lib/workout-tracker/workouts.db-wal /var/lib/workout-tracker/workouts.db-shm
+chown workout:workout /var/lib/workout-tracker/workouts.db
+systemctl start workout-tracker
+for _ in $(seq 1 30); do curl -fsS -o /dev/null "$base/api/auth/me" && break; sleep 1; done
+check 'restored, the app answers' 'no answer' curl -fsS -o /dev/null "$base/api/auth/me"
+check 'with the workout from before the backup' 'gone' has_workout
+check 'and not the one saved after it' 'it is still there' not has_after
+check 'the database is readable by the service alone again' "$(stat -c '%U %a' "$db")" same "$(stat -c '%U %a' "$db")" 'workout 600'
 
 echo 'D   the Docker entrypoint hands the data directory over'
 volume="$work/volume"

@@ -1972,7 +1972,8 @@ by hand agree with the files: what the service worker precaches, the names scrip
 variables and the registered suites). Beside them, a job runs `tests/as-root.sh` as root on its own runner, which is
 thrown away afterwards: the installer installing from a copy of the checkout, an update to a version that upgrades the
 database and then fails to start being undone (the previous version running again on the database as it was), a working
-update and one with nothing new (and, in each, the unit's sandbox and the database's permissions), and the Docker entrypoint handing over a data directory. The workflow's
+update and one with nothing new (and, in each, the unit's sandbox and the database's permissions), the daily backup run, pruned and
+restored by the steps under *Backups*, and the Docker entrypoint handing over a data directory. The workflow's
 token can only read, except in the job that moves `stable`, and its actions are pinned to the commit of a release (the version is
 in a comment on each line; to move one, take the commit its tag points at from the action's repository, not the tag). When they all pass on `main`, it moves the `stable` branch to that commit, and that
 is the branch installs and updates follow. To hold releases back for a while, set the repository variable `HOLD_STABLE` to
