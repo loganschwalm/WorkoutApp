@@ -35,6 +35,10 @@ DATA_DIR="${DATA_DIR:-/var/lib/workout-tracker}"
 SERVICE_USER="${SERVICE_USER:-workout}"
 APP_PORT="${APP_PORT:-6769}"
 
+# What to do, without the menu (or a terminal to show it on): install, update or https. Left empty, the menu asks when there is a
+# terminal, and with none an install is made. CTID then names the container to act on: for an update or https it must be one that
+# is running with the app installed, and for an install it is the ID the new one is given.
+ACTION="${ACTION:-}"
 CTID="${CTID:-}"
 CT_HOSTNAME="${CT_HOSTNAME:-workout-tracker}"
 CT_PASSWORD="${CT_PASSWORD:-}"
@@ -727,14 +731,23 @@ pick_container() {
   mapfile -t found < <(installed_containers)
   [[ ${#found[@]} -gt 0 ]] ||
     die "no running container has $APP installed. Start it first, or create a new one."
-  if [[ ${#found[@]} -eq 1 ]] || ! interactive; then
-    if [[ ${#found[@]} -gt 1 ]]; then
-      msg_warn "${#found[@]} containers have $APP installed; using LXC ${found[0]%% *}."
-      msg_warn "Run this from a terminal to choose, or use 'pct enter <CTID>' on the one you want."
-    fi
+  # A CTID that was given is the one asked for. If it is not among them, nothing is done: another is never taken in its place.
+  if [[ -n "$CTID" ]]; then
+    for row in "${found[@]}"; do
+      if [[ "${row%% *}" == "$CTID" ]]; then
+        printf '%s' "$CTID"
+        return 0
+      fi
+    done
+    die "LXC $CTID is not a running container with $APP installed. Those that are: $(printf '%s, ' "${found[@]%% *}" | sed 's/, $//')."
+  fi
+  if [[ ${#found[@]} -eq 1 ]]; then
     printf '%s' "${found[0]%% *}"
     return 0
   fi
+  # With a choice to make and nowhere to ask, one is not made at random: with several, an update is not guessed at.
+  interactive ||
+    die "${#found[@]} containers have $APP installed ($(printf '%s, ' "${found[@]%% *}" | sed 's/, $//')); set CTID to the one to use."
   for row in "${found[@]}"; do menu+=("${row%% *}" "${row#* }"); done
   whiptail --title "$APP" --menu "$prompt" 16 62 6 "${menu[@]}" 3>&1 1>&2 2>&3 || die "cancelled."
 }
@@ -1169,7 +1182,13 @@ main() {
   header
 
   local action="install" choice
-  if interactive; then
+  case "$ACTION" in
+    '' | install | update | https) ;;
+    advanced) interactive || die "ACTION=advanced asks questions, so it needs a terminal." ;;
+    *) die "ACTION must be install, update or https (got '$ACTION')." ;;
+  esac
+  [[ -z "$ACTION" ]] || action="$ACTION"
+  if [[ -z "$ACTION" ]] && interactive; then
     choice="$(whiptail --title "$APP" --menu "Proxmox VE helper script" 16 66 5 \
       "1" "Create a new LXC with default settings" \
       "2" "Create a new LXC with advanced settings" \

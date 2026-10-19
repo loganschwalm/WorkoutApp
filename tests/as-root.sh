@@ -80,6 +80,59 @@ check 'the unit makes what the service writes private to it' "$(systemctl show -
 check 'and keeps all but the data directory read-only to it' "$(systemctl show -p ProtectSystem --value workout-tracker)" same "$(systemctl show -p ProtectSystem --value workout-tracker)" strict
 check 'so the database it made is readable by it alone' "$(stat -c '%U %a' "$db")" same "$(stat -c '%U %a' "$db")" 'workout 600'
 
+# --- host actions (begin) ---
+echo 'H   ACTION and CTID say what the script on a Proxmox host does, with no menu: stand-in pct, pvesm and pvesh record what it asks of them'
+stubs="$work/stubs"
+pctlog="$work/pct.log"
+mkdir -p "$stubs"
+cat >"$stubs/pct" <<'STUB'
+#!/usr/bin/env bash
+# What a Proxmox host's pct answers: containers 105 and 106 are running, 107 is not, and the ones in STUB_INSTALLED have the app.
+echo "pct $*" >>"$PCT_LOG"
+case "$1" in
+  list) printf 'VMID Status Lock Name\n105 running  workout\n106 running  other\n107 stopped  stopped\n' ;;
+  config) echo "hostname: lxc-$2" ;;
+  exec)
+    id="$2"
+    shift 3
+    case "$*" in
+      test\ -f\ *) [[ " ${STUB_INSTALLED:-105} " == *" $id "* ]] ;;
+      ip\ *) echo '2: eth0    inet 192.0.2.5/24 brd 192.0.2.255 scope global eth0' ;;
+      sh\ -c\ *) printf 6769 ;;
+    esac ;;
+esac
+STUB
+printf '#!/usr/bin/env bash\nexit 0\n' >"$stubs/pvesm"
+printf '#!/usr/bin/env bash\necho 200\n' >"$stubs/pvesh"
+chmod +x "$stubs/pct" "$stubs/pvesm" "$stubs/pvesh"
+# The installer as it would be run on the host (no terminal here, so no menu), its answers in $work/host.out.
+host() { PATH="$stubs:$PATH" PCT_LOG="$pctlog" env "$@" bash ct/workout-tracker.sh >"$work/host.out" 2>&1; }
+asked() { grep -q -- "$1" "$pctlog"; }
+
+: >"$pctlog"
+check 'ACTION=bogus is refused' 'it went on' not host ACTION=bogus
+check 'before it asked the host for anything' "$(grep -c . "$pctlog") calls" same "$(grep -c . "$pctlog")" 0
+check 'and says what the choices are' 'no word of it' grep -q 'install, update or https' "$work/host.out"
+check 'ACTION=advanced, which is all questions, needs a terminal' 'it went on' not host ACTION=advanced
+check 'ACTION=update for a container that does not have the app is refused' 'it went on' not host ACTION=update CTID=106
+check 'whatever else is installed, nothing is changed' 'it pushed something' not asked 'pct push'
+check 'as is a container that is not running' 'it went on' not host ACTION=update CTID=107
+STUB_INSTALLED="105 106"
+export STUB_INSTALLED
+check 'ACTION=update with a choice of containers and none named is refused' 'it picked one' not host ACTION=update
+check 'and says which there are' 'no list' grep -q '105, 106' "$work/host.out"
+check 'with nothing pushed to either' 'it pushed something' not asked 'pct push'
+unset STUB_INSTALLED
+: >"$pctlog"
+check 'ACTION=update CTID=105 updates that container' 'it did not finish' host ACTION=update CTID=105
+check 'by sending it the setup and running it there' 'no push' asked 'pct push 105 '
+check 'once' "$(grep -c 'pct exec 105 -- bash /root/workout-tracker-setup.sh' "$pctlog") runs" same "$(grep -c 'pct exec 105 -- bash /root/workout-tracker-setup.sh' "$pctlog")" 1
+check 'and creates nothing' 'it created a container' not asked 'pct create'
+: >"$pctlog"
+check 'with one container that has the app, update needs no CTID' 'it did not finish' host ACTION=update
+check 'and it is that one' 'wrong container' asked 'pct exec 105 -- bash /root/workout-tracker-setup.sh'
+# --- host actions (end) ---
+
 echo 'F   an update to a version that migrates the database and then does not start'
 # The unit as this install left it, marked, so that going back is seen to put the unit back as well as the code and the database.
 echo '# the unit from before the update' >>"$unit"

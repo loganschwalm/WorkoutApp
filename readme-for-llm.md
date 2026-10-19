@@ -1253,7 +1253,8 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/loganschwalm/WorkoutApp/
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `CTID` | next free ID | LXC container ID |
+| `ACTION` | *(the menu, or install with no terminal)* | `install`, `update` or `https`: what to do with no menu, so a script or a scheduled job can update. `advanced` asks questions, so it needs a terminal. Anything else is refused before anything is done |
+| `CTID` | next free ID | LXC container ID: for an install the ID the new one is given; for `ACTION=update` or `https` the container to act on, which must be running with the app installed (another is never taken in its place) |
 | `CT_HOSTNAME` | `workout-tracker` | Container hostname |
 | `CT_PASSWORD` | *(none)* | Root password, which the container's console then asks for; blank means the console signs in as root by itself |
 | `DEBIAN_VERSION` | `12` | Debian template major version, `12` or `13` |
@@ -1281,7 +1282,10 @@ type. A template cannot live on `local-lvm`, so it is normally `local` even when
 
 #### Updating
 
-Run the same command again on the Proxmox host and choose **Update an existing container**. That
+Run the same command again on the Proxmox host and choose **Update an existing container**. From a script (no terminal, so no menu),
+say so: `ACTION=update CTID=105 bash -c "$(curl -fsSL …)"`. With one container that has the app, `CTID` can be left out; with more
+than one, an update without `CTID` is refused and lists them, rather than choosing for you. Without `ACTION`, a run with no terminal
+still creates a new container, as it always has. That
 fetches the latest commit on the `stable` branch while the app keeps running, then stops the app, backs the
 database up, switches to the new commit, rewrites the systemd unit, starts the service again, and prints
 the URL.

@@ -24,7 +24,7 @@ GitHub Actions runs them all on every push and pull request (`.github/workflows/
 four suites at a time, on Python 3.9 (the oldest the README says the server runs on), 3.12 (what the Docker image uses) and 3.13,
 and moves the `stable` branch that installs follow once all pass on `main`. Before them it runs pyflakes, `tests/lint.py` and ShellCheck (on the shell
 scripts, settings in `.shellcheckrc`). A job of its own runs `tests/as-root.sh` as root on a runner that is thrown away afterwards,
-and `stable` waits for it too: the Proxmox installer installing, an update to a version that upgrades the database and then fails
+and `stable` waits for it too: the Proxmox installer installing (and, with stand-ins for `pct`, `ACTION` and `CTID` choosing what it does and refusing what is not clear), an update to a version that upgrades the database and then fails
 to start being undone (the previous version running again, with the database as it was and the unit it had, and the failed
 one's kept), the unit's sandbox and the database being readable by the service alone (and an update closing one that was not),
 a working update and one with nothing new, and the Docker entrypoint handing over a data directory (and saying what it cannot, rather than
