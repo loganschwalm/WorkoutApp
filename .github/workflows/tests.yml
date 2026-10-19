@@ -57,8 +57,8 @@ jobs:
       # settings are in .shellcheckrc. The runner has ShellCheck already.
       - name: Check the shell scripts
         run: |
-          for script in ct/workout-tracker.sh scripts/docker-backup.sh tests/as-root.sh; do bash -n "$script"; done
-          shellcheck ct/workout-tracker.sh scripts/docker-backup.sh tests/as-root.sh
+          for script in ct/workout-tracker.sh scripts/docker-backup.sh tests/as-root.sh tests/docker.sh; do bash -n "$script"; done
+          shellcheck ct/workout-tracker.sh scripts/docker-backup.sh tests/as-root.sh tests/docker.sh
 
       # Four suites at a time on the runner's four cores, so timing checks are not starved.
       - name: Run the tests
@@ -76,8 +76,21 @@ jobs:
       - name: Install, update, go back from a failed update, and hand over a data directory
         run: sudo bash tests/as-root.sh
 
+  # The Docker install as the README has it followed: the image built and started with docker compose, healthy and not running as root, what
+  # is saved kept in the volume across a restart, and scripts/docker-backup.sh making a backup that opens (and leaving nothing behind when
+  # it fails). A broken image is as much a broken release as a failing test. See tests/docker.sh.
+  docker:
+    name: Docker image and backup script
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build and run the image, save a workout, restart it, and back it up
+        run: bash tests/docker.sh
+
   promote:
-    needs: [test, as-root]
+    needs: [test, as-root, docker]
     if: >-
       github.ref == 'refs/heads/main' && (
         (github.event_name == 'push' && vars.HOLD_STABLE != 'true') ||

@@ -1973,7 +1973,10 @@ variables and the registered suites). Beside them, a job runs `tests/as-root.sh`
 thrown away afterwards: the installer installing from a copy of the checkout, an update to a version that upgrades the
 database and then fails to start being undone (the previous version running again on the database as it was), a working
 update and one with nothing new (and, in each, the unit's sandbox and the database's permissions), the daily backup run, pruned and
-restored by the steps under *Backups*, and the Docker entrypoint handing over a data directory. The workflow's
+restored by the steps under *Backups*, and the Docker entrypoint handing over a data directory. A job of its own
+(`tests/docker.sh`) builds the image with `docker compose up -d --build`, checks it is healthy and not running as root and that a
+saved workout survives a restart, and runs `scripts/docker-backup.sh`, once for a backup that opens and once with its copy step
+failing to see that nothing is left behind. `stable` waits for it as it does for the others. The workflow's
 token can only read, except in the job that moves `stable`, and its actions are pinned to the commit of a release (the version is
 in a comment on each line; to move one, take the commit its tag points at from the action's repository, not the tag). When they all pass on `main`, it moves the `stable` branch to that commit, and that
 is the branch installs and updates follow. To hold releases back for a while, set the repository variable `HOLD_STABLE` to

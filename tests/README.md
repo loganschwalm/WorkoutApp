@@ -24,12 +24,17 @@ GitHub Actions runs them all on every push and pull request (`.github/workflows/
 four suites at a time, on Python 3.9 (the oldest the README says the server runs on), 3.12 (what the Docker image uses) and 3.13,
 and moves the `stable` branch that installs follow once all pass on `main`. Before them it runs pyflakes, `tests/lint.py` and ShellCheck (on the shell
 scripts, settings in `.shellcheckrc`). A job of its own runs `tests/as-root.sh` as root on a runner that is thrown away afterwards,
-and `stable` waits for it too: the Proxmox installer installing (and, with stand-ins for `pct`, `ACTION` and `CTID` choosing what it does and refusing what is not clear), an update to a version that upgrades the database and then fails
+and `stable` waits for it, and for the Docker job below, too: the Proxmox installer installing (and, with stand-ins for `pct`, `ACTION` and `CTID` choosing what it does and refusing what is not clear), an update to a version that upgrades the database and then fails
 to start being undone (the previous version running again, with the database as it was and the unit it had, and the failed
 one's kept), the unit's sandbox and the database being readable by the service alone (and an update closing one that was not),
 a working update and one with nothing new, the daily backup (a database that opens, readable by root alone, pruned to the newest few, the
 backups taken before updates left alone) and putting one back by the steps in the documentation, and the Docker entrypoint handing over a data directory (and saying what it cannot, rather than
 stopping). Never run it on a computer you use: it installs a service and writes to `/etc`, `/opt` and `/var`.
+A job of its own runs `tests/docker.sh`, which needs Docker with the compose plugin: it builds the image and starts it with
+`docker compose up -d --build` as the README has it, and checks that the container reports healthy and its server is not
+root, that a saved workout is still there after a restart, that `scripts/docker-backup.sh` makes a backup that opens, holds the
+workout and is readable by its owner alone, and that one which fails part way leaves nothing in the backup directory or the volume.
+It makes and removes a volume and uses port 6769, so run it where that does no harm.
 
 ```bash
 python -m pyflakes backend tests scripts docker-entrypoint.py   # slips in the Python (needs the requirements above)
