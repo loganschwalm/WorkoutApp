@@ -960,6 +960,14 @@ def run(t):
     check('and opening it draws the chart', painted['width'] > 100 and painted['ink'] is True, painted)
     cdp.ev("document.getElementById('bodyweightChart').focus()")
     cdp.ev("document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }))")
+    # A month back is thirty days of the calendar. Counted in hours, the clocks going forward (a day of 23 hours) left a weigh-in exactly
+    # thirty days back an hour short of it, and the trend measured from the first weigh-in instead.
+    cdp.set_time_zone('America/New_York')
+    trends = cdp.ev("""[[[2026, 2, 6], [2026, 3, 5]], [[2026, 9, 3], [2026, 10, 2]]].map(([from, to]) => bodyweightTrend([
+        { time: new Date(...from).getTime(), weight: 190 }, { time: new Date(...to).getTime(), weight: 187 }]))""")
+    cdp.set_time_zone(None)
+    check('thirty days back is a month back, across the clocks going forward and back alike',
+          trends == ['Down 3 lbs in 30 days', 'Down 3 lbs in 30 days'], trends)
     check('the bodyweight chart is a stop for the keyboard too, and an arrow says the weigh-in', cdp.ev("document.activeElement.id") == 'bodyweightChart'
           and cdp.ev("document.getElementById('bodyweightDetail').textContent").endswith(': 186.6 lbs'), cdp.ev("document.getElementById('bodyweightDetail').textContent"))
     cdp.send('Emulation.setDeviceMetricsOverride', width=375, height=800, deviceScaleFactor=1, mobile=True)

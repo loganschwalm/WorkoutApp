@@ -289,6 +289,29 @@ function inUnit(record, to = weightUnit()) {
   return { ...record, unit:to, exercises:(record.exercises || []).map(exerciseIn) };
 }
 
+// A workout that was shown in another unit (inUnit) and has been changed, back in the unit of `original`, the workout as it was
+// kept. A weight the person left alone is the one it was, not that one converted twice (135 lbs shown as 61.23 kg is 134.99 lbs
+// converted back); one they typed is converted. Nothing but the unit is changed in a workout that was never in the shown unit.
+function backToUnit(record, original) {
+  const from = recordUnit(record), to = recordUnit(original);
+  if (from === to) return record;
+  const kept = new Map();
+  const note = weight => { if (weight !== '' && weight !== null && weight !== undefined && Number.isFinite(Number(weight))) kept.set(convertWeight(Number(weight), to, from), weight); };
+  (original.exercises || []).forEach(exercise => {
+    note(exercise.weight);
+    (exercise.sets || []).forEach(set => note(set.weight));
+    (exercise.plan || []).forEach(set => note(set.weight));
+  });
+  const back = weight => weight !== '' && weight !== null && weight !== undefined && kept.has(Number(weight)) ? kept.get(Number(weight)) : convertWeight(weight, from, to);
+  const exerciseBack = exercise => ({ ...exercise, weight:back(exercise.weight),
+    ...(Array.isArray(exercise.sets) ? { sets:exercise.sets.map(set => ({ ...set, weight:back(set.weight) })) } : {}),
+    ...(Array.isArray(exercise.plan) ? { plan:exercise.plan.map(set => ({ ...set, weight:back(set.weight) })) } : {}),
+    ...(exercise.swappedFrom ? { swappedFrom:exerciseBack(exercise.swappedFrom) } : {}) });
+  const { unit, ...rest } = record;
+  // A pound workout from before units were kept has no unit written, and goes back to that.
+  return { ...rest, ...(original.unit === undefined && to === 'lbs' ? {} : { unit:to }), exercises:(record.exercises || []).map(exerciseBack) };
+}
+
 // Every "lbs" label on the page (a <span class="unit-label">) follows the unit.
 function applyUnitLabels() {
   document.querySelectorAll('.unit-label').forEach(label => { label.textContent = weightUnit(); });

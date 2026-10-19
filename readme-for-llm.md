@@ -791,8 +791,8 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
   A target you have already lifted asks first ("You've already lifted 235 lbs on Back Squat, so 150 lbs is reached
   already. Set it anyway?"): saying yes sets it, which suits getting back to a weight, and no asks for one above your best.
 - Bodyweight: log your weight for a day (today unless you choose an earlier one; weighing in again that day replaces
-  it), and it is charted over time, with the latest weight and how it has moved over the last 30 days ("182.4 lbs on
-  Sep 29 · Down 3 lbs in 30 days"). The newest five are listed under the chart to remove one. Weights are kept with
+  it), and it is charted over time, with the latest weight and how it has moved over the last 30 days, counted in calendar days so the clocks changing does not shorten
+  it ("182.4 lbs on Sep 29 · Down 3 lbs in 30 days"). The newest five are listed under the chart to remove one. Weights are kept with
   your account, in the unit they were logged in, and shown in the unit you use.
 - Review repeated workouts as separate progress points.
 - Cardio is charted on the same chart: the exercise filter lists your activities apart from your exercises, and an
@@ -981,7 +981,10 @@ the button that opened them. Settings include:
   History, Progress and the training programs, which use kilogram steps (2.5 kg jumps, kg
   dumbbells and weight stacks). Workouts are stored in the unit they were logged in and only
   converted for showing, so switching units never changes what you logged, and switching back shows
-  it exactly as it was. The workout in progress and your program switch with you.
+  it exactly as it was. Editing a saved workout while the other unit is shown keeps it in the unit it was logged in too
+  (`backToUnit`): a weight you leave alone is saved as it was, not converted twice (135 lbs shown as 61.23 kg would come back
+  as 134.99), and one you type is converted to the workout's unit. A copy of it ("Copy as new") is a new workout, in the unit
+  shown. The workout in progress and your program switch with you.
 - Weekly goal: 1 to 7 workouts a week (3 by default), which the History page's calendar counts.
 - Training schedule: the days of the week you train, a chip for each (Monday first), and the time of day to be reminded.
   Both belong to the account and follow you between devices. "Remind me on training days, on this device" turns on web

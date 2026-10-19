@@ -66,6 +66,39 @@ def run(t):
     stored = t.workout(t.W1)
     check('while the stored workout is untouched, in pounds', stored.get('unit') is None and stored['exercises'][0]['sets'][0]['weight'] == 100, stored)
 
+    # ------------------------------------------------------------------ K2b editing a pound workout in kilograms
+    print('K2b editing a pound workout while kilograms are shown')
+
+    def edit_set(field, index, value, exercise=0):
+        cdp.ev(f"""(i => {{ i.value = '{value}'; i.dispatchEvent(new Event('change', {{ bubbles: true }})); }})
+            (document.querySelector('#exerciseList [data-exercise="{exercise}"][data-set="{index}"][data-field={field}]'))""")
+
+    def edit_and_save(*changes):
+        cdp.ev(f"loadWorkoutIntoForm(savedWorkouts.find(w => String(w.id) === '{t.W1}'), true)")
+        for change in changes:
+            edit_set(*change)
+        cdp.ev("document.getElementById('saveBtn').click()")
+        cdp.pause(1.0)
+        return t.workout(t.W1)
+
+    cdp.ev(f"loadWorkoutIntoForm(savedWorkouts.find(w => String(w.id) === '{t.W1}'), true)")
+    shown = cdp.ev("[...document.querySelectorAll('#exerciseList [data-field=weight]')].map(input => input.value)")
+    check('the form shows the workout in kilograms', shown == [str(kg(100)), str(kg(100)), str(kg(60))], shown)
+    cdp.ev("document.getElementById('clearBtn').click()")
+    weights = lambda w: [[s['weight'] for s in e['sets']] for e in w['exercises']]
+    edited = edit_and_save(('reps', 1, 9))
+    check('changing only some reps saves the pounds as they were, not 45.36 kg turned back (134.99 lbs for 135)',
+          weights(edited) == [[100, 100], [60]] and edited['exercises'][0]['sets'][1]['reps'] == 9, json.dumps(edited['exercises'])[:300])
+    check('in the unit the workout was kept in, with the weights of its exercises as they were',
+          edited.get('unit') is None and [e['weight'] for e in edited['exercises']] == [100, 60], json.dumps(edited)[:300])
+    edited = edit_and_save(('weight', 0, 50))
+    check('a weight typed in kilograms is saved in pounds, and the rest are as they were', weights(edited) == [[110.23, 100], [60]], weights(edited))
+    check('the heaviest set is the exercise’s weight', edited['exercises'][0]['weight'] == 110.23 and edited.get('unit') is None, json.dumps(edited)[:300])
+    edit_and_save(('weight', 0, kg(100)))
+    check('typing the weight it showed saves the weight it was', weights(t.workout(t.W1)) == [[100, 100], [60]], weights(t.workout(t.W1)))
+    edit_and_save(('reps', 1, 8))
+    check('and the reps put back, for the checks that follow', t.workout(t.W1)['exercises'][0]['sets'][1]['reps'] == 8)
+
     # ------------------------------------------------------------------ K3 a workout in kilograms
     print('K3  logging a workout in kilograms')
     known = t.ids()

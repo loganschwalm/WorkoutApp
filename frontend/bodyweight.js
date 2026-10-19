@@ -38,7 +38,8 @@ function bodyweightEntries() {
 function bodyweightTrend(entries) {
   if (entries.length < 2) return '';
   const latest = entries[entries.length - 1];
-  const monthAgo = latest.time - 30 * 24 * 60 * 60 * 1000;
+  // Thirty days of the calendar: counted in hours, a spring change of the clocks would leave a weigh-in exactly thirty days back an hour short.
+  const monthAgo = addDays(new Date(latest.time), -30).getTime();
   const earlier = [...entries].reverse().find(entry => entry.time <= monthAgo);
   const from = earlier || entries[0];
   const change = Math.round((latest.weight - from.weight) * 10) / 10;

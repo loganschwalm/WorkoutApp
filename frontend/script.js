@@ -3,6 +3,8 @@
 
 const exercises = [];
 let editingWorkout = null;
+// The workout being edited as it was kept, in its own unit, which the form shows in the unit chosen (see backToUnit).
+let editingStored = null;
 // The saved workouts as last loaded, so the list's buttons act without asking the server again.
 let savedWorkouts = [];
 // Everything saved, cardio sessions too, which is what a training day is counted from (schedule.js).
@@ -178,10 +180,11 @@ function renderExerciseSuggestions() {
 }
 
 function loadWorkoutIntoForm(stored, editMode) {
-  // In the unit shown; saving it again stores it in that unit.
+  // In the unit shown. An edit is saved in the unit the workout was kept in (see backToUnit); a copy is a new workout, in this one.
   const workout = inUnit(stored);
   showWorkoutBuilder(editMode);
   editingWorkout = editMode ? workout : null;
+  editingStored = editMode ? stored : null;
   $('workoutName').value = workout.name;
   $('workoutDate').value = editMode ? dateInputValue(workout.createdAt) : dateInputValue(Date.now());
   $('workoutNotes').value = workout.notes || '';
@@ -702,6 +705,7 @@ $('exerciseList').onclick = e => {
 $('activeNotes').oninput = () => { if (activeSession) { activeSession.notes = $('activeNotes').value; persistActiveSession(); } };
 $('clearBtn').onclick = () => {
   editingWorkout = null;
+  editingStored = null;
   exercises.length = 0;
   $('workoutName').value = '';
   $('workoutDate').value = dateInputValue(Date.now());
@@ -1061,10 +1065,11 @@ $('saveBtn').onclick = async () => {
   const savedExercises = exercises.map(item => item.sets?.length
     ? { ...item, weight:Math.max(...item.sets.map(set => Number(set.weight) || 0)), reps:item.setCount ? item.reps : item.sets[item.sets.length - 1].reps }
     : { ...item });
-  const workout = {
+  let workout = {
     ...editingWorkout, name:$('workoutName').value.trim() || 'Untitled workout', notes:$('workoutNotes').value.trim(), exercises:savedExercises,
     createdAt:timestampFromDateInput($('workoutDate').value), unit:weightUnit()
   };
+  if (editingStored) workout = backToUnit(workout, editingStored);
   if (!workout.id) {
     // A new workout goes into the upload queue like a finished one, so it survives a dropped connection, and its clientId
     // lets the server ignore a retried upload. The form is cleared first, so a second tap has nothing left to save twice.
