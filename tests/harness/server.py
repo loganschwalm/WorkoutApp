@@ -12,10 +12,32 @@ from .browser import free_port
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
+class ServerExited(RuntimeError):
+    """The server stopped before it answered: its port taken by someone else first, or something wrong with how it was started."""
+
+
 class AppServer:
     """The real application server, on its own port with an empty database."""
 
     def __init__(self, db_path, frontend_dir=None, env=None):
+        # A port is found by asking the OS for one and letting go of it, so another process (a browser's own connections, in a run of
+        # many suites at once) can take it before the server binds it, and the server then exits at once. That is tried again on another
+        # port, a few times, rather than failing a suite for something that has nothing to do with it.
+        for attempt in range(4):
+            self._launch(db_path, frontend_dir, env)
+            try:
+                self._await_ready()
+                return
+            except ServerExited:
+                self.process.kill()
+                if attempt == 3:
+                    raise
+            except BaseException:
+                # The constructor never returned, so nobody holds a reference to stop() this later.
+                self.process.kill()
+                raise
+
+    def _launch(self, db_path, frontend_dir, env):
         self.port = free_port()
         self.base_url = f'http://127.0.0.1:{self.port}'
         # Mail settings from the shell are left out, so a test server can only email the sink a suite gives it.
@@ -41,12 +63,6 @@ class AppServer:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        try:
-            self._await_ready()
-        except BaseException:
-            # The constructor never returned, so nobody holds a reference to stop() this later.
-            self.process.kill()
-            raise
 
     def admin(self, *args, stdin='', env=None):
         """Run one of server.py's account commands on this server's database, as an admin would while it runs.
@@ -62,7 +78,7 @@ class AppServer:
         deadline = time.time() + 15
         while time.time() < deadline:
             if self.process.poll() is not None:
-                raise RuntimeError(f'Server exited immediately with code {self.process.returncode}.')
+                raise ServerExited(f'Server exited immediately with code {self.process.returncode}.')
             try:
                 self.api('GET', '/api/auth/me')
                 return

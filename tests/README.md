@@ -20,6 +20,9 @@ python tests/run.py --timeout 300    # stop a suite that runs longer than this m
 python tests/run.py --list           # suite names
 ```
 
+A server that exits at once because another process took its port between its being chosen and its starting is started again on a new one
+(up to four tries); one that cannot start for any other reason fails the same way each time, and then the suite.
+
 GitHub Actions runs them all on every push and pull request (`.github/workflows/tests.yml`),
 four suites at a time, on Python 3.9 (the oldest the README says the server runs on), 3.12 (what the Docker image uses) and 3.13,
 and moves the `stable` branch that installs follow once all pass on `main`. Before them it runs pyflakes, `tests/lint.py` and ShellCheck (on the shell
