@@ -14,6 +14,7 @@ cookies="$work/cookies"
 
 fail() {
   echo "  [FAIL] $*" >&2
+  echo "::error::$*"
   docker compose logs --no-color --tail=60 >&2 || true
   exit 1
 }
@@ -25,7 +26,11 @@ check() {
 }
 same() { [[ "$1" == "$2" ]]; }
 not() { ! "$@"; }
+# Whatever stops it is reported with the last command it ran and where (set -e ends it on a command that fails where nothing checks
+# it), then the stack and the volume are taken away.
 cleanup() {
+  local status=$?
+  ((status == 0)) || echo "::error::tests/docker.sh stopped with status $status at line $LINENO, in: $BASH_COMMAND"
   docker compose down --volumes --remove-orphans >/dev/null 2>&1 || true
   rm -rf "$work"
 }

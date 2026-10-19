@@ -20,10 +20,12 @@ on:
 permissions:
   contents: read
 
+# The runner image is named, not "latest": GitHub moves latest to a new Ubuntu on its own date (26, from 19 October 2026), and the
+# browser tests, the sandbox settings and the installer's systemd checks are written against this one. Moving is a change made on purpose.
 jobs:
   test:
     name: test (Python ${{ matrix.python }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
       # Both finish, so a failure on one version shows whether the other has it too.
@@ -68,7 +70,7 @@ jobs:
   # when the new version does not start), and the Docker entrypoint handing over the data directory. See tests/as-root.sh.
   as-root:
     name: as root (installer updates, Docker entrypoint)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -81,7 +83,7 @@ jobs:
   # it fails). A broken image is as much a broken release as a failing test. See tests/docker.sh.
   docker:
     name: Docker image and backup script
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -95,7 +97,7 @@ jobs:
       github.ref == 'refs/heads/main' && (
         (github.event_name == 'push' && vars.HOLD_STABLE != 'true') ||
         (github.event_name == 'workflow_dispatch' && inputs.promote))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     # One promotion at a time, so an older run finishing late cannot move stable back.

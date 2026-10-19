@@ -28,8 +28,16 @@ work="$(mktemp -d /var/tmp/as-root.XXXXXX)"
 repo="$work/repo"
 cookies="$work/cookies"
 
+# Whatever stops it, with the last command it ran and where: set -e ends it on a command that fails where nothing checks it.
+report_stop() {
+  local status=$?
+  ((status == 0)) || echo "::error::tests/as-root.sh stopped with status $status at line $LINENO, in: $BASH_COMMAND"
+}
+trap report_stop EXIT
+
 fail() {
   echo "  [FAIL] $*" >&2
+  echo "::error::$*"
   journalctl -u workout-tracker --no-pager --lines=60 >&2 || true
   exit 1
 }
