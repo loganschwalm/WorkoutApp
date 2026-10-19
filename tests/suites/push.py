@@ -387,6 +387,16 @@ def run(t):
     _, trained = account('trained', [today], now_minutes - 1, trained_at=int(time.time() * 1000))
     _, silent = account('silent', [], now_minutes - 1)
     _, yesterday = account('yesterday', [today], now_minutes - 1, trained_at=int(time.time() * 1000) - 36 * 3600 * 1000)
+    # A phone that is always due, which the reminders are checked against: every look at the phones looks at all of them, so its message
+    # coming after its day was put back says that a look has been made since, and what that look did for the others is done. (A wait
+    # of so many seconds says only that time went by, which on a slow machine may be no looks at all.)
+    _, canary = account('canary', [today], now_minutes - 1)
+
+    def a_look_since_now():
+        before = len(canary.messages())
+        database("UPDATE push_subscriptions SET last_sent = '2000-01-01' WHERE endpoint LIKE '%/canary'")
+        return wait_until(lambda: len(canary.messages()) > before)
+
     # A phone that is asked, and does not answer in time: the next look tries again.
     service.answers['/push/retry'] = [500, 500]
     service.answers['/push/gone'] = [410]
@@ -403,7 +413,7 @@ def run(t):
     check('with a message that opens the app', reminder == {'title': 'Time to train', 'body': 'Today is a training day. Tap to open Workout Tracker.', 'url': '/index.html', 'tag': 'training-day'}, reminder)
     check('and signed for this server, like any other', service.to('ready')[0]['headers']['authorization'].endswith(f'k={key}'))
     wait_until(lambda: len(retrying.messages()) >= 3)
-    time.sleep(1.5)
+    check('(the server has gone on looking)', a_look_since_now())
     check('once that day, however often the server looks', len(ready.messages()) == 1, len(ready.messages()))
     check('and the day is remembered, by the phone’s own clock', database("SELECT last_sent FROM push_subscriptions WHERE endpoint LIKE '%/ready'")[0][0] == device_now(offset).date().isoformat())
     check('not on a day it is not training', wrong_day.messages() == [] and silent.messages() == [])
@@ -420,11 +430,10 @@ def run(t):
     check('the next training day it is reminded again', wait_until(lambda: len(ready.messages()) == 2), len(ready.messages()))
     put_schedule({'days': [], 'time': hhmm(now_minutes - 1)}, ready_token)
     database("UPDATE push_subscriptions SET last_sent = '2000-01-01' WHERE endpoint LIKE '%/ready'")
-    time.sleep(1.5)
+    check('(a look has been made since the days were taken away)', a_look_since_now())
     check('and with the days taken away, not at all', len(ready.messages()) == 2, len(ready.messages()))
     put_schedule({'days': [today], 'time': hhmm(now_minutes - 1)}, ready_token)
-    time.sleep(1.5)
-    check('and with them put back, it carries on', len(ready.messages()) == 3, len(ready.messages()))
+    check('and with them put back, it carries on', wait_until(lambda: len(ready.messages()) == 3), len(ready.messages()))
     check('no page of the app sees any of it: the server stays up throughout', app.api('GET', '/api/auth/me')[0] is not None)
 
     # ------------------------------------------------------------------ P the messages go at once

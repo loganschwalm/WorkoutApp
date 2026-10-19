@@ -197,7 +197,7 @@ daily() { find "$backups" -maxdepth 1 -name 'workouts-*.db' | wc -l; }
 snap="$(workout-tracker-backup)"
 check 'a backup made now is a database that opens' "$(sqlite3 "$snap" 'PRAGMA integrity_check')" same "$(sqlite3 "$snap" 'PRAGMA integrity_check')" ok
 check 'with the workout saved before it' 'it is not there' same "$(sqlite3 "$snap" "SELECT COUNT(*) FROM workouts WHERE name = 'Before The Update'")" 1
-check 'readable by root alone, in a directory of root alone' "$(stat -c '%a %a' "$snap" "$backups" | tr '\n' ' ')" same "$(stat -c '%a %a' "$snap" "$backups" | tr '\n' ' ')" '600 700 '
+check 'readable by root alone, in a directory of root alone' "$(stat -c '%a' "$snap" "$backups" | tr '\n' ' ')" same "$(stat -c '%a' "$snap" "$backups" | tr '\n' ' ')" '600 700 '
 check 'and the backups taken before the updates are not touched by it' "$(pre_update_backups) of them" same "$(pre_update_backups)" 2
 # Only the newest few are kept: older ones, named as a day's are, go; whatever else is there stays.
 find "$backups" -maxdepth 1 -name 'workouts-*.db' ! -path "$snap" -delete

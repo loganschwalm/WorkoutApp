@@ -69,7 +69,7 @@ snap="$(bash scripts/docker-backup.sh "$backups")"
 check 'a backup is made' 'no file' test -f "$snap"
 check 'it is a database that opens' "$(sqlite3 "$snap" 'PRAGMA integrity_check')" same "$(sqlite3 "$snap" 'PRAGMA integrity_check')" ok
 check 'holding the workout' 'not there' same "$(sqlite3 "$snap" "SELECT COUNT(*) FROM workouts WHERE name = 'Docker Day'")" 1
-check 'readable by its owner alone, in a directory of its owner alone' "$(stat -c '%a %a' "$snap" "$backups" | tr '\n' ' ')" same "$(stat -c '%a %a' "$snap" "$backups" | tr '\n' ' ')" '600 700 '
+check 'readable by its owner alone, in a directory of its owner alone' "$(stat -c '%a' "$snap" "$backups" | tr '\n' ' ')" same "$(stat -c '%a' "$snap" "$backups" | tr '\n' ' ')" '600 700 '
 check 'and no copy is left in the volume' "$(in_volume | tr '\n' ' ')" not grep -q backup-in-progress < <(in_volume)
 
 # docker compose cp is what fails here, after the snapshot has been made in the volume: the case the script's cleanup is for.

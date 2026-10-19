@@ -698,10 +698,14 @@ def run(t):
     cdp.pause(0.3)
     log(50, 10)
     cdp.console.clear()
+    before_finish = ids()
     cdp.ev("document.getElementById('nextExerciseBtn').click(); document.getElementById('nextExerciseBtn').click(); document.getElementById('prevExerciseBtn').click()")
-    cdp.pause(0.5)
+    # Saved, and nothing left to upload: only then is a count of what the server holds a count of what two taps made.
+    saved = wait_for(lambda: len(ids() - before_finish) >= 1 and safe_ev('readPendingWorkouts().length', -1) == 0)
+    cdp.pause(0.3)
     errors = [line for line in cdp.console if line.startswith('exceptionThrown')]
-    check('Finish tapped twice saves the workout once, without an error', cdp.ev(HIDDEN) is True and not errors, errors)
+    check('Finish tapped twice saves the workout once, without an error', saved and cdp.ev(HIDDEN) is True and len(ids() - before_finish) == 1 and not errors,
+          f'{saved} {len(ids() - before_finish)} {errors}')
 
     cdp.send('Emulation.setDeviceMetricsOverride', width=375, height=740, deviceScaleFactor=1, mobile=True)
     open_tracker()
