@@ -732,8 +732,7 @@ function renderGoals() {
 }
 
 function showGoalFeedback(message, isError = false) {
-  $('goalFeedback').textContent = message;
-  $('goalFeedback').classList.toggle('error', isError);
+  setStatusLine($('goalFeedback'), message, { error:isError });
 }
 
 $('goalForm').onsubmit = event => {

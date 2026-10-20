@@ -122,8 +122,7 @@ function renderBodyweight() {
 }
 
 function showBodyweightFeedback(message, isError = false) {
-  $('bodyweightFeedback').textContent = message;
-  $('bodyweightFeedback').classList.toggle('error', isError);
+  setStatusLine($('bodyweightFeedback'), message, { error:isError });
 }
 
 $('bodyweightForm').onsubmit = event => {
