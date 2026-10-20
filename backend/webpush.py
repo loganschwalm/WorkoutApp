@@ -4,7 +4,6 @@ an account on its training days. The cryptography is in webpush_crypto.py."""
 import concurrent.futures
 import datetime
 import json
-import os
 import secrets
 import threading
 import time
@@ -13,7 +12,7 @@ import urllib.request
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from config import DEFAULT_REMINDER_TIME, SMTP_FROM
+from config import DEFAULT_REMINDER_TIME, PUSH_ALLOWED_HOSTS, REMINDER_TICK, VAPID_SUBJECT
 from database import connection
 from webpush_crypto import P256_N, b64url, b64url_decode, ec_multiply, ecdsa_sign, encode_point, encrypt_push_payload
 
@@ -32,24 +31,17 @@ from webpush_crypto import P256_N, b64url, b64url_decode, ec_multiply, ecdsa_sig
 PUSH_TIMEOUT = 10
 # What the push service is told to do with a message it cannot deliver yet (a phone that is off), in seconds.
 PUSH_TTL = 3 * 60 * 60
-# Who the server says it is to the push services, which may refuse a message with no way to reach its sender (RFC 8292).
-VAPID_SUBJECT = os.environ.get('VAPID_SUBJECT', '').strip() or (f'mailto:{SMTP_FROM}' if '@' in SMTP_FROM else 'mailto:admin@example.com')
-# How often the server looks for training days to remind about, and how long after the time chosen a reminder is still
-# worth sending (the server was down at that moment, or the phone off).
-REMINDER_TICK = max(0.2, float(os.environ.get('REMINDER_TICK_SECONDS', '60')))
+# How long after the time chosen a reminder is still worth sending (the server was down at that moment, or the phone off).
 REMINDER_GRACE_MINUTES = 3 * 60
 # Push services a subscription may name, as hosts or the end of one. A subscription is an address this server then posts to,
-# so it is not taken from just anyone: PUSH_ALLOWED_HOSTS adds hosts (and lets them be plain http, for a push service of one's
-# own), which is how the tests give the server a push service to talk to.
+# so it is not taken from just anyone: PUSH_ALLOWED_HOSTS (config.py) adds hosts (and lets them be plain http, for a push service
+# of one's own), which is how the tests give the server a push service to talk to.
 PUSH_SERVICES = ('fcm.googleapis.com', 'push.services.mozilla.com', 'push.apple.com', 'notify.windows.com')
-PUSH_ALLOWED_HOSTS = tuple(host.strip().lower() for host in os.environ.get('PUSH_ALLOWED_HOSTS', '').split(',') if host.strip())
 MAX_SUBSCRIPTIONS = 10
 # How many messages go at once (see send_all). Threads only wait on the network, so a few is plenty for one household's phones,
 # and not so many that one push service that has stopped answering could take them all.
 PUSH_WORKERS = 8
 push_pool = concurrent.futures.ThreadPoolExecutor(max_workers=PUSH_WORKERS, thread_name_prefix='push')
-# The least time between one test notification and the next, per account, in seconds.
-TEST_PUSH_WAIT = float(os.environ.get('PUSH_TEST_WAIT', '3'))
 push_test_times = {}
 push_test_lock = threading.Lock()
 

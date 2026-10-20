@@ -136,6 +136,22 @@ LEGACY_ITERATIONS = 120_000
 PASSWORD_HASHERS = max(1, int(os.environ.get('PASSWORD_HASHERS', '2')))
 PASSWORD_HASH_WAIT = float(os.environ.get('PASSWORD_HASH_WAIT', '5'))
 
+# Where the server listens. Every interface unless HOST says one: with a reverse proxy on this machine, HOST=127.0.0.1 leaves no
+# way around it.
+LISTEN_PORT = int(os.environ.get('PORT', '6769'))
+LISTEN_HOST = os.environ.get('HOST', '').strip() or '0.0.0.0'
+
+# Web push (webpush.py). Who the server says it is to the push services, which may refuse a message with no way to reach its
+# sender (RFC 8292).
+VAPID_SUBJECT = os.environ.get('VAPID_SUBJECT', '').strip() or (f'mailto:{SMTP_FROM}' if '@' in SMTP_FROM else 'mailto:admin@example.com')
+# How often the server looks for training days to remind about, in seconds; not less than 0.2, so a typo cannot make it spin.
+REMINDER_TICK = max(0.2, float(os.environ.get('REMINDER_TICK_SECONDS', '60')))
+# Hosts, beyond the browser makers' own, that a push subscription may name, and may then be plain http (a push service of one's
+# own, which is how the tests give the server one to talk to).
+PUSH_ALLOWED_HOSTS = tuple(host.strip().lower() for host in os.environ.get('PUSH_ALLOWED_HOSTS', '').split(',') if host.strip())
+# The least time between one test notification and the next, per account, in seconds.
+TEST_PUSH_WAIT = float(os.environ.get('PUSH_TEST_WAIT', '3'))
+
 SECURITY_HEADERS = {
     # Every script and stylesheet is a file served from here; nothing inline, nothing from elsewhere.
     'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; "

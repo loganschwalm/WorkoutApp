@@ -3,12 +3,10 @@
 import time
 from http import HTTPStatus
 
+from config import TEST_PUSH_WAIT
 from database import connection, session_hash
 from validation import BadRequest, text
-from webpush import (
-    MAX_SUBSCRIPTIONS, TEST_PUSH_WAIT, push_endpoint_allowed, push_test_lock, push_test_times, send_all, settle_pushes,
-    vapid_key
-)
+from webpush import MAX_SUBSCRIPTIONS, push_endpoint_allowed, push_test_lock, push_test_times, send_all, settle_pushes, vapid_key
 from webpush_crypto import b64url_decode, decode_point
 
 

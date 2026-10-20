@@ -24,8 +24,9 @@ from api_data import DataApi
 from api_push import PushApi
 from api_routes import find_route
 from config import (
-    COMPRESSIBLE, MAX_BODY, MIN_COMPRESS, RANGED, REQUEST_TIMEOUT, ROOT, SECURE_COOKIES, SECURITY_HEADERS, SESSION_RENEW,
-    SESSION_TTL, SESSION_USED_EVERY, SHORT_SESSION_RENEW, SHORT_SESSION_TTL, SMTP_HOST, SMTP_PORT, SMTP_SECURITY, TRUSTED_PROXIES
+    COMPRESSIBLE, LISTEN_HOST, LISTEN_PORT, MAX_BODY, MIN_COMPRESS, RANGED, REQUEST_TIMEOUT, ROOT, SECURE_COOKIES, SECURITY_HEADERS,
+    SESSION_RENEW, SESSION_TTL, SESSION_USED_EVERY, SHORT_SESSION_RENEW, SHORT_SESSION_TTL, SMTP_HOST, SMTP_PORT, SMTP_SECURITY,
+    TRUSTED_PROXIES
 )
 from connections import Connections, request_allowance, turn_away
 from database import connection, init_database, session_hash
@@ -486,11 +487,8 @@ class AppServer(http.server.ThreadingHTTPServer):
 def serve():
     check_mail_settings()
     init_database()
-    port = int(os.environ.get('PORT', '6769'))
-    # Every interface unless HOST says one: with a reverse proxy on this machine, HOST=127.0.0.1 leaves no way around it.
-    host = os.environ.get('HOST', '').strip() or '0.0.0.0'
-    server = AppServer((host, port), AppHandler)
-    print(f'Workout Tracker listening on http://{host}:{port}')
+    server = AppServer((LISTEN_HOST, LISTEN_PORT), AppHandler)
+    print(f'Workout Tracker listening on http://{LISTEN_HOST}:{LISTEN_PORT}')
     print(f'Password reset codes are emailed through {SMTP_HOST}:{SMTP_PORT} ({SMTP_SECURITY}).' if SMTP_HOST else
           'Password reset by email is off: set SMTP_HOST to turn it on, or reset passwords with the reset-password command.')
     # `docker stop` and `systemctl stop` ask with SIGTERM. In a container the server is process 1, which the kernel
