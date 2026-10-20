@@ -662,6 +662,16 @@ function confirmSetChange(exercise, index, field, value, input) {
   return false;
 }
 
+// What is wrong with a set's weight or reps changed in place, or null when it may stand. Shared by a saved workout's sets and
+// the sets logged in a workout; the caller says it and puts the old value back. A timed exercise's reps are seconds, which
+// need not be whole.
+function setChangeProblem(field, value, timed) {
+  if (field === 'reps' && (!value || Number(value) < 1)) return timed ? 'Seconds must be at least 1.' : 'Reps must be at least 1.';
+  if (field === 'reps' && !timed && !Number.isInteger(Number(value))) return 'Reps must be a whole number.';
+  if (field === 'weight' && value !== '' && Number(value) < 0) return 'Weight cannot be negative.';
+  return null;
+}
+
 // A set's weight or reps is taken once it is changed; one that is not valid snaps back, as during a workout.
 $('exerciseList').onchange = e => {
   const item = exercises[Number(e.target.dataset.exercise)];
@@ -669,13 +679,12 @@ $('exerciseList').onchange = e => {
   const field = e.target.dataset.field;
   if (!set || !field) return;
   const value = e.target.value;
-  if (field === 'reps' && (!value || Number(value) < 1)) {
-    showFeedback(isTimed(item) ? 'Seconds must be at least 1.' : 'Reps must be at least 1.');
-    e.target.value = set.reps;
+  const problem = setChangeProblem(field, value, isTimed(item));
+  if (problem) {
+    showFeedback(problem);
+    e.target.value = field === 'weight' ? set.weight || '' : set.reps;
     return;
   }
-  if (field === 'reps' && !isTimed(item) && !Number.isInteger(Number(value))) { showFeedback('Reps must be a whole number.'); e.target.value = set.reps; return; }
-  if (field === 'weight' && value !== '' && Number(value) < 0) { showFeedback('Weight cannot be negative.'); e.target.value = set.weight || ''; return; }
   if (!confirmSetChange(item, Number(e.target.dataset.set), field, Number(value) || 0, e.target)) return;
   set[field] = Number(value) || 0;
   clearFeedback();
@@ -933,17 +942,12 @@ $('completedSets').onchange = e => {
   const set = activeSession.exercises[activeSession.currentIndex].sets[index];
   if (!set) return;
   const value = e.target.value;
-  if (field === 'reps' && (!value || Number(value) < 1)) {
-    showFeedback(isTimed(activeSession.exercises[activeSession.currentIndex]) ? 'Seconds must be at least 1.' : 'Reps must be at least 1.');
-    e.target.value = set.reps;
+  const problem = setChangeProblem(field, value, isTimed(activeSession.exercises[activeSession.currentIndex]));
+  if (problem) {
+    showFeedback(problem);
+    e.target.value = field === 'weight' ? set.weight || '' : set.reps;
     return;
   }
-  if (field === 'reps' && !isTimed(activeSession.exercises[activeSession.currentIndex]) && !Number.isInteger(Number(value))) {
-    showFeedback('Reps must be a whole number.');
-    e.target.value = set.reps;
-    return;
-  }
-  if (field === 'weight' && value !== '' && Number(value) < 0) { showFeedback('Weight cannot be negative.'); e.target.value = set.weight || ''; return; }
   if (!confirmSetChange(activeSession.exercises[activeSession.currentIndex], index, field, Number(value) || 0, e.target)) return;
   set[field] = Number(value) || 0;
   clearFeedback();
