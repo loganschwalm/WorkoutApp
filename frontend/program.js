@@ -26,6 +26,8 @@ function roundToStep(value, step) {
 }
 
 // Epley's formula, the usual way to read a one-rep max off a set of several reps.
+// Not exactOneRepMax in common.js, which keeps 2 decimals so that close results still compare; this one is rounded to the
+// whole number a program's notes show. (Neither caps reps itself: callers that want ONE_REP_MAX_REPS filter first.)
 function estimateOneRepMax(weight, reps) {
   return Math.round(reps <= 1 ? weight : weight * (1 + reps / 30));
 }
