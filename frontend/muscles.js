@@ -154,8 +154,7 @@ function renderLibrary() {
 }
 
 function showLibraryFeedback(message, isError = false) {
-  $('libraryFeedback').textContent = message;
-  $('libraryFeedback').classList.toggle('error', isError);
+  setStatusLine($('libraryFeedback'), message, { error:isError });
 }
 
 // The new exercise's choices start blank, which is the guess from its name, and say what that guess is as it is typed.

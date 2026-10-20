@@ -14,7 +14,7 @@ function refusedReason(workout, refusals) {
 
 function showRefusedFeedback(message) {
   const feedback = getSettingElement('refusedFeedback');
-  if (feedback) feedback.textContent = message;
+  if (feedback) setStatusLine(feedback, message);
 }
 
 // One row per workout, built with text nodes: its name, and what the server said, are never read as markup.

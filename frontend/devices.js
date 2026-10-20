@@ -27,9 +27,7 @@ function devicesDetails(device, now = Date.now()) {
 }
 
 function showDevicesFeedback(message) {
-  const feedback = getSettingElement('devicesFeedback');
-  feedback.textContent = message;
-  feedback.hidden = !message;
+  setStatusLine(getSettingElement('devicesFeedback'), message, { hideWhenEmpty:true });
 }
 
 // One row per device, built with text nodes: what the server says of a device is never read as markup.

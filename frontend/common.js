@@ -114,10 +114,27 @@ function clearFeedback() {
   $('formFeedback').textContent = '';
 }
 
+// Marks a field the person has to fix (or, once they type in it, no longer), for the red border and for screen readers.
+function markInvalid(element, invalid) {
+  element.setAttribute('aria-invalid', String(invalid));
+}
+
+// The line of status text under a form or a list (a goal set, a device that could not be reached), where the banner would be too
+// much. `error` colours it as a problem; `hideWhenEmpty` is for a line that is hidden until it has something to say.
+function setStatusLine(element, message, { error = false, hideWhenEmpty = false } = {}) {
+  element.textContent = message;
+  element.classList.toggle('error', error);
+  if (hideWhenEmpty) element.hidden = !message;
+}
+
 // A day as a date field takes it ("2026-09-30"), where this device is; and the time a date field's day means, at noon.
 function dateInputValue(timestamp) {
-  const date = new Date(timestamp);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  return calendarDayKey(new Date(timestamp));
+}
+
+// A day for a list or a chart label, without its year: "Sep 30".
+function formatDate(timestamp) {
+  return new Date(timestamp).toLocaleDateString(undefined, { month:'short', day:'numeric' });
 }
 
 function timestampFromDateInput(value) {

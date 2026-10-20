@@ -65,6 +65,8 @@ function formatDistance(value, unit) {
 }
 
 // A length of time as a clock, to the second: "27:42", "1:05:09".
+// Not clockTime in common.js, which takes whole seconds for the rest and hold timers and never shows hours (3600 is "60:00" there);
+// this one rounds, clamps below zero to 0:00 and counts hours, for sessions and paces that can run past one.
 function formatClock(seconds) {
   const whole = Math.max(0, Math.round(seconds));
   const hours = Math.floor(whole / 3600), minutes = Math.floor(whole % 3600 / 60), rest = whole % 60;

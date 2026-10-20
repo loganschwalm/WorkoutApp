@@ -114,8 +114,9 @@ function toggleHistoryGroup(summary) {
 
 function showHistoryFeedback(message, failed = false) {
   const feedback = $('historyFeedback');
-  feedback.textContent = message;
+  // The whole class is swapped, not just `error` toggled: a failure takes the account forms' red text, otherwise the subtitle's.
   feedback.className = `${failed ? 'auth-feedback' : 'subtitle'} history-feedback`;
+  setStatusLine(feedback, message);
   feedback.hidden = false;
 }
 
