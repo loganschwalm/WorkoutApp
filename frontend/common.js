@@ -119,6 +119,11 @@ function dateInputValue(timestamp) {
   return calendarDayKey(new Date(timestamp));
 }
 
+// A day for a list or a chart label, without its year: "Sep 30".
+function formatDate(timestamp) {
+  return new Date(timestamp).toLocaleDateString(undefined, { month:'short', day:'numeric' });
+}
+
 function timestampFromDateInput(value) {
   const [year, month, day] = value.split('-').map(Number);
   return new Date(year, month - 1, day, 12).getTime();

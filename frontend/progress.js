@@ -121,10 +121,6 @@ function buildChartData(workouts) {
   return { points, types:[...types].map(([name, values]) => ({ name, values })) };
 }
 
-function formatDate(timestamp) {
-  return new Date(timestamp).toLocaleDateString(undefined, { month:'short', day:'numeric' });
-}
-
 function longDate(timestamp) {
   return new Date(timestamp).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' });
 }

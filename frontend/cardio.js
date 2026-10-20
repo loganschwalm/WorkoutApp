@@ -64,10 +64,6 @@ function lastCardio(key) {
   return allCardio().find(workout => cardioKey(workout) === key) || null;
 }
 
-function shortDate(time) {
-  return new Date(time).toLocaleDateString(undefined, { month:'short', day:'numeric' });
-}
-
 function markCardioField(element, invalid) {
   element.setAttribute('aria-invalid', String(invalid));
 }
@@ -81,7 +77,7 @@ function tickCardio() {
 function renderCardioLast() {
   const last = cardioActive ? lastCardio(cardioKey({ name:cardioActive.name, cardio:{ activity:cardioActive.activity } })) : null;
   $('cardioLast').hidden = !last;
-  if (last) $('cardioLast').textContent = `Last time (${shortDate(last.createdAt)}): ${describeCardio(last)}`;
+  if (last) $('cardioLast').textContent = `Last time (${formatDate(last.createdAt)}): ${describeCardio(last)}`;
 }
 
 function renderCardioActive() {
@@ -469,7 +465,7 @@ function renderCardioStart() {
     const last = activity.named ? null : sessions.find(workout => activityOf(workout).id === activity.id);
     const distance = last ? sessionDistance(last) : null;
     const line = activity.named ? `Anything else; name it ${cardioManual ? 'in the form' : 'when you finish'}`
-      : last ? `Last ${shortDate(last.createdAt)} · ${distance ? formatDistance(distance, shownDistanceUnit(activity)).replace(' ', '\u00a0') : formatClock(last.duration)}`
+      : last ? `Last ${formatDate(last.createdAt)} · ${distance ? formatDistance(distance, shownDistanceUnit(activity)).replace(' ', '\u00a0') : formatClock(last.duration)}`
         : '';
     return `<button class="cardio-activity" type="button" data-activity="${activity.id}"><strong>${escapeHTML(activity.name)}</strong>${line ? `<span>${escapeHTML(line)}</span>` : ''}</button>`;
   }).join('');
@@ -544,7 +540,7 @@ async function loadCardioSessions() {
 }
 
 async function deleteCardio(workout) {
-  if (!confirm(`Delete “${workout.name}” of ${shortDate(workout.createdAt)}?`)) return;
+  if (!confirm(`Delete “${workout.name}” of ${formatDate(workout.createdAt)}?`)) return;
   try {
     const response = await syncFetch(`/api/workouts/${encodeURIComponent(workout.id)}`, { method:'DELETE' });
     if (!response.ok) throw new Error(`Delete failed (${response.status}).`);
