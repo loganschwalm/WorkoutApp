@@ -195,8 +195,9 @@ class AccountApi:
         password = str(data.get('password', ''))
         if not re.fullmatch('[0-9]{6}', code):
             raise BadRequest('Enter the 6-digit code from the email.')
-        # Checked before the code is, so a password that will not do costs none of its tries. The username is only
-        # known once the code is right, and is checked then.
+        # Checked before the code is, so a password that will not do is not counted as a guess at the code: it uses up neither
+        # the code's own tries (RESET_CODE_ATTEMPTS) nor the address's wrong guesses (RESET_GUESSES), which a wrong code does.
+        # The username is only known once the code is right, and the password is checked against it then.
         new_password(password, email=email)
         # Counted as a wrong guess before the code is compared, and taken back if it is right, so guesses sent at once cannot
         # all pass the check before any is counted.

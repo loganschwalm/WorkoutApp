@@ -252,7 +252,8 @@ def store_state(database, user_id, state):
 #   by_id     a list of objects told apart by their id, merged as if keyed by it (templates)
 #   identity  keys that say which run of a program the rest belongs to: its days are a cycle's, its weights a unit's,
 #             so changes to two different runs are never mixed (see merge_values)
-# A key one side has and the other does not.
+
+# What a key is taken to be on a side that does not have it, so that "absent" can be told apart from a value that is None.
 MISSING = object()
 
 
