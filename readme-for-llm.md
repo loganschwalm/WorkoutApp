@@ -1141,6 +1141,8 @@ which has every account.
 
 ```text
 frontend/               Browser pages, scripts, styles, icons, service worker, manifest
+frontend/progress.js    The Progress page's chart, filters and start-up; its sessions and exercise card are in progress-exercise.js, and its
+                        achievements, records, stalled lifts and goals in progress-records.js (loaded before it)
 frontend/script.js      The Tracker's state and starting the page; what it does is in workout-form.js (writing a workout down,
                         changing a saved one), saved-workouts.js (the list), active-workout.js (the workout in progress) and
                         set-logging.js (logging and correcting sets), loaded before it and reading its state only when they run
