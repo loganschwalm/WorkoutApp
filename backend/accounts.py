@@ -204,19 +204,6 @@ class Throttle:
         self.events = {}
         self.lock = threading.Lock()
 
-    def retry_after(self, key):
-        """Seconds until this key may try again; 0 if it may try now."""
-        now = time.monotonic()
-        with self.lock:
-            recent = [moment for moment in self.events.get(key, []) if now - moment < self.window]
-            if recent:
-                self.events[key] = recent
-            else:
-                self.events.pop(key, None)
-            if len(recent) < self.attempts:
-                return 0
-            return max(1, int(self.window - (now - recent[0])) + 1)
-
     def prune(self, now):
         if len(self.events) > 10000:  # someone cycling through usernames; drop what has expired
             self.events = {k: v for k, v in self.events.items() if now - v[-1] < self.window}

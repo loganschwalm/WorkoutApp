@@ -609,8 +609,11 @@ def run_limits(t, check):
     server = load_server()
     now = time.monotonic()
     server.reset_daily_throttle.events['ghost@example.test'] = [now - n * 3600 for n in range(10)]
+    # take() counts an ask when it lets it through, which is fine here: the key is not used again.
+    daily_wait, _ = server.reset_daily_throttle.take('ghost@example.test')
+    hourly_wait, _ = server.reset_throttle.take('ghost@example.test')
     check('a daily limit holds after ten asks spread over the day, though no one hour held more than one',
-          server.reset_daily_throttle.retry_after('ghost@example.test') > 0 and server.reset_throttle.retry_after('ghost@example.test') == 0)
+          daily_wait > 0 and hourly_wait == 0, f'daily {daily_wait}, hourly {hourly_wait}')
 
     # ------------------------------------------------------------------ A42 what an account may keep
     print('A42 an account keeps only so many workouts, each only so large, and one import runs at a time')
