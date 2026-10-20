@@ -64,10 +64,6 @@ function lastCardio(key) {
   return allCardio().find(workout => cardioKey(workout) === key) || null;
 }
 
-function markCardioField(element, invalid) {
-  element.setAttribute('aria-invalid', String(invalid));
-}
-
 // ---- The session being timed ------------------------------------------------
 
 function tickCardio() {
@@ -359,7 +355,7 @@ async function saveCardioForm() {
   $('cardioForm').querySelectorAll('[aria-invalid]').forEach(field => field.removeAttribute('aria-invalid'));
   const problem = cardioFormProblem(values);
   if (problem) {
-    markCardioField(problem[1], true);
+    markInvalid(problem[1], true);
     showFeedback(problem[0]);
     problem[1].focus();
     return;
@@ -370,7 +366,7 @@ async function saveCardioForm() {
   const doubt = implausibleRate(workout, allCardio().filter(other => !(mode === 'edit' && editing && other.id === editing.id)));
   if (doubt && !confirm(doubt)) {
     const field = activity.distance ? $('cardioDistance') : $('cardioMinutes');
-    markCardioField(field, true);
+    markInvalid(field, true);
     field.focus();
     return;
   }

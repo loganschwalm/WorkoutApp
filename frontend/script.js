@@ -29,11 +29,7 @@ function showWorkoutBuilder(editing = false) {
   scrollToCard($('workoutBuilderCard'), 'start');
 }
 
-// The banner (showFeedback, clearFeedback) is common.js's, shared with the Cardio page.
-
-function markInvalid(element, invalid) {
-  element.setAttribute('aria-invalid', String(invalid));
-}
+// The banner (showFeedback, clearFeedback) and markInvalid are common.js's, shared with the Cardio page.
 
 // Changes to a saved workout go straight to the server. A new one goes into the upload queue instead (see the form's Save).
 function updateSavedWorkout(workout) {

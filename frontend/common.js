@@ -114,6 +114,11 @@ function clearFeedback() {
   $('formFeedback').textContent = '';
 }
 
+// Marks a field the person has to fix (or, once they type in it, no longer), for the red border and for screen readers.
+function markInvalid(element, invalid) {
+  element.setAttribute('aria-invalid', String(invalid));
+}
+
 // A day as a date field takes it ("2026-09-30"), where this device is; and the time a date field's day means, at noon.
 function dateInputValue(timestamp) {
   return calendarDayKey(new Date(timestamp));
