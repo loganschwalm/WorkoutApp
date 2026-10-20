@@ -116,8 +116,7 @@ function clearFeedback() {
 
 // A day as a date field takes it ("2026-09-30"), where this device is; and the time a date field's day means, at noon.
 function dateInputValue(timestamp) {
-  const date = new Date(timestamp);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  return calendarDayKey(new Date(timestamp));
 }
 
 function timestampFromDateInput(value) {
