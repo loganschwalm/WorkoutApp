@@ -156,9 +156,9 @@ database.write_text(database.read_text() + "\n\ndef migration_broken_update(data
                     "    database.execute('CREATE TABLE broken_update (id INTEGER)')\n\n\nMIGRATIONS.append(migration_broken_update)\n")
 webserver = backend / 'webserver.py'
 text = webserver.read_text()
-start = '    init_database()\n    port = '
+start = '    init_database()\n'
 assert text.count(start) == 1, 'serve() no longer starts the way this test expects'
-webserver.write_text(text.replace(start, "    init_database()\n    raise SystemExit('This version fails on purpose, once it has migrated the database.')\n    port = "))
+webserver.write_text(text.replace(start, start + "    raise SystemExit('This version fails on purpose, once it has migrated the database.')\n"))
 EOF
 commit 'A version that migrates the database and then fails'
 broken="$(git -C "$repo" rev-parse HEAD)"

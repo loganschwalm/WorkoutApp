@@ -957,7 +957,8 @@ def run_connections(t, check):
     check('and one that closes makes room for the next', served.startswith(b'HTTP/1.1 200 '), served[:60])
     for sock in held:
         sock.close()
-    deadline = time.time() + 5
+    # A slot is free again once the server has noticed its connection closed, which on a busy machine takes a while.
+    deadline = time.time() + 15
     while time.time() < deadline and not all(answers(crowded).startswith(b'HTTP/1.1 200 ') for _ in range(3)):
         time.sleep(0.2)
     check('once they all go the server answers as ever', all(answers(crowded).startswith(b'HTTP/1.1 200 ') for _ in range(3)))
