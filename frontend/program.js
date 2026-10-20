@@ -247,13 +247,9 @@ function recordProgramDay(program, week, day, entry) {
 
 // Called by finishWorkout for a workout started from the program with at least one set logged. A workout from a
 // program that has since been ended, restarted or moved on to its next block is saved, but marks nothing done. Returns the
-// sentence saying what comes next.
-function completeProgramWorkout(session) {
-  return completeProgramDay(session).note;
-}
-
-// The same, with what the day did for the summary to celebrate (null when it marked nothing done): the + set beating its
-// plan, every planned rep of the main lift made, and the block it finished, with the numbers it moved on to.
+// sentence saying what comes next (note), and what the day did for the summary to celebrate (outcome, null when it marked
+// nothing done): the + set beating its plan, every planned rep of the main lift made, and the block it finished, with the
+// numbers it moved on to.
 function completeProgramDay(session) {
   const { programDay } = session;
   const program = currentProgram;
