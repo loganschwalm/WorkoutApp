@@ -1,7 +1,7 @@
 // What's new, on the Tracker: once a release, a card telling someone who was already training what the app has learned since,
 // a line for each thing, until Done. It is for those who started before the release: a newer account learned the app as it
 // is (the welcome, onboarding.js, shows it), so it never sees the card for a release it began on. Done is kept as a setting,
-// `seenWhatsNew` (settings-fields.js), so it is seen once on every device. Loaded on the Tracker after recap.js; script.js
+// `seenWhatsNew` (settings-fields.js), so it is seen once on every device. Loaded on the Tracker after recap.js; saved-workouts.js
 // draws it once the saved workouts have loaded, and again when the settings change.
 //
 // A new release adds its own list here and moves `whatsNewRelease` on; the card then shows to everyone who trained before it.

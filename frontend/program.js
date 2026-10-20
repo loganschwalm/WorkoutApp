@@ -181,7 +181,7 @@ function programInfo(programDay) {
 
 // ---- Progress -------------------------------------------------------------
 
-// An exercise done in place of the program's (Swap, in script.js) is not the lift the program is tracking.
+// An exercise done in place of the program's (Swap, in training-tools.js) is not the lift the program is tracking.
 function isSwappedIn(exercise) {
   return Boolean(exercise && exercise.swappedFrom);
 }
@@ -503,7 +503,7 @@ function renderProgram() {
 
 // ---- Setting up and editing -----------------------------------------------
 
-// A one-rep max read off the most recent logged sets of an exercise (lastPerformance, kept by script.js), so the lifter
+// A one-rep max read off the most recent logged sets of an exercise (lastPerformance, kept by records.js and saved-workouts.js), so the lifter
 // does not have to work one out; null if the exercise has never been logged with a weight.
 function estimatedOneRepMax(name) {
   const previous = lastTime(name);

@@ -3,7 +3,7 @@
 // the achievements it earned). Worked out from the history (weekRecapOf, achievements.js), and only once all of it has
 // loaded. A week with nothing in it has no card: a recap is a look back at what was done, never a reminder of what was not.
 // Done is kept on this device, by the week's Monday, so the next week's card comes by itself. Loaded on the Tracker after
-// achievements.js; script.js draws it once the saved workouts have loaded, and again when the settings change.
+// achievements.js; saved-workouts.js draws it once the saved workouts have loaded, and again when the settings change.
 
 // Monday of last week, as the History calendar counts weeks.
 function recapMonday() {

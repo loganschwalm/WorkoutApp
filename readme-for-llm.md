@@ -95,7 +95,7 @@ own workouts, templates, and settings.
   rest left out, after asking first. Finish workout, which Next exercise becomes in the same place on the last exercise, asks
   the same while any exercise has no sets, so a double tap on Next before the last cannot finish without it.
 - A thumb that bounces logs one set. A tap on Complete set, Same as last set or the big view's button within 0.6 seconds
-  of a set being logged is ignored (`bouncedTap` in `script.js`), since the button is still under the thumb once the set
+  of a set being logged is ignored (`bouncedTap` in `set-logging.js`), since the button is still under the thumb once the set
   is in. Only real taps are judged: a click the page makes itself is not.
 - Enter on the keyboard does the same as the buttons: on the weight it goes to the reps, and on the reps it logs the set,
   with the same guard (a key held down logs one, and `enterkeyhint` makes the phone's key say Next and Done).
@@ -1141,6 +1141,9 @@ which has every account.
 
 ```text
 frontend/               Browser pages, scripts, styles, icons, service worker, manifest
+frontend/script.js      The Tracker's state and starting the page; what it does is in workout-form.js (writing a workout down,
+                        changing a saved one), saved-workouts.js (the list), active-workout.js (the workout in progress) and
+                        set-logging.js (logging and correcting sets), loaded before it and reading its state only when they run
 backend/server.py       Starts the server (or runs an account command: users, reset-password, set-email, delete-user)
 backend/config.py       Every setting the environment gives, and the fixed limits
 backend/database.py     The SQLite schema as numbered migrations, and the connection a request uses

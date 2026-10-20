@@ -105,7 +105,7 @@ function closeBigView(restoreFocus = true) {
 
 // The big button does what the page's own button does, pressed here so it counts as a tap (the rest alert's sound is unlocked
 // by one). A set the page will not take (no reps, or an implausible weight declined) is the page's to say, with its field in
-// reach, so the view gets out of the way. A tap just after a set was logged is a thumb bouncing (bouncedTap in script.js), and
+// reach, so the view gets out of the way. A tap just after a set was logged is a thumb bouncing (bouncedTap in set-logging.js), and
 // is ignored whatever the button has become since: Complete set again, or Next exercise once the last planned set is done.
 $('bigViewPrimary').onclick = event => {
   if (!activeSession || bouncedTap(event)) return;

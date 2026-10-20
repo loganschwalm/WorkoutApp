@@ -1,7 +1,7 @@
 // Within reach: during a workout, what the next set or the finish is a step away from, said while there is still time to go
 // for it. A line under the exercise (the reps at this weight that would be a record, a goal the weight reaches, a plate tier
 // close by or reached for the first time), mirrored in the big view, and a line for the workout (what finishing it earns:
-// the weekly goal, the streak, an achievement). Loaded on the Tracker after records.js and achievements.js; script.js,
+// the weekly goal, the streak, an achievement). Loaded on the Tracker after records.js and achievements.js; active-workout.js,
 // whose workout it reads, draws it.
 //
 // The exercise line never guesses: a record is said only when trying the next set through newRecords, as logging it would,
