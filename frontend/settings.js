@@ -425,7 +425,7 @@ async function sendAccountPanel(panel) {
   try {
     let response;
     try {
-      response = await fetch(panel.path, { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(body) });
+      response = await syncFetch(panel.path, { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(body) });
     } catch (error) {
       fail(panel.offline);
       return;

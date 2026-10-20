@@ -78,7 +78,15 @@ function setMode(nextMode) {
 }
 
 async function post(path, body) {
-  const response = await fetch(path, { method:'POST', headers:{ 'Content-Type':'application/json', 'Accept':'application/json' }, body:JSON.stringify(body) });
+  let response;
+  try {
+    // Signing in or up takes a good part of a second on the server, and a wait of a few seconds more when it is busy: this is longer.
+    response = await fetch(path, { method:'POST', headers:{ 'Content-Type':'application/json', 'Accept':'application/json' }, body:JSON.stringify(body),
+      signal:typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(20000) : undefined });
+  } catch (error) {
+    if (error.name === 'TimeoutError' || error.name === 'AbortError') throw new Error('The server did not answer in time. Try again.');
+    throw error;
+  }
   const responseText = await response.text();
   let result;
   try { result = JSON.parse(responseText); }

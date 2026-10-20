@@ -68,7 +68,7 @@ function renderDevices(devices) {
 async function devicesRequest(path, body) {
   let response;
   try {
-    response = await fetch(path, body === undefined ? {} : { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(body) });
+    response = await syncFetch(path, body === undefined ? {} : { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(body) });
   } catch (error) {
     showDevicesFeedback('Could not reach the server. Try again when you are back online.');
     return null;

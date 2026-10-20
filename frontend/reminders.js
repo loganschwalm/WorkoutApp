@@ -57,7 +57,7 @@ function pushBody(subscription) {
 }
 
 async function pushRequest(path, body) {
-  const response = await fetch(path, { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(body || {}) });
+  const response = await syncFetch(path, { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(body || {}) });
   const result = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(result.error || `The server answered ${response.status}.`);
   return result;
@@ -77,7 +77,7 @@ async function turnOnReminders() {
   if (Notification.permission !== 'granted' && (await Notification.requestPermission()) !== 'granted') {
     throw new Error('Notifications were not allowed, so there is nothing to show reminders with.');
   }
-  const response = await fetch('/api/push/key');
+  const response = await syncFetch('/api/push/key');
   if (!response.ok) throw new Error('Could not reach the server.');
   const key = keyBytes((await response.json()).publicKey);
   const registration = await readyRegistration();
