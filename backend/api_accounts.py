@@ -1,5 +1,6 @@
 """Account endpoints (see api_routes.py for which request each answers)."""
 
+import hmac
 import re
 import secrets
 import sqlite3
@@ -12,7 +13,7 @@ from accounts import (
     new_username, password_hash, password_matches, public_user, register_throttle, reset_address_throttle, reset_code_hash,
     reset_daily_throttle, reset_guess_throttle, reset_throttle, throttle_address, username_taken, wait_words
 )
-from config import ALLOW_REGISTRATION, RESET_CODE_ATTEMPTS, RESET_CODE_TTL, SESSION_TTL, SHORT_SESSION_TTL, SMTP_HOST
+from config import ALLOW_REGISTRATION, REGISTRATION_CODE, RESET_CODE_ATTEMPTS, RESET_CODE_TTL, SESSION_TTL, SHORT_SESSION_TTL, SMTP_HOST
 from database import connection, delete_account_rows, forget_reminders, session_hash, username_key
 from validation import BadRequest, text
 
@@ -22,7 +23,7 @@ class AccountApi:
 
     def auth_me(self):
         user = self.session_user()
-        self.send_json(HTTPStatus.OK, {'user': user, 'registrationOpen': ALLOW_REGISTRATION, 'passwordReset': bool(SMTP_HOST)})
+        self.send_json(HTTPStatus.OK, {'user': user, 'registrationOpen': ALLOW_REGISTRATION, 'registrationCode': bool(REGISTRATION_CODE), 'passwordReset': bool(SMTP_HOST)})
 
     def sign_out(self):
         token = self.session_token()
@@ -76,6 +77,15 @@ class AccountApi:
             return
         key = username_key(username)
         try:
+            if REGISTRATION_CODE:
+                # Before the name or email is looked up, so that without it nothing can be learned of who has an account. Compared as bytes, in
+                # constant time (compare_digest refuses text that is not ASCII), and not as typed with spaces round it.
+                given = data.get('inviteCode', '')
+                if not isinstance(given, str) or len(given) > 200:
+                    raise BadRequest('inviteCode must be text.')
+                if not hmac.compare_digest(given.strip().encode(), REGISTRATION_CODE.encode()):
+                    raise BadRequest('Making an account on this server needs the invite code from whoever runs it, and that is not it.' if given.strip()
+                                     else 'Making an account on this server needs an invite code from whoever runs it.', HTTPStatus.FORBIDDEN)
             with connection() as database:
                 if username_taken(database, username, key):
                     raise BadRequest('That username is already registered.', HTTPStatus.CONFLICT)
@@ -93,8 +103,9 @@ class AccountApi:
                 cookie = self.start_session(database, user_id, remember)
         except BaseException as error:
             # A name or email already taken stays counted: the refusal says which are, and a script asking costs the limit as an
-            # account made would. Anything else (too busy to hash) made nothing, so the attempt is handed back.
-            conflict = isinstance(error, BadRequest) and error.status == HTTPStatus.CONFLICT
+            # account made would. So does a wrong invite code, which is a guess. Anything else (too busy to hash) made nothing, so the
+            # attempt is handed back.
+            conflict = isinstance(error, BadRequest) and error.status in (HTTPStatus.CONFLICT, HTTPStatus.FORBIDDEN)
             if moment is not None and not conflict:
                 register_throttle.release(address, moment)
             raise

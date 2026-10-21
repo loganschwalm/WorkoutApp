@@ -71,6 +71,27 @@ def run(t):
     skip_welcome()
 
     # ------------------------------------------------------------------ C2 signing in with an email
+    print('C1b an invite code, when the server asks for one')
+    open_login()
+    cdp.ev("document.getElementById('registerTab').click()")
+    check('a server that asks for none shows no field for it', not shown('inviteCode') and not shown('inviteLabel'))
+    code = 'long-enough-code-1'
+    invited = t.start_server('invited-ui.db', {'REGISTRATION_CODE': code})
+    cdp.send('Page.navigate', url=invited.base_url + '/login.html')
+    cdp.wait("document.readyState === 'complete'")
+    cdp.pause(0.6)
+    check('signing in shows no field either', not shown('inviteCode'))
+    cdp.ev("document.getElementById('registerTab').click()")
+    check('one that does shows it for a new account, with a word about where to get it', shown('inviteCode') and text('inviteLabel') == 'Invite code'
+          and 'whoever runs' in text('inviteAdvice'))
+    fill(email='invited@example.test', username='invitee', password='chalk-and-plates-42', inviteCode='not-the-code-at-all')
+    submit('authForm')
+    check('a wrong code says so, and no account is made', shows_error('invite code') and cdp.ev("location.pathname") == '/login.html', text('authFeedback'))
+    fill(inviteCode=code)
+    submit('authForm')
+    check('the right one makes the account and signs in', cdp.wait("location.pathname === '/'", timeout=10))
+    open_login()
+
     print('C2  signing in with an email')
     open_login()
     check('the email field is gone again', not shown('email') and cdp.ev("document.getElementById('email').disabled") is True)

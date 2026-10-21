@@ -1487,7 +1487,11 @@ The server was written for a home network, and the defaults reflect that:
 - **Registration is open until you close it.** Anyone who can reach the port can create an account.
   Create your accounts, then set `ALLOW_REGISTRATION=0` (see [Server settings](#server-settings)): the
   sign-in page then only offers signing in, and the API refuses new accounts. To add someone later,
-  turn it back on briefly.
+  turn it back on briefly. Or leave it open and set `REGISTRATION_CODE`: making an account then needs that code (the server will not
+  start with one under 12 characters, since the limit on guesses can be turned off), the sign-in page shows the field only when the
+  server asks (`registrationCode` in `/api/auth/me`, a flag and never the code), and the code is checked before the username or email is
+  looked up, so without it nothing can be learned of who has an account. A wrong or missing code is a 403 that counts against
+  `REGISTRATIONS_PER_HOUR` like a taken name. Hand the code out to the people you want, and change it to end an invitation.
 - **The server does not speak HTTPS itself.** Put it behind a reverse proxy that terminates TLS. The
   session cookie is `HttpOnly` and `SameSite=Lax`, and it is marked `Secure` whenever the proxy sends
   `X-Forwarded-Proto: https` (or always, with `SECURE_COOKIES=1`). Over plain HTTP it travels in the clear.
@@ -1609,6 +1613,7 @@ The server reads these environment variables:
 | `APP_ROOT` | `frontend/` | Directory of static files to serve |
 | `WORKOUT_DB` | `data/workouts.db` | SQLite database path |
 | `ALLOW_REGISTRATION` | `1` | `0` refuses new accounts; existing accounts still sign in |
+| `REGISTRATION_CODE` | *(none)* | An invite code: when set (12 characters or more, or the server will not start), making an account needs it, and the sign-in page asks for it. Wrong guesses count against `REGISTRATIONS_PER_HOUR`. Signing in is unaffected |
 | `SECURE_COOKIES` | `0` | `1` always marks the session cookie `Secure`; only for a site reached exclusively over HTTPS |
 | `LOGIN_ATTEMPTS` | `5` | Failed sign-ins per username and address before a wait |
 | `LOGIN_ADDRESS_ATTEMPTS` | `20` | Failed sign-ins from one address, whatever the username, before a wait; `0` turns it off |

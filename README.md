@@ -236,6 +236,7 @@ restart the app), or under `environment:` in `docker-compose.yml`.
 | Setting | Default | What it does |
 |---|---|---|
 | `ALLOW_REGISTRATION` | `1` | `0` stops new accounts being created; existing ones still sign in |
+| `REGISTRATION_CODE` | *(none)* | A code (12+ characters) that making an account needs; the sign-in page asks for it. For a server that has to be reachable but not open |
 | `SECURE_COOKIES` | `0` | `1` if the app is **only** ever reached over HTTPS |
 | `HOST` | `0.0.0.0` | `127.0.0.1` if a reverse proxy on the same machine is the only way in (not under Docker: publish the port as `127.0.0.1:6769:6769`) |
 | `MAX_WORKOUTS` | `50000` | The most workouts one account can keep |

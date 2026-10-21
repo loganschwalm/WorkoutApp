@@ -15,6 +15,9 @@ const resetEmailInput = document.getElementById('resetEmail');
 let mode = 'login';
 // Whether the server can email reset codes; null until it has said, and Forgot password? waits for the answer.
 let resetAvailable = null;
+// Whether making an account needs an invite code (REGISTRATION_CODE); false until the server has said.
+let inviteRequired = false;
+const inviteInput = document.getElementById('inviteCode');
 let resetEmail = '';
 
 // Only pages on this site are followed, so a crafted ?next= link cannot send someone to another site after signing in.
@@ -71,6 +74,9 @@ function setMode(nextMode) {
   if (registering) { loginInput.maxLength = USERNAME_MAX; passwordInput.maxLength = PASSWORD_MAX; }
   else { loginInput.removeAttribute('maxlength'); passwordInput.removeAttribute('maxlength'); }
   document.getElementById('passwordAdvice').hidden = !registering;
+  // The invite code is asked for only when the server wants one, and only for a new account; disabled as well as hidden for the same
+  // reason as the email.
+  document.getElementById('inviteLabel').hidden = inviteInput.hidden = inviteInput.disabled = document.getElementById('inviteAdvice').hidden = !(registering && inviteRequired);
   [emailInput, loginInput, passwordInput].forEach(input => input.removeAttribute('aria-invalid'));
   submit.textContent = registering ? 'Create account' : 'Sign in';
   forgotButton.hidden = !signingIn || resetAvailable === null;
@@ -117,6 +123,9 @@ function signedIn(result) {
 fetch('/api/auth/me').then(response => response.json()).then(info => {
   resetAvailable = info.passwordReset === true;
   forgotButton.hidden = mode !== 'login';
+  inviteRequired = info.registrationCode === true;
+  // The mode may have been chosen before the server answered.
+  if (inviteRequired && mode === 'register') setMode('register');
   if (info.registrationOpen !== false) return;
   registerTab.hidden = true;
   if (mode === 'register') setMode('login');
@@ -153,7 +162,7 @@ form.onsubmit = event => {
   // Taken now, since the tabs can change the mode while the request is on its way.
   const registering = mode === 'register';
   const body = registering
-    ? { email:emailInput.value, username:loginInput.value, password:passwordInput.value, remember }
+    ? { email:emailInput.value, username:loginInput.value, password:passwordInput.value, remember, ...(inviteRequired ? { inviteCode:inviteInput.value } : {}) }
     : { login:loginInput.value, password:passwordInput.value, remember };
   submitWith(submit, async () => {
     const result = await post(`/api/auth/${registering ? 'register' : 'login'}`, body);

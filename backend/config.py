@@ -60,6 +60,12 @@ def env_flag(name, default):
 
 # Set ALLOW_REGISTRATION=0 once your accounts exist, so nobody else who can reach the port can make one.
 ALLOW_REGISTRATION = env_flag('ALLOW_REGISTRATION', True)
+# An invite code: when set, making an account needs it, so a server that has to be reachable (to sign in from outside) is not open to
+# everyone who finds it. Wrong guesses count against REGISTRATIONS_PER_HOUR, but that limit can be turned off, and an address that is
+# changed gets a fresh one, so the code has to be one nobody guesses: not shorter than 12 characters, and a random one is best.
+REGISTRATION_CODE = os.environ.get('REGISTRATION_CODE', '').strip()
+if REGISTRATION_CODE and len(REGISTRATION_CODE) < 12:
+    raise SystemExit('REGISTRATION_CODE must be at least 12 characters, and not something anyone would guess. Try: python3 -c "import secrets; print(secrets.token_urlsafe(12))"')
 # The cookie is also marked Secure whenever a reverse proxy says the request arrived over HTTPS.
 SECURE_COOKIES = env_flag('SECURE_COOKIES', False)
 # After this many failed sign-ins for one username from one address, that pair waits until the oldest failure

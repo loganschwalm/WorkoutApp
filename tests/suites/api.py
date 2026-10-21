@@ -573,6 +573,44 @@ def run_limits(t, check):
         statuses.append(status)
     check('behind a trusted proxy each person has a limit of their own', statuses == [200, 200, 429], statuses)
     behind.stop()
+
+    # ------------------------------------------------------------------ A40b an invite code
+    print('A40b making an account can need an invite code')
+    code = 'long-enough-code-1'
+    invited = t.start_server('invited.db', {'REGISTRATION_CODE': code, 'REGISTRATIONS_PER_HOUR': '10'})
+
+    def sign_up(server, name, invite=None):
+        body = {'username': name, 'email': f'{name}@example.test', 'password': 'chalk-and-plates-42'}
+        if invite is not None:
+            body['inviteCode'] = invite
+        return post(server, '/api/auth/register', body)
+
+    me = invited.request('GET', '/api/auth/me')
+    plain_me = t.server.request('GET', '/api/auth/me')
+    check('the sign-in page is told that a code is asked for, and never what it is', me[2].get('registrationCode') is True and code not in json.dumps(me[2])
+          and plain_me[2].get('registrationCode') is False, f'{me[2]} {plain_me[2]}')
+    status, _, reply = sign_up(invited, 'nocode')
+    check('without the code, an account is refused, saying it needs one', status == 403 and 'invite code' in reply.get('error', ''), f'{status} {reply}')
+    status, _, reply = sign_up(invited, 'wrongcode', 'not-the-code-at-all')
+    check('with the wrong one, refused', status == 403 and 'not it' in reply.get('error', ''), f'{status} {reply}')
+    check('text that is not ASCII is a wrong code, not an error', sign_up(invited, 'accented', 'c\u00f3digo-incorrecto-12')[0] == 403)
+    check('and a code that is not text is a 400', sign_up(invited, 'listed', ['x'])[0] == 400 and sign_up(invited, 'long', 'x' * 201)[0] == 400)
+    check('none of those made an account', post(invited, '/api/auth/login', {'login': 'nocode', 'password': 'chalk-and-plates-42'})[0] == 401)
+    status, headers, _ = sign_up(invited, 'invitee', f'  {code}  ')
+    check('with the right one (spaces round it do not matter), it is made', status == 200 and 'session=' in headers.get('set-cookie', ''), status)
+    check('a name already taken, asked for without the code, is not said to be taken', sign_up(invited, 'invitee')[0] == 403)
+    check('signing in needs no code', post(invited, '/api/auth/login', {'login': 'invitee', 'password': 'chalk-and-plates-42'})[0] == 200)
+    invited.stop()
+    strict = t.start_server('invited-strict.db', {'REGISTRATION_CODE': code, 'REGISTRATIONS_PER_HOUR': '2'})
+    guesses = [sign_up(strict, 'guesser', 'not-the-code-at-all')[0], sign_up(strict, 'guesser', 'not-the-code-either')[0]]
+    check('guesses count against the allowance: the right code is turned away once they have used it up', guesses == [403, 403] and sign_up(strict, 'guesser', code)[0] == 429, guesses)
+    strict.stop()
+    try:
+        t.start_server('shortcode.db', {'REGISTRATION_CODE': 'too-short'})
+        started = True
+    except RuntimeError:
+        started = False
+    check('a code under 12 characters stops the server starting', started is False)
     # An IPv6 client is counted by its /64, the network one home or phone is given, so rotating inside it is one client.
     def register_from(server, name, forwarded):
         return server.request('POST', '/api/auth/register', json.dumps({'username': name, 'email': f'{name}@example.test', 'password': 'chalk-and-plates-42'}).encode(),

@@ -270,6 +270,10 @@ if [[ ! -f /etc/workout-tracker/workout-tracker.env ]]; then
 # Stop anyone else creating an account once yours exist (existing accounts still sign in):
 #ALLOW_REGISTRATION=0
 #
+# Or keep sign-up open but ask for a code to make an account (12 characters or more, and not guessable; for a random one:
+# python3 -c "import secrets; print(secrets.token_urlsafe(12))"). The sign-in page then asks for it.
+#REGISTRATION_CODE=
+#
 # Always mark the session cookie Secure. Only set this if the app is reached exclusively over HTTPS;
 # it is already marked Secure on requests a reverse proxy forwards with X-Forwarded-Proto: https.
 #SECURE_COOKIES=1
