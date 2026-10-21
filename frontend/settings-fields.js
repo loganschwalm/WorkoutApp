@@ -158,6 +158,8 @@ const scheduleSetting = {
       <input id="reminderTimeSetting" type="time" />
       <label class="setting-check"><input id="remindSetting" type="checkbox" /> Remind me on training days, on this device</label>
       <p class="subtitle" id="remindStatus" role="status"></p>
+      <label class="setting-check"><input id="restAlertSetting" type="checkbox" /> Tell me when a rest ends, even with the phone locked, on this device</label>
+      <p class="subtitle" id="restAlertStatus" role="status"></p>
       <button class="secondary test-alert" id="testReminderButton" type="button" hidden>Send a test notification</button>`,
   show(settings) {
     const schedule = scheduleFrom(settings);

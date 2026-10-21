@@ -116,6 +116,8 @@ celebrated.
 - Pick the days you train: the Tracker says what is planned today (and nudges you when you missed a day), History marks
   the planned days on the calendar, and your phone can remind you on training days, even with the app closed.
 - Add a training program's remaining workouts to your own calendar app as an .ics file, one event on each training day.
+- A notification when a rest ends even with the phone locked, if you turn it on in Settings (it needs HTTPS, and on an iPhone the app
+  added to the Home Screen).
 - Pounds or kilograms, your own bar and plates, 10 colour themes (light, dark, and colourful ones), four text sizes, and a clear
   focus ring for keyboard users. Dialogs keep the Tab key, the charts can be stepped through with the arrow keys, the end of a
   rest is said to a screen reader, and a device set to less motion is not scrolled with a glide.

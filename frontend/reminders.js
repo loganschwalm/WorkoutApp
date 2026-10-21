@@ -5,6 +5,36 @@
 // kept in the settings: a phone can have them and a laptop not. Loaded after settings.js on every page with Settings.
 
 const pushClockKey = 'workout-tracker-push-clock';
+// What this browser's subscription is for, kept here since a subscription belongs to the browser and not the account: reminders on
+// training days (on for a subscription from before this, so only '0' means off), and the alert at the end of a rest (only '1' means on).
+// And where the server sends it, so the page can ask for a rest alert at the moment it is hidden, when there is no time to ask the browser.
+const pushRemindersKey = 'workout-tracker-push-reminders';
+const pushRestKey = 'workout-tracker-push-rest';
+const pushEndpointKey = 'workout-tracker-push-endpoint';
+
+function deviceFlag(key) {
+  try { return localStorage.getItem(key); } catch (error) { return null; }
+}
+
+function setDeviceFlag(key, value) {
+  try {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+  } catch (error) { /* told the server again the next time */ }
+}
+
+function wantsReminders() {
+  return deviceFlag(pushRemindersKey) !== '0';
+}
+
+function wantsRestAlerts() {
+  return deviceFlag(pushRestKey) === '1';
+}
+
+// Where the server is to send this device's rest alert, or '' when it is not to (rest alerts are off here, or there is no subscription).
+function restAlertEndpoint() {
+  return wantsRestAlerts() ? deviceFlag(pushEndpointKey) || '' : '';
+}
 
 function onIphone() {
   return /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -53,7 +83,8 @@ function sameBytes(buffer, bytes) {
 // What the server is told of a subscription: where to post, the keys, and this phone's clock, which is what "5:30pm" is by.
 function pushBody(subscription) {
   const { endpoint, keys } = subscription.toJSON();
-  return { endpoint, keys, timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone || '', utcOffset:-new Date().getTimezoneOffset() };
+  return { endpoint, keys, timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone || '', utcOffset:-new Date().getTimezoneOffset(),
+    reminders:wantsReminders(), restAlerts:wantsRestAlerts() };
 }
 
 async function pushRequest(path, body) {
@@ -89,15 +120,33 @@ async function turnOnReminders() {
   }
   subscription = subscription || await registration.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:key });
   await pushRequest('/api/push/subscribe', pushBody(subscription));
+  setDeviceFlag(pushEndpointKey, subscription.endpoint);
   rememberPushClock(subscription);
 }
 
+// The subscription taken away altogether: the server forgets it, the browser lets go of it, and what this browser kept about it goes.
 async function turnOffReminders() {
+  [pushRemindersKey, pushRestKey, pushEndpointKey, pushClockKey].forEach(key => setDeviceFlag(key, null));
   const subscription = await currentPushSubscription();
   if (!subscription) return;
   await pushRequest('/api/push/unsubscribe', { endpoint:subscription.endpoint });
   await subscription.unsubscribe();
-  try { localStorage.removeItem(pushClockKey); } catch (error) { /* nothing to forget */ }
+}
+
+// What this device is to be sent: reminders, rest alerts, both or neither. Each is a flag on the one subscription, and neither takes
+// the subscription away, so turning one off leaves the other as it was. The flags are set first, for the request to carry, and put back
+// if it fails.
+async function setPushPurposes({ reminders, restAlerts }) {
+  const before = [pushRemindersKey, pushRestKey, pushEndpointKey].map(key => [key, deviceFlag(key)]);
+  setDeviceFlag(pushRemindersKey, reminders ? '1' : '0');
+  setDeviceFlag(pushRestKey, restAlerts ? '1' : null);
+  try {
+    if (reminders || restAlerts) await turnOnReminders();
+    else await turnOffReminders();
+  } catch (error) {
+    before.forEach(([key, value]) => setDeviceFlag(key, value));
+    throw error;
+  }
 }
 
 // Signing out takes this browser off the account's reminders, so the next person to use it is not sent them. Best effort.
@@ -125,6 +174,7 @@ async function syncPushDevice() {
 // ---- The Settings dialog --------------------------------------------------------
 
 let remindersOn = false;
+let restAlertsOn = false;
 
 function showReminderStatus(message, failed = false) {
   const status = getSettingElement('remindStatus');
@@ -132,42 +182,59 @@ function showReminderStatus(message, failed = false) {
   status.className = failed ? 'auth-feedback' : 'subtitle';
 }
 
+function showRestAlertStatus(message, failed = false) {
+  const status = getSettingElement('restAlertStatus');
+  status.textContent = message;
+  status.className = failed ? 'auth-feedback' : 'subtitle';
+}
+
 function renderReminders() {
   const problem = pushProblem();
-  const box = getSettingElement('remindSetting');
-  box.disabled = Boolean(problem);
+  const box = getSettingElement('remindSetting'), restBox = getSettingElement('restAlertSetting');
+  box.disabled = restBox.disabled = Boolean(problem);
   box.checked = !problem && remindersOn;
-  getSettingElement('testReminderButton').hidden = !box.checked;
+  restBox.checked = !problem && restAlertsOn;
+  getSettingElement('testReminderButton').hidden = !(box.checked || restBox.checked);
   const days = getSettingElement('scheduleDays').querySelectorAll('input:checked').length;
   if (problem) showReminderStatus(problem);
   else if (remindersOn) showReminderStatus(days ? 'Reminders are on for this device.' : 'Reminders are on for this device. Choose the days you train, above, to be reminded.');
   else showReminderStatus('A notification on the days you train, at this time, even when the app is closed.');
+  if (problem) showRestAlertStatus('');
+  else if (restAlertsOn) showRestAlertStatus('Rest alerts are on for this device. The notification comes when the rest is over and the app is not on screen.');
+  else showRestAlertStatus('A notification when the rest is over, if the phone is locked or the app is in the background, when the app itself cannot sound it.');
 }
 
 async function refreshReminders() {
-  remindersOn = !pushProblem() && Notification.permission === 'granted' && Boolean(await currentPushSubscription());
+  const subscribed = !pushProblem() && Notification.permission === 'granted' && Boolean(await currentPushSubscription());
+  remindersOn = subscribed && wantsReminders();
+  restAlertsOn = subscribed && wantsRestAlerts();
   renderReminders();
 }
 
-getSettingElement('remindSetting').addEventListener('change', async event => {
-  const box = event.target;
+// Either box: one is turned on or off, the other left as it was.
+async function changePushPurpose(box, purpose, words) {
   const wanted = box.checked;
-  box.disabled = true;
-  showReminderStatus(wanted ? 'Turning reminders on…' : 'Turning reminders off…');
+  const [remindBox, restBox] = [getSettingElement('remindSetting'), getSettingElement('restAlertSetting')];
+  remindBox.disabled = restBox.disabled = true;
+  const show = purpose === 'reminders' ? showReminderStatus : showRestAlertStatus;
+  show(`Turning ${words} ${wanted ? 'on' : 'off'}…`);
+  const next = { reminders:remindersOn, restAlerts:restAlertsOn, [purpose === 'reminders' ? 'reminders' : 'restAlerts']:wanted };
   try {
-    if (wanted) await turnOnReminders();
-    else await turnOffReminders();
-    remindersOn = wanted;
+    await setPushPurposes(next);
+    remindersOn = next.reminders;
+    restAlertsOn = next.restAlerts;
   } catch (error) {
-    console.error('Unable to change reminders.', error);
-    remindersOn = !wanted;
+    console.error(`Unable to change ${words}.`, error);
     await refreshReminders();
-    showReminderStatus(`Could not turn reminders ${wanted ? 'on' : 'off'}: ${error.message || error}`, true);
+    show(`Could not turn ${words} ${wanted ? 'on' : 'off'}: ${error.message || error}`, true);
     return;
   }
-  box.disabled = false;
+  remindBox.disabled = restBox.disabled = false;
   renderReminders();
-});
+}
+
+getSettingElement('remindSetting').addEventListener('change', event => changePushPurpose(event.target, 'reminders', 'reminders'));
+getSettingElement('restAlertSetting').addEventListener('change', event => changePushPurpose(event.target, 'restAlerts', 'rest alerts'));
 
 getSettingElement('testReminderButton').onclick = async () => {
   const button = getSettingElement('testReminderButton');

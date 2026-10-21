@@ -662,6 +662,11 @@ After a change to push, or on a new server, check each kind of phone you use:
    of that time, and tapping it opens the app. It does not come on a day a workout has already been saved, so try this
    before training, or on a fresh account.
 5. Untick the reminders (or sign out). The next test notification should then say there are no devices.
+6. Rest alerts: tick *Tell me when a rest ends, even with the phone locked, on this device*. Start a workout, log a set with a rest of a
+   minute, lock the phone (or switch to another app) and wait. *Rest over* arrives as the rest ends, buzzing; open the app and the
+   notification goes. This is the one thing CI cannot show: that the browser makers' services take the message, and that the phone
+   lets the page send its few seconds as it is hidden (the page asks as the screen locks, which an iPhone gives it very little time for).
+   A server that is restarted during a rest loses the alert for it.
 
 Android may hold a notification back while battery saver is on, and an iPhone holds it back in a Focus mode that silences
 the app. Neither is the server's doing.
@@ -1011,8 +1016,14 @@ the button that opened them. Settings include:
 - Weekly goal: 1 to 7 workouts a week (3 by default), which the History page's calendar counts.
 - Training schedule: the days of the week you train, a chip for each (Monday first), and the time of day to be reminded.
   Both belong to the account and follow you between devices. "Remind me on training days, on this device" turns on web
-  push for this browser alone, and Send a test notification shows that it works. See
-  [Training schedule and reminders](#training-schedule-and-reminders).
+  push for this browser alone, and Send a test notification shows that it works. "Tell me when a rest ends, even with the phone
+  locked, on this device" is the same subscription's other use: when the page is hidden with a rest on the clock (a locked phone, or
+  another app in front), it tells the server how many seconds are left (`pageHiddenWithRest` in `rest-timer.js`, with `keepalive`),
+  and the server sends *Rest over*; the page takes it back when it is on screen again, where it sounds its own alert (so there are not two
+  for one rest), and closes a notification that came meanwhile. Nothing is asked of the server while the page is on screen, or for a rest
+  that is paused or has under two seconds. The two boxes are flags on the one subscription, kept for this browser in `localStorage`
+  (`workout-tracker-push-reminders`, `-push-rest`, `-push-endpoint`); turning both off removes the subscription, and signing out does.
+  See [Training schedule and reminders](#training-schedule-and-reminders).
 - Default rest duration from 15 to 600 seconds.
 - Automatic rest-timer start toggle.
 - Cancel confirmation toggle: whether Cancel workout asks first when sets have been logged.

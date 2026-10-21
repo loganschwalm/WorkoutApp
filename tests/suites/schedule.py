@@ -289,6 +289,100 @@ def run(t):
     cdp.pause(0.3)
     check('the box is clear, with no test to send', not cdp.ev("document.getElementById('remindSetting').checked") and not visible('testReminderButton'))
     check('the days stay chosen: they belong to the account, not the device', cdp.ev("[...document.querySelectorAll('#scheduleDays input:checked')].map(input => input.value)") == ['1'])
+
+    # ---- an alert when a rest ends, for a phone that is locked
+    print('R2  rest alerts: a notification when a rest ends and the page is hidden')
+
+    def flags():
+        db = sqlite3.connect(database)
+        try:
+            return db.execute('SELECT reminders, rest_alerts FROM push_subscriptions').fetchall()
+        finally:
+            db.close()
+
+    check('Settings offers them, off to begin with', not cdp.ev("document.getElementById('restAlertSetting').disabled") and not cdp.ev("document.getElementById('restAlertSetting').checked")
+          and 'when the rest is over' in text('restAlertStatus'), text('restAlertStatus'))
+    click('restAlertSetting')
+    check('turning them on subscribes the browser, for rest alerts alone', wait_for(lambda: flags() == [(0, 1)]), flags())
+    cdp.pause(0.3)
+    check('the box is ticked, the reminders box is not, and a test can be sent', cdp.ev("document.getElementById('restAlertSetting').checked") and not cdp.ev("document.getElementById('remindSetting').checked")
+          and visible('testReminderButton') and 'Rest alerts are on' in text('restAlertStatus'), text('restAlertStatus'))
+    check('and the server’s address for this device is kept, to ask with at once', cdp.ev("localStorage.getItem('workout-tracker-push-endpoint')") == endpoint)
+    subscribed = cdp.ev("window.__calls.filter(call => call === 'subscribe').length")
+    click('remindSetting')
+    check('reminders on beside them, the subscription is for both, and the browser subscribed once', wait_for(lambda: flags() == [(1, 1)])
+          and cdp.ev("window.__calls.filter(call => call === 'subscribe').length") == subscribed, flags())
+    cdp.pause(0.3)
+    click('remindSetting')
+    check('and reminders off again leaves rest alerts, and the subscription', wait_for(lambda: flags() == [(0, 1)]) and subscriptions() != [], flags())
+    close_settings()
+
+    # The page asks as it is hidden, and takes it back when it is on screen again. A rest with 3 seconds left, the page hidden: the
+    # server is told 2 or 3, and the notification arrives.
+    cdp.ev('''(() => {
+      window.__asked = [];
+      const realSyncFetch = syncFetch;
+      syncFetch = (path, options = {}, timeout) => { if (path === '/api/push/rest') window.__asked.push(JSON.parse(options.body)); return realSyncFetch(path, options, timeout); };
+      window.__hide = hidden => { Object.defineProperty(document, 'hidden', { get: () => hidden, configurable: true }); document.dispatchEvent(new Event('visibilitychange')); };
+    })()''')
+
+    def resting(seconds):
+        cdp.ev(f"restRemaining = restTotal = {seconds}; $('restPanel').hidden = false; updateRestTimer(); runRestTimer()")
+
+    def alerts():
+        return [json.loads(decrypt_message(server, item['body'], private, public, auth)) for item in service.to('browser')]
+
+    def rest_alerts():
+        return [item for item in alerts() if item.get('tag') == 'rest-over']
+
+    resting(3)
+    cdp.ev('window.__hide(true)')
+    check('hidden with a rest on, the server is told how many seconds are left', wait_for(lambda: len(cdp.ev('window.__asked')) == 1)
+          and cdp.ev('window.__asked[0].endpoint') == endpoint and cdp.ev('window.__asked[0].seconds') in (2, 3), cdp.ev('window.__asked'))
+    check('and the notification comes when they are up', wait_for(lambda: len(rest_alerts()) == 1), alerts())
+    check('saying that the rest is over', rest_alerts()[0]['title'] == 'Rest over' and rest_alerts()[0]['url'] == '/index.html', rest_alerts())
+    cdp.ev('window.__hide(false)')
+    check('back on screen, it takes it back', wait_for(lambda: cdp.ev('window.__asked.length') == 2) and cdp.ev('window.__asked[1].seconds') is None, cdp.ev('window.__asked'))
+
+    # One taken back before it is due does not come: a second, asked for after it, does, and its arriving says the first had its time.
+    cdp.ev('stopRestTimer(); window.__asked = []')
+    resting(3)
+    cdp.ev('window.__hide(true)')
+    wait_for(lambda: len(cdp.ev('window.__asked')) == 1)
+    cdp.ev('window.__hide(false)')
+    cdp.ev('stopRestTimer()')
+    resting(3)
+    cdp.ev('window.__hide(true)')
+    arrived = wait_for(lambda: len(rest_alerts()) == 2, 8)
+    cdp.pause(1.0)
+    check('a rest alert taken back does not come, and the next one does', arrived and len(rest_alerts()) == 2, len(rest_alerts()))
+    cdp.ev('window.__hide(false); stopRestTimer(); window.__asked = []')
+
+    # A rest that is not running, or that is nearly over, or a device with them off, asks for nothing.
+    cdp.ev('window.__hide(true)')
+    check('hidden with no rest running, nothing is asked', cdp.ev('window.__asked.length') == 0)
+    cdp.ev('window.__hide(false)')
+    cdp.ev("restRemaining = restTotal = 30; $('restPanel').hidden = false; updateRestTimer()")
+    cdp.ev('window.__hide(true)')
+    check('nor with a rest that is paused', cdp.ev('window.__asked.length') == 0)
+    cdp.ev('window.__hide(false)')
+    resting(1)
+    cdp.ev('window.__hide(true)')
+    check('nor with one that is all but over', cdp.ev('window.__asked.length') == 0)
+    cdp.ev('window.__hide(false); stopRestTimer()')
+    cdp.ev("localStorage.removeItem('workout-tracker-push-rest')")
+    resting(30)
+    cdp.ev('window.__hide(true)')
+    check('nor from a device that has not turned them on', cdp.ev('window.__asked.length') == 0)
+    cdp.ev('window.__hide(false); stopRestTimer()')
+    cdp.ev("localStorage.setItem('workout-tracker-push-rest', '1')")
+    open_settings()
+    click('restAlertSetting')
+    click('remindSetting')
+    wait_for(lambda: subscriptions() == [])
+    check('with both off the subscription goes, and what this browser kept about it', subscriptions() == [] and cdp.ev("localStorage.getItem('workout-tracker-push-endpoint')") is None
+          and cdp.ev("localStorage.getItem('workout-tracker-push-rest')") is None, subscriptions())
+    close_settings()
     close_settings()
 
     # A subscription this browser already has is told to the server again: once a day, and when the clock changes.

@@ -308,10 +308,45 @@ function restoreRest() {
   updateRestTimer();
 }
 
-window.addEventListener('pagehide', rememberRest);
+// A phone that is locked or in another app does not run the page, so it cannot sound the alert at the end of a rest. If this device has
+// rest alerts on (reminders.js), the server is told, as the page is hidden, how many seconds the rest has left, and sends the
+// notification when they are up; and told to forget it when the page is back on screen, which sounds its own alert. Only while the
+// page is hidden: on screen, the page's alert and a notification would be two for one rest, and a notification where the app is in
+// front is the kind iOS punishes. The time is seconds left, not a time of day, since the phone's clock and the server's differ.
+let restAlertAsked = false;
+
+function askRestAlert(seconds) {
+  const endpoint = typeof restAlertEndpoint === 'function' ? restAlertEndpoint() : '';
+  if (!endpoint) return;
+  // keepalive lets it leave even as the page goes; the endpoint is kept where it can be read at once, since there is no time to ask
+  // the browser for it.
+  syncFetch('/api/push/rest', { method:'POST', keepalive:true, headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ endpoint, seconds }) })
+    .catch(error => console.error('Unable to tell the server about the rest alert.', error));
+}
+
+function pageHiddenWithRest() {
+  if (restAlertAsked || !restInterval || restEndsAt === null) return;
+  const left = Math.floor((restEndsAt - Date.now()) / 1000);
+  if (left < 2) return;
+  restAlertAsked = true;
+  askRestAlert(left);
+}
+
+function pageBackWithRest() {
+  if (!restAlertAsked) return;
+  restAlertAsked = false;
+  askRestAlert(null);
+  // One that came while the page was away is of no use now it is back.
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.ready.then(registration => registration.getNotifications({ tag:'rest-over' }))
+      .then(shown => shown.forEach(notification => notification.close())).catch(() => {});
+  }
+}
+
+window.addEventListener('pagehide', () => { rememberRest(); pageHiddenWithRest(); });
 
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) rememberRest();
+  if (document.hidden) { rememberRest(); pageHiddenWithRest(); } else pageBackWithRest();
   // Back from a locked screen or another app, an iPhone's sound is interrupted; it is woken before the rest catches up.
   if (!document.hidden) wakeAudio();
   if (!document.hidden && restInterval) tickRest();

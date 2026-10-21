@@ -152,6 +152,9 @@ self.addEventListener('push', (event) => {
     icon: '/icons/icon-192.png',
     badge: '/icons/icon-192.png',
     tag: message.tag || 'workout-tracker',
+    // A second "Rest over" while the first is still there should buzz the phone again, not quietly take its place.
+    renotify: Boolean(message.tag),
+    vibrate: message.tag === 'rest-over' ? [200, 100, 200] : undefined,
     data: { url },
   }));
 });
