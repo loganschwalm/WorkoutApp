@@ -30,10 +30,62 @@ function renderActiveProgress() {
     const done = planned ? sets >= planned : sets > 0;
     const status = planned ? `${sets} of ${plural(planned, 'set')}` : sets ? plural(sets, 'set') : 'No sets yet';
     const superset = supersetMembers(activeSession, index).length > 1 ? ' <span class="jump-superset">superset</span>' : '';
+    const names = supersetMembers(activeSession, index).map(member => exercises[member].name).join(' and ');
+    const move = (step, arrow, word) => `<button type="button" class="jump-move" data-move="${step}" data-index="${index}"`
+      + `${moveTarget(activeSession, index, step) === null ? ' disabled' : ''} aria-label="Move ${escapeHTML(names)} ${word}">${arrow}</button>`;
     return `<li><button type="button" data-jump="${index}"${index === currentIndex ? ' aria-current="step"' : ''}${done ? ' class="done"' : ''}>`
       + `<span class="jump-name">${index + 1}. ${escapeHTML(exercise.name)}${superset}</span>`
-      + `<span class="jump-sets">${escapeHTML(status)}</span></button></li>`;
+      + `<span class="jump-sets">${escapeHTML(status)}</span></button>${move(-1, '&uarr;', 'earlier')}${move(1, '&darr;', 'later')}</li>`;
   }).join('');
+  $('lastToggle').hidden = moveTarget(activeSession, currentIndex, 'last') === null;
+}
+
+// ---- Putting the exercises in another order ---------------------------------
+
+// The exercises as the blocks that move together: a superset is one, any other exercise is its own. Each is a list of positions.
+function exerciseBlocks(session) {
+  const blocks = [];
+  for (let index = 0; index < session.exercises.length;) {
+    const members = supersetMembers(session, index);
+    blocks.push(members);
+    index = members[members.length - 1] + 1;
+  }
+  return blocks;
+}
+
+// Which block the exercise at `index` would go to, moved a place earlier (-1) or later (1) or to the end ('last'); null if it cannot.
+// A program day's first exercise is the lift the day is about, which the program reads by its place (completeProgramDay), so that one
+// stays where it is and nothing goes in front of it.
+function moveTarget(session, index, where) {
+  const blocks = exerciseBlocks(session);
+  const floor = session.programDay ? 1 : 0;
+  const at = blocks.findIndex(block => block.includes(index));
+  if (at < floor) return null;
+  const to = where === 'last' ? blocks.length - 1 : at + where;
+  return to < floor || to >= blocks.length || to === at ? null : to;
+}
+
+// Moves the exercise at `index` (with its superset, if it is in one), and keeps the exercise on show the one on show. Returns the
+// exercise's new position, or -1 if it could not move.
+function moveExercise(index, where) {
+  const session = activeSession;
+  const to = moveTarget(session, index, where);
+  if (to === null) return -1;
+  const blocks = exerciseBlocks(session);
+  const at = blocks.findIndex(block => block.includes(index));
+  const exercise = session.exercises[index], current = session.exercises[session.currentIndex];
+  const [moved] = blocks.splice(at, 1);
+  blocks.splice(to, 0, moved);
+  const original = [...session.exercises];
+  session.exercises.splice(0, original.length, ...blocks.flat().map(position => original[position]));
+  session.currentIndex = session.exercises.indexOf(current);
+  persistActiveSession();
+  renderActiveProgress();
+  renderSuperset();
+  // A rest on show was kept against the exercise it follows, by its place.
+  if (!$('restPanel').hidden) rememberRest();
+  if (typeof bigViewIsOpen === 'function' && bigViewIsOpen()) renderBigView();
+  return session.exercises.indexOf(exercise);
 }
 
 function showExerciseJump(open) {
@@ -324,6 +376,15 @@ $('activeNotes').oninput = () => { if (activeSession) { activeSession.notes = $(
 $('activeWorkoutProgress').onclick = () => showExerciseJump($('exerciseJump').hidden);
 $('otherCardsToggle').onclick = () => showOtherCards(!document.body.classList.contains('showing-all'));
 $('exerciseJump').onclick = e => {
+  const move = e.target.closest('[data-move]');
+  if (move && activeSession) {
+    const now = moveExercise(Number(move.dataset.index), Number(move.dataset.move));
+    // The list was drawn again: the keyboard goes to the same button of the same exercise, or to its other one if that can go no further.
+    const again = [...$('exerciseJump').querySelectorAll(`[data-index="${now}"]`)];
+    const same = again.find(button => button.dataset.move === move.dataset.move && !button.disabled) || again.find(button => !button.disabled);
+    if (same) same.focus({ preventScroll:true });
+    return;
+  }
   const button = e.target.closest('[data-jump]');
   if (!button || !activeSession) return;
   const index = Number(button.dataset.jump);

@@ -104,7 +104,10 @@ own workouts, templates, and settings.
   back after it, the weight converted if the unit was what changed.
 - Move through exercises one at a time, or go straight to any of them: tap "Exercise 2 of 6" for a
   list of every exercise and how many sets each has, and tap one to go there. Handy when a machine is
-  taken and you do the next free one first.
+  taken and you do the next free one first. Each row also has an arrow up and an arrow down to put that exercise in another
+  place, and "Do this one last" in the ⋯ menu sends the one on show to the end, with Undo. The exercise on show stays on show.
+  A superset moves as one (`exerciseBlocks`, `moveExercise` in `active-workout.js`). In a workout from a training program the first
+  exercise is the lift the day is about, which the program reads by its place, so it stays first and nothing goes before it.
 - Swap an exercise when its equipment is taken: Swap exercise, in the ⋯ menu beside the exercise's
   name, does another in its place. The new one keeps the sets and rep range still to do, but not the old weights, so it starts
   from its own last time. Sets already logged stay with the old exercise, and the new one follows it

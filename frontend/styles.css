@@ -552,6 +552,10 @@ body.training:not(.showing-all) .between-workouts { display:none; }
 .exercise-jump button:hover { background:var(--bg); transform:none; }
 .exercise-jump button[aria-current] { color:var(--accent); background:var(--accent-soft); }
 .exercise-jump .jump-sets { flex:none; color:var(--muted); font-size:.85rem; font-weight:400; }
+.exercise-jump li { display:flex; gap:2px; align-items:stretch; }
+.exercise-jump li > button[data-jump] { flex:1; min-width:0; }
+.exercise-jump li > .jump-move { flex:none; width:44px; min-height:44px; padding:0; justify-content:center; align-items:center; text-align:center; }
+.exercise-jump li > .jump-move:disabled { opacity:.3; }
 .exercise-jump .done .jump-sets::before { content:"\2713\00a0"; color:#22634c; }
 html[data-theme="dark"] .exercise-jump .done .jump-sets::before { color:#a5e5c2; }
 /* Swap, beside the exercise's name, opens a field for the exercise to do instead. */

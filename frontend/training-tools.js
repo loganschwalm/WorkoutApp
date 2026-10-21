@@ -435,6 +435,27 @@ $('noteToggle').onclick = () => showNotePanel($('notePanel').hidden);
 $('noteCancel').onclick = () => showNotePanel(false);
 $('noteSave').onclick = saveExerciseNote;
 $('supersetToggle').onclick = toggleSuperset;
+// For when the machine is taken: this one goes to the end, with Undo to put it back where it was.
+$('lastToggle').onclick = () => {
+  if (!activeSession) return;
+  const session = activeSession;
+  const before = [...session.exercises];
+  const current = session.exercises[session.currentIndex];
+  const name = current.name;
+  if (moveExercise(session.currentIndex, 'last') === -1) return;
+  showFeedback(`${name} is now the last exercise.`, 'success', { label:'Undo', run:() => {
+    // Only while the workout is as it was: one with an exercise added or swapped since cannot be put back by position.
+    if (activeSession !== session || session.exercises.length !== before.length || !before.every(item => session.exercises.includes(item))) {
+      showFeedback('The order cannot be put back: the workout has changed since.');
+      return;
+    }
+    session.exercises.splice(0, before.length, ...before);
+    session.currentIndex = session.exercises.indexOf(current);
+    persistActiveSession();
+    renderActiveProgress();
+    renderSuperset();
+  } });
+};
 $('progressionUse').onclick = () => {
   $('activeWeight').value = $('progressionUse').dataset.weight;
   $('activeWeight').dispatchEvent(new Event('input', { bubbles:true }));

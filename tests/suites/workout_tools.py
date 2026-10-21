@@ -27,7 +27,7 @@ def run(t):
         return cdp.ev('activeSession.exercises.map(e => e.name)')
 
     def jump_list():
-        return cdp.ev("[...document.querySelectorAll('#exerciseJump button')].map(b => [b.querySelector('.jump-name').textContent, b.querySelector('.jump-sets').textContent, b.hasAttribute('aria-current'), b.classList.contains('done')])")
+        return cdp.ev("[...document.querySelectorAll('#exerciseJump button[data-jump]')].map(b => [b.querySelector('.jump-name').textContent, b.querySelector('.jump-sets').textContent, b.hasAttribute('aria-current'), b.classList.contains('done')])")
 
     def jump(index):
         cdp.ev(f"if (document.getElementById('exerciseJump').hidden) document.getElementById('activeWorkoutProgress').click(); document.querySelector('#exerciseJump [data-jump=\"{index}\"]').click()")

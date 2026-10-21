@@ -49,7 +49,8 @@ library, with SQLite for storage, so there is no build step, no package manager 
   there if the phone closes the app mid-rest.
 - Big view, a button in the workout, shows the set to do and the rest clock in very large type, to read from a few feet away
   on a bench, and can open itself for each rest if you choose.
-- Swap an exercise when the equipment is taken, add one mid-workout, superset two, or hold a timed one like a plank.
+- Swap an exercise when the equipment is taken, add one mid-workout, put the exercises in another order (or send one to the end),
+  superset two, or hold a timed one like a plank.
 - Correct or undo a set, keep notes per workout or per exercise, and rate how many reps you had left.
 - Same as last set logs the previous set again in one tap, and How to do it, in an exercise's ⋯ menu, gives a few
   written cues for it and a link to a video demo.
