@@ -188,7 +188,7 @@ docker compose up -d
 ```
 
 (`docker compose up -d --build` builds the image from the checkout instead.) Open `http://YOUR_SERVER_IP:6769`, create your accounts, then set `ALLOW_REGISTRATION: "0"` in
-`docker-compose.yml` and run `docker compose up -d`. Back up with `scripts/docker-backup.sh`, before every
+`docker-compose.yml` and run `docker compose up -d`. The container runs with a read-only filesystem and no capabilities. Back up with `scripts/docker-backup.sh`, before every
 update too. See the [full reference](readme-for-llm.md#docker-compose) for updating (and going back) and daily
 backups.
 

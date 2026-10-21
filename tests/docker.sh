@@ -52,6 +52,16 @@ check 'the container reports healthy' "$(docker inspect -f '{{.State.Health.Stat
 check 'and the server answers outside it' 'no answer' answering
 check 'the server is not running as root' "user $(server_user)" not same "$(server_user)" 0
 
+echo 'H   the container is held to what it needs'
+inspected() { docker inspect -f "$1" workout-tracker; }
+check 'its own filesystem is read-only' "$(inspected '{{.HostConfig.ReadonlyRootfs}}')" same "$(inspected '{{.HostConfig.ReadonlyRootfs}}')" true
+check 'every capability is dropped, and no more can be gained' "$(inspected '{{json .HostConfig.CapDrop}} {{json .HostConfig.SecurityOpt}}')" same \
+  "$(inspected '{{json .HostConfig.CapDrop}} {{json .HostConfig.SecurityOpt}}')" '["ALL"] ["no-new-privileges:true"]'
+# What the server holds after the entrypoint has handed the volume over and become the workout user: nothing.
+server_capabilities() { docker compose exec -T workout-tracker python -c "print(open('/proc/1/status').read().split('CapEff:')[1].split()[0])"; }
+check 'the server runs with no capabilities' "$(server_capabilities)" same "$(server_capabilities)" 0000000000000000
+check 'nothing can be written to the container itself, only the volume' 'it could' not docker compose exec -T workout-tracker sh -c 'touch /app/written'
+
 echo 'S   what is saved lives in the volume'
 curl -fsS -c "$cookies" -H 'Content-Type: application/json' "$base/api/auth/register" \
   -d '{"username":"lifter","email":"lifter@example.test","password":"chalk-and-plates-42"}' >/dev/null || fail 'could not make an account'
@@ -84,4 +94,19 @@ failed_backups="$work/failed-backups"
 check 'a backup that fails part way fails' 'it said it worked' not env PATH="$work/shim:$PATH" bash scripts/docker-backup.sh "$failed_backups"
 check 'and leaves nothing in the backup directory' "$(find "$failed_backups" -type f | wc -l) files" same "$(find "$failed_backups" -type f | wc -l)" 0
 check 'nor a copy of the database in the volume' "$(in_volume | tr '\n' ' ')" not grep -q backup-in-progress < <(in_volume)
+
+# The documented way back from an update that does not start (readme-for-llm.md, "Docker Compose"): the backup put in place of the
+# database, the write-ahead log beside it removed, and the app started. It needs root to do things to a file the workout user owns,
+# with every capability but a few dropped, so it is run here.
+echo 'R   going back to a backup, by the documented steps'
+docker compose exec -T workout-tracker python -c "import sqlite3; c = sqlite3.connect('/app/data/workouts.db'); c.execute('DELETE FROM workouts'); c.commit()" >/dev/null
+check 'a change made after the backup' 'it is still there' not has_workout
+docker compose stop workout-tracker >/dev/null 2>&1
+docker compose cp "$snap" workout-tracker:/app/data/workouts.db || fail 'could not copy the backup into the container'
+docker compose run --rm --no-deps --entrypoint rm workout-tracker -f /app/data/workouts.db-wal /app/data/workouts.db-shm >/dev/null 2>&1 || fail 'could not remove the log files beside the database'
+docker compose start workout-tracker >/dev/null 2>&1 || fail 'could not start it again'
+for _ in $(seq 1 60); do answering && break; sleep 1; done
+check 'the app answers again' 'no answer' answering
+check 'with the workout that was in the backup' 'gone' has_workout
+check 'the database belongs to the workout user again' "$(docker compose exec -T workout-tracker stat -c '%U' /app/data/workouts.db)" same "$(docker compose exec -T workout-tracker stat -c '%U' /app/data/workouts.db)" workout
 echo 'docker: every check passed'

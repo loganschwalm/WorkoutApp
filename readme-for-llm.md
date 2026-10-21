@@ -1824,6 +1824,14 @@ The database lives in the `workout_data` volume and survives restarts and rebuil
 an unprivileged `workout` user; the container starts as root only long enough to hand the data volume
 to that user (volumes made by older images are owned by root).
 
+`docker-compose.yml` holds the container to what it needs: its own filesystem is read-only (the database is in the volume, and `/tmp` is
+memory), every Linux capability is dropped but the five the entrypoint and `docker-backup.sh` use (`CHOWN`, `SETUID`, `SETGID` to hand the
+volume over and become the workout user; `DAC_OVERRIDE` and `FOWNER` for files in a volume that someone else owns), `no-new-privileges`
+is set, and it cannot have more than 1024 processes or threads (above the 512 connections `MAX_CONNECTIONS` allows). Once the entrypoint
+has become the workout user the server holds no capability at all. There is no memory limit, because an import can need several hundred
+megabytes; add `mem_limit:` if the machine is shared. Something added to the image that writes outside `/app/data` and `/tmp` needs a
+`tmpfs:` line or a volume of its own.
+
 ```bash
 docker compose logs -f                      # logs
 ```
@@ -2031,8 +2039,9 @@ thrown away afterwards: the installer installing from a copy of the checkout, an
 database and then fails to start being undone (the previous version running again on the database as it was), a working
 update and one with nothing new (and, in each, the unit's sandbox and the database's permissions), the daily backup run, pruned and
 restored by the steps under *Backups*, and the Docker entrypoint handing over a data directory. A job of its own
-(`tests/docker.sh`) builds the image with `docker compose up -d --build` (and, apart, for amd64 and arm64, the two kinds that are published), checks it is healthy and not running as root and that a
-saved workout survives a restart, and runs `scripts/docker-backup.sh`, once for a backup that opens and once with its copy step
+(`tests/docker.sh`) builds the image with `docker compose up -d --build` (and, apart, for amd64 and arm64, the two kinds that are published), checks it is healthy and not running as root,
+that its filesystem is read-only and it holds no capability, that a saved workout survives a restart, that the steps for going back to a backup
+(under *Docker Compose*) work with the capabilities dropped, and runs `scripts/docker-backup.sh`, once for a backup that opens and once with its copy step
 failing to see that nothing is left behind. `stable` waits for it as it does for the others. When it has moved `stable`, the last job (`publish`)
 builds the same commit for amd64 and arm64 and pushes it to GitHub's registry as `:stable` and `:sha-<commit>`; it follows only a run that moved
 `stable` (`promote`'s `moved` output), so a run that finishes late cannot put an older image under the tag. The workflow's actions for it are

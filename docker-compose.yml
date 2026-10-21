@@ -6,6 +6,26 @@ services:
     build: .
     container_name: workout-tracker
     restart: unless-stopped
+    # The container is held to what it needs. Its own filesystem is read-only (everything it keeps is in the volume, and /tmp is memory),
+    # it starts as root only to hand the volume to the workout user and then runs without any capability at all, it can never gain a
+    # privilege it does not have (no-new-privileges), and it cannot start more than 1024 processes or threads (the server uses a thread for
+    # each of at most 512 connections). The five capabilities are the entrypoint's: to change the owner of the volume and to become
+    # the workout user; DAC_OVERRIDE and FOWNER let it do that to files a volume from an older image left owned by someone else, and
+    # let docker-backup.sh, which runs as root in the container, read the database.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+      - FOWNER
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 1024
     ports:
       # Open to everything that can reach this machine. With a reverse proxy on this same machine, publish the port to it alone,
       # so nothing can go around the proxy (and its HTTPS, limits and login) to the app: "127.0.0.1:6769:6769". With one on
