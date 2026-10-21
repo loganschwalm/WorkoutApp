@@ -108,6 +108,14 @@ function showFeedback(message, type = 'error', action = null) {
   if (type !== 'error') showFeedback.timer = setTimeout(clearFeedback, action ? 10000 : 6000);
 }
 
+// The banner for something just taken away, with Undo in it, and the keyboard on Undo: the button that was pressed went with the thing
+// (its row was drawn again without it), so the keyboard would otherwise be left on nothing.
+function offerUndo(message, undo) {
+  showFeedback(message, 'success', { label:'Undo', run:undo });
+  const button = $('formFeedback').querySelector('.feedback-action');
+  if (button) button.focus({ preventScroll:true });
+}
+
 function clearFeedback() {
   clearTimeout(showFeedback.timer);
   $('formFeedback').hidden = true;

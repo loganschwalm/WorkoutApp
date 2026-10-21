@@ -154,8 +154,9 @@ def run(t):
     cdp.dialogs.clear()
     cdp.ev("document.querySelector('#templateList [data-template-action=delete][data-template-id=\"custom-lower\"]').click()")
     cdp.pause(0.3)
-    check('deleting it says which day of the program does it', cdp.dialogs == ['Delete template “Lower”? Upper/Lower does it on Lower, which will need another template.'],
-          cdp.dialogs)
+    check('deleting it says which day of the program does it, with Undo, and asks nothing first',
+          cdp.dialogs == [] and cdp.ev("document.getElementById('formFeedback').textContent") == 'Deleted template “Lower”. Upper/Lower does it on Lower, which will need another template. Undo',
+          [cdp.dialogs, cdp.ev("document.getElementById('formFeedback').textContent")])
     check('the day then says its template is gone', day_rows()[2] == 'Lower | Its template was deleted. Edit the program to choose another.', day_rows())
     click('#programNext [data-program-action=skip]')
     check('and when it is next, there is nothing to start, only Skip', next_up() == {'day': 'Lower', 'start': False,

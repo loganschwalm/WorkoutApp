@@ -118,10 +118,9 @@ function withSupersetGroups(drafts) {
 }
 
 // A template that is a day of the program you built takes that day's workout with it, so deleting it says so.
-function templateDeleteQuestion(template) {
+function templateDeleteNote(template) {
   const days = currentProgram && programDefinition(currentProgram).custom ? currentProgram.days.filter(day => day.template === template.id) : [];
-  return days.length ? `Delete template “${template.name}”? ${currentProgram.name} does it on ${days.map(day => day.name).join(' and ')}, which will need another template.`
-    : `Delete template “${template.name}”?`;
+  return days.length ? ` ${currentProgram.name} does it on ${days.map(day => day.name).join(' and ')}, which will need another template.` : '';
 }
 
 function openTemplateEditor(template = null) {
@@ -158,11 +157,23 @@ $('templateList').onclick = e => {
     renderTemplates();
     showFeedback(`Created a copy of “${template.name}”.`, 'success');
   }
-  if (action === 'delete' && confirm(templateDeleteQuestion(template))) {
+  if (action === 'delete') {
+    // No question first: it can be taken back, in the place it was, with the same id (so a program day that used it finds it again).
+    const index = customTemplates.findIndex(item => item.id === template.id);
+    if (index === -1) return;
+    const note = templateDeleteNote(template);
+    const removed = customTemplates[index];
     customTemplates = customTemplates.filter(item => item.id !== template.id);
     saveCustomTemplates();
     renderTemplates();
     renderProgram();
+    offerUndo(`Deleted template “${template.name}”.${note}`, () => {
+      customTemplates = [...customTemplates.slice(0, index), removed, ...customTemplates.slice(index)];
+      saveCustomTemplates();
+      renderTemplates();
+      renderProgram();
+      showFeedback(`Put template “${template.name}” back.`, 'success');
+    });
   }
 };
 $('templateExerciseEditor').oninput = e => {

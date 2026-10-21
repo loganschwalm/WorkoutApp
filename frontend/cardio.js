@@ -536,7 +536,6 @@ async function loadCardioSessions() {
 }
 
 async function deleteCardio(workout) {
-  if (!confirm(`Delete “${workout.name}” of ${formatDate(workout.createdAt)}?`)) return;
   try {
     const response = await syncFetch(`/api/workouts/${encodeURIComponent(workout.id)}`, { method:'DELETE' });
     if (!response.ok) throw new Error(`Delete failed (${response.status}).`);
@@ -546,8 +545,13 @@ async function deleteCardio(workout) {
     return;
   }
   if (cardioForm && cardioForm.workout && cardioForm.workout.id === workout.id) closeCardioForm();
-  showFeedback(`Deleted “${workout.name}”.`, 'success');
   await loadCardioSessions();
+  // No question first: it can be taken back.
+  offerUndo(`Deleted “${workout.name}” of ${formatDate(workout.createdAt)}.`, async () => {
+    const synced = await restoreDeletedWorkout(workout);
+    showFeedback(synced ? `“${workout.name}” is back.` : `“${workout.name}” is back on this device and will sync when the server is reachable again.`, 'success');
+    await loadCardioSessions();
+  });
 }
 
 // A link from History says what to do with one of the sessions once they have loaded: ?start= times it again, ?edit=

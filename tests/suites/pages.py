@@ -1178,11 +1178,13 @@ def run(t):
     check('a delete that cannot reach the server says so, and keeps the workout', 'could not be deleted' in cdp.ev("document.getElementById('historyFeedback').textContent")
           and cdp.ev(f"!!{row(push)}") is True, cdp.ev("document.getElementById('historyFeedback').textContent"))
     cdp.block_api = False
+    cdp.dialogs.clear()
     cdp.ev(f"{row(push)}.querySelector('[data-action=delete]').click()")
     cdp.wait(f"!{row(push)}")
     state = history()
-    check('Delete asks, then takes it out of the list and the month', cdp.ev("document.getElementById('historyFeedback').textContent") == 'Deleted “Push Day”.'
-          and state['months'][0][1] == '1 workout · 30 min' and state['summary'] == f'{total - 1} saved workouts', state)
+    check('Delete takes it out of the list and the month, with Undo and no question first',
+          cdp.ev("document.getElementById('formFeedback').textContent") == 'Deleted “Push Day”. Undo' and not cdp.dialogs
+          and state['months'][0][1] == '1 workout · 30 min' and state['summary'] == f'{total - 1} saved workouts', [state, cdp.ev("document.getElementById('formFeedback').textContent"), cdp.dialogs])
     check('and off the server', all(w['id'] != push for w in t.api('GET', '/api/workouts', token=historian)[0]['workouts']))
     check('the calendar follows', cdp.ev(f"document.querySelector('.calendar-day[data-date=\"{today.isoformat()}\"]').title").endswith(': Leg Day'))
     t.set_cookie(t.token)

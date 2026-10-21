@@ -408,7 +408,8 @@ Users can also:
   last time every set reached 12 reps"); until then it stays at last time's weight. Starting that
   workout again from History or Recent workouts progresses the same way. Sets left blank mean as many as
   you like, as before.
-- Delete custom templates.
+- Delete custom templates. Nothing is asked first: the banner says "Deleted template “X”." with Undo, which puts it back in its place
+  under the same id (so a program day that used it finds it again).
 - Start a workout directly from any template.
 - On the Tracker, templates fold away once you have saved workouts or a program; someone new sees
   them straight away.
@@ -555,8 +556,8 @@ A weekly split you build from your templates, for training the way you already d
 - Workouts are named after their day ("Upper A"), and History says which program and week ("Upper/Lower · Week 2").
 - Edit program, in the card's ⋯ menu, opens the builder again. A day already done this week stays done while it keeps
   its place and template.
-- Deleting a template that a day does says so first. The day then asks for another template, and can only be skipped
-  until it has one.
+- Deleting a template that a day does says so in the banner that offers Undo. Without Undo the day asks for another template, and
+  can only be skipped until it has one.
 
 ### Training schedule and reminders
 
@@ -723,7 +724,11 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
   30 h 2 min", "October · 14 workouts · 12 h 19 min"). The latest year and its latest month start open and the rest
   folded, so the list is not one long column; what you open or fold stays so when the list is drawn again (a search, a
   deletion). Each workout shows its name and date (tap it for the sets), Start, and a ⋯ menu to copy it as a new
-  workout, edit it (both in the Tracker's form), or delete it.
+  workout, edit it (both in the Tracker's form), or delete it. Deleting a workout, here, in the Tracker's list or on Cardio, asks
+  nothing first: the banner (kept on the page for ten seconds) says "Deleted “X”." and offers Undo, with the keyboard on it. Undo makes a
+  *new* workout with the same name, day, notes and sets (`restoreDeletedWorkout` in `offline.js`): the server remembers the
+  `clientId` of every workout deleted, so the old one cannot be uploaded again. It is queued like a finished workout, so Undo works
+  with no connection and sends it when there is one.
 - Search History by workout name, exercise, activity or note; every word typed has to match, and the search
   looks through every year and month, opening each that has a match.
 - Cardio sessions are listed with the workouts, under their activity's name with their day, time and distance ("Oct 1,

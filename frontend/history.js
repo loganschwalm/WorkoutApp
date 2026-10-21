@@ -121,7 +121,6 @@ function showHistoryFeedback(message, failed = false) {
 }
 
 async function deleteHistoryWorkout(workout) {
-  if (!confirm(`Delete “${workout.name}”?`)) return;
   try {
     const response = await syncFetch(`/api/workouts/${encodeURIComponent(workout.id)}`, { method:'DELETE' });
     if (!response.ok) throw new Error(`Delete failed (${response.status}).`);
@@ -132,7 +131,17 @@ async function deleteHistoryWorkout(workout) {
   }
   openWorkouts.delete(workout.id);
   showHistory(historyWorkouts.filter(item => item.id !== workout.id));
-  showHistoryFeedback(`Deleted “${workout.name}”.`);
+  $('historyFeedback').hidden = true;
+  // No question first: it can be taken back.
+  offerUndo(`Deleted “${workout.name}”.`, async () => {
+    const synced = await restoreDeletedWorkout(workout);
+    showFeedback(synced ? `“${workout.name}” is back.` : `“${workout.name}” is back on this device and will sync when the server is reachable again.`, 'success');
+    try {
+      showHistory(await getSavedWorkouts());
+    } catch (error) {
+      if (error.copy) showHistory(error.copy);
+    }
+  });
 }
 
 function showWorkoutDetails(row, open) {
@@ -163,6 +172,8 @@ $('historyList').onclick = event => {
   if (action === 'export') showHistoryFeedback(activitySavedMessage(saveActivityFile(workout)));
   if (action === 'delete') deleteHistoryWorkout(workout);
 };
+// Tap the banner to dismiss it.
+$('formFeedback').onclick = clearFeedback;
 $('historySearch').oninput = () => { if (historyWorkouts) renderHistory(historyWorkouts); };
 
 // ---- Training calendar ----------------------------------------------------

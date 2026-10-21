@@ -185,11 +185,17 @@ $('savedWorkoutList').onclick = async e => {
   }
   if (action === 'repeat') loadWorkoutIntoForm(workout, false);
   if (action === 'edit') loadWorkoutIntoForm(workout, true);
-  if (action === 'delete' && confirm(`Delete “${workout.name}”?`)) {
+  if (action === 'delete') {
     try {
       await deleteWorkout(workout.id);
       if (editingWorkout && editingWorkout.id === workout.id) $('clearBtn').click();
       await loadSavedWorkouts();
+      // No question first: it can be taken back.
+      offerUndo(`Deleted “${workout.name}”.`, async () => {
+        const synced = await restoreDeletedWorkout(workout);
+        showFeedback(synced ? `“${workout.name}” is back.` : `“${workout.name}” is back on this device and will sync when the server is reachable again.`, 'success');
+        await loadSavedWorkouts();
+      });
     } catch (error) {
       showFeedback('This workout could not be deleted.');
       console.error('Unable to delete workout.', error);

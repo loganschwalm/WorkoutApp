@@ -302,6 +302,16 @@ function withoutQueuedWorkout(queue, workout) {
   return index === -1 ? queue : [...queue.slice(0, index), ...queue.slice(index + 1)];
 }
 
+// Brings back a workout (or cardio session) that was deleted, as Undo does. Not by sending the same one again: the server remembers the
+// clientId of every workout deleted, so that a late retry of an upload cannot bring it back, and would answer that it is deleted and
+// make nothing. It is a new workout with the same name, day, sets and notes, under a clientId of its own, queued like a finished one,
+// so it works with no connection and lands when there is one. Resolves true once it has gone up.
+function restoreDeletedWorkout(workout) {
+  const { id, clientId, ...rest } = workout;
+  queuePendingWorkout({ ...rest, clientId:newClientId() });
+  return flushPendingWorkouts();
+}
+
 function schedulePendingRetry() {
   pendingRetryCount += 1;
   pendingRetryTimer = setTimeout(flushPendingWorkouts, Math.min(60000, 2000 * 2 ** (pendingRetryCount - 1)));
