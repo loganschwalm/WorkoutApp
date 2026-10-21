@@ -62,7 +62,7 @@
       <div class="effort-choices" id="effortChoices" role="group" aria-labelledby="effortLabel" hidden><span id="effortLabel">Reps left</span><button class="secondary" type="button" data-effort="0" aria-pressed="false" aria-label="0 left">0</button><button class="secondary" type="button" data-effort="1" aria-pressed="false" aria-label="1 left">1</button><button class="secondary" type="button" data-effort="2" aria-pressed="false" aria-label="2 left">2</button><button class="secondary" type="button" data-effort="3" aria-pressed="false" aria-label="3 left">3</button><button class="secondary" type="button" data-effort="4" aria-pressed="false" aria-label="4 or more left">4+</button></div>
       <div class="hold-timer" id="holdTimer" hidden><div class="hold-time"><strong>Hold</strong><span id="holdDisplay">0:30</span></div><button class="secondary" id="holdBtn" type="button">Start timer</button></div>
       <p class="plate-hint" id="plateHint" hidden></p><p class="plate-hint" id="warmupHint" hidden></p>
-      <div class="rest-panel" id="restPanel" hidden><div class="rest-time"><strong>Rest</strong><span id="timerDisplay">1:30</span><div class="rest-adjust" id="restAdjust"><button class="secondary" type="button" data-rest-adjust="-30" aria-label="30s less rest">&minus;30s</button><button class="secondary" type="button" data-rest-adjust="30" aria-label="30s more rest">+30s</button></div></div><div class="rest-actions"><button class="secondary" id="restFixBtn" type="button">Fix last set</button><button class="secondary" id="restEndBtn" type="button" aria-label="End rest now">End rest</button><button class="secondary" id="restToggleBtn" type="button">Start rest</button><button class="secondary" id="restResetBtn" type="button" aria-label="Reset the rest timer" title="Reset">&#8634;</button></div></div>
+      <div class="rest-panel" id="restPanel" hidden><div class="rest-time"><strong>Rest</strong><span id="timerDisplay">1:30</span><div class="rest-adjust" id="restAdjust"><button class="secondary" type="button" data-rest-adjust="-30" aria-label="30s less rest">&minus;30s</button><button class="secondary" type="button" data-rest-adjust="30" aria-label="30s more rest">+30s</button></div></div><div class="rest-actions"><button class="secondary" id="restEndBtn" type="button" aria-label="End rest now">End rest</button><button class="secondary" id="restToggleBtn" type="button">Start rest</button><button class="secondary rest-more-toggle" id="restMoreBtn" type="button" aria-expanded="false" aria-controls="restMoreItems" aria-label="More for the rest">&middot;&middot;&middot;</button><div class="rest-more-items" id="restMoreItems"><button class="secondary" id="restFixBtn" type="button">Fix last set</button><button class="secondary" id="restResetBtn" type="button">Restart rest</button></div></div></div>
       <p class="visually-hidden" id="restAnnouncement" role="status"></p>
       <p class="subtitle screen-awake-notice" id="screenAwakeNotice" role="status" hidden></p>
       <p class="subtitle" id="activeSyncNotice" role="status" hidden>Can&rsquo;t reach the server. Your sets are saved on this device and will sync automatically.</p>
@@ -91,20 +91,26 @@
       <button class="link-button summary-export" id="summaryExport" type="button" hidden>Download for Strava (.tcx)</button>
     </section>
 
-    <section class="card recap-card whats-new-card" id="whatsNewCard" aria-labelledby="whatsNewTitle" hidden>
-      <div class="section-heading"><div><h2 id="whatsNewTitle">What's new</h2><p class="subtitle" id="whatsNewRelease"></p></div><button class="secondary" id="whatsNewDone" type="button">Done</button></div>
-      <ul class="whats-new-list" id="whatsNewList"></ul>
-      <details class="recap-records whats-new-more" id="whatsNewMore" hidden><summary id="whatsNewMoreTitle">More</summary><ul class="whats-new-list" id="whatsNewMoreList"></ul></details>
+    <section class="card recap-card whats-new-card banner" id="whatsNewCard" aria-labelledby="whatsNewTitle" hidden>
+      <div class="section-heading banner-bar"><div><h2 id="whatsNewTitle"><button class="banner-toggle" id="whatsNewToggle" type="button" aria-expanded="false" aria-controls="whatsNewBody">What's new</button></h2><p class="subtitle banner-line" id="whatsNewLine"></p></div><button class="secondary" id="whatsNewDone" type="button">Dismiss</button></div>
+      <div class="banner-body" id="whatsNewBody" hidden>
+        <p class="subtitle" id="whatsNewRelease"></p>
+        <ul class="whats-new-list" id="whatsNewList"></ul>
+        <details class="recap-records whats-new-more" id="whatsNewMore" hidden><summary id="whatsNewMoreTitle">More</summary><ul class="whats-new-list" id="whatsNewMoreList"></ul></details>
+      </div>
     </section>
 
-    <section class="card recap-card" id="recapCard" aria-labelledby="recapTitle" hidden>
-      <div class="section-heading"><div><h2 id="recapTitle">Last week</h2><p class="subtitle" id="recapRange"></p></div><button class="secondary" id="recapDone" type="button">Done</button></div>
-      <p class="summary-splash recap-best" id="recapBest" hidden>Your biggest week of lifting yet.</p>
-      <p class="summary-headline recap-headline" id="recapHeadline"></p>
-      <p class="summary-line" id="recapCompare" hidden></p>
-      <ul class="summary-stats" id="recapStats"></ul>
-      <div class="summary-records summary-achievements" id="recapAchievements" hidden><h3>Achievements</h3><ul id="recapAchievementList"></ul></div>
-      <details class="recap-records summary-records" id="recapRecords" hidden><summary id="recapRecordsTitle">Personal records</summary><ul id="recapRecordList"></ul></details>
+    <section class="card recap-card banner" id="recapCard" aria-labelledby="recapTitle" hidden>
+      <div class="section-heading banner-bar"><div><h2 id="recapTitle"><button class="banner-toggle" id="recapToggle" type="button" aria-expanded="false" aria-controls="recapBody">Last week</button></h2><p class="subtitle banner-line" id="recapLine"></p></div><button class="secondary" id="recapDone" type="button">Dismiss</button></div>
+      <div class="banner-body" id="recapBody" hidden>
+        <p class="subtitle" id="recapRange"></p>
+        <p class="summary-splash recap-best" id="recapBest" hidden>Your biggest week of lifting yet.</p>
+        <p class="summary-headline recap-headline" id="recapHeadline"></p>
+        <p class="summary-line" id="recapCompare" hidden></p>
+        <ul class="summary-stats" id="recapStats"></ul>
+        <div class="summary-records summary-achievements" id="recapAchievements" hidden><h3>Achievements</h3><ul id="recapAchievementList"></ul></div>
+        <details class="recap-records summary-records" id="recapRecords" hidden><summary id="recapRecordsTitle">Personal records</summary><ul id="recapRecordList"></ul></details>
+      </div>
     </section>
 
     <section class="card between-workouts schedule-card" id="scheduleCard" aria-label="Training schedule" hidden>

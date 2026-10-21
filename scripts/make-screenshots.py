@@ -97,8 +97,9 @@ class Browser:
             self.cdp.send(f'{domain}.enable')
         self.cdp.send('Emulation.setScrollbarsHidden', hidden=True)
         # The app follows the device's light or dark mode; the screenshots are light (the dark one sets it outright),
-        # whatever this machine uses.
-        self.cdp.send('Emulation.setEmulatedMedia', features=LIGHT_DEVICE)
+        # whatever this machine uses. Motion is reduced, so the demo data's best streak does not fire its confetti across the page
+        # being photographed.
+        self.cdp.send('Emulation.setEmulatedMedia', features=[*LIGHT_DEVICE, {'name': 'prefers-reduced-motion', 'value': 'reduce'}])
 
     def viewport(self, size, phone=False):
         width, height = size

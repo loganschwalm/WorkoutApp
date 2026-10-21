@@ -192,10 +192,10 @@ def run(t):
       CanvasRenderingContext2D.prototype.arc = function (x, y, ...rest) { arcs.push(y); return original.call(this, x, y, ...rest); };
       drawChart();
       const baseline = 22 + (360 - 22 - 52);
-      return { arcs: arcs.length, expected: chartData.types.reduce((n, t) => n + t.values.size, 0), atZero: arcs.filter(y => Math.abs(y - baseline) < 0.5).length, types: chartData.types.length };
+      return { arcs: arcs.length, expected: chartData.types.reduce((n, t) => n + t.values.size + (t.values.size > 1 ? 1 : 0), 0), atZero: arcs.filter(y => Math.abs(y - baseline) < 0.5).length, types: chartData.types.length };
     })()""")
     check('chart has multiple workout types', info['types'] >= 2, str(info))
-    check('each series plots only its own workouts', info['arcs'] == info['expected'], str(info))
+    check('each series plots only its own workouts, and rings its best', info['arcs'] == info['expected'], str(info))
     check('no phantom zero-value points', info['atZero'] == 0, str(info))
 
     # A saved workout with no exercises (the API and an import can hold one) once threw on starting, and the empty

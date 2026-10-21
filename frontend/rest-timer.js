@@ -262,6 +262,14 @@ $('restToggleBtn').onclick = () => {
 };
 $('restEndBtn').onclick = endRest;
 $('restResetBtn').onclick = () => { stopRestTimer(); restRemaining = restTotal = restDuration(); updateRestTimer(); };
+// On a phone the rest is End rest and Pause rest with ··· beside them, which opens Fix last set and Restart rest in a row under (on a wide
+// screen all four show, and ··· does not). Choosing one closes it again, so the panel is as small as it can be while the page is in use.
+function showRestMore(open) {
+  $('restMoreBtn').setAttribute('aria-expanded', String(open));
+  $('restPanel').classList.toggle('more-open', open);
+}
+$('restMoreBtn').onclick = () => showRestMore($('restMoreBtn').getAttribute('aria-expanded') !== 'true');
+$('restMoreItems').addEventListener('click', e => { if (e.target.closest('button')) showRestMore(false); });
 $('restAdjust').onclick = e => {
   const button = e.target.closest('[data-rest-adjust]');
   if (!button) return;

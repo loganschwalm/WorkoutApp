@@ -618,7 +618,7 @@ def run(t):
       CanvasRenderingContext2D.prototype.fillText = function (text, ...rest) { drawn.push(String(text)); return fill.call(this, text, ...rest); };
       try { drawChart(); } finally { CanvasRenderingContext2D.prototype.fillText = fill; }
       return drawn.filter(text => /^-?[\d,.]+$/.test(text)); })()""")
-    check('the axis is marked on round numbers, from zero to the round step above the best', ticks == ['0', '50', '100', '150'], ticks)
+    check('the axis fits the values, marked on round numbers from the step below the lowest to the one above the best', ticks == ['120', '130', '140', '150', '160'], ticks)
     label = cdp.ev("document.getElementById('progressChart').getAttribute('aria-label')")
     check('the chart is described in words for a screen reader', label.startswith('Heaviest weight for Bench Press: 5 workouts from ')
           and label.endswith('lowest 135 lbs, highest 150 lbs.'), label)
@@ -684,6 +684,24 @@ def run(t):
     cdp.pause(0.2)
     shown = cdp.ev("[document.getElementById('metricFilter').value, document.getElementById('exerciseFilter').value]")
     check('Clear filters goes back to how the page opened', shown == ['weight', 'bench press'], shown)
+
+    # The range chips: a tap for the dates most wanted, and the dates themselves under More filters.
+    pressed = "[...document.querySelectorAll('#rangeChips button')].filter(b => b.getAttribute('aria-pressed') === 'true').map(b => b.textContent)"
+    check('the page opens with every workout: All is the range pressed', cdp.ev(pressed) == ['All'] and cdp.ev("document.getElementById('moreFiltersState').textContent") == '', cdp.ev(pressed))
+    cdp.ev("document.querySelector('#rangeChips [data-range-days=\"28\"]').click()")
+    cdp.pause(0.2)
+    chips = cdp.ev("""({ from: document.getElementById('startDateFilter').value, to: document.getElementById('endDateFilter').value,
+        expected: calendarDayKey(addDays(new Date(), -28)) })""")
+    check('4 weeks fills From with the day 28 back, and leaves To empty, and is the one pressed', chips['from'] == chips['expected'] and chips['to'] == ''
+          and cdp.ev(pressed) == ['4 weeks'] and cdp.ev("document.getElementById('moreFiltersState').textContent") == '', chips)
+    cdp.ev("(box => { box.value = '2020-01-02'; box.dispatchEvent(new Event('change')); })(document.getElementById('startDateFilter'))")
+    cdp.pause(0.2)
+    check('dates chosen by hand leave no range pressed, and More filters says dates are set',
+          cdp.ev(pressed) == [] and cdp.ev("document.getElementById('moreFiltersState').textContent") == 'dates', cdp.ev(pressed))
+    cdp.ev("document.querySelector('#rangeChips [data-range-days=\"\"]').click()")
+    cdp.pause(0.2)
+    check('All empties both dates again', cdp.ev(pressed) == ['All'] and cdp.ev("document.getElementById('startDateFilter').value") == ''
+          and cdp.ev("document.getElementById('endDateFilter').value") == '')
 
     # The This exercise card: one exercise's records, rep maxes, goal, stall and muscle in one place, over every workout.
     print('P8a Progress has a card for the exercise chosen: its records, the heaviest weight for 1 to 10 reps, its goal and its muscle')
@@ -856,6 +874,7 @@ def run(t):
     })()""")
     check('with several workout types on one line, on a phone, the values still never overlap or run off the edge',
           mixed['labels'] >= 2 and mixed['overlaps'] == 0 and mixed['clipped'] == 0, mixed)
+    cdp.ev("document.getElementById('moreFilters').open = true")
     fits = cdp.ev("document.querySelector('.progress-filters').scrollWidth <= document.querySelector('.progress-filters').clientWidth")
     check('and the filters fit the phone', fits is True)
     # "All workout types" does not fit half a phone, so Workout type has a line of its own; From and To share one, each field whole.

@@ -40,8 +40,20 @@ def run(t):
           items == ev("whatsNewItems.slice(0, 3).map(item => item.title)") and folded == ev("whatsNewItems.slice(3).map(item => item.title)")
           and ev("document.getElementById('whatsNewMoreTitle').textContent") == f'{len(folded)} more' and ev("document.getElementById('whatsNewMore').open") is False,
           [items, folded])
-    check('nothing to press is under 44px', ev("""[...document.querySelectorAll('#whatsNewCard button, #whatsNewCard summary, #whatsNewCard a')].every(e => { const box = e.getBoundingClientRect();
-        return box.height >= 44 && box.width >= 44; })""") is True)
+    # It is a line until its heading is pressed, and the line says what is inside.
+    check('it starts as a line: the heading to open it, and what is inside', ev("document.getElementById('whatsNewBody').hidden") is True
+          and ev("document.getElementById('whatsNewToggle').getAttribute('aria-expanded')") == 'false'
+          and ev("document.getElementById('whatsNewLine').textContent") == f"{len(items) + len(folded)} new things in {ev('whatsNewRelease.name')}"
+          and ev("document.getElementById('whatsNewToggle').textContent") == "What's new")
+    tall = """[...document.querySelectorAll('#whatsNewCard button, #whatsNewCard summary, #whatsNewCard a')].filter(e => e.offsetParent).every(e => { const box = e.getBoundingClientRect();
+        return box.height >= 44 && box.width >= 44; })"""
+    check('and its heading and Dismiss are 44px to press', ev(tall) is True)
+    ev("document.getElementById('whatsNewToggle').click()")
+    check('pressing the heading opens it, in place of the line', ev("document.getElementById('whatsNewBody').hidden") is False
+          and ev("document.getElementById('whatsNewToggle').getAttribute('aria-expanded')") == 'true' and ev("document.getElementById('whatsNewLine').hidden") is True)
+    check('nothing to press is under 44px', ev(tall) is True)
+    ev("document.getElementById('whatsNewToggle').click()")
+    check('and pressing it again puts the line back', ev("document.getElementById('whatsNewBody').hidden") is True and ev("document.getElementById('whatsNewLine').hidden") is False)
     check('nothing before the whole history is in hand',
           ev("(() => { savedWorkoutsLoaded = false; renderWhatsNew(); const hidden = document.getElementById('whatsNewCard').hidden; savedWorkoutsLoaded = true; renderWhatsNew(); return hidden; })()") is True)
     t.start(0)
@@ -61,7 +73,7 @@ def run(t):
     t.open_tracker()
     ev("document.getElementById('whatsNewDone').click()")
     cdp.pause(0.2)
-    check('Done puts it away, and the keyboard carries on from the templates', shown() is False and ev('document.activeElement.id') == 'templatesToggle',
+    check('Dismiss puts it away, and the keyboard carries on from the templates', shown() is False and ev('document.activeElement.id') == 'templatesToggle',
           ev('document.activeElement.id'))
     check('saving the release as seen, as a setting', ev('getWorkoutSettings().seenWhatsNew') == ev('whatsNewRelease.id'))
     check('which reaches the account', t.wait_for(lambda: server_settings(veteran).get('seenWhatsNew') == ev('whatsNewRelease.id')))

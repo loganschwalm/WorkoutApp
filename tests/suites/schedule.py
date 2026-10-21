@@ -351,6 +351,10 @@ def run(t):
     wait_for(lambda: len(cdp.ev('window.__asked')) == 1)
     cdp.ev('window.__hide(false)')
     cdp.ev('stopRestTimer()')
+    # The two requests are on connections of their own, and a server under load can answer the later first, so the cancelling one
+    # would cancel the new alert; in use they are seconds apart, as here they are made to be.
+    wait_for(lambda: len(cdp.ev('window.__asked')) == 2)
+    cdp.pause(0.6)
     resting(3)
     cdp.ev('window.__hide(true)')
     arrived = wait_for(lambda: len(rest_alerts()) == 2, 8)

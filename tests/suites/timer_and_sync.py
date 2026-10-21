@@ -634,9 +634,15 @@ def run(t):
     cdp.send('Emulation.setDeviceMetricsOverride', width=375, height=740, deviceScaleFactor=1, mobile=True)
     cdp.ev("document.getElementById('restResetBtn').click()")
     cdp.pause(0.3)
-    fit = cdp.ev("(() => { const panel = document.getElementById('restPanel').getBoundingClientRect(); "
-                 "return [...document.querySelectorAll('#restPanel button')].every(b => { const r = b.getBoundingClientRect(); return r.left >= panel.left && r.right <= panel.right + 0.5; }); })()")
-    check('on a phone every rest button still fits in the panel', fit is True)
+    fit = ("(() => { const panel = document.getElementById('restPanel').getBoundingClientRect(); "
+           "const shown = [...document.querySelectorAll('#restPanel button')].filter(b => b.offsetParent); "
+           "return [shown.length, shown.every(b => { const r = b.getBoundingClientRect(); return r.left >= panel.left && r.right <= panel.right + 0.5 && r.height >= 44; })]; })()")
+    check('on a phone End rest, Pause rest and ··· fit in the panel, each 44px tall, with −30s and +30s', cdp.ev(fit) == [5, True], cdp.ev(fit))
+    cdp.ev("document.getElementById('restMoreBtn').click()")
+    check('··· opens Fix last set and Restart rest under them, which fit too', cdp.ev(fit) == [7, True]
+          and cdp.ev("document.getElementById('restMoreBtn').getAttribute('aria-expanded')") == 'true', cdp.ev(fit))
+    cdp.ev("document.getElementById('restResetBtn').click()")
+    check('and choosing one puts them away again', cdp.ev(fit)[0] == 5 and cdp.ev("document.getElementById('restMoreBtn').getAttribute('aria-expanded')") == 'false')
     cdp.send('Emulation.clearDeviceMetricsOverride')
     end_workout()
 

@@ -89,8 +89,16 @@ def run(t):
     check('the achievements it earned, to share', 'First workout' in shown['achievements']
           and ev("document.querySelectorAll('#recapAchievementList [data-share]').length") == len(shown['achievements']), shown['achievements'])
     check('and its records, folded under their count', shown['records'] == '2 personal records' and shown['recordsFolded'] is True, shown['records'])
-    check('nothing to press is under 44px', ev("""[...document.querySelectorAll('#recapCard button, #recapCard summary')].every(e => { const box = e.getBoundingClientRect();
-        return box.height >= 44 && box.width >= 44; })""") is True)
+    check('it starts as a line saying how the week went, under the heading that opens it', ev("document.getElementById('recapBody').hidden") is True
+          and ev("document.getElementById('recapLine').textContent").endswith(shown['headline']) and ev("document.getElementById('recapToggle').getAttribute('aria-expanded')") == 'false')
+    tall = """[...document.querySelectorAll('#recapCard button, #recapCard summary')].filter(e => e.offsetParent).every(e => { const box = e.getBoundingClientRect();
+        return box.height >= 44 && box.width >= 44; })"""
+    check('its heading and Dismiss are 44px to press', ev(tall) is True)
+    ev("document.getElementById('recapToggle').click()")
+    check('pressing the heading opens the week, in place of the line', ev("document.getElementById('recapBody').hidden") is False and ev("document.getElementById('recapLine').hidden") is True)
+    check('nothing to press is under 44px', ev(tall) is True)
+    ev("document.getElementById('recapToggle').click()")
+    check('and pressing it again puts the line back', ev("document.getElementById('recapBody').hidden") is True and ev("document.getElementById('recapLine').hidden") is False)
     check('nothing is shown before the whole history is in hand',
           ev("(() => { savedWorkoutsLoaded = false; renderRecap(); const hidden = document.getElementById('recapCard').hidden; savedWorkoutsLoaded = true; renderRecap(); return hidden; })()") is True)
     t.start(0)
@@ -101,7 +109,7 @@ def run(t):
     check('and it is back after', ev("getComputedStyle(document.getElementById('recapCard')).display") != 'none')
     ev("document.getElementById('recapDone').click()")
     cdp.pause(0.2)
-    check('Done puts it away, and the keyboard carries on from the templates', ev("document.getElementById('recapCard').hidden") is True
+    check('Dismiss puts it away, and the keyboard carries on from the templates', ev("document.getElementById('recapCard').hidden") is True
           and ev('document.activeElement.id') == 'templatesToggle', ev('document.activeElement.id'))
     t.open_tracker()
     check('for the rest of the week', ev("document.getElementById('recapCard').hidden") is True)

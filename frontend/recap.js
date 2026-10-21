@@ -5,6 +5,18 @@
 // Done is kept on this device, by the week's Monday, so the next week's card comes by itself. Loaded on the Tracker after
 // achievements.js; saved-workouts.js draws it once the saved workouts have loaded, and again when the settings change.
 
+// Last week and What's new are a line each until opened: the Tracker's first screen is for starting a workout, and these are
+// news. The toggle is the card's heading, which opens its body; the line under the heading says what is inside and gives way to
+// the body when it opens. Whether it is open is not kept, so each visit begins with the one line.
+function wireBanner(toggle, body, line) {
+  $(toggle).onclick = () => {
+    const open = $(toggle).getAttribute('aria-expanded') !== 'true';
+    $(toggle).setAttribute('aria-expanded', String(open));
+    $(body).hidden = !open;
+    $(line).hidden = open;
+  };
+}
+
 // Monday of last week, as the History calendar counts weeks.
 function recapMonday() {
   return addDays(startOfWeek(new Date()), -7);
@@ -39,6 +51,7 @@ function renderRecap() {
   const day = date => date.toLocaleDateString(undefined, { month:'short', day:'numeric' });
   $('recapRange').textContent = `${day(monday)} – ${day(addDays(monday, 6))}`;
   $('recapHeadline').textContent = recapHeadline(recap);
+  $('recapLine').textContent = recap.biggest ? `Your biggest week of lifting yet. ${recapHeadline(recap)}` : recapHeadline(recap);
   $('recapBest').hidden = !recap.biggest;
   const comparison = recapComparison(recap);
   $('recapCompare').textContent = comparison;
@@ -61,7 +74,9 @@ function renderRecap() {
   renderEarnedAchievements($('recapAchievementList'), recap.earned, recap.achievements);
 }
 
-// Done puts the card away until next week, and the keyboard carries on from the templates under it.
+wireBanner('recapToggle', 'recapBody', 'recapLine');
+
+// Dismiss puts the card away until next week, and the keyboard carries on from the templates under it.
 $('recapDone').onclick = () => {
   writeLocal(localKey('recap-dismissed'), calendarDayKey(recapMonday()));
   $('recapCard').hidden = true;

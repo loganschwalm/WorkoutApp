@@ -79,7 +79,8 @@ own workouts, templates, and settings.
 - On a phone the header is just the page's name and Settings, and Strength (the Tracker), Cardio, Progress and History
   are a tab bar along the bottom of the screen, in reach of a thumb: a pill floating just above the edge, an icon over each
   name (the SVGs in `frontend/icons/`, drawn with a CSS mask so they take the text colour, and precached). Dialogs, Settings
-  among them, rise from the bottom as sheets there. On a wider screen the pages are a segmented pill in the header.
+  among them, rise from the bottom as sheets there. On a wider screen the pages are a segmented pill in the header, in the same place on every page
+  (the header is a grid with a column for the date, so the pill does not move with the width of the page's name).
 - The look is flat: surfaces are told from the page by tone, a hairline and their corners (`--radius-control`, `--radius-panel`
   and `--radius-card` in `styles.css`), shadows are kept for what floats, and numbers are tabular. The page you are on in the
   navigation, the next workout of a program and the rest timer are drawn inverted (the theme's ink as the ground, its card
@@ -155,8 +156,10 @@ own workouts, templates, and settings.
   on screen while you scroll, at the top of the screen or, above it, at the bottom. An exercise can have a rest of its own: the training programs rest
   longer after a main lift than after accessories, and a template can set one for each exercise.
   Everything else uses the default from Settings.
-- Pause and reset the rest timer, or give yourself 30 seconds more or less with −30s and +30s,
-  running or paused. Taking it down to nothing ends the rest quietly.
+- Pause and restart the rest timer, or give yourself 30 seconds more or less with −30s and +30s,
+  running or paused. End rest is the main button of the panel; on a phone Pause rest and ··· sit beside it, and ··· opens Fix last set
+  and Restart rest in a row under them (`showRestMore` in `rest-timer.js`), which closes again when one is chosen. On a wide screen all four
+  show and there is no ···. Taking it down to nothing ends the rest quietly.
   A thin bar along the bottom of the timer drains as the rest runs out.
   Fix last set, in the rest panel (and in the big view, which it closes), opens the list of completed sets with the cursor in the
   last one's reps, for a slip at the end of a set (`fixLastSet` in `set-logging.js`). Nothing is drawn again, so what has been typed for
@@ -778,13 +781,19 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
   it (a bodyweight exercise) has no point for the heaviest weight, the one-rep max or the volume rather than a zero, and
   the empty chart says to choose Best reps.
 - Filter by exercise. Names typed differently ("Bench press", "Bench Press ") count as one exercise.
-- Filter by workout type.
-- Filter by start and end date.
+- Choose the range with a tap: 4 weeks, 12 weeks, 1 year or All (the page opens on All). Each fills From, counted back from today,
+  and empties To (`rangeStart` in `progress.js`); which is pressed follows the two date boxes, so dates chosen by hand leave none
+  pressed.
+- Filter by workout type, and by start and end date to the day, under More filters, which folds shut and says in its line which of
+  the two (dates, workout type) is set. Metric and Exercise are always on the card, so the chart is not pushed down the page.
 - See filtered workout counts and chart legends.
 - Workouts sit along the chart by date, so a month between two takes more room than a day and the
   slope is your real rate of progress.
-- Dates and values are written only where they have room, so they never overlap, however many
-  workouts the chart shows; the latest value is always written. Tap any point to see its value.
+- The axis fits the values, with a little room either side and never below zero (`chartScale`): from zero, a bench press that went
+  from 155 to 180 pounds is a line that is all but flat.
+- Each line writes its first value, its best and its latest, and rings its best (its highest, or its lowest where less is better, as
+  a pace is); the rest of the points are a tap away. Dates and values are written only where they have room, so they never overlap,
+  however many workouts the chart shows; the latest value is always written. Tap any point to see its value.
 - The chart is described in words for screen readers: what it shows, over how many workouts, and the
   lowest and highest values. It is a stop for the keyboard too: the Left and Right arrows step through its points, earliest
   first and in order across the chart whatever order the lines were drawn in, and Home and End go to the ends; each point is
@@ -894,7 +903,9 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
   the share sheet is refused, the picture is saved as a file instead, and the page says so. Closing the share sheet does
   nothing more.
 - **Last week** (`recap.js`, from `weekRecapOf`): from the first visit of a new week, the Tracker has a card looking back on the
-  week before, Monday to Sunday, between workouts (a workout puts it away, as it does the cards under it):
+  week before, Monday to Sunday, between workouts (a workout puts it away, as it does the cards under it). It is a line, the headline
+  below, until its heading is pressed (`wireBanner`, which What's new uses too), so the first screen is still for starting a workout; its
+  body is what follows:
   - "Your biggest week of lifting yet.", when its volume beats every week before it, and there are at least three weeks of
     lifting to beat, so a first week is never called one;
   - a headline: its workouts against the weekly goal and the streak it makes ("6 workouts, your goal of 3 reached: a 5-week
@@ -907,14 +918,15 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
     exercise's latest of the week, up to three, and how many more. The records are those each of its workouts was told,
     from one replay of the history up to the week's end.
   It is worked out from the history, in the units shown and against the weekly goal as it is now, and only once all of it
-  has loaded. A week with nothing in it has no card: it looks back at what was done, never at what was not. Done puts it
+  has loaded. A week with nothing in it has no card: it looks back at what was done, never at what was not. Dismiss puts it
   away until the next week, kept on this device by the week's Monday.
 - **What's new** (`whats-new.js`): once a release, the Tracker has a card for someone who was training before it, saying
   what the app has learned since, a line for each thing (its name, then what it does), the first three showing and the rest
   folded under how many there are, with a link where one helps (Achievements opens its row on Progress, through
   `progress.html#achievements`). It is shown to an account with a workout older than the release's first day, once the
-  whole history has loaded, and between workouts. An account whose workouts all came after the release (one made since,
-  which the welcome showed the app to) has nothing to catch up on and never sees it. Done saves the release as seen in
+  whole history has loaded, and between workouts. It is a line ("7 new things in October 2026") until its heading is pressed. An
+  account whose workouts all came after the release (one made since,
+  which the welcome showed the app to) has nothing to catch up on and never sees it. Dismiss saves the release as seen in
   `seenWhatsNew`, a setting with no control of its own (as `welcomed` is), so the card is seen once on every device. A new
   release adds its list to `whatsNewItems` and moves `whatsNewRelease` on.
 - **Encouraging lines** (`splashLine`): plain, picked at random when something happens (never while drawing), and not the same

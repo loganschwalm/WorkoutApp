@@ -234,18 +234,11 @@ function roundStep(rough) {
   return [1, 2, 2.5, 5, 10].map(multiple => multiple * magnitude).find(size => size >= rough);
 }
 
-// Where the chart's axis runs. A strength chart starts at zero, as it always has, up to the round step above its top
-// (four of them: 0, 50, 100, 150, 200). A cardio chart spans its sessions with a little room either side, on round steps
-// (a clock's for a time), since a pace that moves from 9:10 to 8:20 a mile is a flat line along the top of an axis from
-// zero. A pace or split, where less is faster, runs the other way up, so getting faster climbs as getting stronger does.
+// Where the chart's axis runs: the sessions' values with a little room either side, on round steps (a clock's for a time), and never
+// below zero. An axis from zero turns a bench press that went from 155 to 180 pounds into a line that is all but flat, along the
+// top; this one shows the slope, which is the point of the chart. A pace or split, where less is faster, runs the other way up, so
+// getting faster climbs as getting stronger does.
 function chartScale(values) {
-  if (!chartingCardio()) {
-    const step = roundStep(Math.max(...values, 4) / 4);
-    const high = Math.ceil(Math.max(...values, 4) / step) * step;
-    const ticks = [];
-    for (let value = 0; value <= high + step / 1000; value += step) ticks.push(Math.round(value * 1e6) / 1e6);
-    return { low:0, high, invert:false, ticks };
-  }
   const slower = selectedMetric === 'rate' && keyActivity(selectedExercise).rate !== 'speed';
   const clock = slower || selectedMetric === 'duration';
   const min = Math.min(...values), max = Math.max(...values);
@@ -282,9 +275,10 @@ function placeValueLabels(latest, others, width) {
   return written.sort((a, b) => a.left - b.left);
 }
 
-// Draws each workout type's line and dots, and notes where every point is (drawnPoints, for a tap on the chart). Returns the
-// value to write at each: each line's latest, and the rest.
-function drawSeries(context, { across, y, format }) {
+// Draws each workout type's line and dots, and notes where every point is (drawnPoints, for a tap on the chart). A line's best
+// point (its highest, or its lowest where less is better) is ringed. Returns the values to write: each line's latest, and its first
+// and best, which with the ring tell where it started, how far it got and where it is. The rest are one tap away.
+function drawSeries(context, { across, y, format, invert }) {
   context.font = '11px Figtree, system-ui, sans-serif';
   const latest = [], others = [];
   chartData.types.forEach((type, typeIndex) => {
@@ -293,8 +287,17 @@ function drawSeries(context, { across, y, format }) {
     const spots = own.map(entry => ({ x:across[entry.index], y:y(entry.value) }));
     drawLine(context, spots, colour);
     drawDots(context, spots, colour);
+    const best = own.reduce((top, entry, position) => (invert ? entry.value < own[top].value : entry.value > own[top].value) ? position : top, 0);
+    if (own.length > 1) {
+      context.strokeStyle = colour;
+      context.lineWidth = 2;
+      context.beginPath();
+      context.arc(spots[best].x, spots[best].y, 8, 0, Math.PI * 2);
+      context.stroke();
+    }
     own.forEach(({ point, index, value }, position) => {
       drawnPoints.push({ x:across[index], y:y(value), text:`${type.name}, ${longDate(point.createdAt)}: ${format.value(value)}` });
+      if (position !== own.length - 1 && position !== 0 && position !== best) return;
       const text = format.value(value);
       (position === own.length - 1 ? latest : others).push({ text, colour, x:across[index], y:y(value), width:context.measureText(text).width });
     });
@@ -328,7 +331,7 @@ function drawChart() {
   drawGuides(context, { colours, ticks:scale.ticks, y, left, right, width, label:format.tick, gap:10 });
   drawAxisTitle(context, format.axis, 15, top + chartHeight / 2);
   drawDateLabels(context, chartData.points.map((point, index) => ({ time:point.createdAt, x:across[index] })), height - 20, colours);
-  const { latest, others } = drawSeries(context, { across, y, format });
+  const { latest, others } = drawSeries(context, { across, y, format, invert:scale.invert });
   placeValueLabels(latest, others, width).forEach(label => {
     context.fillStyle = label.colour;
     context.textAlign = label.align;
@@ -386,7 +389,8 @@ function renderProgress(workouts) {
   }
   $('legend').innerHTML = chartData.types.map(type => `<div class="legend-item"><span class="legend-swatch"></span><span>${escapeHTML(type.name)}</span></div>`).join('');
   $('progressChart').setAttribute('aria-label', describeChart());
-  $('chartDetail').textContent = chartData.points.length ? 'Tap a point, or use the arrow keys, to see its value.' : '';
+  $('chartDetail').textContent = chartData.points.length ? 'Tap a point, or use the arrow keys, to see its value. A ring marks the best.' : '';
+  syncRangeChips();
   drawChart();
   renderExerciseCard();
   renderSessions(workouts);
@@ -438,6 +442,31 @@ async function loadProgress() {
 }
 
 let selectedExercise = 'all';
+// The range chips (4 weeks, 12 weeks, 1 year, All) fill in From, counted back from today, and empty To; All empties both. Which is
+// pressed follows the two boxes rather than being kept, so dates chosen by hand under More filters leave none pressed, and Clear
+// filters presses All without a line about it.
+function rangeStart(days) {
+  return days ? calendarDayKey(addDays(new Date(), -Number(days))) : '';
+}
+function syncRangeChips() {
+  const start = $('startDateFilter').value, end = $('endDateFilter').value;
+  let custom = Boolean(start || end);
+  document.querySelectorAll('#rangeChips button').forEach(button => {
+    const pressed = !end && start === rangeStart(button.dataset.rangeDays);
+    button.setAttribute('aria-pressed', String(pressed));
+    if (pressed) custom = false;
+  });
+  // What More filters holds that is not at its default, so it is known without opening it.
+  const set = [...(custom ? ['dates'] : []), ...($('workoutTypeFilter').value !== 'all' && !chartingCardio() ? ['workout type'] : [])];
+  $('moreFiltersState').textContent = set.join(' and ');
+}
+$('rangeChips').onclick = event => {
+  const button = event.target.closest('button');
+  if (!button) return;
+  $('startDateFilter').value = rangeStart(button.dataset.rangeDays);
+  $('endDateFilter').value = '';
+  applyFilters();
+};
 ['metricFilter', 'exerciseFilter', 'workoutTypeFilter', 'startDateFilter', 'endDateFilter'].forEach(id => { $(id).onchange = applyFilters; });
 // Back to how the page opens: heaviest weight of the exercise done most, over every workout.
 $('clearFilters').onclick = () => {

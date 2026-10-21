@@ -1,5 +1,5 @@
 // What's new, on the Tracker: once a release, a card telling someone who was already training what the app has learned since,
-// a line for each thing, until Done. It is for those who started before the release: a newer account learned the app as it
+// a line for each thing, until Dismiss. It is for those who started before the release: a newer account learned the app as it
 // is (the welcome, onboarding.js, shows it), so it never sees the card for a release it began on. Done is kept as a setting,
 // `seenWhatsNew` (settings-fields.js), so it is seen once on every device. Loaded on the Tracker after recap.js; saved-workouts.js
 // draws it once the saved workouts have loaded, and again when the settings change.
@@ -38,6 +38,7 @@ function renderWhatsNew() {
   $('whatsNewCard').hidden = !owed;
   if (!owed) return;
   $('whatsNewRelease').textContent = whatsNewRelease.name;
+  $('whatsNewLine').textContent = `${plural(whatsNewItems.length, 'new thing')} in ${whatsNewRelease.name}`;
   $('whatsNewList').innerHTML = whatsNewItems.slice(0, 3).map(whatsNewItemHTML).join('');
   const more = whatsNewItems.slice(3);
   $('whatsNewMore').hidden = !more.length;
@@ -45,7 +46,9 @@ function renderWhatsNew() {
   $('whatsNewMoreList').innerHTML = more.map(whatsNewItemHTML).join('');
 }
 
-// Done marks this release seen, for the account, and the keyboard carries on from the templates under it.
+wireBanner('whatsNewToggle', 'whatsNewBody', 'whatsNewLine');
+
+// Dismiss marks this release seen, for the account, and the keyboard carries on from the templates under it.
 $('whatsNewDone').onclick = () => {
   saveLocalState('settings', { ...getWorkoutSettings(), seenWhatsNew:whatsNewRelease.id });
   window.dispatchEvent(new Event('settingschange'));

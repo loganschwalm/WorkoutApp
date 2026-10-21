@@ -176,6 +176,7 @@ def run(t):
         if label == 'Progress':
             # A date field does not report its text running past its edge, so it is measured: the longest date, the field's padding and
             # its calendar icon have to be within it.
+            cdp.ev("document.getElementById('moreFilters').open = true")
             room = cdp.ev("""['startDateFilter', 'endDateFilter'].map(id => {
                 const input = document.getElementById(id);
                 input.value = '2026-12-31';
