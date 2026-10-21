@@ -373,7 +373,9 @@ works while the page stays loaded, and a reload needs the server.
 - Opened in a phone's browser, a bar along the bottom says how: Share then Add to Home Screen
   on an iPhone or iPad, and an Install button on Android once the browser offers one. Closing it
   hides it for a week; it never shows inside the installed app.
-- The app icon, name, and theme colour come from a web app manifest.
+- The app icon, name, and theme colour come from a web app manifest. It also lists shortcuts, which Android and desktop browsers show when
+  the installed icon is long-pressed or right-clicked: Strength, Cardio, History, and Log weight (`progress.html#bodyweight`, which
+  opens Bodyweight and puts the cursor in the weight field). iOS ignores them.
 - The status bar follows the colour theme.
 - Reloading offline opens the app from the cache instead of failing.
 

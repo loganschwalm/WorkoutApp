@@ -62,6 +62,18 @@ def run(t):
     check('manifest offers 192px and 512px icons', {'192x192', '512x512'} <= sizes, str(sizes))
     purposes = {icon.get('purpose') for icon in manifest.get('icons', [])}
     check('manifest offers a maskable icon', 'maskable' in purposes, str(purposes))
+    shortcuts = manifest.get('shortcuts', [])
+    check('the installed icon offers shortcuts to Strength, Cardio, Log weight and History',
+          [item.get('name') for item in shortcuts] == ['Strength', 'Cardio', 'Log weight', 'History'], str(shortcuts))
+    pages_served = [t.request('GET', item['url'].split('#')[0], None, None, token=t.token)[0] for item in shortcuts]
+    check('each is a page of this site, inside the scope, and is served', pages_served == [200] * 4 and all(item['url'].startswith('/') for item in shortcuts)
+          and all(icon['src'].startswith('/icons/') and icon['sizes'] == '192x192' for item in shortcuts for icon in item.get('icons', [])), str(pages_served))
+    cdp.goto('/progress.html#bodyweight')
+    cdp.wait("typeof drawBodyweight === 'function'")
+    check('Log weight opens Bodyweight with the weight field ready', cdp.ev("document.getElementById('bodyweightFold').open") is True
+          and cdp.ev('document.activeElement.id') == 'bodyweightValue', cdp.ev('document.activeElement.id'))
+    cdp.goto('/progress.html')
+    check('and the page without it leaves Bodyweight folded', cdp.ev("document.getElementById('bodyweightFold').open") is False)
 
     cdp.goto('/index.html')
     mime = ev_async("fetch('/manifest.webmanifest').then(r => r.headers.get('content-type'))")

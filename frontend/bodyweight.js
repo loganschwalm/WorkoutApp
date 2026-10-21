@@ -192,3 +192,10 @@ window.serverStateReady.then(() => { loadBodyweights(); renderBodyweight(); });
 window.addEventListener('accountstatechange', () => { loadBodyweights(); renderBodyweight(); });
 // The unit changes the numbers; the theme, the colours.
 window.addEventListener('settingschange', renderBodyweight);
+// The installed app's "Log weight" shortcut opens this page at #bodyweight: the row is opened, scrolled to, and the weight field is
+// ready to type in.
+if (location.hash === '#bodyweight') {
+  $('bodyweightFold').open = true;
+  scrollToCard($('bodyweightFold'), 'start');
+  $('bodyweightValue').focus({ preventScroll:true });
+}

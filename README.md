@@ -109,7 +109,7 @@ celebrated.
   the Tracker says so, rather than holding up the rest; Settings lists those workouts and why, and each can be tried again,
   saved to a file or discarded. A tab left open while someone else signs in on
   the same browser stops saving, says so, and keeps its account's work for that account.
-- Add it to your phone's home screen to open it like an app.
+- Add it to your phone's home screen to open it like an app. Long-pressing its icon offers shortcuts to Strength, Cardio, History and Log weight (on Android).
 - Pick the days you train: the Tracker says what is planned today (and nudges you when you missed a day), History marks
   the planned days on the calendar, and your phone can remind you on training days, even with the app closed.
 - Add a training program's remaining workouts to your own calendar app as an .ics file, one event on each training day.
