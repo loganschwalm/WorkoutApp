@@ -157,7 +157,7 @@ def run(t):
     cdp.wait(ACTIVE)
     cdp.pause(0.4)
     menu = "[...document.querySelectorAll('#exerciseMenu .row-menu-items button')].map(b => b.textContent)"
-    check('the exercise’s menu offers it', cdp.ev(menu) == ['Swap exercise', 'How to do it', 'Add note', 'Superset with next'], cdp.ev(menu))
+    check('the exercise’s menu offers it', cdp.ev(menu) == ['Swap exercise', 'How to do it', 'Add note', 'Superset with next', 'Do this one last'], cdp.ev(menu))
     check('the cues are out of the way until asked for', not visible('guidePanel') and cdp.ev("document.getElementById('guideToggle').getAttribute('aria-expanded')") == 'false')
     cdp.ev("document.getElementById('exerciseMenu').open = true")
     click('guideToggle')

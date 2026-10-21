@@ -49,8 +49,11 @@ def run(t):
 
         def replaced(old, new):
             def edit(text):
-                assert old in text, old
-                return text.replace(old, new, 1)
+                # The files are read as they are on disk, which on Windows is with carriage returns; the text to find is written with plain ones.
+                ending = '\r\n' if '\r\n' in text else '\n'
+                wanted = old.replace('\n', ending)
+                assert wanted in text, old
+                return text.replace(wanted, new.replace('\n', ending), 1)
             return edit
 
         def found():
