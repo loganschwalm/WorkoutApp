@@ -1,5 +1,7 @@
 # The self-hosted server uses only Python standard-library modules.
 FROM python:3.12-slim
+# Where the published image says it came from, which is how GitHub links the package to this repository.
+LABEL org.opencontainers.image.source="https://github.com/loganschwalm/WorkoutApp" org.opencontainers.image.description="Workout Tracker: a self-hosted workout log" org.opencontainers.image.licenses="MIT"
 RUN useradd --system --user-group --no-create-home --shell /usr/sbin/nologin workout
 WORKDIR /app
 COPY frontend /app/frontend

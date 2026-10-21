@@ -181,10 +181,11 @@ The full reference covers [every install option](readme-for-llm.md#choosing-sett
 ```bash
 git clone https://github.com/loganschwalm/WorkoutApp.git workout-tracker
 cd workout-tracker
-docker compose up -d --build
+docker compose pull          # the published image, for amd64 and arm64 (a Raspberry Pi too)
+docker compose up -d
 ```
 
-Open `http://YOUR_SERVER_IP:6769`, create your accounts, then set `ALLOW_REGISTRATION: "0"` in
+(`docker compose up -d --build` builds the image from the checkout instead.) Open `http://YOUR_SERVER_IP:6769`, create your accounts, then set `ALLOW_REGISTRATION: "0"` in
 `docker-compose.yml` and run `docker compose up -d`. Back up with `scripts/docker-backup.sh`, before every
 update too. See the [full reference](readme-for-llm.md#docker-compose) for updating (and going back) and daily
 backups.

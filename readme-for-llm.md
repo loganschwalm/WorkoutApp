@@ -1775,8 +1775,15 @@ misreads this compose file, so install Docker from Docker's own repository:
 curl -fsSL https://get.docker.com | sh
 git clone https://github.com/loganschwalm/WorkoutApp.git workout-tracker
 cd workout-tracker
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
+
+`docker compose pull` fetches the image published for the `stable` branch, `ghcr.io/loganschwalm/workoutapp:stable`, built for amd64 and
+arm64 (so a Raspberry Pi pulls instead of building), by the last job of the *Tests* workflow once stable has moved. It is tagged
+`:stable` and by commit (`:sha-<the commit>`, to pin one). `docker compose up -d --build` builds from the checkout instead, and
+keeps the result under the same name. If a pull is refused (a fork's package is private until its owner makes it public, under the
+package's settings on GitHub), build.
 
 Open `http://YOUR_SERVER_IP:6769` and register your accounts, then set `ALLOW_REGISTRATION: "0"` in
 `docker-compose.yml` and run `docker compose up -d` to close registration.
@@ -1794,7 +1801,7 @@ To update, back up first, then rebuild from the new commit. Note the commit you 
 ```bash
 git rev-parse --short HEAD                  # the version running now
 scripts/docker-backup.sh                    # a backup from before the update
-git pull && docker compose up -d --build
+git pull && docker compose pull && docker compose up -d     # or, to build from the checkout: git pull && docker compose up -d --build
 docker compose ps                           # "healthy" within a minute or so
 ```
 
@@ -1992,9 +1999,12 @@ thrown away afterwards: the installer installing from a copy of the checkout, an
 database and then fails to start being undone (the previous version running again on the database as it was), a working
 update and one with nothing new (and, in each, the unit's sandbox and the database's permissions), the daily backup run, pruned and
 restored by the steps under *Backups*, and the Docker entrypoint handing over a data directory. A job of its own
-(`tests/docker.sh`) builds the image with `docker compose up -d --build`, checks it is healthy and not running as root and that a
+(`tests/docker.sh`) builds the image with `docker compose up -d --build` (and, apart, for amd64 and arm64, the two kinds that are published), checks it is healthy and not running as root and that a
 saved workout survives a restart, and runs `scripts/docker-backup.sh`, once for a backup that opens and once with its copy step
-failing to see that nothing is left behind. `stable` waits for it as it does for the others. The workflow's
+failing to see that nothing is left behind. `stable` waits for it as it does for the others. When it has moved `stable`, the last job (`publish`)
+builds the same commit for amd64 and arm64 and pushes it to GitHub's registry as `:stable` and `:sha-<commit>`; it follows only a run that moved
+`stable` (`promote`'s `moved` output), so a run that finishes late cannot put an older image under the tag. The workflow's actions for it are
+pinned to commits like the rest. The workflow's
 token can only read, except in the job that moves `stable`, and its actions are pinned to the commit of a release (the version is
 in a comment on each line; to move one, take the commit its tag points at from the action's repository, not the tag). When they all pass on `main`, it moves the `stable` branch to that commit, and that
 is the branch installs and updates follow. To hold releases back for a while, set the repository variable `HOLD_STABLE` to

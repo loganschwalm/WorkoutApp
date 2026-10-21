@@ -1,5 +1,8 @@
 services:
   workout-tracker:
+    # The image published for the stable branch (what installs follow): `docker compose pull` fetches it, and `docker compose up -d --build`
+    # builds one from this checkout instead and keeps it under the same name.
+    image: ghcr.io/loganschwalm/workoutapp:stable
     build: .
     container_name: workout-tracker
     restart: unless-stopped
