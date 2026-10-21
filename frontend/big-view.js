@@ -134,6 +134,8 @@ $('bigViewRest').onclick = event => {
   if (button.dataset.bigRest) $('restAdjust').querySelector(`[data-rest-adjust="${button.dataset.bigRest}"]`).click();
   else if (button.id === 'bigViewToggle') $('restToggleBtn').click();
   else if (button.id === 'bigViewSkip') $('restEndBtn').click();
+  // The page behind is where the set is, so the view gets out of the way.
+  else if (button.id === 'bigViewFix') { closeBigView(false); fixLastSet(); return; }
   renderBigView();
 };
 

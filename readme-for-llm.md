@@ -158,6 +158,9 @@ own workouts, templates, and settings.
 - Pause and reset the rest timer, or give yourself 30 seconds more or less with −30s and +30s,
   running or paused. Taking it down to nothing ends the rest quietly.
   A thin bar along the bottom of the timer drains as the rest runs out.
+  Fix last set, in the rest panel (and in the big view, which it closes), opens the list of completed sets with the cursor in the
+  last one's reps, for a slip at the end of a set (`fixLastSet` in `set-logging.js`). Nothing is drawn again, so what has been typed for
+  the next set stays; its weight or reps follow the correction only if they were still what the last set had put there.
   End rest skips what is left of it, and the screen flashes green, softly and once, when a rest is over,
   whether it ran out or you ended it (not with reduced motion on). A rest that runs out is also said to a screen reader
   ("Rest over", in a status line that stays in the page, emptied when a rest runs; the big view, a modal dialog, has one of

@@ -290,7 +290,7 @@ html[data-theme="dark"] .link-button.danger-link { color:#ff9eaa; }
 /* Text on the ink panel is drawn in the card's colour. Each rule says its ground (the panel's own ink) so tests/lint.py checks it against that. */
 .rest-time strong { color:var(--card); background:var(--ink); }
 .rest-time span { color:var(--card); background:var(--ink); font-size:2rem; font-weight:800; letter-spacing:-.03em; font-variant-numeric:tabular-nums; }
-.rest-actions { display:flex; gap:8px; margin-left:auto; }
+.rest-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; margin-left:auto; }
 /* −30s and +30s sit by the time. On a narrow screen the panel wraps, the pause and reset buttons going under. */
 .rest-panel { flex-wrap:wrap; }
 .rest-adjust { display:flex; gap:6px; align-self:center; }
@@ -1115,6 +1115,7 @@ body.big-view-open .form-feedback { z-index:60; }
 .big-view-reach { max-width:34rem; color:var(--big-go); font-size:clamp(1.05rem, min(4.4vw, 5vh), 1.9rem); font-weight:700; text-wrap:balance; }
 .big-view-actions { display:grid; gap:10px; }
 .big-view-rest { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.big-view-rest #bigViewFix { grid-column:1 / -1; }
 .big-view .big-view-primary { min-height:clamp(72px, 14vh, 120px); color:#000; background:#fff; box-shadow:none; font-size:clamp(1.4rem, min(6vw, 7vh), 2.4rem); }
 .big-view.go .big-view-primary { background:var(--big-go); }
 @media (prefers-reduced-motion:reduce) { .big-view-bar span { transition:none; } }

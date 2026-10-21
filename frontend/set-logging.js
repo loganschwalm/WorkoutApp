@@ -226,11 +226,34 @@ $('completedSets').onchange = e => {
     return;
   }
   if (!confirmSetChange(activeSession.exercises[activeSession.currentIndex], index, field, Number(value) || 0, e.target)) return;
+  // If this is the last set, the fields for the next one started from it: they follow the correction, unless they were changed since.
+  const exercise = activeSession.exercises[activeSession.currentIndex];
+  const entry = field === 'weight' ? $('activeWeight') : $('completedReps');
+  const followed = index === exercise.sets.length - 1 && entry.value === String(set[field] || '');
   set[field] = Number(value) || 0;
+  if (followed) {
+    entry.value = set[field] || '';
+    if (field === 'weight') showPlates();
+  }
   clearFeedback();
   persistActiveSession();
   renderReach();
 };
+// Fix last set, in the rest after a set (and in the big view): the list of completed sets is opened, and the cursor put in the last
+// set's reps with the number selected, so a slip is a few keys. Nothing is drawn again, so what is typed for the next set stays.
+function fixLastSet() {
+  if (!activeSession) return;
+  const last = (activeSession.exercises[activeSession.currentIndex].sets || []).length - 1;
+  if (last < 0) return;
+  $('completedSetsToggle').open = true;
+  const reps = $('completedSets').querySelector(`[data-set="${last}"][data-field="reps"]`);
+  if (!reps) return;
+  scrollToCard(reps.closest('li'), 'nearest');
+  reps.focus({ preventScroll:true });
+  reps.select();
+}
+$('restFixBtn').onclick = fixLastSet;
+
 // Remove takes the set away at once, with no question asked mid-workout, and the banner offers it back for a few
 // seconds in case the tap was a slip. Undo puts it back in its place, even after moving on to another exercise.
 $('completedSets').onclick = e => {

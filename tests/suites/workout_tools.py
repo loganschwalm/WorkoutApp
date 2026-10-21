@@ -504,6 +504,38 @@ def run(t):
     check('and its volume is the time held', text('progressTitle') == 'Total time held' and cdp.ev(series).get('Full Body') == [2 + held, 3], cdp.ev(series))
 
     # ------------------------------------------------------------------ V the server
+    print('X   fixing the last set from the rest')
+    open_tracker()
+    start(0)
+    cdp.pause(0.4)
+    log(100, 10)
+    check('the rest after a set offers Fix last set', visible('restPanel') and visible('restFixBtn'))
+    set_field('activeWeight', '105')
+    set_field('completedReps', '10')
+    cdp.ev("document.getElementById('restFixBtn').click()")
+    cdp.pause(0.2)
+    check('it opens the list of sets and puts the cursor in the last one’s reps',
+          cdp.ev("document.getElementById('completedSetsToggle').open") is True
+          and cdp.ev("document.activeElement.dataset.set + document.activeElement.dataset.field") == '0reps')
+    cdp.ev("(i => { i.value = '8'; i.dispatchEvent(new Event('change', { bubbles: true })); })(document.activeElement)")
+    cdp.pause(0.2)
+    check('a correction there is kept', cdp.ev('activeSession.exercises[0].sets[0].reps') == 8 and cdp.ev("document.querySelector('#completedSets [data-field=reps]').value") == '8')
+    check('the weight typed for the next set is still there', field('activeWeight') == '105', field('activeWeight'))
+    check('the reps the next set started with follow the correction, since they had not been changed', field('completedReps') == '8', field('completedReps'))
+    check('and the list stays open', cdp.ev("document.getElementById('completedSetsToggle').open") is True)
+    # Changed since, they are the person's and are left alone.
+    set_field('completedReps', '12')
+    cdp.ev("(i => { i.value = '7'; i.dispatchEvent(new Event('change', { bubbles: true })); })(document.querySelector('#completedSets [data-set=\"0\"][data-field=reps]'))")
+    check('reps typed for the next set are not replaced by a correction', field('completedReps') == '12' and cdp.ev('activeSession.exercises[0].sets[0].reps') == 7, field('completedReps'))
+    cdp.ev("openBigView()")
+    cdp.pause(0.3)
+    check('the big view has it too', cdp.ev("!document.getElementById('bigViewFix').hidden && !document.getElementById('bigViewRest').hidden"))
+    cdp.ev("document.getElementById('bigViewFix').click()")
+    cdp.pause(0.2)
+    check('which gets out of the way and puts the cursor in the same place', cdp.ev("document.getElementById('bigView').hidden") is True
+          and cdp.ev("document.activeElement.dataset.set + document.activeElement.dataset.field") == '0reps')
+    t.end_workout()
+
     print('V   the server checks the new fields')
 
     def post(body):
