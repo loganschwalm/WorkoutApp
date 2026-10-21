@@ -36,10 +36,10 @@ class AccountApi:
                     forget_reminders(database, user['user_id'], session_hash(token))
         # The workouts are kept by the browser between visits (see GET /api/workouts), so signing out clears them, on a
         # browser that understands this (Safari does not) and over HTTPS or localhost, the only places it is honoured.
-        self.send_json(HTTPStatus.OK, {'ok': True}, [self.session_cookie('', 0)], headers={'Clear-Site-Data': '"cache"'})
+        self.send_json(HTTPStatus.OK, {'ok': True}, self.session_cookies('', 0), headers={'Clear-Site-Data': '"cache"'})
 
     def start_session(self, database, user_id, remember=True):
-        """Sign this account in: a new session, and the cookie that carries it. One that is not remembered ends when the
+        """Sign this account in: a new session, and the cookie headers that carry it (a list). One that is not remembered ends when the
         browser closes, or after SHORT_SESSION_TTL without use."""
         now = int(time.time())
         token = secrets.token_urlsafe(32)
@@ -47,7 +47,7 @@ class AccountApi:
         database.execute('DELETE FROM sessions WHERE expires_at <= ?', (now,))
         database.execute('INSERT INTO sessions (token, user_id, expires_at, remember, created_at, last_used, label, address) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
                          (session_hash(token), user_id, now + lifetime, int(remember), now, now, device_label(self.headers.get('User-Agent')), self.client_ip()))
-        return self.session_cookie(token, lifetime if remember else None)
+        return self.session_cookies(token, lifetime if remember else None)
 
     def wants_remembering(self, data):
         """Whether the sign-in asked to be remembered. Pages from before "Remember me" say nothing, and were."""
@@ -109,7 +109,7 @@ class AccountApi:
             if moment is not None and not conflict:
                 register_throttle.release(address, moment)
             raise
-        self.send_json(HTTPStatus.OK, {'user': {'id': user_id, 'username': username, 'email': email}}, [cookie])
+        self.send_json(HTTPStatus.OK, {'user': {'id': user_id, 'username': username, 'email': email}}, cookie)
 
     def sign_in(self):
         data = self.read_json()
@@ -158,7 +158,7 @@ class AccountApi:
                 # The password is only known now, so this is the moment to move an older hash to the current strength.
                 database.execute('UPDATE users SET password_hash = ? WHERE id = ?', (password_hash(password), row['id']))
             cookie = self.start_session(database, row['id'], remember)
-        self.send_json(HTTPStatus.OK, {'user': public_user(row)}, [cookie])
+        self.send_json(HTTPStatus.OK, {'user': public_user(row)}, cookie)
 
     def send_reset_code(self):
         if not SMTP_HOST:
@@ -245,7 +245,7 @@ class AccountApi:
             cookie = self.start_session(database, user['id'])
         reset_guess_throttle.clear(email)
         login_throttle.clear(login_key(throttle_address(self.client_ip()), user['username'], user['id']))
-        self.send_json(HTTPStatus.OK, {'user': public_user(user)}, [cookie])
+        self.send_json(HTTPStatus.OK, {'user': public_user(user)}, cookie)
 
     def confirm_password(self, database, user, password, wrong='That password is not right.'):
         """Check the signed-in account's password, asked again before a change only its owner should make: a signed-in
@@ -340,4 +340,4 @@ class AccountApi:
             self.confirm_password(database, user, password)
             delete_account_rows(database, user['id'])
         print(f"Deleted the account {user['username']} at its owner's request.", flush=True)
-        self.send_json(HTTPStatus.OK, {'ok': True}, [self.session_cookie('', 0)])
+        self.send_json(HTTPStatus.OK, {'ok': True}, self.session_cookies('', 0))

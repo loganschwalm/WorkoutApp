@@ -235,7 +235,7 @@ class WebHandler(http.server.SimpleHTTPRequestHandler):
 
     def parse_request(self):
         # One handler answers every request on a keep-alive connection, so nothing is carried over from the last one.
-        self.renewed_cookie = None
+        self.renewed_cookies = None
         understood = super().parse_request()
         self.close_connection = True
         if understood:
@@ -266,9 +266,9 @@ class WebHandler(http.server.SimpleHTTPRequestHandler):
         if not getattr(self, 'connection_sent', False):
             self.send_header('Connection', 'close')
         # A session renewed while answering this request (see session_user) goes out on whatever the answer is.
-        if getattr(self, 'renewed_cookie', None):
-            self.send_header('Set-Cookie', self.renewed_cookie)
-            self.renewed_cookie = None
+        for cookie in getattr(self, 'renewed_cookies', None) or []:
+            self.send_header('Set-Cookie', cookie)
+        self.renewed_cookies = None
         for name, value in SECURITY_HEADERS.items():
             self.send_header(name, value)
         super().end_headers()
@@ -300,10 +300,19 @@ class WebHandler(http.server.SimpleHTTPRequestHandler):
         forwarded = self.headers.get('X-Forwarded-Proto', '').split(',')[0].strip().lower()
         return SECURE_COOKIES or forwarded == 'https'
 
-    def session_cookie(self, token, max_age):
-        """The cookie carrying a session. With no max_age it lasts until the browser is closed."""
+    def session_cookies(self, token, max_age):
+        """The headers that set the session cookie, or with max_age 0 clear it. With no max_age it lasts until the browser is closed.
+
+        Over HTTPS it is __Host-session: that prefix makes the browser take the cookie only if it is Secure, has Path=/ and names no
+        Domain, and so refuses one set by another page of the same host (another port, or a subdomain), which could otherwise put its own
+        session in place of the person's. Over plain HTTP, where a Secure cookie cannot be had, it is session, as it was. The plain
+        `session` an earlier version set over HTTPS is cleared along with it, when there is one to clear (or always, to sign out)."""
         lifetime = '' if max_age is None else f'; Max-Age={max_age}'
-        return f"session={token}; Path=/; HttpOnly; SameSite=Lax{lifetime}" + ('; Secure' if self.secure_cookies() else '')
+        secure = self.secure_cookies()
+        cookies = [f"{'__Host-session' if secure else 'session'}={token}; Path=/; HttpOnly; SameSite=Lax{lifetime}" + ('; Secure' if secure else '')]
+        if secure and (max_age == 0 or 'session' in SimpleCookie(self.headers.get('Cookie', ''))):
+            cookies.append('session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Secure')
+        return cookies
 
     def send_json(self, status, payload, cookies=None, headers=None):
         body, encoding = self.encoded(json.dumps(payload).encode())
@@ -384,7 +393,13 @@ class WebHandler(http.server.SimpleHTTPRequestHandler):
             self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {'error': 'Internal server error.'})
 
     def session_token(self):
-        token = SimpleCookie(self.headers.get('Cookie', '')).get('session')
+        """The session's token from the request: from __Host-session, else from the plain session cookie an earlier version set over HTTPS
+        (see session_user, which replaces that one). This fallback is for the sessions already out there, and is to be taken out in a
+        later release: a plain cookie is the one a page of the same host could have set."""
+        cookies = SimpleCookie(self.headers.get('Cookie', ''))
+        host = cookies.get('__Host-session')
+        self.session_from_plain_cookie = host is None and 'session' in cookies
+        token = host or cookies.get('session')
         return token.value if token else None
 
     def session_user(self):
@@ -405,7 +420,10 @@ class WebHandler(http.server.SimpleHTTPRequestHandler):
                 lifetime, renew = (SESSION_TTL, SESSION_RENEW) if remembered else (SHORT_SESSION_TTL, SHORT_SESSION_RENEW)
                 if row['expires_at'] < now + lifetime - renew:
                     database.execute('UPDATE sessions SET expires_at = ? WHERE token = ?', (now + lifetime, session_hash(token)))
-                    self.renewed_cookie = self.session_cookie(token, lifetime if remembered else None)
+                    self.renewed_cookies = self.session_cookies(token, lifetime if remembered else None)
+                elif self.session_from_plain_cookie and self.secure_cookies():
+                    # An older version's cookie, over HTTPS: given the __Host- one now, with as long as the session has left.
+                    self.renewed_cookies = self.session_cookies(token, max(1, row['expires_at'] - now) if remembered else None)
         return {key: row[key] for key in ('id', 'username', 'email')} if row else None
 
     def require_user(self):

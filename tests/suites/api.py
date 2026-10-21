@@ -4,6 +4,7 @@ import csv
 import datetime
 import gzip
 import hashlib
+import http.client
 import io
 import json
 import os
@@ -461,6 +462,50 @@ def run_security(t, check, request):
     secure.api('POST', '/api/auth/register', {'username': 'someone', 'email': 'someone@example.test', 'password': 'chalk-and-plates-42'})
     _, headers, _ = login(secure, 'someone', 'chalk-and-plates-42')
     check('SECURE_COOKIES=1 marks it Secure without a proxy', headers['set-cookie'].endswith('; Secure'), headers['set-cookie'])
+
+    # ------------------------------------------------------------------ A8b the __Host- cookie
+    print('A8b over HTTPS the session cookie is __Host-session, which another page of the same host cannot replace')
+
+    def exchange(server, method, path, body=None, headers=None):
+        """(status, every Set-Cookie header, the parsed answer): the test server's own helper keeps only the last of a header sent twice."""
+        connection = http.client.HTTPConnection('127.0.0.1', server.port, timeout=10)
+        connection.request(method, path, json.dumps(body).encode() if body is not None else None, {'Content-Type': 'application/json', **(headers or {})})
+        response = connection.getresponse()
+        data = response.read()
+        cookies = [value for name, value in response.getheaders() if name.lower() == 'set-cookie']
+        connection.close()
+        return response.status, cookies, json.loads(data) if data else None
+
+    https = {'X-Forwarded-Proto': 'https'}
+    credentials = {'login': 'tester', 'password': 'chalk-and-plates-42'}
+    status, cookies, _ = exchange(main, 'POST', '/api/auth/login', credentials, https)
+    check('signing in over HTTPS sets __Host-session: Secure, HttpOnly, Path=/, and no Domain',
+          status == 200 and len(cookies) == 1 and cookies[0].startswith('__Host-session=') and '; Path=/' in cookies[0] and cookies[0].endswith('; Secure')
+          and 'HttpOnly' in cookies[0] and 'Domain' not in cookies[0], cookies)
+    host_token = cookies[0].split('=', 1)[1].split(';')[0]
+    check('and is the cookie that signs in', exchange(main, 'GET', '/api/auth/me', None, {**https, 'Cookie': f'__Host-session={host_token}'})[2]['user']['username'] == 'tester')
+    status, cookies, _ = exchange(main, 'POST', '/api/auth/login', credentials)
+    check('over plain HTTP it is session, as it was, and nothing else is sent', len(cookies) == 1 and cookies[0].startswith('session=') and 'Secure' not in cookies[0], cookies)
+    plain_token = cookies[0].split('=', 1)[1].split(';')[0]
+
+    # The plain cookie an older version set over HTTPS still signs in, once: it is replaced by the __Host- one and cleared.
+    status, cookies, reply = exchange(main, 'GET', '/api/auth/me', None, {**https, 'Cookie': f'session={plain_token}'})
+    check('a plain session cookie sent over HTTPS (from an older version) still signs in', status == 200 and reply['user']['username'] == 'tester', reply)
+    check('and is replaced by __Host-session, the plain one cleared', len(cookies) == 2 and cookies[0].startswith(f'__Host-session={plain_token};') and cookies[0].endswith('; Secure')
+          and cookies[1].startswith('session=;') and 'Max-Age=0' in cookies[1], cookies)
+    check('once it has been, nothing more is sent', exchange(main, 'GET', '/api/auth/me', None, {**https, 'Cookie': f'__Host-session={plain_token}'})[1] == [])
+
+    # The point of the prefix: a page that can set `session` for this host cannot override the person's own.
+    main.api('POST', '/api/auth/register', {'username': 'tosser', 'email': 'tosser@example.test', 'password': 'chalk-and-plates-42'})
+    status, cookies, _ = exchange(main, 'POST', '/api/auth/login', {'login': 'tosser', 'password': 'chalk-and-plates-42'}, https)
+    toss_token = cookies[0].split('=', 1)[1].split(';')[0]
+    reply = exchange(main, 'GET', '/api/auth/me', None, {**https, 'Cookie': f'__Host-session={host_token}; session={toss_token}'})[2]
+    check('with both, the __Host- one is the session, so a plain cookie set by another page does not take its place', reply['user']['username'] == 'tester', reply)
+    status, cookies, _ = exchange(main, 'POST', '/api/auth/logout', {}, {**https, 'Cookie': f'__Host-session={host_token}'})
+    check('signing out over HTTPS clears both names', status == 200 and any(c.startswith('__Host-session=;') and 'Max-Age=0' in c and c.endswith('; Secure') for c in cookies)
+          and any(c.startswith('session=;') and 'Max-Age=0' in c for c in cookies), cookies)
+    status, cookies, _ = exchange(main, 'POST', '/api/auth/logout', {}, {'Cookie': f'session={plain_token}'})
+    check('and over plain HTTP only the one', status == 200 and len(cookies) == 1 and cookies[0].startswith('session=;'), cookies)
 
     # ------------------------------------------------------------------ A9 expired sessions
     print('A9  expired sessions are deleted')

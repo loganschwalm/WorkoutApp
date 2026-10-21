@@ -1494,7 +1494,13 @@ The server was written for a home network, and the defaults reflect that:
   `REGISTRATIONS_PER_HOUR` like a taken name. Hand the code out to the people you want, and change it to end an invitation.
 - **The server does not speak HTTPS itself.** Put it behind a reverse proxy that terminates TLS. The
   session cookie is `HttpOnly` and `SameSite=Lax`, and it is marked `Secure` whenever the proxy sends
-  `X-Forwarded-Proto: https` (or always, with `SECURE_COOKIES=1`). Over plain HTTP it travels in the clear.
+  `X-Forwarded-Proto: https` (or always, with `SECURE_COOKIES=1`). Over plain HTTP it travels in the clear. Over HTTPS it is named
+  `__Host-session`, not `session`: the prefix makes a browser take the cookie only if it is `Secure`, has `Path=/` and names no
+  `Domain`, and so refuse one set by another page of the same host (another port, or a subdomain), which could otherwise replace
+  the person's session with its own. When both are sent the `__Host-` one is the session. A plain `session` cookie that arrives over
+  HTTPS (set by an older version) still signs in, once: the response gives the `__Host-` cookie and clears the plain one. That fallback is
+  for the sessions out there when this arrived, and is to be taken out in a later release (`session_token` in `webserver.py`), after
+  which those sign in again. Signing out over HTTPS clears both names. Over plain HTTP the cookie is `session`, as it was.
 
 What is already in place:
 
