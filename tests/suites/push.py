@@ -468,3 +468,63 @@ def run(t):
     check('though the slow one has been asked', len(service.to('hung')) >= 1)
     check('and gets its own when its push service gets round to it, once', wait_until(lambda: len(service.to('hung')) >= 1 and database("SELECT last_sent FROM push_subscriptions WHERE endpoint LIKE '%/hung'")[0][0] == device_now(offset).date().isoformat(), 8)
           and len(hung.messages()) == 1, len(hung.messages()))
+
+    # ------------------------------------------------------------------ A an alert when a rest ends
+    print('A   an alert when a rest ends, for a phone that is locked')
+    rest_token = signed_up('rester')
+
+    def with_rest_alerts(name, **changes):
+        phone = Phone(name, offset)
+        status, reply = post('/api/push/subscribe', phone.body(restAlerts=True, **changes), rest_token)
+        assert status == 200, (status, reply)
+        return phone
+
+    def rest(phone, seconds, token=None):
+        return post('/api/push/rest', {'endpoint': phone.endpoint, 'seconds': seconds}, token or rest_token)
+
+    resting, cancelled, replaced, leaving, late = (with_rest_alerts(name) for name in ('resting', 'cancelled', 'replaced', 'leaving', 'late'))
+    quiet = Phone('quiet', offset)
+    quiet.subscribe(rest_token)
+    check('a subscription says what it is for: reminders as ever, and now rest alerts', database("SELECT reminders, rest_alerts FROM push_subscriptions WHERE endpoint LIKE '%/resting'") == [(1, 1)]
+          and database("SELECT reminders, rest_alerts FROM push_subscriptions WHERE endpoint LIKE '%/quiet'") == [(1, 0)])
+    check('a flag that is not true or false is refused', post('/api/push/subscribe', quiet.body(restAlerts='yes'), rest_token)[0] == 400
+          and post('/api/push/subscribe', quiet.body(reminders=1), rest_token)[0] == 400)
+    check('an older page, that says nothing of it, does not turn them off or on', post('/api/push/subscribe', resting.body(), rest_token)[0] == 200
+          and post('/api/push/subscribe', quiet.body(), rest_token)[0] == 200
+          and database("SELECT rest_alerts FROM push_subscriptions WHERE endpoint LIKE '%/resting'")[0][0] == 1
+          and database("SELECT rest_alerts FROM push_subscriptions WHERE endpoint LIKE '%/quiet'")[0][0] == 0)
+
+    check('signed out, asking for one is refused', app.request('POST', '/api/push/rest', json.dumps({'endpoint': resting.endpoint, 'seconds': 5}).encode(), {'Content-Type': 'application/json'})[0] == 401)
+    check('for a device that has not turned them on, it is refused', rest(quiet, 5)[0] == 404)
+    check('and for another account’s device', rest(resting, 5, other)[0] == 404)
+    check('though taking one back is never refused', rest(quiet, None)[0] == 200 and post('/api/push/rest', {'endpoint': 'https://nowhere.example/x', 'seconds': None}, rest_token)[0] == 200)
+    for name, seconds in (('no time at all', 0), ('more than an hour', 3601), ('words', 'soon'), ('true', True), ('a negative time', -5)):
+        status, reply = rest(resting, seconds)
+        check(f'{name} is refused', status == 400 and reply.get('error'), f'{status} {reply}')
+    check('so is no endpoint', post('/api/push/rest', {'seconds': 5}, rest_token)[0] == 400 and post('/api/push/rest', {'endpoint': 5, 'seconds': 5}, rest_token)[0] == 400)
+
+    # Several asked for at once, the one that must not arrive among them; the last due, `late`, arriving is what says the others have had their time.
+    check('asked for', all(item[0] == 200 for item in (rest(resting, 1), rest(cancelled, 2), rest(replaced, 40), rest(leaving, 2), rest(late, 4))))
+    check('taken back before it is due', rest(cancelled, None)[0] == 200)
+    check('asked again for sooner, it comes at the new time', rest(replaced, 2)[0] == 200)
+    check('a device taken off before it is due is not sent one', post('/api/push/unsubscribe', {'endpoint': leaving.endpoint}, rest_token)[0] == 200)
+    check('the alert comes when the seconds are up', wait_until(lambda: len(resting.messages()) == 1, 6), len(resting.messages()))
+    check('saying that the rest is over, opening the app, and replacing an earlier one', resting.messages() == [{'title': 'Rest over', 'body': 'Your next set is waiting.', 'url': '/index.html', 'tag': 'rest-over'}],
+          resting.messages())
+    sent = service.to('resting')[0]['headers']
+    check('urgent, and not to be kept for long', sent.get('urgency') == 'high' and sent.get('ttl') == '60', sent)
+    check('the last asked for comes too', wait_until(lambda: len(late.messages()) == 1, 8), len(late.messages()))
+    check('the one asked again for sooner came', len(replaced.messages()) == 1, len(replaced.messages()))
+    check('the one taken back did not', cancelled.messages() == [], cancelled.messages())
+    check('nor the one that left', leaving.messages() == [], leaving.messages())
+
+    # Reminders on training days are for the subscriptions that want them.
+    quiet_reminders = with_rest_alerts('noreminders', reminders=False)
+    put_schedule({'days': [today], 'time': hhmm(now_minutes - 1)}, rest_token)
+    check('(a look at the phones has been made since the days were set)', a_look_since_now())
+    check('a phone that has turned reminders off, but keeps rest alerts, gets none', quiet_reminders.messages() == [] and database("SELECT reminders FROM push_subscriptions WHERE endpoint LIKE '%/noreminders'")[0][0] == 0)
+    check('while one that wants them gets its reminder', wait_until(lambda: any(m['tag'] == 'training-day' for m in quiet.messages()), 6), quiet.messages())
+    check('turned back on, it does', post('/api/push/subscribe', quiet_reminders.body(reminders=True, restAlerts=True), rest_token)[0] == 200
+          and (database("UPDATE push_subscriptions SET last_sent = '2000-01-01' WHERE endpoint LIKE '%/noreminders'") or True)
+          and wait_until(lambda: len(quiet_reminders.messages()) == 1, 6), len(quiet_reminders.messages()))
+

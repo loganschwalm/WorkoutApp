@@ -34,6 +34,7 @@ ROUTES = {
     ('POST', '/api/push/subscribe'): ('push_subscribe', False),
     ('POST', '/api/push/unsubscribe'): ('push_unsubscribe', False),
     ('POST', '/api/push/test'): ('push_test', False),
+    ('POST', '/api/push/rest'): ('push_rest', False),
 }
 
 PREFIXED = (

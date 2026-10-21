@@ -634,9 +634,19 @@ tests give the server one). An account has at most 10 subscriptions (the newest 
 | Request | Does |
 |---|---|
 | `GET /api/push/key` | The server's VAPID public key, which a browser subscribes against |
-| `POST /api/push/subscribe` | `{endpoint, keys: {p256dh, auth}, timeZone, utcOffset}`: remembers this device (asking again updates it) |
-| `POST /api/push/unsubscribe` | `{endpoint}`: forgets it |
+| `POST /api/push/subscribe` | `{endpoint, keys: {p256dh, auth}, timeZone, utcOffset, reminders?, restAlerts?}`: remembers this device (asking again updates it). `reminders` (training-day reminders, on by default) and `restAlerts` (off by default) say what it is for; a request that leaves one out leaves it as it was, which is how a page from before them keeps telling the server about its phone without changing either |
+| `POST /api/push/unsubscribe` | `{endpoint}`: forgets it, and any rest alert asked for |
+| `POST /api/push/rest` | `{endpoint, seconds}`: a rest has `seconds` (1 to 3600) left on a phone about to be locked, so send it "Rest over" then; `seconds: null` takes that back. Only for a device of this account that has rest alerts on (404 otherwise; taking one back is never refused) |
 | `POST /api/push/test` | Sends a notification to every device of the account now; at most one every `PUSH_TEST_WAIT` seconds (3) |
+
+**Rest alerts.** A phone that is locked cannot sound the alert at the end of a rest: the page is not running. A device with rest alerts
+on (`rest_alerts` on its subscription, beside `reminders`; migration 17) has its page say, when it is hidden with a rest on the clock, how
+many seconds are left (`POST /api/push/rest`), and the server (`rest_alert_loop` in `webpush.py`, a thread woken whenever one is asked
+for) sends "Rest over" when they are up: urgent (Android holds anything else back until the phone wakes), and with a TTL of a minute
+(a "Rest over" three hours late is worse than none). The time is worked out on the server from seconds left, not from the phone's
+clock. One is kept per subscription, in memory, so a second replaces the first and a server that restarts meanwhile loses it. It is
+sent to the subscription as it is when the time comes: one signed out, deleted or turned off since is not sent to, and one the push
+service says is gone is forgotten. Training-day reminders go only to subscriptions with `reminders` on.
 
 The tests use a push service of their own, so only a real phone shows that the browser makers' services take the messages.
 After a change to push, or on a new server, check each kind of phone you use:

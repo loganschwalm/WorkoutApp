@@ -31,7 +31,7 @@ from config import (
 from connections import Connections, request_allowance, turn_away
 from database import connection, init_database, session_hash
 from validation import BadRequest
-from webpush import reminder_loop
+from webpush import reminder_loop, rest_alert_loop
 
 
 # Each file gzipped once, until it changes on disk: {path: ((mtime, size), gzipped bytes)}.
@@ -496,6 +496,7 @@ def serve():
     # shutdown() waits for serve_forever to return, so it is called from another thread, not from inside the handler.
     signal.signal(signal.SIGTERM, lambda *_: threading.Thread(target=server.shutdown, daemon=True).start())
     threading.Thread(target=reminder_loop, daemon=True).start()
+    threading.Thread(target=rest_alert_loop, daemon=True).start()
     server.serve_forever()
     server.server_close()
     print('Workout Tracker stopped.', flush=True)

@@ -100,15 +100,16 @@ def push_endpoint_allowed(endpoint):
     return parts.scheme == 'https' and port in (None, 443) and matches(PUSH_SERVICES)
 
 
-def send_push(subscription, message):
-    """Posts a message (a dict) to a subscription. Returns the push service's status, or None if it could not be reached."""
+def send_push(subscription, message, ttl=PUSH_TTL, urgency='normal'):
+    """Posts a message (a dict) to a subscription, which the push service keeps `ttl` seconds for a phone that cannot be reached.
+    Returns the push service's status, or None if it could not be reached."""
     try:
         body = encrypt_push_payload(json.dumps(message, separators=(',', ':')).encode(), b64url_decode(subscription['p256dh']), b64url_decode(subscription['auth']))
     except ValueError:
         return 400
     request = urllib.request.Request(subscription['endpoint'], data=body, method='POST', headers={
         'Authorization': vapid_authorization(subscription['endpoint']), 'Content-Encoding': 'aes128gcm', 'Content-Type': 'application/octet-stream',
-        'TTL': str(PUSH_TTL), 'Urgency': 'normal'})
+        'TTL': str(ttl), 'Urgency': urgency})
     try:
         with urllib.request.build_opener(NoRedirects).open(request, timeout=PUSH_TIMEOUT) as response:
             return response.status
@@ -118,10 +119,10 @@ def send_push(subscription, message):
         return None
 
 
-def send_safely(subscription, message):
+def send_safely(subscription, message, ttl=PUSH_TTL, urgency='normal'):
     """send_push, with anything it did not expect kept from stopping the rest: a message that goes astray is no worse than one lost."""
     try:
-        return send_push(subscription, message)
+        return send_push(subscription, message, ttl, urgency)
     except Exception:
         traceback.print_exc()
         return None
@@ -176,7 +177,7 @@ def due_reminders(database, now):
     training day, from the time chosen until REMINDER_GRACE_MINUTES minutes after, and not when a workout has been saved that day."""
     due = []
     rows = database.execute('SELECT s.id, s.user_id, s.endpoint, s.p256dh, s.auth, s.tz, s.offset_minutes, s.last_sent, u.settings_json '
-                            'FROM push_subscriptions s JOIN user_state u ON u.user_id = s.user_id').fetchall()
+                            'FROM push_subscriptions s JOIN user_state u ON u.user_id = s.user_id WHERE s.reminders = 1').fetchall()
     for row in rows:
         schedule = reminder_schedule(row['settings_json'])
         if not schedule:
@@ -227,6 +228,67 @@ def reminder_answered(subscription, future):
                 database.execute('UPDATE push_subscriptions SET last_sent = ? WHERE id = ?', (subscription['last_sent'], subscription['id']))
     except Exception:
         traceback.print_exc()
+
+
+# -- Rest alerts --
+# A phone that is locked cannot sound the alert at the end of a rest (the page is not running), so the page, when it is hidden with a rest
+# on the clock, tells the server how many seconds are left, and the server sends a notification when they are up. Kept in memory: a rest
+# is at most an hour, and a server that restarts meanwhile loses it, which is no worse than the phone being locked without this. One per
+# subscription, so a second asking replaces the first, and the count is bounded by the subscriptions there can be.
+REST_ALERT_MAX_SECONDS = 3600
+# A "Rest over" that comes a minute late is of no use, so the push service is not asked to keep it longer, and it is urgent: without that
+# Android holds it back until the phone wakes of its own accord.
+REST_ALERT_TTL = 60
+REST_MESSAGE = {'title': 'Rest over', 'body': 'Your next set is waiting.', 'url': '/index.html', 'tag': 'rest-over'}
+rest_alerts = {}  # endpoint -> (time.monotonic() when it is due, the account's id)
+rest_alerts_changed = threading.Condition()
+
+
+def schedule_rest_alert(endpoint, user_id, seconds):
+    """Sends the rest alert to this subscription in `seconds`; None takes back one that was asked for. The time is worked out here, from
+    seconds left, rather than taken as the phone's clock says it: phone and server clocks differ."""
+    with rest_alerts_changed:
+        if seconds is None:
+            rest_alerts.pop(endpoint, None)
+        else:
+            rest_alerts[endpoint] = (time.monotonic() + seconds, user_id)
+        rest_alerts_changed.notify()
+
+
+def rest_alert_answered(subscription, future):
+    try:
+        with connection() as database:
+            settle_pushes(database, [subscription], [future.result()])
+    except Exception:
+        traceback.print_exc()
+
+
+def send_rest_alert(endpoint, user_id):
+    """Sent to the subscription as it is now: one that has since been signed out, deleted or turned off for rest alerts is not there to send to."""
+    with connection() as database:
+        row = database.execute('SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE endpoint = ? AND user_id = ? AND rest_alerts = 1',
+                               (endpoint, user_id)).fetchone()
+    if row:
+        subscription = dict(row)
+        push_pool.submit(send_safely, subscription, REST_MESSAGE, REST_ALERT_TTL, 'high').add_done_callback(
+            lambda future, subscription=subscription: rest_alert_answered(subscription, future))
+
+
+def rest_alert_loop():
+    while True:
+        with rest_alerts_changed:
+            now = time.monotonic()
+            due = [(endpoint, user_id) for endpoint, (when, user_id) in rest_alerts.items() if when <= now]
+            for endpoint, _ in due:
+                del rest_alerts[endpoint]
+            if not due:
+                # Until the next is due, or until another is asked for (which may be sooner).
+                rest_alerts_changed.wait(timeout=min([when - now for when, _ in rest_alerts.values()] + [60]))
+        for endpoint, user_id in due:
+            try:
+                send_rest_alert(endpoint, user_id)
+            except Exception:
+                traceback.print_exc()
 
 
 def reminder_loop():

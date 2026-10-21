@@ -237,10 +237,17 @@ def migration_16_deleted_workouts(database):
         ) WITHOUT ROWID''')
 
 
+def migration_17_push_purposes(database):
+    # What a subscription is for: reminders on training days (every one so far), and an alert when a rest ends, for a phone that is
+    # locked and cannot sound it itself. A phone can have either or both, so turning one off does not take the subscription away.
+    database.execute('ALTER TABLE push_subscriptions ADD COLUMN reminders INTEGER NOT NULL DEFAULT 1')
+    database.execute('ALTER TABLE push_subscriptions ADD COLUMN rest_alerts INTEGER NOT NULL DEFAULT 0')
+
+
 MIGRATIONS = [migration_1_tables, migration_2_client_ids, migration_3_programs, migration_4_emails, migration_5_exercise_notes,
               migration_6_hashed_sessions, migration_7_goals, migration_8_bodyweight, migration_9_remembered_sessions,
               migration_10_exercise_library, migration_11_push, migration_12_workout_cache, migration_13_session_details,
-              migration_14_workout_bytes, migration_15_username_keys, migration_16_deleted_workouts]
+              migration_14_workout_bytes, migration_15_username_keys, migration_16_deleted_workouts, migration_17_push_purposes]
 
 
 def init_database():
