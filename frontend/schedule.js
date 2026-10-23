@@ -40,14 +40,15 @@ function programQueue(count) {
 
 // The training days from today on, for `span` days: { date, key, today, trained, entry }, where entry is the program's
 // workout planned for that day (null on a day already trained, or with no program).
-function plannedDays(trained, span, schedule = scheduleFrom(getWorkoutSettings())) {
+function plannedDays(trained, span, schedule = scheduleFrom(getWorkoutSettings()), breaks = breaksFrom()) {
   const today = startOfDay(new Date());
   const queue = programQueue(span);
   let used = 0;
   const planned = [];
   for (let index = 0; index < span; index += 1) {
     const date = addDays(today, index);
-    if (!schedule.days.includes(date.getDay())) continue;
+    // Nothing is planned on a break, and the program's queue waits for the first day after it.
+    if (!schedule.days.includes(date.getDay()) || onBreak(date, breaks)) continue;
     const key = calendarDayKey(date);
     const done = index === 0 && trained.has(key);
     planned.push({ date, key, today:index === 0, trained:done, entry:done ? null : queue[used++] || null });
@@ -61,18 +62,27 @@ function dayWord(date) {
   return days === 0 ? 'today' : days === 1 ? 'tomorrow' : weekdayNames[date.getDay()];
 }
 
-// What to say on the Tracker, from the workouts saved: { text, start } or null when no days are chosen. `start` is the
-// program's next workout when the lifter could begin it now (today is a day to train, or a missed one is still owed).
+// What to say on the Tracker, from the workouts saved: { text, start } or null when no days are chosen and no break is on. `start` is
+// the program's next workout when the lifter could begin it now (today is a day to train, or a missed one is still owed).
 function scheduleNudge(workouts) {
-  const schedule = scheduleFrom(getWorkoutSettings());
-  if (!schedule.days.length) return null;
+  const settings = getWorkoutSettings();
+  const schedule = scheduleFrom(settings);
+  const breaks = breaksFrom(settings);
   const trained = trainedDayKeys(workouts);
   const today = startOfDay(new Date());
-  const planned = plannedDays(trained, 14, schedule);
+  const planned = plannedDays(trained, 14, schedule, breaks);
   const todays = planned.find(day => day.today);
   const next = planned.find(day => !day.today);
   const queue = programQueue(1)[0] || null;
   const parts = [];
+  const ahead = day => day ? `${dayWord(day.date)}${day.entry ? `, ${day.entry.label}` : ''}` : '';
+  // On a break there is nothing to do and nothing missed, with or without training days chosen; the card says how long it lasts.
+  const under = breakOn(today, breaks);
+  if (under) {
+    const until = new Date(dayStart(under.to)).toLocaleDateString(undefined, { weekday:'long', month:'short', day:'numeric' });
+    return { text:`On a break until ${until}. Your streak is safe.${next ? ` Next up: ${ahead(next)}.` : ''}`, start:false, onBreak:true };
+  }
+  if (!schedule.days.length) return null;
   // The latest training day before today, within a week, that was not trained and has not been made up for since. Only for
   // someone who was training just before it: a schedule only just chosen, or picked up again after months, has missed nothing.
   let missed = null;
@@ -80,9 +90,8 @@ function scheduleNudge(workouts) {
   const trainedBefore = date => workouts.some(workout => workout.createdAt < date.getTime() && workout.createdAt >= date.getTime() - 14 * 86400000);
   for (let back = 1; back <= 7 && !missed; back += 1) {
     const date = addDays(today, -back);
-    if (schedule.days.includes(date.getDay()) && !trained.has(calendarDayKey(date)) && lastTrained < date.getTime() && trainedBefore(date)) missed = date;
+    if (schedule.days.includes(date.getDay()) && !onBreak(date, breaks) && !trained.has(calendarDayKey(date)) && lastTrained < date.getTime() && trainedBefore(date)) missed = date;
   }
-  const ahead = day => day ? `${dayWord(day.date)}${day.entry ? `, ${day.entry.label}` : ''}` : '';
   if (todays && !todays.trained) {
     if (missed) parts.push(`You missed ${weekdayNames[missed.getDay()]}.`);
     parts.push(`Today is a training day${todays.entry ? `: ${todays.entry.label}` : ''}.`);
@@ -97,6 +106,24 @@ function scheduleNudge(workouts) {
   return { text:next ? `Rest day. Next up: ${ahead(next)}.` : 'Rest day.', start:false };
 }
 
+// ---- Today's workout, from the home screen ------------------------------------
+
+// The installed app's shortcut Today's workout (manifest.webmanifest) opens the Tracker at #today, which starts the program's next
+// workout, as the nudge's button does. A workout already under way is carried on and never replaced, and with no program there
+// is nothing to start, so the page says so. The hash is taken off the address, so a reload does not start it again. The program
+// is the account's, so this waits for it: a copy on the device answers when the server cannot.
+async function startTodaysWorkout() {
+  if (location.hash !== '#today') return;
+  history.replaceState(null, '', `${location.pathname}${location.search}`);
+  if (activeSession) return;
+  await window.serverStateReady.catch(() => {});
+  // The wait was long enough for a workout to be started by hand, or to come back from the server.
+  if (activeSession) return;
+  const next = currentProgram ? nextProgramDay(currentProgram) : null;
+  if (next) startWorkout(programWorkout(currentProgram, next.week, next.day));
+  else showFeedback(currentProgram ? 'Your program has no workouts left to start.' : 'Today’s workout comes from a training program. Choose a workout below, or set one up.');
+}
+
 // ---- The Tracker's nudge ----------------------------------------------------
 
 function renderScheduleNudge() {
@@ -108,6 +135,7 @@ function renderScheduleNudge() {
   card.hidden = !nudge;
   if (!nudge) return;
   document.getElementById('scheduleText').textContent = nudge.text;
+  document.getElementById('scheduleChange').textContent = nudge.onBreak ? 'Change break' : 'Change schedule';
   const button = document.getElementById('scheduleStart');
   const next = typeof currentProgram !== 'undefined' && currentProgram ? nextProgramDay(currentProgram) : null;
   button.hidden = !(nudge.start && next);

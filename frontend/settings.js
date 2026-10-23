@@ -314,6 +314,38 @@ getSettingElement('settingsForm').addEventListener('change', event => {
 // Picking a distance unit keeps it, rather than leaving it to follow the weight unit. The select hears its change before
 // the form does, which then saves it.
 getSettingElement('distanceUnitSetting').addEventListener('change', event => { event.target.dataset.chosen = 'true'; });
+// Breaks (settings-fields.js) are a list, so Add and the buttons beside each change the list and keep it; the dates are only what
+// the next one will be. A break is at least a day and at most longestBreakDays.
+getSettingElement('addBreakButton').onclick = () => {
+  const from = getSettingElement('breakFrom').value, to = getSettingElement('breakTo').value;
+  const status = getSettingElement('breakStatus');
+  const days = isDayKey(from) && isDayKey(to) ? Math.round((dayStart(to) - dayStart(from)) / 86400000) + 1 : 0;
+  if (!isDayKey(from) || !isDayKey(to)) status.textContent = 'Choose the first and last day of the break.';
+  else if (to < from) status.textContent = 'The break cannot end before it starts.';
+  else if (days > longestBreakDays) status.textContent = `A break can be up to ${longestBreakDays} days. For longer, add another when it ends.`;
+  else {
+    shownBreaks = withBreak(shownBreaks, { from, to });
+    status.textContent = `Break added: ${breakRange({ from, to })}.`;
+    getSettingElement('breakTo').value = '';
+    if (saveSettings()) showSettingsSaved();
+    renderBreakList();
+  }
+};
+getSettingElement('breakList').onclick = event => {
+  const button = event.target.closest('[data-break-from]');
+  if (!button) return;
+  const today = calendarDayKey(new Date());
+  const entry = shownBreaks.find(item => item.from === button.dataset.breakFrom);
+  if (!entry) return;
+  const rest = shownBreaks.filter(item => item !== entry);
+  // One under way ends yesterday, and the days it has taken stay excused.
+  const yesterday = calendarDayKey(addDays(new Date(), -1));
+  shownBreaks = entry.from <= today && today <= entry.to && entry.from <= yesterday ? [...rest, { from:entry.from, to:yesterday }].sort((a, b) => a.from < b.from ? -1 : 1) : rest;
+  getSettingElement('breakStatus').textContent = `${breakAction(entry, today) === 'End break' ? 'Break ended' : 'Break removed'}: ${breakRange(entry)}.`;
+  if (saveSettings()) showSettingsSaved();
+  renderBreakList();
+  getSettingElement('addBreakButton').focus();
+};
 // Plays the alert with the values currently in the form, so changes can be heard before they are saved.
 getSettingElement('testAlertButton').onclick = () => { unlockAudio(); playRestAlert(readSettingsForm()); };
 getSettingElement('signOutButton').onclick = async () => {

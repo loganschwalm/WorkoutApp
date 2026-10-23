@@ -434,6 +434,19 @@ def run(t):
     check('and with the days taken away, not at all', len(ready.messages()) == 2, len(ready.messages()))
     put_schedule({'days': [today], 'time': hhmm(now_minutes - 1)}, ready_token)
     check('and with them put back, it carries on', wait_until(lambda: len(ready.messages()) == 3), len(ready.messages()))
+    # A day on a break is not a day to be reminded, by the phone's own date.
+    phone_day, yesterday_day = device_now(offset).date(), device_now(offset).date() - datetime.timedelta(days=1)
+
+    def put_breaks(first, last):
+        body = {'settings': {'schedule': {'days': [today], 'time': hhmm(now_minutes - 1)}, 'breaks': [{'from': first.isoformat(), 'to': last.isoformat()}]}}
+        return app.request('PUT', '/api/state', json.dumps(body).encode(), {'Content-Type': 'application/json'}, token=ready_token)[0]
+
+    reminded = len(ready.messages())
+    check('a break that covers today is kept', put_breaks(phone_day, phone_day) == 200)
+    database("UPDATE push_subscriptions SET last_sent = '2000-01-01' WHERE endpoint LIKE '%/ready'")
+    check('(a look has been made since the break began)', a_look_since_now())
+    check('and on a break, a training day brings no reminder', len(ready.messages()) == reminded, len(ready.messages()))
+    check('a break that ended yesterday does not stop one', put_breaks(yesterday_day, yesterday_day) == 200 and wait_until(lambda: len(ready.messages()) == reminded + 1), len(ready.messages()))
     check('no page of the app sees any of it: the server stays up throughout', app.api('GET', '/api/auth/me')[0] is not None)
 
     # ------------------------------------------------------------------ P the messages go at once

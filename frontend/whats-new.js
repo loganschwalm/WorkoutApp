@@ -17,7 +17,9 @@ const whatsNewItems = [
   { title:'Last week', text:'Each new week starts with a look back at the last: your goal, your streak, your records and achievements.' },
   { title:'Program moments', text:'A + set past its plan, every planned rep made, and a finished cycle are celebrated, with fireworks across the screen.' },
   { title:'One exercise at a time', text:'Choose an exercise on Progress for its records, the heaviest weight it has done for 1 to 10 reps, its goal, and whether it has stalled.' },
-  { title:'Strava export', text:'Download a finished workout or cardio session as a .tcx file for Strava, from its summary or from History.' }
+  { title:'Strava export', text:'Download a finished workout or cardio session as a .tcx file for Strava, from its summary or from History.' },
+  { title:'Take a break', text:'Away, ill or hurt? Add a break in Settings, under Training schedule: a week with one in it cannot end your streak, and its days bring no reminders.' },
+  { title:'Today’s workout', text:'On Android, press and hold the app icon for a shortcut that opens the Tracker and starts your program’s next workout.' }
 ];
 
 // Someone who was training before the release: a workout of theirs is older than it. A newer account, or one with nothing

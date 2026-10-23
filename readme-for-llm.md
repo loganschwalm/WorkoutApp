@@ -383,8 +383,14 @@ works while the page stays loaded, and a reload needs the server.
   on an iPhone or iPad, and an Install button on Android once the browser offers one. Closing it
   hides it for a week; it never shows inside the installed app.
 - The app icon, name, and theme colour come from a web app manifest. It also lists shortcuts, which Android and desktop browsers show when
-  the installed icon is long-pressed or right-clicked: Strength, Cardio, History, and Log weight (`progress.html#bodyweight`, which
+  the installed icon is long-pressed or right-clicked: Today's workout (`index.html#today`, first, below), Cardio, History, and Log weight (`progress.html#bodyweight`, which
   opens Bodyweight and puts the cursor in the weight field). iOS ignores them.
+- Today's workout opens the Tracker at `#today`, which starts the program's next workout, as the Tracker's schedule button does
+  (`startTodaysWorkout` in `schedule.js`, called at the end of `resumeOrStartWorkout`, and on `hashchange` for a Tracker that is already
+  open). A workout already under way is carried on and never replaced. With no program (or one with nothing left) there is nothing to start,
+  and the page says so. The hash is taken off the address, so a reload does not start another. It is a hash and not a query, so the
+  service worker's cached page (keyed by path) answers it offline, as it does a plain launch; it waits for the account's state, so the program
+  it starts from is the account's, or the copy on the device when the server is out of reach.
 - The status bar follows the colour theme.
 - Reloading offline opens the app from the cache instead of failing.
 
@@ -591,6 +597,27 @@ A day with no program is just "a training day". The pieces:
   Coming up lists the next six training days with their workouts, the one already trained marked Done. History loads
   `program-definitions.js` and `program-plan.js` (the pieces of `program.js` that say which day is next, which the Tracker's
   program card shares) to name them.
+- **Breaks** are days away from training for a reason (a holiday, an injury, being ill), added in Settings under Training schedule
+  (Take a break: from and until, a list of breaks with Remove, End break for one under way and Cancel for one to come). They are
+  `settings.breaks`, a list of `{"from": "2026-10-24", "to": "2026-11-02"}` (both days included, up to 100, none longer than 366
+  days; checked by `validate_breaks` in `state.py`), merged between devices as one value like the rest of the settings, so two
+  devices that change the list at once keep the later change. Overlapping or touching breaks are joined. A **week** (Monday to
+  Sunday) with any day of a break in it is *excused*: if it reaches the weekly goal it counts as ever, and if it falls short it neither
+  ends a streak nor adds to it (`weeklyStreaks`, `bestStreakBefore` and the replay in `achievementsOf`, all through `runEndingAt` in
+  `achievements.js`; `breaksFrom`, `onBreak` and `weekExcused` are in `settings-fields.js`). So a streak survives a holiday, and the
+  Weekly streak achievement counts across it. On a break:
+  - the Tracker's card says "On a break until Sunday, Nov 2. Your streak is safe." with the next training day after it, and offers
+    Change break; it shows whether or not training days are chosen;
+  - no training day inside it is planned (the History calendar, Coming up, and Add to calendar skip it: `plannedDays`), and none counts
+    as missed afterwards;
+  - History marks its days with a hatch (a day trained on keeps its colour), says "break week" beside the week's count, and in place
+    of "N more workouts by Sunday" says "On a break until …" with the streak safe;
+  - Last week's card says "That week had a break in it, so it counts against nothing" for an excused week under the goal, not "A new
+    streak can start this week";
+  - the server sends no training-day reminder on a day inside one, by the phone's own date (`due_reminders`, `reminder_breaks` in
+    `webpush.py`). Rest alerts are not reminders and are unaffected.
+  Ending a break under way sets its last day to yesterday, so the days already taken stay excused; removing a break that is over takes
+  its weeks' excuse back, and a streak that depended on it with it.
 - **Add to calendar**, in the program card's ⋯ menu (`program-calendar.js`), saves the program's remaining workouts as an `.ics`
   file (RFC 5545) for any calendar app to import. It lays the queue on the schedule as it stands: the next workout on the next
   training day, the one after it on the day after, to the end of the block in progress (nothing from the next block, whose
@@ -741,7 +768,8 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
   keep says what it takes ("2 more workouts by Sunday keeps your 4-week streak going."), while there are days enough
   left in the week; with too few, nothing is said.
 - With a training schedule (Settings), the calendar also marks the training days still to come in the week, with the
-  workout planned for each, and Coming up lists the next six. See [Training schedule and
+  workout planned for each, and Coming up lists the next six. Days of a break (Settings) are hatched and planned for nothing, and a
+  week with one in it cannot end the streak. See [Training schedule and
   reminders](#training-schedule-and-reminders).
 - Review all saved workouts on the History page, under Recent workouts: a line each, in a month, in a year. Each year
   and month is a heading that folds and opens, with its workouts and training time beside it ("2026 · 41 workouts ·
@@ -883,8 +911,9 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
   | Big week | 5, 7 days | Different days trained in one week, Monday to Sunday |
   | Back at it | once | A workout after two weeks or more off |
 
-  The weekly streak is counted against the weekly goal as it is now, and the weight and distance tiers are in the units
-  shown, so changing either can change what is earned; a plate is counted in the unit its set was loaded in.
+  The weekly streak is counted against the weekly goal as it is now and passes over weeks with a break in them (Settings, Training
+  schedule), and the weight and distance tiers are in the units
+  shown, so changing any of them can change what is earned; a plate is counted in the unit its set was loaded in.
 - **What a workout earned.** A finished workout or session is compared with the history before it (`finishRewards`): what it
   earned is what the history after it has and the history before it had not. Only when the whole history is in hand: before
   the saved workouts have loaded (`savedWorkoutsLoaded` on the Strength page, `cardioEverything` on Cardio) it earns nothing,
@@ -1027,7 +1056,8 @@ the button that opened them. Settings include:
   shown. The workout in progress and your program switch with you.
 - Weekly goal: 1 to 7 workouts a week (3 by default), which the History page's calendar counts.
 - Training schedule: the days of the week you train, a chip for each (Monday first), and the time of day to be reminded.
-  Both belong to the account and follow you between devices. "Remind me on training days, on this device" turns on web
+  Both belong to the account and follow you between devices. Take a break, below them, lists the account's breaks and adds one from two
+  dates (see [Training schedule and reminders](#training-schedule-and-reminders)). "Remind me on training days, on this device" turns on web
   push for this browser alone, and Send a test notification shows that it works. "Tell me when a rest ends, even with the phone
   locked, on this device" is the same subscription's other use: when the page is hidden with a rest on the clock (a locked phone, or
   another app in front), it tells the server how many seconds are left (`pageHiddenWithRest` in `rest-timer.js`, with `keepalive`),

@@ -86,6 +86,8 @@ function applyUnit() {
 }
 
 window.addEventListener('settingschange', applyUnit);
+// The shortcut Today's workout, chosen while the Tracker is already open, only changes the address (startTodaysWorkout, schedule.js).
+window.addEventListener('hashchange', () => { if (initialLoadDone) startTodaysWorkout(); });
 applyUnitLabels();
 applyWeightStepper();
 window.addEventListener('syncchange', event => {

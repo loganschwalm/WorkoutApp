@@ -25,7 +25,8 @@ function recapMonday() {
 // "4 workouts, your goal of 3 reached: a 5-week streak."
 function recapHeadline(recap) {
   const done = plural(recap.sessions, 'workout');
-  if (!recap.reached) return `${done}. A new streak can start this week.`;
+  // A week with a break in it could not end a streak, so it is not looked forward from as if it had.
+  if (!recap.reached) return recap.excused ? `${done}. That week had a break in it, so it counts against nothing.` : `${done}. A new streak can start this week.`;
   return recap.streak >= 2 ? `${done}, your goal of ${recap.goal} reached: a ${recap.streak}-week streak.` : `${done}, your goal of ${recap.goal} reached.`;
 }
 

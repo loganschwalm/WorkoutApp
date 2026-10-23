@@ -366,6 +366,7 @@ async function resumeOrStartWorkout(workouts) {
       console.error('Unable to load active workout; showing the copy on this device.', error);
     }
   }
+  await startTodaysWorkout();
   const workout = requested && workouts.find(item => item.id === requested.id);
   if (!workout) return;
   if (requested.action === 'start') startWorkout(workout);

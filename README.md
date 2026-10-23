@@ -112,10 +112,13 @@ celebrated.
   the Tracker says so, rather than holding up the rest; Settings lists those workouts and why, and each can be tried again,
   saved to a file or discarded. A tab left open while someone else signs in on
   the same browser stops saving, says so, and keeps its account's work for that account.
-- Add it to your phone's home screen to open it like an app. Long-pressing its icon offers shortcuts to Strength, Cardio, History and Log weight (on Android).
+- Add it to your phone's home screen to open it like an app. Long-pressing its icon offers shortcuts to Today's workout (it starts
+  your program's next workout, or carries on the one under way), Cardio, History and Log weight (on Android).
 - Pick the days you train: the Tracker says what is planned today (and nudges you when you missed a day), History marks
   the planned days on the calendar, and your phone can remind you on training days, even with the app closed.
 - Add a training program's remaining workouts to your own calendar app as an .ics file, one event on each training day.
+- Take a break when you are away, ill or hurt: a week with a break in it can't end your streak, and its days bring no reminders
+  and no missed-day nudge. Add one in Settings, under Training schedule.
 - A notification when a rest ends even with the phone locked, if you turn it on in Settings (it needs HTTPS, and on an iPhone the app
   added to the Home Screen).
 - Pounds or kilograms, your own bar and plates, 10 colour themes (light, dark, and colourful ones), four text sizes, and a clear

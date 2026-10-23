@@ -56,6 +56,23 @@ def validate_schedule(schedule):
         raise BadRequest('settings.schedule.time must be a time of day as HH:MM.')
 
 
+MAX_BREAKS = 100
+MAX_BREAK_DAYS = 366
+
+
+def validate_breaks(breaks):
+    """Days away from training, as a list of {from, to} days as YYYY-MM-DD (both included), none longer than MAX_BREAK_DAYS."""
+    if not isinstance(breaks, list) or len(breaks) > MAX_BREAKS:
+        raise BadRequest(f'settings.breaks must be a list of up to {MAX_BREAKS} breaks.')
+    for index, entry in enumerate(breaks):
+        days = [entry.get(end) if isinstance(entry, dict) else None for end in ('from', 'to')]
+        if not all(isinstance(day, str) and is_calendar_date(day) for day in days):
+            raise BadRequest(f'settings.breaks[{index}] must have a "from" and a "to" day as YYYY-MM-DD.')
+        first, last = (datetime.date.fromisoformat(day) for day in days)
+        if not first <= last <= first + datetime.timedelta(days=MAX_BREAK_DAYS - 1):
+            raise BadRequest(f'settings.breaks[{index}] must end on or after the day it starts, and last at most {MAX_BREAK_DAYS} days.')
+
+
 # How many of each an account may keep, for the validators below and for what an import may add.
 MAX_TEMPLATES = 1000
 MAX_NOTES = 5000
@@ -69,6 +86,8 @@ def validate_settings(settings):
         raise BadRequest('settings must be an object.')
     if 'schedule' in settings:
         validate_schedule(settings['schedule'])
+    if 'breaks' in settings:
+        validate_breaks(settings['breaks'])
 
 
 def validate_templates(templates):

@@ -207,6 +207,116 @@ def run(t):
     check('a cardio session logged today makes it done', text('scheduleText').startswith('Done for today.'), text('scheduleText'))
     t.set_cookie(t.token)
 
+    # ------------------------------------------------------------------ B breaks
+    print('B   a break: what the Tracker and the calendar say, the list in Settings, and the shortcut that starts today’s workout')
+
+    def key(offset):
+        return cdp.ev(f'calendarDayKey(addDays(new Date(), {offset}))')
+
+    def stored_breaks():
+        return cdp.ev('getWorkoutSettings().breaks')
+
+    def server_breaks():
+        return api('GET', '/api/state', token=token)[0]['settings'].get('breaks')
+
+    def set_breaks(breaks):
+        cdp.ev(f"saveLocalState('settings', {{ ...getWorkoutSettings(), breaks: {json.dumps(breaks)} }}); window.dispatchEvent(new Event('settingschange'))")
+        cdp.pause(0.2)
+
+    t.open_tracker()
+    set_schedule([today])
+    set_breaks([{'from': key(-1), 'to': key(2)}])
+    check('on a break, the Tracker says until when, and that the streak is safe, in place of today’s workout',
+          visible('scheduleCard') and text('scheduleText').startswith('On a break until ') and 'Your streak is safe.' in text('scheduleText') and 'training day' not in text('scheduleText'), text('scheduleText'))
+    check('with nothing to start, and the schedule button offering to change the break', not visible('scheduleStart') and text('scheduleChange') == 'Change break')
+    set_schedule([])
+    check('even with no training days chosen', visible('scheduleCard') and text('scheduleText').startswith('On a break until '), text('scheduleText'))
+    planned = cdp.ev("plannedDays(new Set(), 7, { days: [0, 1, 2, 3, 4, 5, 6], time: '17:00' }).map(day => day.key)")
+    check('no day of a break is planned; the first after it is', planned == [key(offset) for offset in (3, 4, 5, 6)], planned)
+    set_schedule([number(5)])
+    set_breaks([{'from': key(-3), 'to': key(-1)}])
+    check('a training day that fell in a break was not missed', nudge(f'[{ago(3)}]')['text'].startswith('Rest day.'), nudge(f'[{ago(3)}]'))
+    set_breaks([])
+    check('(where it would have been)', nudge(f'[{ago(3)}]')['text'].startswith('You missed '), nudge(f'[{ago(3)}]'))
+    set_schedule([])
+    check('and with no break the card is gone again', not visible('scheduleCard'))
+
+    # The list in Settings.
+    set_breaks([{'from': key(-1), 'to': key(2)}])
+    open_settings()
+    check('Settings lists a break under way, with a button to end it', cdp.ev("[...document.querySelectorAll('#breakList li')].map(li => li.querySelector('button').textContent)") == ['End break']
+          and 'on a break until' in text('settings-schedule-state'), text('settings-schedule-state'))
+    cdp.ev("document.querySelector('#breakList [data-break-from]').click()")
+    cdp.pause(0.3)
+    check('ending it keeps the days already taken, and ends it yesterday', stored_breaks() == [{'from': key(-1), 'to': key(-1)}], stored_breaks())
+    check('and that reaches the server', wait_for(lambda: server_breaks() == [{'from': key(-1), 'to': key(-1)}]), server_breaks())
+
+    def add_break(first, last):
+        cdp.ev(f"(() => {{ document.getElementById('breakFrom').value = '{first}'; document.getElementById('breakTo').value = '{last}'; document.getElementById('addBreakButton').click(); }})()")
+        cdp.pause(0.3)
+
+    add_break(key(5), key(8))
+    check('a break added is kept, in order', stored_breaks() == [{'from': key(-1), 'to': key(-1)}, {'from': key(5), 'to': key(8)}], stored_breaks())
+    check('and listed with the latest first, one still to come with a button to cancel it',
+          cdp.ev("[...document.querySelectorAll('#breakList li')].map(li => li.querySelector('button').textContent)") == ['Cancel', 'Remove'])
+    add_break(key(9), key(10))
+    check('one that starts the day after another ends is joined to it', stored_breaks()[-1] == {'from': key(5), 'to': key(10)} and len(stored_breaks()) == 2, stored_breaks())
+    add_break(key(20), key(15))
+    check('a break that ends before it starts is refused, and says so', len(stored_breaks()) == 2 and 'cannot end before' in text('breakStatus'), text('breakStatus'))
+    add_break(key(20), key(400))
+    check('so is one past a year', len(stored_breaks()) == 2 and 'up to 366 days' in text('breakStatus'), text('breakStatus'))
+    add_break('', '')
+    check('and one with no days', len(stored_breaks()) == 2 and 'Choose the first and last day' in text('breakStatus'), text('breakStatus'))
+    cdp.ev("document.querySelector('#breakList [data-break-from]').click()")
+    cdp.pause(0.3)
+    check('cancelling one still to come removes it', stored_breaks() == [{'from': key(-1), 'to': key(-1)}], stored_breaks())
+    cdp.ev("document.querySelector('#breakList [data-break-from]').click()")
+    cdp.pause(0.3)
+    check('and so does removing one that is over', stored_breaks() == [], stored_breaks())
+    close_settings()
+    wait_for(lambda: server_breaks() == [])
+    refusals = {'not a list': {'from': '2026-01-01'}, 'a break with no end': [{'from': '2026-01-01'}], 'a day that does not exist': [{'from': '2026-02-30', 'to': '2026-03-01'}],
+                'a break that ends before it starts': [{'from': '2026-01-05', 'to': '2026-01-04'}], 'one longer than a year': [{'from': '2026-01-01', 'to': '2027-02-01'}],
+                'a day not written as one': [{'from': 'Jan 1', 'to': 'Jan 2'}], 'more than a hundred': [{'from': '2026-01-01', 'to': '2026-01-01'}] * 101}
+    for name, breaks in refusals.items():
+        status = t.request('PUT', '/api/state', json.dumps({'settings': {'breaks': breaks}}).encode(), {'Content-Type': 'application/json'}, token=token)[0]
+        check(f'the server refuses {name}', status == 400, status)
+    status = t.request('PUT', '/api/state', json.dumps({'settings': {'breaks': [{'from': '2026-01-05', 'to': '2026-01-11'}]}}).encode(), {'Content-Type': 'application/json'}, token=token)[0]
+    check('and keeps a good one', status == 200 and server_breaks() == [{'from': '2026-01-05', 'to': '2026-01-11'}], [status, server_breaks()])
+    read = cdp.ev("breaksFrom({ breaks: [{ from: '2026-01-05', to: '2026-01-11' }, { from: 'x', to: '2026-01-01' }, { from: '2026-02-01', to: '2026-01-01' }, null, 5, { from: '2026-02-30', to: '2026-03-01' }] })")
+    check('a break that is not one is left out when read', read == [{'from': '2026-01-05', 'to': '2026-01-11'}], read)
+    api('PUT', '/api/state', {'settings': {}}, token)
+
+    # The shortcut, Today’s workout: the Tracker at #today.
+    shortcuts = api('GET', '/manifest.webmanifest')[0]['shortcuts']
+    check('the installed icon offers it, first', shortcuts[0]['name'] == "Today's workout" and shortcuts[0]['url'] == '/index.html#today', shortcuts[0])
+    api('PUT', '/api/state', {'program': PPL}, token)
+    t.open_tracker()
+    expected = cdp.ev("(() => { const next = nextProgramDay(currentProgram); return programWorkout(currentProgram, next.week, next.day).name; })()")
+    cdp.goto('/history.html')
+    cdp.goto('/index.html#today')
+    check('it starts the program’s next workout', cdp.wait('activeSession !== null', timeout=15) and cdp.ev('activeSession.name') == expected, cdp.ev('activeSession && activeSession.name'))
+    check('and takes itself off the address, so a reload does not start another', cdp.ev('location.hash') == '' and cdp.ev('location.pathname') == '/index.html')
+    started = cdp.ev('activeSession.clientId')
+    cdp.ev('activeSession.notes = "keep me"; persistActiveSession()')
+    cdp.goto('/history.html')
+    cdp.goto('/index.html#today')
+    cdp.wait('initialLoadDone === true', timeout=15)
+    cdp.pause(0.6)
+    check('chosen with a workout under way it carries that on, and never replaces it', cdp.ev('activeSession.clientId') == started and cdp.ev('activeSession.notes') == 'keep me', cdp.ev('activeSession.clientId'))
+    cdp.ev('location.hash = "#today"')
+    cdp.pause(0.6)
+    check('and so when the Tracker is already open', cdp.ev('activeSession.clientId') == started and cdp.ev('location.hash') == '')
+    api('PUT', '/api/state', {'program': None}, token)
+    bare_token = api('POST', '/api/auth/register', {'username': 'noprogram', 'email': 'noprogram@example.test', 'password': PASSWORD})[1].split('session=')[1].split(';')[0]
+    t.set_cookie(bare_token)
+    cdp.goto('/history.html')
+    cdp.goto('/index.html#today')
+    cdp.wait('initialLoadDone === true', timeout=15)
+    cdp.pause(0.6)
+    check('with no program there is nothing to start, and the page says so', cdp.ev('activeSession') is None and 'training program' in text('formFeedback'), text('formFeedback'))
+    t.set_cookie(t.token)
+
     # ------------------------------------------------------------------ R reminders
     print('R   reminders, from Settings to the notification')
     server = load_server()

@@ -153,14 +153,23 @@ def settle_pushes(database, subscriptions, statuses):
 
 # -- Training days --
 def reminder_schedule(settings_json):
-    """(days as the browser numbers them, Sunday 0, and the time as minutes after midnight), or None for no reminders."""
+    """(days as the browser numbers them, Sunday 0, the time as minutes after midnight, and the breaks as (first, last) days written
+    YYYY-MM-DD, which compare as text), or None for no reminders."""
     try:
-        schedule = json.loads(settings_json or '{}').get('schedule')
+        settings = json.loads(settings_json or '{}')
+        schedule = settings.get('schedule')
         days = {day for day in schedule['days'] if isinstance(day, int) and not isinstance(day, bool) and 0 <= day <= 6}
         hours, minutes = schedule.get('time', DEFAULT_REMINDER_TIME).split(':')
-        return (days, int(hours) * 60 + int(minutes)) if days else None
+        return (days, int(hours) * 60 + int(minutes), reminder_breaks(settings)) if days else None
     except (AttributeError, KeyError, TypeError, ValueError):
         return None
+
+
+def reminder_breaks(settings):
+    """The days away from training the settings name, as (first, last) pairs; anything that is not a pair of days is left out."""
+    breaks = settings.get('breaks')
+    pairs = [(entry.get('from'), entry.get('to')) for entry in breaks if isinstance(entry, dict)] if isinstance(breaks, list) else []
+    return [(first, last) for first, last in pairs if isinstance(first, str) and isinstance(last, str)]
 
 
 def device_clock(subscription, now):
@@ -174,7 +183,8 @@ def device_clock(subscription, now):
 
 def due_reminders(database, now):
     """The subscriptions to remind at this moment, each marked as reminded for its day. A phone is reminded once on a
-    training day, from the time chosen until REMINDER_GRACE_MINUTES minutes after, and not when a workout has been saved that day."""
+    training day, from the time chosen until REMINDER_GRACE_MINUTES minutes after, and not when a workout has been saved that day or the
+    day is on a break (settings.breaks)."""
     due = []
     rows = database.execute('SELECT s.id, s.user_id, s.endpoint, s.p256dh, s.auth, s.tz, s.offset_minutes, s.last_sent, u.settings_json '
                             'FROM push_subscriptions s JOIN user_state u ON u.user_id = s.user_id WHERE s.reminders = 1').fetchall()
@@ -182,11 +192,14 @@ def due_reminders(database, now):
         schedule = reminder_schedule(row['settings_json'])
         if not schedule:
             continue
-        days, at = schedule
+        days, at, breaks = schedule
         clock = device_clock(row, now)
         minute = clock.hour * 60 + clock.minute
         today = clock.date().isoformat()
         if (clock.weekday() + 1) % 7 not in days or not at <= minute < at + REMINDER_GRACE_MINUTES or row['last_sent'] == today:
+            continue
+        # A day on a break (by this phone's own date) is not a day to be reminded.
+        if any(first <= today <= last for first, last in breaks):
             continue
         midnight = clock.replace(hour=0, minute=0, second=0, microsecond=0)
         trained = database.execute('SELECT 1 FROM workouts WHERE user_id = ? AND created_at >= ? AND created_at < ?',

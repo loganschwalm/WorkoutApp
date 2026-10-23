@@ -34,18 +34,27 @@ function weekCountsOf(sessions) {
   return weeks;
 }
 
+// The weeks at the goal in a row, counting back from a Monday that is itself at it (or a week on a break). A week on a break that
+// fell short is passed over: it neither counts nor ends the run (see breaksFrom, settings-fields.js).
+function runEndingAt(weeks, goal, monday, breaks) {
+  let run = 0;
+  for (let week = monday; ; week = addDays(week, -7)) {
+    if ((weeks.get(calendarDayKey(week)) || 0) >= goal) run += 1;
+    else if (!weekExcused(week, breaks)) return run;
+  }
+}
+
 // The current run of weeks at the goal, and the longest. This week counts once it reaches the goal; until then it is
 // still in progress, so the run is counted from last week and nothing is lost yet.
-function weeklyStreaks(weeks, goal, thisWeek) {
+function weeklyStreaks(weeks, goal, thisWeek, breaks = []) {
   const reached = monday => (weeks.get(calendarDayKey(monday)) || 0) >= goal;
-  let current = reached(thisWeek) ? 1 : 0;
-  for (let monday = addDays(thisWeek, -7); reached(monday); monday = addDays(monday, -7)) current += 1;
+  const current = runEndingAt(weeks, goal, reached(thisWeek) ? thisWeek : addDays(thisWeek, -7), breaks);
   const mondays = [...weeks.keys()].sort();
   let best = current, run = 0;
   if (mondays.length) {
     const [year, month, day] = mondays[0].split('-').map(Number);
     for (let monday = new Date(year, month - 1, day); monday <= thisWeek; monday = addDays(monday, 7)) {
-      run = reached(monday) ? run + 1 : 0;
+      run = reached(monday) ? run + 1 : weekExcused(monday, breaks) ? run : 0;
       best = Math.max(best, run);
     }
   }
@@ -54,17 +63,22 @@ function weeklyStreaks(weeks, goal, thisWeek) {
 
 // The longest run before the current one (`current` weeks, from weeklyStreaks), so a current run past it is a new best:
 // weeklyStreaks' best includes the current run, so it cannot say that itself.
-function bestStreakBefore(weeks, goal, thisWeek, current) {
+function bestStreakBefore(weeks, goal, thisWeek, current, breaks = []) {
   const reached = monday => (weeks.get(calendarDayKey(monday)) || 0) >= goal;
-  // The current run ends this week once it has reached the goal, and last week until then.
-  const runStart = addDays(reached(thisWeek) ? thisWeek : addDays(thisWeek, -7), -7 * Math.max(0, current - 1));
-  const before = current ? runStart : addDays(thisWeek, 7);
+  // The current run begins at its earliest week at the goal, which weeks on a break may be a good way back from `current` weeks.
+  let before = addDays(thisWeek, 7);
+  if (current) {
+    let found = 0;
+    for (let monday = reached(thisWeek) ? thisWeek : addDays(thisWeek, -7); found < current; monday = addDays(monday, -7)) {
+      if (reached(monday)) { found += 1; before = monday; }
+    }
+  }
   const mondays = [...weeks.keys()].sort();
   let best = 0, run = 0;
   if (mondays.length) {
     const [year, month, day] = mondays[0].split('-').map(Number);
     for (let monday = new Date(year, month - 1, day); monday < before; monday = addDays(monday, 7)) {
-      run = reached(monday) ? run + 1 : 0;
+      run = reached(monday) ? run + 1 : weekExcused(monday, breaks) ? run : 0;
       best = Math.max(best, run);
     }
   }
@@ -134,7 +148,7 @@ const achievementFamilies = [
 function achievementContext(options = {}) {
   const settings = getWorkoutSettings();
   return { unit:options.unit || weightUnit(), distanceUnit:options.distanceUnit || distanceUnitOf(settings),
-    goal:options.goal || weeklyGoalFrom(settings.weeklyGoal) };
+    goal:options.goal || weeklyGoalFrom(settings.weeklyGoal), breaks:options.breaks || breaksFrom(settings) };
 }
 
 // Which session earned something, to tell this workout's from the rest.
@@ -166,11 +180,7 @@ function achievementsOf(sessions, options = {}) {
     const date = new Date(session.createdAt);
     const week = calendarDayKey(startOfWeek(date));
     weeks.set(week, (weeks.get(week) || 0) + 1);
-    if (weeks.get(week) === context.goal) {
-      let run = 1;
-      for (let monday = addDays(startOfWeek(date), -7); (weeks.get(calendarDayKey(monday)) || 0) >= context.goal; monday = addDays(monday, -7)) run += 1;
-      metrics.streak = Math.max(metrics.streak, run);
-    }
+    if (weeks.get(week) === context.goal) metrics.streak = Math.max(metrics.streak, runEndingAt(weeks, context.goal, startOfWeek(date), context.breaks));
     const days = weekDays.get(week) || new Set();
     days.add(calendarDayKey(date));
     weekDays.set(week, days);
@@ -235,7 +245,7 @@ function finishRewards(history, session) {
   const had = new Set(achievementsOf(before).earned.map(item => item.id));
   const after = achievementsOf([...before, session]);
   return { earned:after.earned.filter(item => !had.has(item.id)), weekReached:weeks.get(calendarDayKey(monday)) === goal,
-    streak:weeklyStreaks(weeks, goal, startOfWeek(new Date())).current, after };
+    streak:weeklyStreaks(weeks, goal, startOfWeek(new Date()), breaksFrom()).current, after };
 }
 
 // The line about the week and the streak, after a workout: '' when there is nothing to say.
@@ -379,7 +389,7 @@ function weekRecapOf(sessions, monday, options = {}) {
   return { start, end, context, sessions:week.length, strength:week.filter(session => !isCardio(session)).length, cardio:week.filter(isCardio).length,
     seconds:sum(week, session => Number(session.duration) > 0 ? Number(session.duration) : 0), sets:sum(week, setsOf), volume, distance:sum(week, distanceOf),
     records:[...latest.values()], recordCount:records.length, achievements, earned:achievements.earned.filter(item => item.at >= start),
-    goal:context.goal, reached, streak:reached ? weeklyStreaks(weeks, context.goal, monday).current : 0,
+    goal:context.goal, reached, streak:reached ? weeklyStreaks(weeks, context.goal, monday, context.breaks).current : 0, excused:weekExcused(monday, context.breaks),
     previous:{ sessions:previous.length, volume:sum(previous, volumeOf) },
     biggest:volume > 0 && lifted.length >= 3 && volume > Math.max(...lifted) };
 }

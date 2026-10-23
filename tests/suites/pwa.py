@@ -63,8 +63,8 @@ def run(t):
     purposes = {icon.get('purpose') for icon in manifest.get('icons', [])}
     check('manifest offers a maskable icon', 'maskable' in purposes, str(purposes))
     shortcuts = manifest.get('shortcuts', [])
-    check('the installed icon offers shortcuts to Strength, Cardio, Log weight and History',
-          [item.get('name') for item in shortcuts] == ['Strength', 'Cardio', 'Log weight', 'History'], str(shortcuts))
+    check('the installed icon offers shortcuts to Today’s workout, Cardio, Log weight and History',
+          [item.get('name') for item in shortcuts] == ["Today's workout", 'Cardio', 'Log weight', 'History'], str(shortcuts))
     pages_served = [t.request('GET', item['url'].split('#')[0], None, None, token=t.token)[0] for item in shortcuts]
     check('each is a page of this site, inside the scope, and is served', pages_served == [200] * 4 and all(item['url'].startswith('/') for item in shortcuts)
           and all(icon['src'].startswith('/icons/') and icon['sizes'] == '192x192' for item in shortcuts for icon in item.get('icons', [])), str(pages_served))

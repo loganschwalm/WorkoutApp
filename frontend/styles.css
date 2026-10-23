@@ -1092,6 +1092,15 @@ html[data-theme="dark"] .guide-mistake { background:#3a3122; }
 .schedule-actions { display:flex; align-items:center; gap:8px; flex-shrink:0; }
 .schedule-actions .link-button { padding:8px; }
 .calendar-day.planned { background:var(--accent-soft); border:2px dashed var(--accent); }
+/* A day on a break (Settings, Training schedule) is hatched; a day trained on it keeps its colour. */
+.calendar-day.away:not(.trained) { background-image:repeating-linear-gradient(135deg, var(--line) 0 3px, transparent 3px 7px); }
+.break-choices { display:grid; gap:8px; min-width:0; margin:14px 0 0; padding:14px 0 0; border:0; border-top:1px solid var(--line); }
+.break-choices legend { padding:0; margin-bottom:2px; color:var(--muted); font-size:.78rem; font-weight:700; }
+.break-choices .schedule-help { margin:0; }
+.break-dates { display:grid; grid-template-columns:auto 1fr; align-items:center; gap:8px 12px; }
+.break-dates label { margin:0; }
+.break-choices #addBreakButton { justify-self:start; }
+.break-choices .subtitle { margin:0; }
 .coming-up { margin-top:14px; }
 .coming-up h3 { margin:0 0 8px; font-size:.95rem; }
 .coming-up ul { display:grid; gap:6px; margin:0; padding:0; list-style:none; }

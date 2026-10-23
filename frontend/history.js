@@ -207,11 +207,16 @@ function trainingByDate(workouts) {
 // Under the week's count: a run longer than any before it is said, with fireworks the first time it reaches each length (kept
 // on this device, so a reload does not set them off again); otherwise a run this week has yet to keep says what it takes, while
 // there are days enough left in the week to do it.
-function renderStreakNote(weeks, goal, thisWeek, current, thisWeekCount) {
-  const newBest = current >= 2 && current > bestStreakBefore(weeks, goal, thisWeek, current);
+function renderStreakNote(weeks, goal, thisWeek, current, thisWeekCount, breaks) {
+  const newBest = current >= 2 && current > bestStreakBefore(weeks, goal, thisWeek, current, breaks);
   const needed = goal - thisWeekCount;
   const daysLeft = 7 - ((new Date().getDay() + 6) % 7);
+  // A week with a break in it cannot end a streak, so it asks nothing: it says so instead.
+  const under = breakOn(new Date(), breaks);
+  const excused = weekExcused(thisWeek, breaks) && needed > 0;
   const note = newBest ? `New best streak: ${plural(current, 'week')} in a row at your goal.`
+    : under ? `On a break until ${breakRange({ from:under.to, to:under.to })}. ${current > 0 ? `Your ${current}-week streak is safe.` : 'Nothing to catch up on.'}`
+    : excused ? `This week has a break in it, so it cannot end your streak.`
     : current > 0 && needed > 0 && needed <= daysLeft ? `${plural(needed, 'more workout')} by Sunday keeps your ${current}-week streak going.` : '';
   $('streakNote').textContent = note;
   $('streakNote').hidden = !note;
@@ -235,12 +240,13 @@ function renderCalendar() {
   const planned = plannedDays(trainedDayKeys(historyWorkouts), 21, schedule);
   const plans = new Map(planned.filter(day => !day.trained).map(day => [day.key, day]));
   const thisWeekCount = weeks.get(calendarDayKey(thisWeek)) || 0;
-  $('calendarSummary').textContent = weekGoalLine(thisWeekCount, goal);
-  const { current, best } = weeklyStreaks(weeks, goal, thisWeek);
+  const breaks = breaksFrom();
+  $('calendarSummary').textContent = weekGoalLine(thisWeekCount, goal) + (thisWeekCount < goal && weekExcused(thisWeek, breaks) ? ' · break week' : '');
+  const { current, best } = weeklyStreaks(weeks, goal, thisWeek, breaks);
   $('streakSummary').textContent = current
     ? `${current}-week streak${best > current ? ` · best ${best}` : ''}`
     : best ? `No streak right now · best ${plural(best, 'week')}` : `Reach ${goal} in a week to start a streak`;
-  renderStreakNote(weeks, goal, thisWeek, current, thisWeekCount);
+  renderStreakNote(weeks, goal, thisWeek, current, thisWeekCount, breaks);
 
   // A header row of month names over the week they start in, then a row per weekday.
   const columns = Array.from({ length:calendarWeeks }, (entry, index) => addDays(first, 7 * index));
@@ -257,8 +263,9 @@ function renderCalendar() {
     const key = calendarDayKey(date);
     const plan = plans.get(key);
     const planText = plan ? `planned${plan.entry ? `: ${plan.entry.label}` : ''}` : '';
-    const description = names.length ? `${when}: ${names.join(', ')}` : `${when}: ${planText || 'rest'}`;
-    const classes = ['calendar-day', names.length ? 'trained' : '', names.length > 1 ? 'many' : '', cardioOnly.has(key) ? 'cardio' : '', plan ? 'planned' : '',
+    const away = onBreak(date, breaks);
+    const description = names.length ? `${when}: ${names.join(', ')}` : `${when}: ${planText || (away ? 'break' : 'rest')}`;
+    const classes = ['calendar-day', names.length ? 'trained' : '', names.length > 1 ? 'many' : '', cardioOnly.has(key) ? 'cardio' : '', plan ? 'planned' : '', away ? 'away' : '',
       date > today ? 'future' : '', date.getTime() === today.getTime() ? 'today' : ''].filter(Boolean).join(' ');
     // A day to come that is planned is a button, so its workout can be read; the others are only squares.
     if (date > today && !plan) return `<span class="${classes}" data-date="${calendarDayKey(date)}" aria-hidden="true"></span>`;

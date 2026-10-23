@@ -14,7 +14,7 @@
     { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "shortcuts": [
-    { "name": "Strength", "short_name": "Strength", "description": "Start or carry on a workout", "url": "/index.html",
+    { "name": "Today's workout", "short_name": "Today", "description": "Start the next workout of your program, or carry on the one under way", "url": "/index.html#today",
       "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }] },
     { "name": "Cardio", "short_name": "Cardio", "description": "Time or log a cardio session", "url": "/cardio.html",
       "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }] },

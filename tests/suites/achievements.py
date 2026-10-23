@@ -84,6 +84,22 @@ def run(t):
     })()""")
     check('two weeks running at the goal is a 2-week streak, earned by the workout that met it the second time', streak['at'] == streak['sixth'], streak)
     check('not before then, and not with a week missed between', streak['short'] is False and streak['gap'] is False, streak)
+    excused = ev("""(() => {
+      // Three workouts in the first and the third week, none in the second: with that week on a break, two weeks at the goal in a row.
+      const monday = new Date(2026, 0, 5);
+      const list = [0, 1, 2, 14, 15, 16].map(n => T.lift(monday.getTime() + n * 86400000 + 43200000, 'Curl', [[20, 10]]));
+      const options = breaks => ({ unit: 'lbs', distanceUnit: 'mi', goal: 3, breaks });
+      const earned = breaks => achievementsOf(list, options(breaks)).earned.some(item => item.id === 'streak:2');
+      const weeks = weekCountsOf(list), thisWeek = new Date(2026, 0, 19);
+      return { whole: earned([{ from: '2026-01-12', to: '2026-01-18' }]), oneDay: earned([{ from: '2026-01-18', to: '2026-01-18' }]),
+        none: earned([]), elsewhere: earned([{ from: '2026-02-02', to: '2026-02-03' }]),
+        run: weeklyStreaks(weeks, 3, thisWeek, [{ from: '2026-01-12', to: '2026-01-14' }]), bare: weeklyStreaks(weeks, 3, thisWeek),
+        before: bestStreakBefore(weeks, 3, thisWeek, 2, [{ from: '2026-01-12', to: '2026-01-14' }]) };
+    })()""")
+    check('a week on a break is passed over: two weeks at the goal either side of one are a 2-week streak', excused['whole'] is True and excused['run'] == {'current': 2, 'best': 2}, excused)
+    check('one day of the week is enough', excused['oneDay'] is True, excused)
+    check('without the break, or with one in another week, they are not', excused['none'] is False and excused['elsewhere'] is False and excused['bare'] == {'current': 1, 'best': 1}, excused)
+    check('and the run that a new best is measured against starts where the current one does', excused['before'] == 0, excused)
     check('five days trained in one week is a big week; five workouts on two days is not',
           'bigWeek:5' in ev("T.ids([0, 1, 2, 3, 4].map(n => T.lift(T.day(n), 'Curl', [[20, 10]])))")
           and 'bigWeek:5' not in ev("T.ids([0, 0, 0, 1, 1].map(n => T.lift(T.day(n) + n, 'Curl', [[20, 10]])))"))
@@ -211,6 +227,16 @@ def run(t):
         check('a streak this week has yet to keep says what it takes', text('streakNote') == '3 more workouts by Sunday keeps your 1-week streak going.', text('streakNote'))
     else:
         check('with too few days left to keep it, nothing is said', ev("document.getElementById('streakNote').hidden") is True, text('streakNote'))
+
+    # A break this week says so instead, and keeps the streak without asking for the workouts.
+    api('PUT', '/api/state', {'settings': {'breaks': [{'from': ev("calendarDayKey(new Date())"), 'to': ev("calendarDayKey(addDays(new Date(), 2))")}]}}, keeper)
+    cdp.goto('/history.html')
+    cdp.wait("document.querySelectorAll('.history-workout').length >= 3")
+    cdp.pause(0.4)
+    check('on a break, History says until when, and that the streak is safe', text('streakNote').startswith('On a break until ') and text('streakNote').endswith('Your 1-week streak is safe.'), text('streakNote'))
+    check('the week’s count says it is a break week, and the break’s days are marked on the calendar', text('calendarSummary').endswith('· break week')
+          and ev("document.querySelectorAll('#trainingCalendar .calendar-day.away').length") >= 1, text('calendarSummary'))
+    api('PUT', '/api/state', {'settings': {'breaks': []}}, keeper)
 
     # ------------------------------------------------------------------ R within reach
     print('R   during a workout, what the next set or the finish is a step away from')

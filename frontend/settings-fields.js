@@ -174,6 +174,96 @@ const scheduleSetting = {
   }
 };
 
+// ---- Breaks --------------------------------------------------------------------------------
+
+// Days away from training for a reason (a holiday, an injury, a bad flu), kept as settings.breaks: a list of { from, to } day keys,
+// both days included. A week (Monday to Sunday) with a break in it is excused: if it falls short of the weekly goal it neither
+// ends a streak nor adds to it (weeklyStreaks, achievements.js), and the days of a break are not planned, missed or reminded
+// (plannedDays, schedule.js; reminder_schedule, webpush.py). A week that reaches the goal anyway counts as ever. The list is one
+// value to the merge between devices, so two devices that change it at once keep the later change.
+const mostBreaks = 100;
+const longestBreakDays = 366;
+
+function isDayKey(key) {
+  return typeof key === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(key) && calendarDayKey(new Date(dayStart(key))) === key;
+}
+
+// The breaks in the settings, oldest first, with anything that is not a break (a hand-edited import) left out.
+function breaksFrom(settings = getWorkoutSettings()) {
+  const stored = Array.isArray(settings.breaks) ? settings.breaks : [];
+  return stored.filter(entry => entry && isDayKey(entry.from) && isDayKey(entry.to) && entry.from <= entry.to)
+    .map(entry => ({ from:entry.from, to:entry.to })).sort((a, b) => a.from < b.from ? -1 : a.from > b.from ? 1 : 0).slice(-mostBreaks);
+}
+
+// The breaks with one more, any it overlaps or touches joined into one so that the list stays short and plain.
+function withBreak(breaks, added) {
+  const merged = [];
+  [...breaks, added].sort((a, b) => a.from < b.from ? -1 : a.from > b.from ? 1 : 0).forEach(entry => {
+    const last = merged[merged.length - 1];
+    if (last && entry.from <= calendarDayKey(addDays(new Date(dayStart(last.to)), 1))) last.to = entry.to > last.to ? entry.to : last.to;
+    else merged.push({ ...entry });
+  });
+  return merged.slice(-mostBreaks);
+}
+
+function onBreak(date, breaks) {
+  const key = calendarDayKey(date);
+  return breaks.some(entry => entry.from <= key && key <= entry.to);
+}
+
+// The break a day is in, or null.
+function breakOn(date, breaks) {
+  const key = calendarDayKey(date);
+  return breaks.find(entry => entry.from <= key && key <= entry.to) || null;
+}
+
+// Whether any day of the week starting on this Monday is on a break.
+function weekExcused(monday, breaks) {
+  const first = calendarDayKey(monday), last = calendarDayKey(addDays(monday, 6));
+  return breaks.some(entry => entry.from <= last && first <= entry.to);
+}
+
+// "Oct 24 – Nov 2" or "Oct 24", with the year when it is not this one.
+function breakRange(entry) {
+  const day = key => new Date(dayStart(key)).toLocaleDateString(undefined, { month:'short', day:'numeric', ...(key.slice(0, 4) === String(new Date().getFullYear()) ? {} : { year:'numeric' }) });
+  return entry.from === entry.to ? day(entry.from) : `${day(entry.from)} – ${day(entry.to)}`;
+}
+
+// What the Settings list does with a break by when it is: one that has ended is removed, one under way is ended yesterday (so
+// the days already taken stay excused), one still to come is cancelled.
+function breakAction(entry, today = calendarDayKey(new Date())) {
+  return entry.to < today ? 'Remove' : entry.from <= today ? 'End break' : 'Cancel';
+}
+
+// The breaks as the list shows them. Settings are saved from what the controls say (readSettingsForm), so the list is kept here.
+let shownBreaks = [];
+
+function renderBreakList() {
+  const today = calendarDayKey(new Date());
+  getSettingElement('breakList').innerHTML = shownBreaks.slice().reverse().map(entry => `<li class="device"><div><strong>${escapeHTML(breakRange(entry))}</strong>`
+    + `<span class="subtitle">${entry.to < today ? 'Over' : entry.from <= today ? 'Under way' : 'Coming up'}</span></div>`
+    + `<button class="secondary" type="button" data-break-from="${entry.from}" aria-label="${breakAction(entry, today)} the break ${escapeHTML(breakRange(entry))}">${breakAction(entry, today)}</button></li>`).join('');
+}
+
+const breakSetting = {
+  defaults:{ breaks:[] },
+  html:() => `<fieldset class="break-choices" id="breakFields"><legend>Take a break</legend>
+      <span class="subtitle schedule-help">Away, ill or hurt? A week with a break in it cannot end your streak, and its days bring no reminders and no missed-day nudge.</span>
+      <ul class="device-list" id="breakList"></ul>
+      <div class="break-dates">
+        <label for="breakFrom">From</label><input id="breakFrom" type="date" />
+        <label for="breakTo">Until</label><input id="breakTo" type="date" />
+      </div>
+      <button class="secondary" id="addBreakButton" type="button">Add break</button>
+      <p class="subtitle" id="breakStatus" role="status"></p></fieldset>`,
+  show(settings) {
+    shownBreaks = breaksFrom(settings);
+    renderBreakList();
+    if (!getSettingElement('breakFrom').value) getSettingElement('breakFrom').value = calendarDayKey(new Date());
+  },
+  read:() => ({ breaks:shownBreaks })
+};
+
 // ---- The welcome ---------------------------------------------------------------------------
 
 // Whether this account has been through the welcome a new account gets on the Tracker (onboarding.js), finished or skipped. It is
@@ -298,9 +388,11 @@ const settingSections = [
   { id:'schedule', title:'Training schedule',
     summary:settings => {
       const { days, time } = scheduleFrom(settings);
-      return days.length ? `${trainingDays.filter(([value]) => days.includes(value)).map(([, short]) => short).join(', ')} · ${clockText(time)}` : 'No days chosen';
+      const chosen = days.length ? `${trainingDays.filter(([value]) => days.includes(value)).map(([, short]) => short).join(', ')} · ${clockText(time)}` : 'No days chosen';
+      const under = breakOn(new Date(), breaksFrom(settings));
+      return under ? `${chosen} · on a break until ${breakRange({ from:under.to, to:under.to })}` : chosen;
     },
-    fields:[scheduleSetting] },
+    fields:[scheduleSetting, breakSetting] },
   { id:'workout', title:'During a workout',
     // How many of the options that this browser has are on: the first are on unless turned off, the big view's off unless on.
     summary:settings => {
