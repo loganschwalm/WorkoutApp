@@ -141,17 +141,30 @@ def run(t):
     t.open_tracker()
     set_schedule([today])
     check('with a program, today’s workout is named', text('scheduleText') == 'Today is a training day: Push (Bench).', text('scheduleText'))
-    check('and can be started from the nudge', visible('scheduleStart') and text('scheduleStart') == 'Start Push (Bench)', text('scheduleStart'))
+    check('the program’s card has Start workout for it, so the nudge has no second button for the same thing',
+          not visible('scheduleStart') and cdp.ev("document.querySelector('#programNext [data-program-action=start]') !== null") is True)
     check('Done for today says what the next training day brings', nudge('[{ createdAt: Date.now() }]')['text'] == f'Done for today. Next up: {weekday(0)}, Push (Bench).', nudge('[{ createdAt: Date.now() }]'))
     set_schedule([number(2), number(4)])
     check('the next training day gets the next workout', nudge('[]')['text'] == f'Rest day. Next up: {weekday(2)}, Push (Bench).', nudge('[]'))
     set_schedule([today])
-    click('scheduleStart')
+    cdp.ev("document.querySelector('#programNext [data-program-action=start]').click()")
     cdp.wait(ACTIVE)
     cdp.pause(0.3)
     check('Start begins the program’s next workout', text('activeExerciseName') == 'Bench Press', text('activeExerciseName'))
     check('and the nudge is out of the way while it goes on', cdp.ev("getComputedStyle(document.getElementById('scheduleCard')).display") == 'none')
     t.end_workout()
+
+    # The home screen's order: what to do first, then the news.
+    after = "(a, b) => Boolean(document.getElementById(a).compareDocumentPosition(document.getElementById(b)) & Node.DOCUMENT_POSITION_FOLLOWING)"
+    check('the nudge and the program’s card come before the news and the templates',
+          cdp.ev(f"[['scheduleCard', 'programCard'], ['programCard', 'whatsNewCard'], ['programCard', 'recapCard'], ['recapCard', 'templateArea']].every(([a, b]) => ({after})(a, b))") is True)
+    cdp.send('Emulation.setDeviceMetricsOverride', width=375, height=800, deviceScaleFactor=1, mobile=True)
+    t.open_tracker()
+    order = cdp.ev("""(() => { const box = selector => document.querySelector(selector).getBoundingClientRect();
+      const title = box('#programNext strong'), start = box('#programNext [data-program-action=start]'), list = box('#programNext ul');
+      return [title.bottom <= start.top, start.bottom <= list.top, start.bottom < innerHeight, document.documentElement.scrollWidth <= innerWidth]; })()""")
+    check('on a phone the card has the title, then Start workout, then the exercises, with Start on the first screen and nothing too wide', order == [True, True, True, True], order)
+    cdp.send('Emulation.clearDeviceMetricsOverride')
     click('scheduleChange')
     cdp.pause(0.3)
     check('Change schedule opens Settings', settings_open())

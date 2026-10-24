@@ -614,8 +614,9 @@ days to train. The next training day is planned the program's next workout, the 
 (wrapping into the next block when a block has fewer left), and a day that goes by untrained leaves the queue where it was.
 A day with no program is just "a training day". The pieces:
 
-- **The Tracker's nudge**, a card above the program (hidden while a workout is going on, and until days are chosen). Today
-  is a training day: "Today is a training day: Push (Bench)." with a button that starts the program's next workout. A day
+- **The Tracker's nudge**, a slim line above the program's card (hidden while a workout is going on, and until days are chosen). Today
+  is a training day: "Today is a training day: Push (Bench)." The program's card just under it has Start workout for the same workout, so
+  the nudge has a Start button of its own only when that card has none (two buttons for one thing would have the eye choosing). A day
   already trained: "Done for today. Next up: Thursday, Pull (Row)." A day off: "Rest day. Next up: tomorrow, Legs." A day
   missed: "You missed Friday's workout. Train today instead, or carry on Tuesday." A day counts as missed when it was a
   training day within the last seven, with no workout on it or since, for someone who trained in the two weeks before it, so
@@ -984,7 +985,13 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
   sheet still counts as its answer. The share sheet takes files only over HTTPS; at a plain `http://` address, and where
   the share sheet is refused, the picture is saved as a file instead, and the page says so. Closing the share sheet does
   nothing more.
-- **Last week** (`recap.js`, from `weekRecapOf`): from the first visit of a new week, the Tracker has a card looking back on the
+- **The Tracker's order** puts what to do first: the nudge, then the program's card (its Next workout, drawn inverted), then the news
+  (Last week and What's new, below), then the templates and the recent workouts. The two news items are a thin strip each, their heading
+  and what they say on one line (the line under the heading on a narrow phone) with Dismiss as quiet text, rather than two cards that pushed
+  the program's card off the first screen. On a phone the program's card has its title, then Start workout and Skip, then the exercises
+  (`display:contents` on the markup that has the exercises with the title lets the buttons go between), so the button is on the first
+  screen. The line to start on under the title (`splash`) is muted, not the accent, so it does not look like a link.
+- **Last week** (`recap.js`, from `weekRecapOf`): from the first visit of a new week, the Tracker has a strip looking back on the
   week before, Monday to Sunday, between workouts (a workout puts it away, as it does the cards under it). It is a line, the headline
   below, until its heading is pressed (`wireBanner`, which What's new uses too), so the first screen is still for starting a workout; its
   body is what follows:
@@ -1002,7 +1009,7 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
   It is worked out from the history, in the units shown and against the weekly goal as it is now, and only once all of it
   has loaded. A week with nothing in it has no card: it looks back at what was done, never at what was not. Dismiss puts it
   away until the next week, kept on this device by the week's Monday.
-- **What's new** (`whats-new.js`): once a release, the Tracker has a card for someone who was training before it, saying
+- **What's new** (`whats-new.js`): once a release, the Tracker has a strip for someone who was training before it, saying
   what the app has learned since, a line for each thing (its name, then what it does), the first three showing and the rest
   folded under how many there are, with a link where one helps (Achievements opens its row on Progress, through
   `progress.html#achievements`). It is shown to an account with a workout older than the release's first day, once the

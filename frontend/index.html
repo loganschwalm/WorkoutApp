@@ -94,6 +94,20 @@
       <button class="link-button summary-export" id="summaryExport" type="button" hidden>Download for Strava (.tcx)</button>
     </section>
 
+    <section class="card between-workouts schedule-card" id="scheduleCard" aria-label="Training schedule" hidden>
+      <p class="schedule-text" id="scheduleText"></p>
+      <div class="schedule-actions"><button class="primary" id="scheduleStart" type="button" hidden></button><button class="link-button" id="scheduleChange" type="button">Change schedule</button></div>
+    </section>
+
+    <section class="card between-workouts flat" id="programCard" hidden>
+      <div class="section-heading program-heading"><div><h2 id="programTitle">Training program</h2><p id="programSummary" class="subtitle"></p></div><details class="row-menu program-menu"><summary class="secondary" aria-label="Program options">&middot;&middot;&middot;</summary><div class="row-menu-items"><button id="editProgramBtn" type="button">Edit program</button><button id="calendarProgramBtn" type="button">Add to calendar</button><button class="danger" id="endProgramBtn" type="button">End program</button></div></details></div>
+      <p class="program-notice" id="programNotice" role="status" hidden></p>
+      <div class="program-next" id="programNext"></div>
+      <details class="program-section" id="programNumbersSection"><summary id="programNumbersHeading">Training maxes</summary><ul class="program-maxes" id="programMaxes"></ul></details>
+      <details class="program-section" id="programProgressSection" hidden><summary>Progress</summary><p class="program-progress-key" id="programProgressKey"></p><ul class="program-progress" id="programProgress"></ul></details>
+      <details class="program-section"><summary id="programBlockHeading">This cycle</summary><div id="programWeeks"></div></details>
+    </section>
+
     <section class="card recap-card whats-new-card banner" id="whatsNewCard" aria-labelledby="whatsNewTitle" hidden>
       <div class="section-heading banner-bar"><div><h2 id="whatsNewTitle"><button class="banner-toggle" id="whatsNewToggle" type="button" aria-expanded="false" aria-controls="whatsNewBody">What's new</button></h2><p class="subtitle banner-line" id="whatsNewLine"></p></div><button class="secondary" id="whatsNewDone" type="button">Dismiss</button></div>
       <div class="banner-body" id="whatsNewBody" hidden>
@@ -114,20 +128,6 @@
         <div class="summary-records summary-achievements" id="recapAchievements" hidden><h3>Achievements</h3><ul id="recapAchievementList"></ul></div>
         <details class="recap-records summary-records" id="recapRecords" hidden><summary id="recapRecordsTitle">Personal records</summary><ul id="recapRecordList"></ul></details>
       </div>
-    </section>
-
-    <section class="card between-workouts schedule-card" id="scheduleCard" aria-label="Training schedule" hidden>
-      <p class="schedule-text" id="scheduleText"></p>
-      <div class="schedule-actions"><button class="primary" id="scheduleStart" type="button" hidden></button><button class="link-button" id="scheduleChange" type="button">Change schedule</button></div>
-    </section>
-
-    <section class="card between-workouts flat" id="programCard" hidden>
-      <div class="section-heading program-heading"><div><h2 id="programTitle">Training program</h2><p id="programSummary" class="subtitle"></p></div><details class="row-menu program-menu"><summary class="secondary" aria-label="Program options">&middot;&middot;&middot;</summary><div class="row-menu-items"><button id="editProgramBtn" type="button">Edit program</button><button id="calendarProgramBtn" type="button">Add to calendar</button><button class="danger" id="endProgramBtn" type="button">End program</button></div></details></div>
-      <p class="program-notice" id="programNotice" role="status" hidden></p>
-      <div class="program-next" id="programNext"></div>
-      <details class="program-section" id="programNumbersSection"><summary id="programNumbersHeading">Training maxes</summary><ul class="program-maxes" id="programMaxes"></ul></details>
-      <details class="program-section" id="programProgressSection" hidden><summary>Progress</summary><p class="program-progress-key" id="programProgressKey"></p><ul class="program-progress" id="programProgress"></ul></details>
-      <details class="program-section"><summary id="programBlockHeading">This cycle</summary><div id="programWeeks"></div></details>
     </section>
 
     <section class="card between-workouts flat ruled">

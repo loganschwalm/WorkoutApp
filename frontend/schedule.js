@@ -138,7 +138,10 @@ function renderScheduleNudge() {
   document.getElementById('scheduleChange').textContent = nudge.onBreak ? 'Change break' : 'Change schedule';
   const button = document.getElementById('scheduleStart');
   const next = typeof currentProgram !== 'undefined' && currentProgram ? nextProgramDay(currentProgram) : null;
-  button.hidden = !(nudge.start && next);
+  // The program's own card, just under, already has Start workout for the same workout: two buttons for one thing would have the
+  // eye choosing between them, so the nudge carries a button only when the card has none to offer.
+  const cardStarts = Boolean(document.querySelector('#programNext [data-program-action=start]')) && !document.getElementById('programNext').hidden;
+  button.hidden = !(nudge.start && next) || cardStarts;
   if (!button.hidden) button.textContent = `Start ${dayLabel(currentProgram, next.week, next.day)}`;
 }
 
