@@ -745,6 +745,30 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
   rate and notes, all but the time optional. Back to the timer leaves it paused. As the distance is typed, the form
   works out how fast that was: the pace (time a mile or kilometre) of a walk or run, the speed (mph or km/h) of a ride,
   the elliptical or Other, and a rower's split (time per 500 metres).
+- **Intervals.** A session can be timed in rounds, for HIIT, Tabata or rowing pieces. Under the Enter the time switch, a folded box,
+  Intervals, says what the next session will be timed in ("Intervals: 8 × 20 s on / 10 s off", or off). Open, it has a tick box (Time the
+  next session in intervals), presets (Tabata 20 / 10 × 8, 30 / 30 × 10, 40 / 20 × 8, 1 min / 1 min × 6) that fill the fields and turn them on,
+  and the fields: Work (1 to 3600 seconds), Rest (0 to 3600), Rounds (1 to 99) and a Warm-up first in minutes (0 to 120). A field out of range is
+  taken as the nearest in range. What was chosen is kept on this device (`workout-tracker-cardio-intervals`), like the choice of the timer or
+  entering the time, and the box is hidden while Enter the time is chosen. Tapping an activity starts the timer with them; Start again from
+  History starts with the intervals that session had.
+  - The session being timed (`cardioActive.intervals`: `{ work, rest, rounds, warmup }`, in seconds) shows a panel under the clock: Warm-up
+    (the time to go, with no cue), Work or Rest (the seconds to go, large, the round, and what is next), and Done. The last round has no rest
+    after it. Where the session is in its rounds is worked out from the seconds it has been going (`intervalPhase` in `cardio-activities.js`
+    from `cardioElapsed`), never from counting ticks, so Pause pauses the rounds and a reload, or a page that was hidden, finds its place
+    again.
+  - Cues: a new phase sounds once (`playRestAlert`, so the sound and vibrate settings and the iPhone's silent-switch rule apply): a high double
+    beep to work, a long low tone to rest, the chime when the rounds are done, with a tick for each of the last three seconds of a phase (no
+    buzz). They are said to a screen reader through a hidden status. The first round is cued as the timer starts; a page loaded with a session
+    in progress takes the phase it finds as already cued, and one that was hidden does not sound for a phase more than two seconds old.
+    After the last round the clock goes on, for a cool-down, and Finish ends the session as ever.
+  - The screen is held on while intervals run and the page is showing (Screen Wake Lock, where the browser has it: `syncCardioWakeLock`), since
+    a page that is not running cannot sound its cues. Where the browser has none (a plain `http://` address), the panel says so. Unlike the
+    Strength page it has no silent-video fallback, and no server alert as the rest timer has.
+  - Saved as `cardio.intervals` (`{ work, rest, rounds, warmup }`, whole numbers, the server's limits the same as the page's:
+    `validate_intervals`), written beside the other numbers ("8 × 20 s on / 10 s off", with ", after 1 min warm-up" if it had one) in the
+    session's line, in History and on Progress, and in the summary. Editing or copying a session keeps its intervals. The cardio CSV and
+    the .tcx file do not carry them.
 - With Enter the time chosen, tapping an activity opens the same form for a session done without the timer: any
   activity (it can be changed there), any day up to today, and its time in hours, minutes and seconds. One logged for today is
   saved at the time it was logged, one for another day at noon on it.

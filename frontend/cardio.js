@@ -7,9 +7,17 @@
 let cardioSessions = [];
 let cardioLoaded = false;
 let cardioReachable = true;
-// The session being timed: { activity, name, startedAt, pausedAt, pausedTotal }, times in milliseconds, or null.
+// The session being timed: { activity, name, startedAt, pausedAt, pausedTotal, intervals? }, times in milliseconds, or null. Its
+// intervals are { work, rest, rounds, warmup } (cardio-activities.js).
 let cardioActive = null;
 let cardioTicker = null;
+// The interval phase last cued (a new one is cued once, with sound and buzz), and the last tick of a countdown. Undefined on a page
+// that has just loaded a session in progress, which takes the phase it finds as already cued rather than sounding for one past.
+let cardioCueIndex;
+let cardioTickKey = '';
+// The screen is held on while intervals run, where the browser can: the cues need a page that is on screen.
+let cardioWakeLock = null;
+let cardioWakeLockRequesting = false;
 // What the form is doing: { mode, workout }. 'log' is a session by hand, 'finish' the one being timed, 'edit' a saved one
 // and 'copy' a saved one again as a new session. distanceShown is the distance as the form first showed it, so an edit
 // that leaves it alone keeps what was logged exactly, rather than as converted and rounded.
@@ -27,6 +35,7 @@ function readCardioMode() {
 
 function setCardioMode(manual) {
   cardioManual = manual;
+  renderIntervalSetup();
   try { localStorage.setItem('workout-tracker-cardio-mode', manual ? 'manual' : 'timer'); } catch (error) { /* only for this visit, then */ }
   renderCardioStart();
 }
@@ -67,7 +76,122 @@ function lastCardio(key) {
 // ---- The session being timed ------------------------------------------------
 
 function tickCardio() {
-  if (cardioActive) $('cardioClock').textContent = formatClock(Math.floor(cardioElapsed()));
+  if (!cardioActive) return;
+  $('cardioClock').textContent = formatClock(Math.floor(cardioElapsed()));
+  if (cardioActive.intervals) tickIntervals();
+}
+
+// ---- Intervals, while timing -------------------------------------------------
+
+// The panel and the cues: where the session is in its rounds, drawn every tick, and a cue at each new phase.
+function tickIntervals() {
+  const intervals = cardioActive.intervals;
+  const phase = intervalPhase(intervals, cardioElapsed());
+  const panel = $('cardioIntervalPanel');
+  const next = phase.phase === 'work' ? (intervals.rest ? `Next: rest, ${intervalLength(intervals.rest)}` : phase.round < intervals.rounds ? 'Next: work again' : 'The last round')
+    : phase.phase === 'rest' ? `Next: work, round ${phase.round + 1} of ${intervals.rounds}`
+      : phase.phase === 'warmup' ? `Round 1 of ${intervals.rounds} follows` : '';
+  const names = { warmup:'Warm-up', work:'Work', rest:'Rest', done:'Done' };
+  panel.dataset.phase = phase.phase;
+  $('cardioIntervalPhase').textContent = names[phase.phase];
+  $('cardioIntervalLeft').textContent = phase.phase === 'done' ? '' : formatClock(Math.ceil(phase.left));
+  $('cardioIntervalRound').textContent = phase.phase === 'done' ? `All ${plural(intervals.rounds, 'round')} done` : phase.phase === 'warmup' ? '' : `Round ${phase.round} of ${intervals.rounds}`;
+  $('cardioIntervalNext').textContent = phase.phase === 'done' ? 'Keep going to cool down, or Finish.' : next;
+  if (cardioCueIndex === undefined) {
+    cardioCueIndex = phase.index;
+    cardioTickKey = '';
+    return;
+  }
+  if (phase.phase === 'warmup') {
+    cardioCueIndex = phase.index;
+    return;
+  }
+  const settings = getWorkoutSettings();
+  if (phase.index !== cardioCueIndex) {
+    cardioCueIndex = phase.index;
+    // A page that was hidden for a while finds a phase long begun: it does not sound for it.
+    if (phase.since < 2) {
+      playRestAlert({ ...settings, alertSound:{ work:'intervalWork', rest:'intervalRest', done:'chime' }[phase.phase] });
+      $('cardioIntervalAnnounce').textContent = phase.phase === 'done' ? `Done. All ${plural(intervals.rounds, 'round')}.`
+        : `${names[phase.phase]}${phase.phase === 'work' ? `, round ${phase.round} of ${intervals.rounds}` : ''}`;
+    }
+    return;
+  }
+  // The last three seconds of a phase tick once each, without a buzz.
+  const whole = Math.ceil(phase.left);
+  const key = `${phase.index}:${whole}`;
+  if (phase.phase !== 'done' && whole >= 1 && whole <= 3 && phase.since >= 0.9 && key !== cardioTickKey && !cardioActive.pausedAt) {
+    cardioTickKey = key;
+    playRestAlert({ ...settings, alertSound:'intervalTick', vibrate:false });
+  }
+}
+
+// Holds the screen on for a session in intervals that is running and on screen, and lets it go otherwise.
+async function syncCardioWakeLock() {
+  if (!('wakeLock' in navigator)) return;
+  const wanted = Boolean(cardioActive && cardioActive.intervals && !cardioActive.pausedAt) && !document.hidden;
+  if (wanted && !cardioWakeLock && !cardioWakeLockRequesting) {
+    cardioWakeLockRequesting = true;
+    try {
+      cardioWakeLock = await navigator.wakeLock.request('screen');
+      cardioWakeLock.addEventListener('release', () => { cardioWakeLock = null; });
+    } catch (error) {
+      cardioWakeLock = null;
+    } finally {
+      cardioWakeLockRequesting = false;
+    }
+  } else if (!wanted && cardioWakeLock) {
+    const lock = cardioWakeLock;
+    cardioWakeLock = null;
+    await lock.release().catch(() => {});
+  }
+}
+
+// What the intervals are for the next session, chosen in the box above the activities and kept on this device (a habit of how this
+// phone is used, as the choice of the timer or entering the time is). `on` says whether the next session is timed in them.
+const intervalSetupKey = 'workout-tracker-cardio-intervals';
+const intervalPresets = { tabata:[20, 10, 8], thirty:[30, 30, 10], forty:[40, 20, 8], minute:[60, 60, 6] };
+
+function readIntervalSetup() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(intervalSetupKey));
+    if (stored && typeof stored === 'object') return { on:stored.on === true, work:Number(stored.work) || 30, rest:Number(stored.rest) || 0, rounds:Number(stored.rounds) || 8, warmup:Number(stored.warmup) || 0 };
+  } catch (error) { /* nothing kept, or not readable: the defaults */ }
+  return { on:false, work:30, rest:30, rounds:8, warmup:0 };
+}
+
+let intervalSetup = readIntervalSetup();
+
+function saveIntervalSetup() {
+  try { localStorage.setItem(intervalSetupKey, JSON.stringify(intervalSetup)); } catch (error) { /* only for this visit, then */ }
+}
+
+// The fields as the setup says them (the warm-up in minutes), and the line on the box when it is folded.
+function renderIntervalSetup() {
+  $('cardioIntervalOn').checked = intervalSetup.on;
+  $('cardioIntervalWork').value = String(intervalSetup.work);
+  $('cardioIntervalRest').value = String(intervalSetup.rest);
+  $('cardioIntervalRounds').value = String(intervalSetup.rounds);
+  $('cardioIntervalWarmup').value = String(Math.round(intervalSetup.warmup / 60 * 10) / 10);
+  const intervals = intervalsFrom(intervalSetup);
+  $('cardioIntervalSummary').textContent = intervalSetup.on && intervals ? `Intervals: ${describeIntervals(intervals)}` : 'Intervals: off';
+  $('cardioIntervalSetup').hidden = cardioManual;
+}
+
+// What the fields say, kept in range, so a field left empty or too big is the nearest thing that works.
+function readIntervalFields() {
+  const clamp = (id, field, scale = 1) => {
+    const [least, most] = intervalLimits[field];
+    const number = Math.round(Number($(id).value) * scale);
+    return Number.isFinite(number) ? Math.min(most, Math.max(least, number)) : intervalSetup[field];
+  };
+  return { on:$('cardioIntervalOn').checked, work:clamp('cardioIntervalWork', 'work'), rest:clamp('cardioIntervalRest', 'rest'),
+    rounds:clamp('cardioIntervalRounds', 'rounds'), warmup:clamp('cardioIntervalWarmup', 'warmup', 60) };
+}
+
+// The intervals for a session about to start: those chosen, if they are on.
+function chosenIntervals() {
+  return intervalSetup.on && !cardioManual ? intervalsFrom(intervalSetup) : null;
 }
 
 function renderCardioLast() {
@@ -82,25 +206,36 @@ function renderCardioActive() {
   const finishing = Boolean(cardioForm) && cardioForm.mode === 'finish';
   $('cardioActive').hidden = !session || finishing;
   $('cardioStartCard').hidden = Boolean(session) || Boolean(cardioForm);
-  if (!session) return;
+  if (!session) {
+    syncCardioWakeLock();
+    return;
+  }
   const paused = Boolean(session.pausedAt);
   $('cardioActive').classList.toggle('paused', paused);
+  $('cardioIntervalPanel').hidden = !session.intervals;
+  // Where the browser cannot hold the screen on, the cues are only heard while it is on, which the lifter has to see to.
+  $('cardioIntervalNote').hidden = !session.intervals || 'wakeLock' in navigator;
   $('cardioActiveTitle').textContent = session.name;
   $('cardioActiveStarted').textContent = `Started ${new Date(session.startedAt).toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' })}${paused ? ' · paused' : ''}`;
   $('cardioPauseBtn').textContent = paused ? 'Resume' : 'Pause';
   renderCardioLast();
   tickCardio();
-  if (!paused) cardioTicker = setInterval(tickCardio, 500);
+  if (!paused) cardioTicker = setInterval(tickCardio, session.intervals ? 250 : 500);
+  syncCardioWakeLock();
 }
 
 // One tap starts the timer. One already going is replaced, after asking (unless Settings says not to).
-function startCardio(activityId, name = '') {
+function startCardio(activityId, name = '', intervals = null) {
   const activity = cardioActivity(activityId);
   if (cardioActive && getWorkoutSettings().confirmEnd && !confirm(`Replace your ${cardioActive.name} in progress? Its time so far will not be saved.`)) return;
   cardioForm = null;
   $('cardioFormCard').hidden = true;
   $('cardioSummary').hidden = true;
-  cardioActive = { activity:activity.id, name:name || activity.name, startedAt:Date.now(), pausedAt:null, pausedTotal:0 };
+  cardioActive = { activity:activity.id, name:name || activity.name, startedAt:Date.now(), pausedAt:null, pausedTotal:0, ...(intervals ? { intervals } : {}) };
+  // The first round's cue sounds as the timer starts, with no warm-up; the warm-up's end is cued as the rounds begin.
+  cardioCueIndex = -2;
+  cardioTickKey = '';
+  unlockAudio();
   saveCardioActive();
   renderCardioActive();
   scrollToCard($('cardioActive'), 'start');
@@ -149,7 +284,7 @@ function finishCardio() {
     saveCardioActive();
   }
   openCardioForm('finish', { activity:cardioActive.activity, name:cardioActive.name, createdAt:Date.now(), duration:Math.floor(cardioElapsed()),
-    ...lastSettings(cardioActive.activity, cardioActive.name) });
+    intervals:cardioActive.intervals, ...lastSettings(cardioActive.activity, cardioActive.name) });
 }
 
 // What the machine was set to last time this activity was done (Other's by its name), to start from: a gym's treadmill
@@ -170,7 +305,8 @@ function logDraft(activityId, name = '') {
 function cardioDraft(workout) {
   const cardio = workout.cardio || {};
   return { activity:activityOf(workout).id, name:workout.name, createdAt:workout.createdAt, duration:Number(workout.duration) || 0, distance:sessionDistance(workout),
-    calories:cardio.calories, heartRate:cardio.heartRate, floors:cardio.floors, notes:workout.notes || '', ...Object.fromEntries(sessionSettings(workout)) };
+    calories:cardio.calories, heartRate:cardio.heartRate, floors:cardio.floors, notes:workout.notes || '', intervals:cardio.intervals,
+    ...Object.fromEntries(sessionSettings(workout)) };
 }
 
 // A field for each setting the activity has, with what it had (or the draft gave) in it. Drawn again only when the
@@ -221,7 +357,8 @@ function openCardioForm(mode, draft, workout = null) {
   $('cardioNotes').value = draft.notes || '';
   renderSettingsFields(activity, draft);
   $('cardioForm').querySelectorAll('[aria-invalid]').forEach(field => field.removeAttribute('aria-invalid'));
-  cardioForm = { mode, workout, distanceShown:$('cardioDistance').value };
+  // The intervals a timed session had go with it to its save; the form has no fields for them.
+  cardioForm = { mode, workout, distanceShown:$('cardioDistance').value, intervals:intervalsFrom(draft.intervals) };
   $('cardioFormTitle').textContent = titles[mode];
   $('cardioFormIntro').textContent = intros[mode];
   $('cardioSave').textContent = mode === 'edit' ? 'Save changes' : 'Save session';
@@ -315,7 +452,7 @@ function readCardioForm(activity) {
 
 // The session to save: what the form says (`values`) as a workout of kind cardio, a new one or an edited one. Nothing that is zero
 // is kept (no heart rate is none), and a number is rounded to as fine as it can be measured.
-function cardioSessionFrom(values, activity, { mode, workout:editing, distanceShown }) {
+function cardioSessionFrom(values, activity, { mode, workout:editing, distanceShown, intervals }) {
   const name = activity.named ? $('cardioName').value.trim() || activity.name : activity.name;
   // An edit that leaves the distance as it was shown keeps what was logged, in its own unit, rather than converted.
   const kept = mode === 'edit' && editing && $('cardioDistance').value === distanceShown && editing.cardio && editing.cardio.distance > 0
@@ -324,7 +461,7 @@ function cardioSessionFrom(values, activity, { mode, workout:editing, distanceSh
     : { distance:values.unit === 'm' ? Math.round(values.distance) : Math.round(values.distance * 100) / 100, distanceUnit:values.unit }) : {};
   const cardio = { activity:activity.id, ...distance, ...(values.calories > 0 ? { calories:Math.round(values.calories) } : {}),
     ...(values.heartRate > 0 ? { heartRate:Math.round(values.heartRate) } : {}), ...(values.floors > 0 ? { floors:Math.round(values.floors) } : {}),
-    ...Object.fromEntries(Object.entries(values.settings).map(([id, value]) => [id, Math.round(value * 10) / 10])) };
+    ...Object.fromEntries(Object.entries(values.settings).map(([id, value]) => [id, Math.round(value * 10) / 10])), ...(intervals ? { intervals } : {}) };
   const workout = { ...(mode === 'edit' ? editing : {}), kind:'cardio', name, notes:$('cardioNotes').value.trim(), exercises:[],
     createdAt:cardioTime(mode, values.day, editing), duration:values.seconds, cardio, clientId:mode === 'edit' ? editing.clientId : newClientId() };
   if (!workout.clientId) delete workout.clientId;
@@ -408,6 +545,7 @@ function showCardioSummary(workout, records, history = null) {
   const stats = [[formatClock(workout.duration), 'Time'],
     ...(distance ? [[formatDistance(distance, shownDistanceUnit(activity)), 'Distance']] : []),
     ...(rate ? [[rate.text, rateName(activity)]] : []),
+    ...(intervalsFrom(cardio.intervals) ? [[describeIntervals(intervalsFrom(cardio.intervals)), 'Intervals']] : []),
     ...(cardio.floors ? [[String(cardio.floors), 'Floors']] : []),
     ...sessionSettings(workout).map(([id, value]) => [`${value}${cardioSettings[id].unit ? ` ${cardioSettings[id].unit}` : ''}`, cardioSettings[id].label]),
     ...(cardio.heartRate ? [[`${cardio.heartRate} bpm`, 'Heart rate']] : []),
@@ -569,7 +707,7 @@ function takeCardioRequest() {
 }
 
 function actOnCardio(action, workout) {
-  if (action === 'start') startCardio(activityOf(workout).id, workout.name);
+  if (action === 'start') startCardio(activityOf(workout).id, workout.name, intervalsFrom(workout.cardio && workout.cardio.intervals));
   if (action === 'edit') openCardioForm('edit', cardioDraft(workout), workout);
   if (action === 'copy') openCardioForm('copy', { ...cardioDraft(workout), createdAt:Date.now() });
 }
@@ -580,8 +718,24 @@ $('cardioActivityGrid').onclick = event => {
   const button = event.target.closest('[data-activity]');
   if (!button) return;
   if (cardioManual) openCardioForm('log', logDraft(button.dataset.activity));
-  else startCardio(button.dataset.activity);
+  else startCardio(button.dataset.activity, '', chosenIntervals());
 };
+// The intervals box: the fields and the tick box are kept as they change, and a preset fills them in and turns them on. Any tap in the
+// session being timed is a tap that lets a page that was reloaded sound its cues again (unlockAudio).
+$('cardioIntervalSetup').addEventListener('change', () => {
+  intervalSetup = readIntervalFields();
+  saveIntervalSetup();
+  renderIntervalSetup();
+});
+$('cardioIntervalPresets').onclick = event => {
+  const button = event.target.closest('[data-preset]');
+  if (!button) return;
+  const [work, rest, rounds] = intervalPresets[button.dataset.preset];
+  intervalSetup = { ...intervalSetup, on:true, work, rest, rounds };
+  saveIntervalSetup();
+  renderIntervalSetup();
+};
+$('cardioActive').addEventListener('click', unlockAudio);
 $('cardioModeTimer').onclick = () => setCardioMode(false);
 $('cardioModeManual').onclick = () => setCardioMode(true);
 $('cardioPauseBtn').onclick = toggleCardioPause;
@@ -618,7 +772,7 @@ $('cardioList').onclick = event => {
   else actOnCardio(button.dataset.action, workout);
 };
 // The clock catches up at once when the page is looked at again; a hidden page's timers run late.
-document.addEventListener('visibilitychange', () => { if (!document.hidden) tickCardio(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) tickCardio(); syncCardioWakeLock(); });
 // Miles or kilometres from Settings change every distance shown, and the one being typed.
 window.addEventListener('settingschange', () => {
   renderCardio();
@@ -630,6 +784,7 @@ window.addEventListener('syncchange', event => {
 });
 
 renderCardioStart();
+renderIntervalSetup();
 window.localReady.then(() => {
   cardioActive = readCardioActive();
   renderCardioActive();

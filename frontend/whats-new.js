@@ -18,6 +18,8 @@ const whatsNewItems = [
   { title:'Program moments', text:'A + set past its plan, every planned rep made, and a finished cycle are celebrated, with fireworks across the screen.' },
   { title:'One exercise at a time', text:'Choose an exercise on Progress for its records, the heaviest weight it has done for 1 to 10 reps, its goal, and whether it has stalled.' },
   { title:'Strava export', text:'Download a finished workout or cardio session as a .tcx file for Strava, from its summary or from History.' },
+  { title:'Set types', text:'Tag a set as a warm-up, a drop set, to failure or AMRAP. Warm-ups and drop sets stay out of your records, and warm-ups out of your volume.' },
+  { title:'Interval timer', text:'On Cardio, time a session in rounds of work and rest, with a sound and a buzz at each change: Tabata, 30 / 30, or your own.' },
   { title:'Take a break', text:'Away, ill or hurt? Add a break in Settings, under Training schedule: a week with one in it cannot end your streak, and its days bring no reminders.' },
   { title:'Today’s workout', text:'On Android, press and hold the app icon for a shortcut that opens the Tracker and starts your program’s next workout.' }
 ];

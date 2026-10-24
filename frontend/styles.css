@@ -715,6 +715,19 @@ body.training .splash { display:none; }
 .effort-choices button { flex:1; max-width:64px; }
 .effort-choices button { min-width:44px; padding:8px 10px; }
 .effort-choices button[aria-pressed="true"] { color:var(--on-accent); background:var(--accent); }
+/* The Cardio page's interval timer: the box above the activities, and the panel in the session being timed. */
+.cardio-intervals { margin:12px 0; }
+.cardio-intervals[hidden] { display:none; }
+.interval-body { display:grid; gap:10px; margin-top:10px; }
+.interval-body .subtitle { margin:0; }
+.interval-presets { display:flex; flex-wrap:wrap; gap:6px; }
+.interval-panel { display:grid; justify-items:center; gap:2px; margin:12px 0; padding:16px; border-radius:var(--radius-panel); text-align:center; color:var(--ink); background:var(--accent-soft); }
+.interval-panel[hidden] { display:none; }
+.interval-panel[data-phase="work"] { color:var(--on-accent); background:var(--accent); }
+.interval-panel p { margin:0; }
+.interval-phase { font-size:.9rem; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+.interval-left { font-size:4rem; font-weight:800; line-height:1.05; font-variant-numeric:tabular-nums; }
+.interval-round, .interval-next { font-size:.95rem; }
 .set-effort { display:block; color:var(--muted); font-size:.75rem; font-weight:400; }
 /* The kind of the next set: chips under the entry fields. In a list of logged sets, each set's kind is a row of its own. */
 .set-type-choices { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:10px; color:var(--muted); font-size:.85rem; }

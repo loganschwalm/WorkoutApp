@@ -341,6 +341,118 @@ def run(t):
     check('the records list each activity\'s bests beside the lifts', records.get('Run') == ['Longest 5.63 km', 'Fastest 5:11 /km, over 4.83 km', 'Longest time 31:30']
           and 'Bench Press' in records, records)
 
+    # ------------------------------------------------------------------ CI intervals
+    print('CI  the interval timer: the rounds, the cues, a reload, a pause, and what is saved')
+    open_cardio()
+    where = cdp.ev("""(() => {
+      const long = { work: 20, rest: 10, rounds: 3, warmup: 60 }, back = { work: 30, rest: 0, rounds: 2, warmup: 0 };
+      const at = (intervals, seconds) => { const p = intervalPhase(intervals, seconds); return [p.phase, p.index, p.round, Math.round(p.left * 10) / 10]; };
+      return { long: [0, 59, 60, 79.5, 80, 90, 139, 140, 500].map(seconds => at(long, seconds)), back: [0, 29.9, 30, 59, 60].map(seconds => at(back, seconds)),
+        valid: intervalsFrom({ work: 20, rounds: 8 }), weird: [{ work: 0, rounds: 1 }, { work: 20, rounds: 0 }, { work: 4000, rounds: 1 }, { work: 20.5, rounds: 1 }, { work: '20', rounds: '2', rest: '5' }, null, 5, {}].map(intervalsFrom),
+        said: [describeIntervals(long), describeIntervals({ work: 60, rest: 0, rounds: 5, warmup: 0 }), describeIntervals({ work: 90, rest: 30, rounds: 4, warmup: 0 })] };
+    })()""")
+    check('the phase comes from the seconds gone: warm-up, then work and rest, and the last round has no rest after it', where['long'] == [
+        ['warmup', -1, 0, 60], ['warmup', -1, 0, 1], ['work', 0, 1, 20], ['work', 0, 1, 0.5], ['rest', 1, 1, 10], ['work', 2, 2, 20], ['work', 4, 3, 1], ['done', 5, 3, 0], ['done', 5, 3, 0]], where['long'])
+    check('with no rest, the rounds run on into each other', where['back'] == [['work', 0, 1, 30], ['work', 0, 1, 0.1], ['work', 1, 2, 30], ['work', 1, 2, 1], ['done', 2, 2, 0]], where['back'])
+    check('intervals are whole numbers in range, the rest and warm-up optional', where['valid'] == {'work': 20, 'rest': 0, 'rounds': 8, 'warmup': 0}
+          and where['weird'] == [None, None, None, None, {'work': 20, 'rest': 5, 'rounds': 2, 'warmup': 0}, None, None, None], where)
+    check('and are written plainly', where['said'] == ['3 × 20 s on / 10 s off, after 1 min warm-up', '5 × 1 min on', '4 × 90 s on / 30 s off'], where['said'])
+
+    check('the box for them is above the activities, folded, and says they are off', not hidden('cardioIntervalSetup') and cdp.ev("document.getElementById('cardioIntervalSetup').open") is False
+          and text('cardioIntervalSummary') == 'Intervals: off')
+    cdp.ev("document.getElementById('cardioIntervalSetup').open = true")
+    click("#cardioIntervalPresets [data-preset=tabata]")
+    fields = cdp.ev("['cardioIntervalWork', 'cardioIntervalRest', 'cardioIntervalRounds', 'cardioIntervalWarmup'].map(id => document.getElementById(id).value)")
+    check('a preset fills in the rounds and turns them on', fields == ['20', '10', '8', '0'] and cdp.ev("document.getElementById('cardioIntervalOn').checked") is True
+          and text('cardioIntervalSummary') == 'Intervals: 8 × 20 s on / 10 s off', [fields, text('cardioIntervalSummary')])
+    fill('cardioIntervalRounds', '500')
+    fill('cardioIntervalWork', '')
+    check('a field out of range is the nearest thing that works', cdp.ev("[intervalSetup.rounds, intervalSetup.work]") == [99, 1], cdp.ev('intervalSetup'))
+    fill('cardioIntervalRounds', '8')
+    fill('cardioIntervalWork', '20')
+    open_cardio()
+    check('what was chosen is kept on this device', text('cardioIntervalSummary') == 'Intervals: 8 × 20 s on / 10 s off', text('cardioIntervalSummary'))
+
+    def cues():
+        return cdp.ev('window.__cues')
+
+    def elapse(seconds):
+        """The session as if it had been going this long (its pauses left out), and the page told."""
+        cdp.ev(f"cardioActive.startedAt = Date.now() - {seconds} * 1000 - (cardioActive.pausedTotal || 0); saveCardioActive(); tickCardio()")
+
+    cdp.ev("window.__cues = []; window.__real = playRestAlert; playRestAlert = settings => { window.__cues.push([settings.alertSound, settings.vibrate]); }")
+    click("#cardioActivityGrid [data-activity=walk]")
+    cdp.pause(0.6)
+    check('a session started with them shows the rounds: work, the seconds to go, the round, and what is next',
+          not hidden('cardioIntervalPanel') and text('cardioIntervalPhase') == 'Work' and text('cardioIntervalLeft') in ('0:20', '0:19') and text('cardioIntervalRound') == 'Round 1 of 8'
+          and text('cardioIntervalNext') == 'Next: rest, 10 s', [text('cardioIntervalPhase'), text('cardioIntervalLeft'), text('cardioIntervalNext')])
+    check('the first round is cued as the timer starts, once, however often the clock ticks', [cue[0] for cue in cues()] == ['intervalWork'], cues())
+    elapse(21)
+    check('rest is cued, and shown', text('cardioIntervalPhase') == 'Rest' and cues()[-1][0] == 'intervalRest' and text('cardioIntervalNext') == 'Next: work, round 2 of 8', [cues(), text('cardioIntervalNext')])
+    elapse(31)
+    check('then the next round of work', text('cardioIntervalPhase') == 'Work' and text('cardioIntervalRound') == 'Round 2 of 8' and cues()[-1][0] == 'intervalWork', cues())
+    before = len(cues())
+    elapse(47.2)
+    elapse(47.4)
+    ticks = [cue for cue in cues()[before:]]
+    check('the last three seconds tick, once each, without a buzz', ticks == [['intervalTick', False]], ticks)
+    check('the cues are said to a screen reader', 'Work, round 2 of 8' in text('cardioIntervalAnnounce') or 'Rest' in text('cardioIntervalAnnounce'), text('cardioIntervalAnnounce'))
+    check('and the browser either keeps the screen on or says that it cannot', hidden('cardioIntervalNote') == cdp.ev("'wakeLock' in navigator"))
+    elapse(65)
+    click('#cardioPauseBtn')
+    shown = [text('cardioIntervalLeft'), text('cardioIntervalPhase')]
+    cdp.pause(1.2)
+    check('a pause pauses the rounds', [text('cardioIntervalLeft'), text('cardioIntervalPhase')] == shown, [shown, text('cardioIntervalLeft')])
+    open_cardio()
+    cdp.ev("window.__cues = []; playRestAlert = settings => { window.__cues.push([settings.alertSound, settings.vibrate]); }")
+    check('a reload finds its place again, paused, and does not sound for a phase it had', not hidden('cardioIntervalPanel') and [text('cardioIntervalLeft'), text('cardioIntervalPhase')] == shown and cues() == [],
+          [text('cardioIntervalLeft'), cues()])
+    click('#cardioPauseBtn')
+    cdp.pause(0.6)
+    check('resumed, it carries on without repeating the cue', cues() == [] or all(cue[0] == 'intervalTick' for cue in cues()), cues())
+    elapse(8 * 20 + 7 * 10 + 1)
+    check('after the last round it is done, with the chime, and the clock goes on', text('cardioIntervalPhase') == 'Done' and text('cardioIntervalRound') == 'All 8 rounds done'
+          and cues()[-1][0] == 'chime' and cdp.ev('cardioActive !== null'), [text('cardioIntervalPhase'), cues()])
+    click('#cardioFinishBtn')
+    fill('cardioDistance', '0.2')
+    click('#cardioSave')
+    done = t.wait_for(lambda: any(w['name'] == 'Walk' and w['cardio'].get('intervals') for w in sessions()))
+    kept = next((w for w in sessions() if w['cardio'].get('intervals')), None)
+    check('the intervals are saved with the session', done and kept['cardio']['intervals'] == {'work': 20, 'rest': 10, 'rounds': 8, 'warmup': 0}, kept)
+    stats = cdp.ev("[...document.querySelectorAll('#cardioSummaryStats li')].map(li => li.textContent)")
+    check('the summary says so', '8 × 20 s on / 10 s offIntervals' in stats, stats)
+    check('and so does the list', t.wait_for(lambda: '8 × 20 s on / 10 s off' in cdp.ev("document.getElementById('cardioList').textContent")))
+
+    cdp.ev("document.getElementById('cardioIntervalSetup').open = true")
+    fill('cardioIntervalWarmup', '0.5')
+    cdp.ev("window.__cues = []")
+    click("#cardioActivityGrid [data-activity=run]")
+    cdp.pause(0.6)
+    check('a warm-up counts down first, with no cue', text('cardioIntervalPhase') == 'Warm-up' and text('cardioIntervalLeft') in ('0:30', '0:29') and cues() == [], [text('cardioIntervalPhase'), cues()])
+    elapse(31)
+    check('and the rounds are cued as it ends', text('cardioIntervalPhase') == 'Work' and [cue[0] for cue in cues()] == ['intervalWork'], cues())
+    cdp.answer = True
+    click('#cardioCancelBtn')
+    fill('cardioIntervalWarmup', '0')
+    cdp.ev("document.getElementById('cardioIntervalOn').click()")
+    cdp.pause(0.2)
+    click("#cardioActivityGrid [data-activity=walk]")
+    check('with them off, a session has no rounds', hidden('cardioIntervalPanel') and cdp.ev('cardioActive.intervals === undefined'), cdp.ev('cardioActive'))
+    click('#cardioCancelBtn')
+    click('#cardioModeManual')
+    check('and entering the time by hand has no use for them', hidden('cardioIntervalSetup'))
+    click('#cardioModeTimer')
+
+    def post(intervals):
+        body = {'kind': 'cardio', 'name': 'Run', 'notes': '', 'exercises': [], 'duration': 600, 'cardio': {'activity': 'run', 'intervals': intervals}}
+        status, _, reply = t.request('POST', '/api/workouts', json.dumps(body).encode(), {'Content-Type': 'application/json'}, token=runner)
+        return status, reply.get('error')
+
+    check('the server checks intervals', post({'work': 20, 'rounds': 0})[0] == 400 and post({'work': 4000, 'rounds': 1})[0] == 400 and post({'work': 20.5, 'rounds': 1})[0] == 400
+          and post('long')[0] == 400 and post({'work': 20, 'rounds': 3, 'rest': -1})[0] == 400, post({'work': 20, 'rounds': 0}))
+    check('and keeps good ones, the rest and warm-up optional', post({'work': 20, 'rounds': 3})[0] in (200, 201) and post({'work': 45, 'rest': 15, 'rounds': 6, 'warmup': 300})[0] in (200, 201))
+    check('no page errors along the way', not [line for line in cdp.console if line.startswith('exceptionThrown')], [line for line in cdp.console if line.startswith('exceptionThrown')][:3])
+
     # ------------------------------------------------------------------ C9 the Strength page, and a phone
     print('C9  the Strength page keeps to strength, and Cardio works on a phone')
     t.open_tracker()

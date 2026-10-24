@@ -112,6 +112,51 @@ function fasterRate(activity, value, than) {
   return activity.rate === 'speed' ? value > than : value < than;
 }
 
+// ---- Intervals -----------------------------------------------------------------------
+// A session timed in intervals keeps what they were as cardio.intervals: { work, rest, rounds, warmup }, whole seconds for the
+// first, second and last, rounds a count. A warm-up is time before the first round, and the last round has no rest after it.
+// Where in them a session is comes from the seconds it has been going (cardioElapsed), never from counting ticks, so a pause, a
+// reload or a page that was hidden finds its place again.
+const intervalLimits = { work:[1, 3600], rest:[0, 3600], rounds:[1, 99], warmup:[0, 7200] };
+
+// Intervals as the session keeps them, or null when what is given is not a whole set of them in range (the server's limits too).
+function intervalsFrom(value) {
+  if (!value || typeof value !== 'object') return null;
+  const intervals = {};
+  for (const field of Object.keys(intervalLimits)) {
+    const number = Number(value[field] ?? 0);
+    const [least, most] = intervalLimits[field];
+    if (!Number.isInteger(number) || number < least || number > most) return null;
+    intervals[field] = number;
+  }
+  return intervals;
+}
+
+// Where a session is in its intervals at `elapsed` seconds: { phase ('warmup', 'work', 'rest' or 'done'), index (the phase's number
+// from the first work, to tell a new one from the same, -1 in the warm-up), round (1-based), left (seconds of the phase to go),
+// since (seconds it has been going) }.
+function intervalPhase(intervals, elapsed) {
+  const { work, rest, rounds, warmup } = intervals;
+  const time = elapsed - warmup;
+  if (time < 0) return { phase:'warmup', index:-1, round:0, left:-time, since:elapsed };
+  const cycle = work + rest, total = rounds * cycle - rest;
+  if (time >= total) return { phase:'done', index:rest ? 2 * rounds - 1 : rounds, round:rounds, left:0, since:time - total };
+  const done = Math.floor(time / cycle), within = time - done * cycle;
+  if (within < work) return { phase:'work', index:rest ? 2 * done : done, round:done + 1, left:work - within, since:within };
+  return { phase:'rest', index:2 * done + 1, round:done + 1, left:cycle - within, since:within - work };
+}
+
+// 20 s, or 2 min for a whole number of minutes.
+function intervalLength(seconds) {
+  return seconds >= 60 && seconds % 60 === 0 ? `${seconds / 60} min` : `${seconds} s`;
+}
+
+// "8 × 20 s on / 10 s off", with its warm-up if it had one.
+function describeIntervals(intervals) {
+  const { work, rest, rounds, warmup } = intervals;
+  return `${rounds} × ${intervalLength(work)} on${rest ? ` / ${intervalLength(rest)} off` : ''}${warmup ? `, after ${intervalLength(warmup)} warm-up` : ''}`;
+}
+
 // Everything a session did, as History, Progress and the Cardio page write it: "3.1 mi in 27:42 · 8:56 /mi · 2% incline ·
 // 152 bpm · 320 cal", "20:00 · 60 floors · level 8". Only what was given is there.
 function describeCardio(workout) {
@@ -122,6 +167,8 @@ function describeCardio(workout) {
   const parts = [distance ? `${formatDistance(distance, shownDistanceUnit(activity))} in ${time}` : time];
   const rate = sessionRate(workout);
   if (rate) parts.push(rate.text);
+  const intervals = intervalsFrom(cardio.intervals);
+  if (intervals) parts.push(describeIntervals(intervals));
   if (activity.floors && Number(cardio.floors) > 0) parts.push(plural(Math.round(cardio.floors), 'floor'));
   sessionSettings(workout).forEach(([id, value]) => parts.push(cardioSettings[id].says(value)));
   if (Number(cardio.heartRate) > 0) parts.push(`${Math.round(cardio.heartRate)} bpm`);

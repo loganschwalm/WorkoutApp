@@ -90,6 +90,9 @@ celebrated.
   distance, calories and heart rate. Or switch to Enter the time to log one you did by hand, for any day.
 - What the machine was set to: a treadmill's incline, a bike's or elliptical's resistance, a rower's damper and stroke
   rate, a stair climber's level, prefilled from last time.
+- An interval timer for HIIT, Tabata or rowing pieces: choose the work, the rest, the rounds and a warm-up (or a preset), and the
+  session is timed in rounds, with a sound and a buzz at each change and a tick for the last three seconds. It is saved with the
+  session ("8 × 20 s on / 10 s off").
 - Pace, speed or a rower's split worked out for you, last time under the clock, this week's totals, and records for the
   longest, the fastest and the longest time.
 - Miles or kilometres (rowing in metres, stairs in floors), and every session in History and on Progress.

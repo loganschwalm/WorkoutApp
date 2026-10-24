@@ -4,6 +4,13 @@
 if (typeof accountStateFill !== 'undefined') {
   accountStateFill.settings = value => ({ ...defaultSettings, ...(value && typeof value === 'object' && !Array.isArray(value) ? value : {}) });
 }
+// The cardio interval timer's cues (cardio.js), which are not choices in Settings: a high double beep to work, a long low tone to rest,
+// a tick for the last three seconds. The end of the rounds is the chime. playRestAlert plays them by their names, as it does the alerts'.
+const intervalTones = {
+  intervalWork:[{ at:0, freq:988, length:0.12 }, { at:0.16, freq:1319, length:0.22 }],
+  intervalRest:[{ at:0, freq:523, length:0.5 }],
+  intervalTick:[{ at:0, freq:784, length:0.08 }]
+};
 const alertTones = {
   beep:[{ at:0, freq:880, length:0.18 }, { at:0.25, freq:880, length:0.18 }],
   chime:[{ at:0, freq:659, length:0.22 }, { at:0.2, freq:784, length:0.22 }, { at:0.4, freq:988, length:0.4 }],
@@ -89,7 +96,7 @@ function playRestAlert(settings) {
   if (settings.vibrate && navigator.vibrate) navigator.vibrate([200, 100, 200]);
   const level = Math.min(100, Math.max(0, Number(settings.soundVolume) || 0)) / 100 * 0.3;
   if (!settings.soundEnabled || !audioContext || level <= 0) return;
-  const tones = alertTones[settings.alertSound] || alertTones.beep;
+  const tones = alertTones[settings.alertSound] || intervalTones[settings.alertSound] || alertTones.beep;
   // An iPhone plays a page's sound as ambient audio, which the Ring/Silent switch mutes. As playback audio, like a music
   // app's, it follows the volume buttons and plays with the ringer silent, but the phone pauses other audio (music, a
   // podcast) while it lasts. So playback is taken only for the length of the alert: then the sound is suspended and the

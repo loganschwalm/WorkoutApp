@@ -29,6 +29,14 @@
     <section class="card cardio-active" id="cardioActive" aria-labelledby="cardioActiveTitle" hidden>
       <div class="section-heading"><div><h2 id="cardioActiveTitle">Session</h2><p class="subtitle" id="cardioActiveStarted"></p></div><button class="secondary" id="cardioCancelBtn" type="button">Cancel session</button></div>
       <p class="cardio-clock" id="cardioClock" role="timer" aria-label="Time so far">0:00</p>
+      <div class="interval-panel" id="cardioIntervalPanel" data-phase="work" hidden>
+        <p class="interval-phase" id="cardioIntervalPhase"></p>
+        <p class="interval-left" id="cardioIntervalLeft" aria-hidden="true"></p>
+        <p class="interval-round" id="cardioIntervalRound"></p>
+        <p class="interval-next" id="cardioIntervalNext"></p>
+      </div>
+      <p class="visually-hidden" id="cardioIntervalAnnounce" role="status"></p>
+      <p class="subtitle cardio-note" id="cardioIntervalNote" hidden>This browser cannot keep the screen on for you. The cues sound and buzz only while it is on, so keep it on until the rounds are done.</p>
       <p class="subtitle cardio-last" id="cardioLast" hidden></p>
       <div class="cardio-controls"><button class="secondary" id="cardioPauseBtn" type="button">Pause</button><button class="primary" id="cardioFinishBtn" type="button">Finish</button></div>
       <p class="subtitle cardio-note">The timer keeps going with the screen off or the app closed. Finish when you are done to enter the distance and the rest.</p>
@@ -74,6 +82,19 @@
     <section class="card" id="cardioStartCard" aria-labelledby="cardioStartTitle">
       <div class="section-heading"><div><h2 id="cardioStartTitle">Start a session</h2><p class="subtitle" id="cardioStartHelp">Tap what you are doing and the timer starts.</p></div></div>
       <div class="cardio-mode" role="group" aria-label="How to log it"><button class="secondary" id="cardioModeTimer" type="button" aria-pressed="true">Start the timer</button><button class="secondary" id="cardioModeManual" type="button" aria-pressed="false">Enter the time</button></div>
+      <details class="cardio-intervals" id="cardioIntervalSetup"><summary id="cardioIntervalSummary">Intervals: off</summary>
+        <div class="interval-body">
+          <label class="setting-check"><input id="cardioIntervalOn" type="checkbox" /> Time the next session in intervals</label>
+          <div class="interval-presets" id="cardioIntervalPresets" role="group" aria-label="Presets"><button class="secondary" type="button" data-preset="tabata">Tabata 20 / 10 &times; 8</button><button class="secondary" type="button" data-preset="thirty">30 / 30 &times; 10</button><button class="secondary" type="button" data-preset="forty">40 / 20 &times; 8</button><button class="secondary" type="button" data-preset="minute">1 min / 1 min &times; 6</button></div>
+          <div class="cardio-fields">
+            <div><label for="cardioIntervalWork">Work (seconds)</label><input id="cardioIntervalWork" type="number" inputmode="numeric" min="1" max="3600" step="1" /></div>
+            <div><label for="cardioIntervalRest">Rest (seconds)</label><input id="cardioIntervalRest" type="number" inputmode="numeric" min="0" max="3600" step="1" /></div>
+            <div><label for="cardioIntervalRounds">Rounds</label><input id="cardioIntervalRounds" type="number" inputmode="numeric" min="1" max="99" step="1" /></div>
+            <div><label for="cardioIntervalWarmup">Warm-up first (minutes)</label><input id="cardioIntervalWarmup" type="number" inputmode="decimal" min="0" max="120" step="0.5" /></div>
+          </div>
+          <p class="subtitle">A cue sounds and buzzes at each change, with a tick for the last three seconds. The rounds are timed from the session's own clock, so a pause pauses them. After the last round the clock goes on for a cool-down.</p>
+        </div>
+      </details>
       <div class="cardio-activity-grid" id="cardioActivityGrid"></div>
     </section>
 

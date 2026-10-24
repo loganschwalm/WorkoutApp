@@ -167,6 +167,23 @@ CARDIO_SETTINGS = {'incline': (-10, 40), 'resistance': (0, 100), 'ramp': (0, 100
                    'strokeRate': (0, 100), 'level': (0, 100)}
 
 
+# A timed session's intervals, as intervalLimits in cardio-activities.js has them: (least, most) of each, whole numbers.
+INTERVAL_LIMITS = {'work': (1, 3600), 'rest': (0, 3600), 'rounds': (1, 99), 'warmup': (0, 7200)}
+
+
+def validate_intervals(intervals):
+    """What a session timed in intervals was: {work, rest, rounds, warmup}, the first, second and last in whole seconds, rounds a count;
+    rest and warmup may be left out (none)."""
+    if intervals is None:
+        return
+    if not isinstance(intervals, dict):
+        raise BadRequest('cardio.intervals must be an object.')
+    for field, (least, most) in INTERVAL_LIMITS.items():
+        value = intervals.get(field, 0 if field in ('rest', 'warmup') else None)
+        if not (is_number(value) and value == int(value) and least <= value <= most):
+            raise BadRequest(f'cardio.intervals.{field} must be a whole number from {least} to {most}.')
+
+
 def validate_cardio(data):
     """A cardio session (the Cardio page) is a workout with kind 'cardio', no exercises, its time as duration, and what it
     did as cardio: {activity, distance, distanceUnit, calories, heartRate, floors}, all but the activity optional."""
@@ -186,6 +203,7 @@ def validate_cardio(data):
         value = cardio.get(field)
         if value is not None and not (is_number(value) and 0 <= value <= most):
             raise BadRequest(f'cardio.{field} must be a number from 0 to {most}.')
+    validate_intervals(cardio.get('intervals'))
     if cardio.get('distanceUnit') not in (None, 'mi', 'km', 'm'):
         raise BadRequest('cardio.distanceUnit must be mi, km or m.')
     for field, (least, most) in CARDIO_SETTINGS.items():
