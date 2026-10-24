@@ -179,7 +179,7 @@ def run(t):
       const labels = [];
       const original = CanvasRenderingContext2D.prototype.fillText;
       CanvasRenderingContext2D.prototype.fillText = function (text, x, y, ...rest) {
-        if (y === 360 - 20) labels.push({ x, width: this.measureText(text).width });
+        if (y === document.getElementById('progressChart').clientHeight - 20) labels.push({ x, width: this.measureText(text).width });
         return original.call(this, text, x, y, ...rest);
       };
       drawChart();
@@ -611,6 +611,34 @@ def run(t):
 
     check('the page opens on the exercise done most', cdp.ev("document.getElementById('exerciseFilter').value") == 'bench press',
           cdp.ev("document.getElementById('exerciseFilter').value"))
+    # The chart comes first: the range above it, what it is of beside what it measures, and the other filters under it.
+    check('the range is above the chart, and the metric, exercise and more filters are under it',
+          cdp.ev("""(() => { const before = (a, b) => Boolean(document.getElementById(a).compareDocumentPosition(document.getElementById(b)) & Node.DOCUMENT_POSITION_FOLLOWING);
+            return [before('rangeChips', 'progressChart'), before('progressChart', 'legend'), before('legend', 'metricFilter'), before('metricFilter', 'moreFilters')]; })()""") == [True] * 4)
+    check('the heading says what the chart is of, beside what it measures', cdp.ev("document.getElementById('progressSubject').textContent") == 'Bench Press'
+          and cdp.ev("document.getElementById('progressTitle').textContent") == 'Heaviest weight', cdp.ev("document.getElementById('progressSubject').textContent"))
+    cdp.ev("(f => { f.value = 'all'; f.dispatchEvent(new Event('change', { bubbles: true })); })(document.getElementById('exerciseFilter'))")
+    cdp.pause(0.3)
+    check('across all exercises the heading says so', cdp.ev("document.getElementById('progressSubject').textContent") == 'All exercises')
+    written = cdp.ev("""(() => {
+      const real = CanvasRenderingContext2D.prototype.fillText, saved = chartData, texts = [];
+      CanvasRenderingContext2D.prototype.fillText = function (text, ...rest) { texts.push(text); return real.call(this, text, ...rest); };
+      const day = 86400000, start = Date.now() - 20 * day;
+      const lines = names => ({ points: [0, 1, 2].map(n => ({ key: `k${n}`, createdAt: start + n * 10 * day })),
+        types: names.map((name, index) => ({ name, values: new Map([0, 1, 2].map(n => [`k${n}`, 100 + 20 * index + 10 * n])) })) });
+      const run = names => { texts.length = 0; chartData = lines(names); drawChart(); return [...texts]; };
+      const few = run(['Push Day', 'Pull Day', 'A Rather Long Workout Name']), many = run(['A', 'B', 'C', 'D', 'E']);
+      chartData = saved;
+      CanvasRenderingContext2D.prototype.fillText = real;
+      drawChart();
+      return { few, many };
+    })()""")
+    check('with a few lines, each line’s latest value is written with the name of its workout type, a long name cut short, so the colours are not all that tells them apart',
+          any(text.startswith('Push Day ') and text.endswith(' lbs') for text in written['few']) and any(text.startswith('Pull Day ') for text in written['few'])
+          and any(text.startswith('A Rather Long… ') for text in written['few']), written['few'])
+    check('with more than four, the legend does it and the values stand alone', not any(text.startswith(name + ' ') for text in written['many'] for name in 'ABCDE'), written['many'])
+    cdp.ev("(f => { f.value = 'bench press'; f.dispatchEvent(new Event('change', { bubbles: true })); })(document.getElementById('exerciseFilter'))")
+    cdp.pause(0.3)
     xs = cdp.ev('drawnPoints.map(point => point.x)') or []
     ratio = (xs[2] - xs[1]) / (xs[1] - xs[0]) if len(xs) >= 3 and xs[1] != xs[0] else 0
     check('workouts sit apart by the time between them: 29 days take 29 times the room of 1', 25 < ratio < 33, f'{ratio:.1f} {xs}')

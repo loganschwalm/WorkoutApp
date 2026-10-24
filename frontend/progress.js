@@ -281,6 +281,9 @@ function placeValueLabels(latest, others, width) {
 function drawSeries(context, { across, y, format, invert }) {
   context.font = '11px Figtree, system-ui, sans-serif';
   const latest = [], others = [];
+  // With a few lines (up to four), each line's latest value says whose it is, so the lines are not told apart by colour alone.
+  const named = chartData.types.length > 1 && chartData.types.length <= 4;
+  const shortName = name => name.length > 14 ? `${name.slice(0, 13)}…` : name;
   chartData.types.forEach((type, typeIndex) => {
     const colour = seriesColour(typeIndex);
     const own = chartData.points.map((point, index) => ({ point, index, value:type.values.get(point.key) })).filter(entry => entry.value !== undefined);
@@ -298,7 +301,7 @@ function drawSeries(context, { across, y, format, invert }) {
     own.forEach(({ point, index, value }, position) => {
       drawnPoints.push({ x:across[index], y:y(value), text:`${type.name}, ${longDate(point.createdAt)}: ${format.value(value)}` });
       if (position !== own.length - 1 && position !== 0 && position !== best) return;
-      const text = format.value(value);
+      const text = named && position === own.length - 1 ? `${shortName(type.name)} ${format.value(value)}` : format.value(value);
       (position === own.length - 1 ? latest : others).push({ text, colour, x:across[index], y:y(value), width:context.measureText(text).width });
     });
   });
@@ -308,7 +311,8 @@ function drawSeries(context, { across, y, format, invert }) {
 function drawChart() {
   drawnPoints = [];
   if (!chartData || !chartData.points.length) return;
-  const { context, width, height } = prepareChart($('progressChart'), 360);
+  // As tall as the page's style makes it (shorter on a phone), so what is drawn is not stretched to fit.
+  const { context, width, height } = prepareChart($('progressChart'), $('progressChart').clientHeight || 360);
   // Set through the DOM: the Content-Security-Policy refuses style="" attributes written into markup. Coloured with the
   // chart, so a change of theme recolours both.
   $('legend').querySelectorAll('.legend-swatch').forEach((swatch, index) => { swatch.style.background = seriesColour(index); });
@@ -375,6 +379,8 @@ function renderProgress(workouts) {
     : { weight:['Heaviest weight', 'Track your heaviest weight by workout type and date.'], oneRepMax:['Estimated one-rep max', 'Your best set in each workout as a one-rep max, from sets of up to 12 reps, so heavier weights and more reps both count.'], reps:['Best reps', 'Track your highest completed reps by workout type and date.'], volume:['Total volume', 'Track total weight moved by workout type and date.'] };
   $('progressTitle').textContent = labels[selectedMetric][0];
   $('progressDescription').textContent = labels[selectedMetric][1];
+  // What the chart is of, beside what it measures: "Heaviest weight · Back Squat", where the filters are under the chart.
+  $('progressSubject').textContent = selectedExercise === 'all' ? 'All exercises' : $('exerciseFilter').selectedOptions[0]?.textContent || '';
   if (!chartData.points.length && allWorkouts.length && activity) {
     const missing = { distance:'a distance', floors:'floors', rate:'a distance to work it out from', calories:'calories', heartRate:'a heart rate' }[selectedMetric]
       || (cardioSettings[selectedMetric] ? `a ${cardioSettings[selectedMetric].label.toLowerCase()}` : '');

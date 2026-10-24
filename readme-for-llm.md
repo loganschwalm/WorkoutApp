@@ -867,12 +867,20 @@ Progress beside them. The Strength tab is the Tracker, which keeps to strength w
   and empties To (`rangeStart` in `progress.js`); which is pressed follows the two date boxes, so dates chosen by hand leave none
   pressed.
 - Filter by workout type, and by start and end date to the day, under More filters, which folds shut and says in its line which of
-  the two (dates, workout type) is set. Metric and Exercise are always on the card, so the chart is not pushed down the page.
+  the two (dates, workout type) is set.
+- The chart comes first. The card's order is its heading (what it measures, then what it is of, "Heaviest weight · Back Squat", and how
+  many workouts), the range chips on a line of their own, the chart, its legend, and then the Metric and Exercise boxes with More filters
+  under it, so the first screen of a phone is the chart and not a panel of filters. The range is the one filter changed all the time, which
+  is why it is above the chart. On a phone the metric's description is read by a screen reader and not drawn, the chips are tighter so four fit
+  a line, and the chart is 300 pixels tall rather than 360 (`drawChart` draws at the height the page gives it, so nothing is stretched).
 - See filtered workout counts and chart legends.
 - Workouts sit along the chart by date, so a month between two takes more room than a day and the
   slope is your real rate of progress.
 - The axis fits the values, with a little room either side and never below zero (`chartScale`): from zero, a bench press that went
   from 155 to 180 pounds is a line that is all but flat.
+- With a few lines (two to four workout types), each line's latest value is written with the name of its type ("Push Day 180 lbs", a long
+  name cut to 13 letters and an ellipsis), so the lines are not told apart by colour alone; with more, the legend does it, and a single line's
+  value stands alone. The legend is always there.
 - Each line writes its first value, its best and its latest, and rings its best (its highest, or its lowest where less is better, as
   a pace is); the rest of the points are a tap away. Dates and values are written only where they have room, so they never overlap,
   however many workouts the chart shows; the latest value is always written. Tap any point to see its value.
