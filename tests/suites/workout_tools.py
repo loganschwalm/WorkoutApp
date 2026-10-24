@@ -596,6 +596,28 @@ def run(t):
     check('changing one is kept', kinds() == ['warmup', 'failure', 'drop', 'drop'], kinds())
     change_kind(2, '')
     check('and a normal set has none written', cdp.ev("'type' in activeSession.exercises[0].sets[2]") is False and kinds() == ['warmup', 'failure', '', 'drop'], kinds())
+    # The chips for the reps left and the kind of set share one folded row, and Cancel is in the workout's menu.
+    check('Cancel workout is in the workout’s ⋯ menu, with Big view beside it in the header, and the menu is shut',
+          cdp.ev("document.querySelector('#workoutMenu #endWorkoutBtn') !== null") is True and cdp.ev("document.getElementById('workoutMenu').open") is False
+          and cdp.ev("document.querySelector('#activeWorkout .section-heading-actions > #bigViewBtn') !== null") is True
+          and cdp.ev("document.getElementById('workoutMenu').querySelector('summary').getAttribute('aria-label')") == 'More for this workout')
+    check('the chips are in one row, which says Tag this set', cdp.ev("document.querySelectorAll('#setTags #effortChoices, #setTags #setTypeChoices').length") == 2 and text('setTagsSummary') == 'Tag this set')
+    cdp.ev("document.querySelectorAll('#effortChoices button')[1].click(); document.querySelector('#setTypeChoices [data-set-type=failure]').click()")
+    check('and when something is chosen, says what', text('setTagsSummary') == 'Tag this set · 1 left · To failure', text('setTagsSummary'))
+    cdp.ev("document.querySelector('#setTypeChoices [data-set-type=failure]').click(); document.querySelectorAll('#effortChoices button')[1].click()")
+    check('taken back, it says nothing', text('setTagsSummary') == 'Tag this set', text('setTagsSummary'))
+    cdp.ev("document.getElementById('setTags').open = true")
+    cdp.pause(0.2)
+    cdp.ev("location.reload()")
+    cdp.wait("document.getElementById('setTags') && initialLoadDone === true", timeout=15)
+    cdp.pause(0.5)
+    check('whether the row is open is kept on this device', cdp.ev("document.getElementById('setTags').open") is True)
+    cdp.ev("document.getElementById('setTags').open = false")
+    cdp.pause(0.2)
+    cdp.ev("activeSession.exercises[activeSession.currentIndex].timed = true; renderActiveWorkout()")
+    check('a timed hold has neither, so the row is not there', cdp.ev("document.getElementById('setTags').hidden") is True)
+    cdp.ev("activeSession.exercises[activeSession.currentIndex].timed = false; renderActiveWorkout()")
+    check('and an exercise that is not has it', cdp.ev("document.getElementById('setTags').hidden") is False)
     cdp.ev("document.getElementById('nextExerciseBtn').click()")
     t.finish_all()
 

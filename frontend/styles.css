@@ -663,7 +663,7 @@ html[data-theme="dark"] .summary-achievements li { color:#ffe2a0; background:#3a
 /* Share, under an achievement in a summary or on Progress: draws it as a picture (achievement-card.js). */
 .achievement-share { justify-self:start; min-width:44px; min-height:44px; margin:2px 0 -8px -10px; padding:4px 10px; font-size:.9rem; }
 /* Within reach (reach.js): what finishing the workout earns, under its heading, and what the next set would be a record of. */
-.reach-line { margin:6px 0 0; color:var(--accent); font-size:.92rem; font-weight:700; }
+.reach-line { margin:6px 0 0; color:var(--muted); font-size:.88rem; font-weight:600; }
 .reach-hint { margin:8px 0 0; padding:8px 12px; color:var(--ink); background:var(--accent-soft); border-left:3px solid var(--accent); border-radius:8px; font-size:.92rem; font-weight:600; }
 /* Last week (recap.js), on the Tracker between workouts: a headline, the totals on one line, then what the week earned. It is
    put away during a workout, as the cards under it are, with them when Show the rest of the Tracker brings them back. */
@@ -830,13 +830,31 @@ h2 { margin-bottom:14px; }
 .program-day-actions { flex-direction:row; }
 /* During a workout. */
 .active-workout .section-heading h2 { margin-bottom:0; }
-#endWorkoutBtn, #bigViewBtn { flex:none; padding:8px 13px; font-size:.85rem; white-space:nowrap; }
+#bigViewBtn { flex:none; padding:8px 13px; font-size:.85rem; white-space:nowrap; }
 /* Buttons come in three tiers. Solid is the one thing to do here, the tint (.secondary) is the other things to do, and an outline is
    for showing more or going elsewhere. Cancel is drawn in the muted ink, so it does not look like a neighbour of Start. */
 .section-heading-actions > .secondary, .more-workouts > button, .more-workouts > .button-link {
   color:var(--accent); background:transparent; box-shadow:inset 0 0 0 1.5px var(--accent-line);
 }
-#endWorkoutBtn, #cardioCancelBtn { color:var(--muted); background:transparent; box-shadow:inset 0 0 0 1.5px var(--line); }
+#cardioCancelBtn { color:var(--muted); background:transparent; box-shadow:inset 0 0 0 1.5px var(--line); }
+/* The workout in progress keeps the tint for what is information (the record to beat), and draws what is tapped in three tiers: solid
+   for the one thing to do (Complete set, Next exercise), an outline for the things done often (the weight steps, Same as last set,
+   the chips under the entry), and the neutral ground for a menu. Cancel is in the workout's ⋯ menu, away from the thumb's usual place. */
+.active-workout .section-heading-actions { flex-direction:row; align-items:center; gap:8px; }
+.active-workout .row-menu > summary { color:var(--ink); background:var(--sunk); }
+.active-workout .weight-stepper .secondary, .active-workout .repeat-set, .active-workout .effort-choices button, .active-workout .set-type-choices button {
+  color:var(--ink); background:transparent; box-shadow:inset 0 0 0 1.5px var(--line);
+}
+.active-workout .repeat-set { color:var(--accent); box-shadow:inset 0 0 0 1.5px var(--accent-line); }
+.active-workout .effort-choices button[aria-pressed="true"], .active-workout .set-type-choices button[aria-pressed="true"] {
+  color:var(--on-accent); background:var(--accent); box-shadow:none;
+}
+/* Tag this set: reps left and the kind of set, under one folded line (a link, like the others under the entry) that says what is chosen. */
+.set-tags { margin-top:6px; }
+.set-tags > summary { display:flex; align-items:center; min-height:44px; padding:12px 0; color:var(--accent); font-size:.9rem; font-weight:700; cursor:pointer; }
+.active-workout .section-heading { padding-bottom:10px; }
+.set-tags .effort-choices, .set-tags .set-type-choices { margin-top:4px; margin-bottom:8px; }
+.set-tags .effort-choices[hidden], .set-tags .set-type-choices[hidden] { display:none; }
 .progress-toggle { margin-top:4px; }
 .active-exercise { padding:12px 0 4px; }
 .plan-sets { margin-top:8px; }

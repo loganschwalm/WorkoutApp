@@ -157,6 +157,7 @@ function renderActiveWorkout() {
   renderPastSessions(exercise);
   renderEffort(exercise);
   renderSetType(exercise);
+  renderSetTags(exercise);
   $('completedSets').innerHTML = completedSetsHtml(exercise, timed);
   $('completedSetsToggle').hidden = !exercise.sets.length;
   // The list is folded away, so its label says what was just logged: "Completed sets (3) · last 145 lbs × 6".

@@ -109,7 +109,16 @@ own workouts, templates, and settings.
   largest thing on the screen, between large −5 and +5 buttons, and Complete set is as tall as the boxes beside it (4.25rem).
 - Buttons come in three tiers: solid (the one thing to do on a screen: Start workout, Complete set, Finish), a tint (`.secondary`,
   the other things to do) and an outline (showing more or going elsewhere, and Start on a row of a log, so a column of them does
-  not shout over what was done). Cancel workout and Cancel session are an outline in the muted ink.
+  not shout over what was done). Cancel session is an outline in the muted ink. Cancel workout is in the workout's own ⋯ menu in the card's
+  header (beside Big view), away from where the thumb goes, drawn in the danger colour.
+- The workout in progress keeps the tint for information (the record to beat) and draws what is tapped in the three tiers: solid for
+  the one thing to do (Complete set, Next exercise), an outline for what is done often (the weight steps, Same as last set, the chips
+  under the entry; a chosen chip is solid), and the neutral ground for a ⋯ menu's button. The line saying what finishing would earn
+  (`reach-line`) is muted, since it is news and not a thing to tap.
+- The chips under the entry fields, Reps left and Set type, share one folded line, Tag this set (`setTags`; `renderSetTags` in
+  `training-tools.js`). Closed, it says what is chosen for the next set ("Tag this set · 2 left · Drop set"), so the screen has one line
+  where there were two rows of buttons; it is not there for an exercise that has neither (a timed hold, with Reps left turned off in
+  Settings). Whether it is open is kept on this device (`workout-tracker-set-tags-open`), so someone who tags every set opens it once.
 - Complete set is answered with the one motion in the app: the next planned set pops in and the rest time settles. It is off for
   anyone who has asked for less motion, and moves no box, so a measure taken as it appears is unaffected.
 - Finish early, beside Next exercise until the last, ends the workout there: the exercises with sets are saved and the
@@ -318,7 +327,7 @@ own workouts, templates, and settings.
   the next exercise" in the template editor. Next exercise moves on past the whole superset, and an
   exercise added mid-superset goes after it. Reddit PPL does its triceps and lateral raises this way.
 - Restore an active workout after refreshing the page.
-- Finish a workout by moving past its last exercise, or cancel it with Cancel workout, beside its name: for a workout
+- Finish a workout by moving past its last exercise, or cancel it with Cancel workout, in the ⋯ menu in the workout's header: for a workout
   started by mistake, or one you do not want kept. A cancelled workout is not saved anywhere, as if it had never been
   started: it is not in History, last time's numbers, personal records or Progress, a training program's day stays to
   do, and other devices stop showing it. With nothing logged it goes at once; with sets logged it asks first (Settings

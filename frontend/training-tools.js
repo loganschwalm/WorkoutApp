@@ -441,6 +441,19 @@ function renderSetType(exercise) {
   $('setTypeChoices').querySelectorAll('[data-set-type]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.setType === chosen)));
 }
 
+// The one folded row that holds both sets of chips (reps left, and the kind of set): closed, it says what is chosen for the next
+// set, and it is not there at all for an exercise that has neither (a timed hold, with effort turned off).
+function renderSetTags(exercise) {
+  const effort = !$('effortChoices').hidden && effortChoice !== null ? `${effortChoice >= 4 ? '4+' : effortChoice} left` : '';
+  const kind = !$('setTypeChoices').hidden ? (setTypes.find(([id]) => id === currentSetType(exercise)) || [])[1] || '' : '';
+  const chosen = [effort, kind].filter(Boolean);
+  $('setTags').hidden = $('effortChoices').hidden && $('setTypeChoices').hidden;
+  $('setTagsSummary').textContent = chosen.length ? `Tag this set · ${chosen.join(' · ')}` : 'Tag this set';
+}
+
+// Whether the row is open is kept on this device: someone who asks for the reps left after every set opens it once.
+const setTagsOpenKey = 'workout-tracker-set-tags-open';
+
 function renderEffort(exercise) {
   $('effortChoices').hidden = !effortAsked(exercise);
   $('effortChoices').querySelectorAll('[data-effort]')
@@ -485,6 +498,7 @@ $('setTypeChoices').onclick = e => {
   // Tapping the one already chosen takes it back: a normal set.
   setTypeChoice = currentSetType(exercise) === button.dataset.setType ? '' : button.dataset.setType;
   renderSetType(exercise);
+  renderSetTags(exercise);
   renderReach();
 };
 $('effortChoices').onclick = e => {
@@ -493,7 +507,12 @@ $('effortChoices').onclick = e => {
   // Tapping the one already chosen takes it back.
   effortChoice = effortChoice === Number(button.dataset.effort) ? null : Number(button.dataset.effort);
   renderEffort(activeSession.exercises[activeSession.currentIndex]);
+  renderSetTags(activeSession.exercises[activeSession.currentIndex]);
 };
+try { $('setTags').open = localStorage.getItem(setTagsOpenKey) === 'true'; } catch (error) { /* closed, then */ }
+$('setTags').addEventListener('toggle', () => {
+  try { localStorage.setItem(setTagsOpenKey, String($('setTags').open)); } catch (error) { /* only for this visit, then */ }
+});
 
 $('swapToggle').onclick = () => showSwap($('swapPanel').hidden);
 // Whatever is picked from the exercise's ⋯ menu closes it.
