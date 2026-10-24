@@ -6,7 +6,9 @@
 // set is whichever planned one has not been logged yet.
 function nextSetDefaults(exercise, previous, timed) {
   const sets = exercise.sets || [];
-  const previousFirst = previous ? { ...previous.sets[0], weight:prefillWeight(previous.sets[0].weight, previous.converted) } : null;
+  // Last time's first working set: its warm-ups are not the weight to start from.
+  const firstSet = previous ? workSets(previous.sets)[0] || previous.sets[0] : null;
+  const previousFirst = previous ? { ...firstSet, weight:prefillWeight(firstSet.weight, previous.converted) } : null;
   const lastSet = sets[sets.length - 1];
   const plan = Array.isArray(exercise.plan) && exercise.plan.length ? exercise.plan : null;
   const planned = plan ? plan[sets.length] : null;
@@ -38,7 +40,21 @@ function completedSetsHtml(exercise, timed) {
     + ` data-set="${index}" data-field="weight" aria-label="Set ${index + 1} weight in ${weightUnit()}"><span>${weightUnit()}</span></div>`
     + `<div class="set-field"><input class="set-edit" type="number" inputmode="numeric" min="1" step="1" value="${escapeHTML(set.reps)}" data-set="${index}"`
     + ` data-field="reps" aria-label="Set ${index + 1} ${count.label}"><span>${count.unit}</span></div>`
-    + `<button class="remove" type="button" data-remove-set="${index}" aria-label="Remove set ${index + 1}" title="Remove">&times;</button></li>`).join('');
+    + `<button class="remove" type="button" data-remove-set="${index}" aria-label="Remove set ${index + 1}" title="Remove">&times;</button>`
+    + (timed ? '' : setTypeSelectHtml(set, `data-set="${index}"`, `Set ${index + 1}`)) + '</li>').join('');
+}
+
+// The kind of a logged set, to change in place: a row of its own under the set's numbers. `where` is the attributes that say which set.
+function setTypeSelectHtml(set, where, label) {
+  const type = setTypeOf(set);
+  return `<label class="set-kind">Type <select class="set-edit set-type-edit" ${where} data-field="type" aria-label="${escapeHTML(label)} type">`
+    + `<option value="">Normal</option>${setTypes.map(([id, name]) => `<option value="${id}"${id === type ? ' selected' : ''}>${name}</option>`).join('')}</select></label>`;
+}
+
+// A logged set's type changed in place: a normal set has none written. Not a number, as its weight and reps are.
+function applySetType(set, value) {
+  if (setTypes.some(([id]) => id === value)) set.type = value;
+  else delete set.type;
 }
 
 // A set changed in place, during a workout or in a saved one, is asked about as a new set is when it looks like a slip
@@ -93,13 +109,16 @@ function refusedSet(exercise, { weightValue, reps }, timed) {
 
 // Adds the set to the exercise, shows it, and marks a record or a goal reached. Returns what it said of them, or '', so what
 // follows the set (restAfterSet) can say it again rather than over it.
-function recordSet(exercise, { weightValue, reps }) {
+function recordSet(exercise, { weightValue, reps, type: repeatedType }) {
   const weight = Number(weightValue) || 0;
   const effort = effortAsked(exercise) && effortChoice !== null ? { rir:effortChoice } : {};
   effortChoice = null;
+  // Its kind: the one asked for (a set repeated is the kind it repeats), else the chip chosen, else what the program planned.
+  const type = isTimed(exercise) ? '' : repeatedType !== undefined ? setTypeOf({ type:repeatedType }) : currentSetType(exercise);
+  setTypeChoice = null;
   const recordBefore = exerciseRecord(exercise.name);
-  const goalReached = goalReachedBy(exercise, weight);
-  exercise.sets.push({ reps, weight, ...effort });
+  const goalReached = goalReachedBy(exercise, weight, type);
+  exercise.sets.push({ reps, weight, ...effort, ...(type ? { type } : {}) });
   persistActiveSession();
   renderActiveWorkout();
   const recordNow = exerciseRecord(exercise.name);
@@ -207,7 +226,7 @@ function repeatLastSet() {
   const last = exercise && exercise.sets && exercise.sets[exercise.sets.length - 1];
   if (!last) return;
   stopHold();
-  logSet({ weightValue:String(last.weight || 0), reps:Number(last.reps) });
+  logSet({ weightValue:String(last.weight || 0), reps:Number(last.reps), type:setTypeOf(last) });
 }
 $('repeatSetBtn').onclick = event => { if (!bouncedTap(event)) repeatLastSet(); };
 $('completedReps').oninput = () => { markInvalid($('completedReps'), false); syncHoldDisplay(); };
@@ -219,6 +238,12 @@ $('completedSets').onchange = e => {
   const set = activeSession.exercises[activeSession.currentIndex].sets[index];
   if (!set) return;
   const value = e.target.value;
+  if (field === 'type') {
+    applySetType(set, value);
+    persistActiveSession();
+    renderActiveWorkout();
+    return;
+  }
   const problem = setChangeProblem(field, value, isTimed(activeSession.exercises[activeSession.currentIndex]));
   if (problem) {
     showFeedback(problem);

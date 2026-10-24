@@ -68,7 +68,7 @@ function chartingTimed() {
 
 // The best estimated one-rep max among an exercise's sets, or 0 when no set can give one (no weight, or too many reps).
 function oneRepMaxOf(item) {
-  const sets = item.sets && item.sets.length ? item.sets : [{ weight:item.weight, reps:item.reps }];
+  const sets = bestSets(item.sets && item.sets.length ? item.sets : [{ weight:item.weight, reps:item.reps }]);
   return Math.max(0, ...sets.map(set => {
     const weight = Number(set.weight) || 0, reps = Number(set.reps) || 0;
     return weight > 0 && reps >= 1 && reps <= ONE_REP_MAX_REPS ? exactOneRepMax(weight, reps) : 0;
@@ -101,10 +101,10 @@ function buildChartData(workouts) {
     const matchingExercises = (selectedExercise === 'all' ? workout.exercises.filter(item => !isTimed(item)) : workout.exercises.filter(item => exerciseKey(item.name) === selectedExercise)).filter(item => !item.sets || item.sets.length);
     const values = matchingExercises.map(item => {
       if (selectedMetric === 'oneRepMax') return timed ? 0 : oneRepMaxOf(item);
-      if (selectedMetric === 'reps') return Math.max(...(item.sets || []).map(set => Number(set.reps) || 0), Number(item.reps) || 0);
+      if (selectedMetric === 'reps') return Math.max(...bestSets(item.sets).map(set => Number(set.reps) || 0), ownCount(item, 'reps'));
       if (selectedMetric === 'volume' && timed) return item.sets?.length ? item.sets.reduce((total, set) => total + (Number(set.reps) || 0), 0) : Number(item.reps) || 0;
-      if (selectedMetric === 'volume') return item.sets?.length ? item.sets.reduce((total, set) => total + (Number(set.weight) || 0) * (Number(set.reps) || 0), 0) : (Number(item.weight) || 0) * (Number(item.reps) || 0);
-      return Math.max(...(item.sets || []).map(set => Number(set.weight) || 0), Number(item.weight) || 0);
+      if (selectedMetric === 'volume') return item.sets?.length ? workSets(item.sets).reduce((total, set) => total + (Number(set.weight) || 0) * (Number(set.reps) || 0), 0) : (Number(item.weight) || 0) * (Number(item.reps) || 0);
+      return Math.max(...bestSets(item.sets).map(set => Number(set.weight) || 0), ownCount(item, 'weight'));
     });
     const metricValue = selectedMetric === 'volume' ? values.reduce((total, value) => total + value, 0) : Math.max(...values, 0);
     if (!matchingExercises.length) return;

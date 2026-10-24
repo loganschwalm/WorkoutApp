@@ -22,7 +22,7 @@ function liftSessions(workouts, key) {
   const sessions = [];
   [...workouts].filter(workout => !isCardio(workout)).sort((a, b) => a.createdAt - b.createdAt).forEach(workout => {
     const items = (workout.exercises || []).filter(item => exerciseKey(item.name ?? '') === key && !isTimed(item));
-    const sets = items.flatMap(item => item.sets && item.sets.length ? item.sets : item.sets ? [] : [{ weight:item.weight, reps:item.reps }]);
+    const sets = bestSets(items.flatMap(item => item.sets && item.sets.length ? item.sets : item.sets ? [] : [{ weight:item.weight, reps:item.reps }]));
     const scored = sets.map(set => ({ weight:Number(set.weight) || 0, reps:Number(set.reps) || 0 })).filter(set => set.weight > 0 && set.reps >= 1);
     const estimates = scored.filter(set => set.reps <= ONE_REP_MAX_REPS).map(set => exactOneRepMax(set.weight, set.reps));
     if (!estimates.length) return;

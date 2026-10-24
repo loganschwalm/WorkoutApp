@@ -352,6 +352,36 @@ function isTimed(exercise) {
   return Boolean(exercise) && exercise.timed === true;
 }
 
+// ---- Kinds of set ---------------------------------------------------------
+// A logged set can say what kind it is: set.type is 'warmup', 'drop' (a drop set: lighter, straight after a heavier one), 'failure'
+// (taken to failure) or 'amrap' (as many reps as possible); a normal set has none. Warm-ups and drop sets are left out of what a
+// set is measured by (records, estimated one-rep maxes, the heaviest weight, progression), because their weight says nothing of
+// what the lifter can do; warm-ups are also left out of what is counted (volume, sets per muscle). To failure and AMRAP are labels:
+// they count as any set does. A set with no type behaves as it always did.
+const setTypes = [['warmup', 'Warm-up'], ['drop', 'Drop set'], ['failure', 'To failure'], ['amrap', 'AMRAP']];
+const setTypeWords = { warmup:'warm-up', drop:'drop set', failure:'to failure', amrap:'AMRAP' };
+
+// A set's type, or '' for a normal one (or one with a type this version does not know).
+function setTypeOf(set) {
+  return set && setTypes.some(([id]) => id === set.type) ? set.type : '';
+}
+
+// The sets that records and progression are worked out from: all but warm-ups and drop sets.
+function bestSets(sets) {
+  return (sets || []).filter(set => { const type = setTypeOf(set); return type !== 'warmup' && type !== 'drop'; });
+}
+
+// The sets that are counted: all but warm-ups.
+function workSets(sets) {
+  return (sets || []).filter(set => setTypeOf(set) !== 'warmup');
+}
+
+// What an exercise was saved with beside its sets (its weight, its reps) is the heaviest set's weight and the last set's reps, which
+// may be a warm-up's or a drop set's once sets are tagged, so it is not read as a result then.
+function ownCount(item, field) {
+  return (item.sets || []).some(set => setTypeOf(set)) ? 0 : Number(item[field]) || 0;
+}
+
 // Logged sets written compactly, one part per run of sets at the same weight: "3 × 5 at 185 lbs", "115 lbs × 5, 5, 5,
 // 5, 9", "40 lbs × 5 · 50 lbs × 5", and for bodyweight "3 × 10" or "10, 9, 8 reps". Sets of a timed exercise are in
 // seconds: "3 × 30 s", "45, 40 s". The weights must already be in the unit shown (see inUnit).
@@ -360,14 +390,16 @@ function describeLoggedSets(sets, timed = false) {
   const runs = [];
   sets.forEach(set => {
     const last = runs[runs.length - 1];
-    if (last && String(last.weight) === String(set.weight ?? '')) last.reps.push(set.reps);
-    else runs.push({ weight:set.weight ?? '', reps:[set.reps] });
+    const type = setTypeOf(set);
+    if (last && String(last.weight) === String(set.weight ?? '') && last.type === type) last.reps.push(set.reps);
+    else runs.push({ weight:set.weight ?? '', type, reps:[set.reps] });
   });
   const each = timed ? ' s' : '';
-  return runs.map(({ weight, reps }) => {
+  return runs.map(({ weight, type, reps }) => {
     const repeated = reps.length > 1 && reps.every(rep => String(rep) === String(reps[0]));
-    if (isBodyweight(weight)) return repeated ? `${reps.length} × ${reps[0]}${each}` : `${reps.join(', ')}${timed ? ' s' : ' reps'}`;
-    return repeated ? `${reps.length} × ${reps[0]}${each} at ${formatWeight(weight)} ${unit}` : `${formatWeight(weight)} ${unit} × ${reps.join(', ')}${each}`;
+    const kind = type ? ` (${setTypeWords[type]})` : '';
+    if (isBodyweight(weight)) return (repeated ? `${reps.length} × ${reps[0]}${each}` : `${reps.join(', ')}${timed ? ' s' : ' reps'}`) + kind;
+    return (repeated ? `${reps.length} × ${reps[0]}${each} at ${formatWeight(weight)} ${unit}` : `${formatWeight(weight)} ${unit} × ${reps.join(', ')}${each}`) + kind;
   }).join(' · ');
 }
 

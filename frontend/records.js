@@ -6,7 +6,8 @@ let personalBests = {};
 
 function normalizeSets(sets) {
   return sets.map(set => ({
-    weight:Number(set.weight) || 0, reps:Number(set.reps) || 0, ...(set.rir !== undefined && set.rir !== null ? { rir:Number(set.rir) } : {})
+    weight:Number(set.weight) || 0, reps:Number(set.reps) || 0, ...(set.rir !== undefined && set.rir !== null ? { rir:Number(set.rir) } : {}),
+    ...(setTypeOf(set) ? { type:set.type } : {})
   }));
 }
 
@@ -48,7 +49,7 @@ function bestsOf(workouts) {
   const bests = {};
   workouts.forEach(workout => workout.exercises.forEach(item => {
     // The workout form saves an exercise without sets: its weight and reps are its one set.
-    const sets = item.sets || [{ weight:item.weight, reps:item.reps }];
+    const sets = bestSets(item.sets || [{ weight:item.weight, reps:item.reps }]);
     if (!sets.length) return;
     const key = exerciseKey(item.name);
     const best = bests[key] || (bests[key] = { weight:0, oneRepMax:0, reps:0, seconds:0 });
@@ -126,7 +127,7 @@ function newRecords(workout, before) {
     const key = exerciseKey(item.name);
     if (!exercises.has(key)) exercises.set(key, { name:String(item.name).trim(), timed:isTimed(item), sets:[] });
     // Sets as done, with each weight in pounds too, to compare.
-    exercises.get(key).sets.push(...(item.sets || []).map(set => ({
+    exercises.get(key).sets.push(...bestSets(item.sets || []).map(set => ({
       reps:Number(set.reps) || 0, weight:Number(set.weight) || 0, pounds:convertWeight(Number(set.weight) || 0, from, 'lbs')
     })));
   });
@@ -186,8 +187,10 @@ function exerciseRecord(name) {
 }
 
 // The goal (see Progress) that a set of this weight reaches for the first time, or null: one for this exercise, met by this set
-// and by nothing before it, in this workout or any saved one. Call it before the set is added.
-function goalReachedBy(exercise, weight) {
+// and by nothing before it, in this workout or any saved one. Call it before the set is added. A warm-up or a drop set reaches
+// nothing (setTypeOf, common.js): `type` is the kind of the set about to be logged.
+function goalReachedBy(exercise, weight, type = '') {
+  if (type === 'warmup' || type === 'drop') return null;
   const key = exerciseKey(exercise.name);
   const stored = readLocalState('goals');
   const goal = stored && stored.value && typeof stored.value === 'object' ? stored.value[key] : null;
@@ -195,7 +198,7 @@ function goalReachedBy(exercise, weight) {
   const unit = goal.unit || 'lbs', from = recordUnit(activeSession);
   if (!(convertWeight(Number(weight) || 0, from, unit) >= goal.target)) return null;
   const earlier = [convertWeight(personalBests[key]?.weight || 0, 'lbs', unit)];
-  activeSession.exercises.filter(item => exerciseKey(item.name) === key).forEach(item => (item.sets || []).forEach(set => {
+  activeSession.exercises.filter(item => exerciseKey(item.name) === key).forEach(item => bestSets(item.sets).forEach(set => {
     earlier.push(convertWeight(Number(set.weight) || 0, from, unit));
   }));
   return Math.max(...earlier) < goal.target ? goal : null;

@@ -35,16 +35,18 @@ function summaryExercises(shown, last) {
   return shown.exercises.filter(item => item.sets && item.sets.length).map(item => {
     const timed = isTimed(item);
     const lastSets = last[exerciseKey(item.name)]?.sets;
-    const top = topSet(item.sets);
-    return { name:String(item.name).trim(), sets:item.sets.length, top:describeTopSet(top, timed, unit),
-      change:topSetChange(top, lastSets && lastSets.length ? topSet(lastSets) : null, timed, unit) };
+    // The top set and the sets counted leave warm-ups out (and drop sets, for the top); with nothing else logged, whatever there is.
+    const top = topSet(bestSets(item.sets).length ? bestSets(item.sets) : item.sets);
+    const lastBest = lastSets && lastSets.length ? (bestSets(lastSets).length ? bestSets(lastSets) : lastSets) : null;
+    return { name:String(item.name).trim(), sets:workSets(item.sets).length || item.sets.length, top:describeTopSet(top, timed, unit),
+      change:topSetChange(top, lastBest ? topSet(lastBest) : null, timed, unit) };
   });
 }
 
 // Weight × reps of every set with a weight; a hold's seconds are not reps, so timed exercises are left out.
 function workoutVolume(shown) {
   const setVolume = set => (Number(set.weight) || 0) * (Number(set.reps) || 0);
-  return shown.exercises.filter(item => !isTimed(item)).reduce((total, item) => total + (item.sets || []).reduce((sum, set) => sum + setVolume(set), 0), 0);
+  return shown.exercises.filter(item => !isTimed(item)).reduce((total, item) => total + workSets(item.sets).reduce((sum, set) => sum + setVolume(set), 0), 0);
 }
 
 // "6% more volume than last time (Oct 1)", or '' with nothing to compare (`before` is { volume, date }).
@@ -67,7 +69,7 @@ function goalsReached(workout, bests) {
     if (!goal || !(goal.target > 0)) return;
     const unit = goal.unit || 'lbs';
     const done = workout.exercises.filter(item => exerciseKey(item.name) === key);
-    const lifted = Math.max(0, ...done.flatMap(item => (item.sets || []).map(set => convertWeight(Number(set.weight) || 0, from, unit))));
+    const lifted = Math.max(0, ...done.flatMap(item => bestSets(item.sets).map(set => convertWeight(Number(set.weight) || 0, from, unit))));
     const had = convertWeight(bests[key]?.weight || 0, 'lbs', unit);
     if (lifted >= goal.target && had < goal.target) reached.push(`${String(done[0].name).trim()}: ${formatWeight(goal.target)} ${unit}, goal reached`);
   });

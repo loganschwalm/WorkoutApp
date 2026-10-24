@@ -57,7 +57,8 @@ def spreadsheet_text(value):
 
 def workouts_csv(workouts, zone):
     """One row per logged set, oldest first, for a spreadsheet. A skipped exercise has no rows, and one saved without
-    sets (from the workout form) has one row of its weight and reps. A timed exercise's count goes under Seconds. A cardio
+    sets (from the workout form) has one row of its weight and reps. A set that is not a normal one says its kind in the last column,
+    Type. A timed exercise's count goes under Seconds. A cardio
     session is one row: its time under Seconds, then its distance (in the unit it was entered in), calories, average heart
     rate and floors, then what the machine was set to, where it has them."""
     out = io.StringIO()
@@ -65,7 +66,7 @@ def workouts_csv(workouts, zone):
     settings = {'incline': 'Incline (%)', 'resistance': 'Resistance level', 'ramp': 'Incline level', 'cadence': 'Cadence (rpm)', 'damper': 'Damper',
                 'strokeRate': 'Stroke rate (spm)', 'level': 'Level'}
     writer.writerow(['Date', 'Workout', 'Exercise', 'Set', 'Weight', 'Unit', 'Reps', 'Seconds', 'Distance', 'Distance unit', 'Calories',
-                     'Average heart rate', 'Floors', *settings.values()])
+                     'Average heart rate', 'Floors', *settings.values(), 'Type'])
     for workout in workouts:
         date = local_date(workout['createdAt'], zone)
         unit = workout.get('unit') or 'lbs'
@@ -75,7 +76,7 @@ def workouts_csv(workouts, zone):
             name = spreadsheet_text(workout['name'])
             writer.writerow([date, name, name, '', '', '', '', workout.get('duration', ''), given('distance'),
                              cardio.get('distanceUnit', '') if cardio.get('distance') is not None else '', given('calories'), given('heartRate'),
-                             given('floors'), *(given(field) for field in settings)])
+                             given('floors'), *(given(field) for field in settings), ''])
             continue
         for exercise in workout.get('exercises') or []:
             sets = exercise.get('sets')
@@ -86,7 +87,7 @@ def workouts_csv(workouts, zone):
                 count = '' if count is None else count
                 writer.writerow([date, spreadsheet_text(workout['name']), spreadsheet_text(exercise.get('name') or ''), number,
                                  '' if weight is None else weight, unit, '' if timed else count, count if timed else '', '', '', '', '', '',
-                                 *('' for _ in settings)])
+                                 *('' for _ in settings), logged.get('type') or ''])
     # A byte-order mark, or Excel reads the file in its own code page and mangles anything beyond plain English.
     return '﻿' + out.getvalue()
 

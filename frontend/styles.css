@@ -716,6 +716,14 @@ body.training .splash { display:none; }
 .effort-choices button { min-width:44px; padding:8px 10px; }
 .effort-choices button[aria-pressed="true"] { color:var(--on-accent); background:var(--accent); }
 .set-effort { display:block; color:var(--muted); font-size:.75rem; font-weight:400; }
+/* The kind of the next set: chips under the entry fields. In a list of logged sets, each set's kind is a row of its own. */
+.set-type-choices { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:10px; color:var(--muted); font-size:.85rem; }
+.set-type-choices[hidden] { display:none; }
+.set-type-choices span { flex-basis:100%; }
+.set-type-choices button { flex:1; min-width:44px; padding:8px 6px; font-size:.85rem; }
+.set-type-choices button[aria-pressed="true"] { color:var(--on-accent); background:var(--accent); }
+.set-kind { grid-column:1 / -1; display:flex; align-items:center; gap:8px; margin:0; color:var(--muted); font-size:.8rem; font-weight:700; }
+.set-kind select { flex:1; max-width:200px; }
 .template-exercise-row .template-superset { grid-column:1 / -1; margin:0; }
 /* Every session of one exercise, on Progress. */
 .session-list { display:grid; gap:8px; margin:14px 0 0; padding:0; list-style:none; }

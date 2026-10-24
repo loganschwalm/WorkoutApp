@@ -18,10 +18,10 @@ function weeksAfter(monday, weeks) {
   return addDays(new Date(monday), 7 * weeks).getTime();
 }
 
-// The sets an exercise of a saved workout had: those logged, none if it was skipped, and one for an exercise saved by the
+// The sets an exercise of a saved workout had: those logged (warm-ups apart), none if it was skipped, and one for an exercise saved by the
 // workout form, whose weight and reps are its one set.
 function setCount(item) {
-  return Array.isArray(item.sets) ? item.sets.length : 1;
+  return Array.isArray(item.sets) ? workSets(item.sets).length : 1;
 }
 
 // Sets per muscle in the workouts from one time up to another, and the exercises done then that have no muscle to count for.

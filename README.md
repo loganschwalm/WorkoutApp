@@ -51,6 +51,9 @@ library, with SQLite for storage, so there is no build step, no package manager 
   on a bench, and can open itself for each rest if you choose.
 - Swap an exercise when the equipment is taken, add one mid-workout, put the exercises in another order (or send one to the end),
   superset two, or hold a timed one like a plank.
+- Tag a set as a warm-up, a drop set, to failure or AMRAP, with the chips under the weight and reps (or change it later, even in a
+  saved workout). Warm-ups and drop sets stay out of your records, estimated one-rep maxes and "go heavier" prompts, and warm-ups
+  out of your volume and sets per muscle; a program's warm-up and + sets are tagged for you.
 - Correct or undo a set (Fix last set is in the rest panel, for a slip at the end of a set), keep notes per workout or per exercise,
   and rate how many reps you had left.
 - Same as last set logs the previous set again in one tap, and How to do it, in an exercise's ⋯ menu, gives a few

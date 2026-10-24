@@ -5,6 +5,9 @@
 let exerciseNotes = loadExerciseNotes();
 // How many reps the next set had left, when that is asked (Settings); null until one of the buttons is tapped.
 let effortChoice = null;
+// The kind of the next set, chosen with the chips under the entry fields: null follows the plan (a program's warm-up set, its + set),
+// '' is a normal set, and otherwise the type chosen. Taken when the set is logged, and given back to the plan after it.
+let setTypeChoice = null;
 
 function loadExerciseNotes() {
   const stored = readLocalState('exerciseNotes');
@@ -309,10 +312,11 @@ function toggleSuperset() {
 // reps left means the weight is still enough. A program says this in its own way.
 function progressionFor(exercise, previous) {
   if (!previous || isTimed(exercise) || (Array.isArray(exercise.plan) && exercise.plan.length) || exercise.sets.length) return null;
-  const top = Math.max(0, ...previous.sets.map(set => Number(set.weight) || 0));
+  const sets = bestSets(previous.sets);
+  const top = Math.max(0, ...sets.map(set => Number(set.weight) || 0));
   const target = Number(exercise.reps);
   if (!(top > 0) || !(target >= 1)) return null;
-  const atTop = previous.sets.filter(set => (Number(set.weight) || 0) === top);
+  const atTop = sets.filter(set => (Number(set.weight) || 0) === top);
   const needed = Math.max(target, Number(atTop[0].reps) || 0);
   if (!atTop.every(set => Number(set.reps) >= needed) || atTop.some(set => set.rir === 0)) return null;
   const step = gymEquipment().step;
@@ -328,10 +332,11 @@ function progressionFor(exercise, previous) {
 function templateProgression(name, count, top) {
   const previous = lastTime(name);
   if (!previous || !previous.sets.length) return null;
-  const heaviest = Math.max(0, ...previous.sets.map(set => Number(set.weight) || 0));
+  const sets = bestSets(previous.sets);
+  const heaviest = Math.max(0, ...sets.map(set => Number(set.weight) || 0));
   if (!(heaviest > 0)) return null;
   const from = prefillWeight(heaviest, previous.converted);
-  const atHeaviest = previous.sets.filter(set => (Number(set.weight) || 0) === heaviest);
+  const atHeaviest = sets.filter(set => (Number(set.weight) || 0) === heaviest);
   const up = atHeaviest.length >= count && atHeaviest.every(set => Number(set.reps) >= top);
   const step = gymEquipment().step;
   return { from, up, top, weight:up ? Math.round((Math.round(from / step) * step + step) * 100) / 100 : from };
@@ -423,6 +428,19 @@ function effortAsked(exercise) {
   return getWorkoutSettings().trackEffort !== false && !isTimed(exercise);
 }
 
+// The kind of set the next one is: the chip chosen, else the one the program planned for it, else normal ('').
+function currentSetType(exercise) {
+  if (setTypeChoice !== null) return setTypeChoice;
+  const planned = Array.isArray(exercise.plan) ? exercise.plan[(exercise.sets || []).length] : null;
+  return planned && planned.warmup ? 'warmup' : planned && planned.amrap ? 'amrap' : '';
+}
+
+function renderSetType(exercise) {
+  $('setTypeChoices').hidden = isTimed(exercise);
+  const chosen = currentSetType(exercise);
+  $('setTypeChoices').querySelectorAll('[data-set-type]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.setType === chosen)));
+}
+
 function renderEffort(exercise) {
   $('effortChoices').hidden = !effortAsked(exercise);
   $('effortChoices').querySelectorAll('[data-effort]')
@@ -459,6 +477,15 @@ $('lastToggle').onclick = () => {
 $('progressionUse').onclick = () => {
   $('activeWeight').value = $('progressionUse').dataset.weight;
   $('activeWeight').dispatchEvent(new Event('input', { bubbles:true }));
+};
+$('setTypeChoices').onclick = e => {
+  const button = e.target.closest('[data-set-type]');
+  if (!button || !activeSession) return;
+  const exercise = activeSession.exercises[activeSession.currentIndex];
+  // Tapping the one already chosen takes it back: a normal set.
+  setTypeChoice = currentSetType(exercise) === button.dataset.setType ? '' : button.dataset.setType;
+  renderSetType(exercise);
+  renderReach();
 };
 $('effortChoices').onclick = e => {
   const button = e.target.closest('[data-effort]');

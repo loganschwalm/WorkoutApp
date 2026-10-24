@@ -92,7 +92,7 @@ function repMaxesOf(workouts, key) {
   const best = new Map();
   [...workouts].sort((a, b) => a.createdAt - b.createdAt).forEach(workout => (workout.exercises || []).forEach(item => {
     if (exerciseKey(item.name ?? '') !== key || isTimed(item)) return;
-    (item.sets || [{ weight:item.weight, reps:item.reps }]).forEach(set => {
+    bestSets(item.sets || [{ weight:item.weight, reps:item.reps }]).forEach(set => {
       const weight = Number(set.weight) || 0, reps = Number(set.reps) || 0;
       if (!(weight > 0)) return;
       repMaxTargets.forEach(target => {
@@ -146,4 +146,4 @@ function renderExerciseCard() {
       `<span><span class="record-label">Try</span> ${escapeHTML(`a week at ${formatWeight(stall.deload)} ${unit}, 10% off last time's ${formatWeight(stall.heaviest)}`)}</span>`]));
   }
   $('exerciseFacts').innerHTML = tiles.join('') || '<li class="empty">Nothing is logged for it yet.</li>';
-}
+}

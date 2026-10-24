@@ -1944,6 +1944,7 @@ def run_export(t, check, request):
                 'exercises': [t.ex('Bench Press', 80, 5, [(5, 80), (5, 82.5)]),
                               {'name': 'Plank', 'weight': '', 'reps': '60', 'timed': True, 'sets': [{'weight': '', 'reps': 45}]},
                               t.ex('Dips', 0, 10, [])]}
+    finished['exercises'][0]['sets'][1]['type'] = 'drop'
     formed = {'name': 'Form Workout', 'notes': '', 'createdAt': utc_ms(2026, 3, 12, 12), 'exercises': [{'name': 'Squat', 'weight': '100', 'reps': '5'}]}
     for workout in (formed, finished):
         t.api('POST', '/api/workouts', workout, source)
@@ -1984,10 +1985,11 @@ def run_export(t, check, request):
     rows = list(csv.reader(io.StringIO(text.lstrip('﻿'))))
     check('with a header row', rows[:1] == [['Date', 'Workout', 'Exercise', 'Set', 'Weight', 'Unit', 'Reps', 'Seconds', 'Distance', 'Distance unit', 'Calories',
                                          'Average heart rate', 'Floors', 'Incline (%)', 'Resistance level', 'Incline level', 'Cadence (rpm)',
-                                         'Damper', 'Stroke rate (spm)', 'Level']], rows[:1])
-    blank = [''] * 12
+                                         'Damper', 'Stroke rate (spm)', 'Level', 'Type']], rows[:1])
+    blank = [''] * 13
     check('one row per logged set, in the time zone asked for', ["2026-03-09", "'=SUM(A1) Push", 'Bench Press', '1', '80', 'kg', '5', ''] + blank in rows
-          and ["2026-03-09", "'=SUM(A1) Push", 'Bench Press', '2', '82.5', 'kg', '5', ''] + blank in rows, rows)
+          and ["2026-03-09", "'=SUM(A1) Push", 'Bench Press', '2', '82.5', 'kg', '5', ''] + blank[:-1] + ['drop'] in rows, rows)
+    check('and a set of a kind says it in the last column, under Type', sum(1 for row in rows[1:] if row[-1] == 'drop') == 1 and sum(1 for row in rows[1:] if row[-1]) == 1, rows)
     check('a timed set under Seconds', ["2026-03-09", "'=SUM(A1) Push", 'Plank', '1', '', 'kg', '', '45'] + blank in rows, rows)
     check('no rows for a skipped exercise', not any(row[2] == 'Dips' for row in rows[1:]), rows)
     check('an exercise saved without sets as one row', ['2026-03-12', 'Form Workout', 'Squat', '', '100', 'lbs', '5', ''] + blank in rows, rows)
@@ -2073,9 +2075,9 @@ def run_export(t, check, request):
     status, _, body = request('GET', '/api/export.csv?offset=-300', token=runner)
     rows = list(csv.reader(io.StringIO((body.decode('utf-8') if isinstance(body, bytes) else '').lstrip('﻿'))))
     check('a session is one row: its time under Seconds, then its distance and unit, calories and heart rate',
-          ['2026-04-01', 'Run', 'Run', '', '', '', '', '1680', '3.1', 'mi', '310', '152', ''] + [''] * 7 in rows, rows)
+          ['2026-04-01', 'Run', 'Run', '', '', '', '', '1680', '3.1', 'mi', '310', '152', ''] + [''] * 8 in rows, rows)
     check('and floors and the level for the stair climber, with no distance unit where there is no distance',
-          ['2026-04-03', 'Stair climber', 'Stair climber', '', '', '', '', '900', '', '', '', '', '60', '', '', '', '', '', '', '8'] in rows, rows)
+          ['2026-04-03', 'Stair climber', 'Stair climber', '', '', '', '', '900', '', '', '', '', '60', '', '', '', '', '', '', '8', ''] in rows, rows)
     _, _, export = request('GET', '/api/export', token=runner)
     kept = {w['name']: w for w in export.get('workouts', [])} if isinstance(export, dict) else {}
     check('the JSON export keeps each session as it was saved', kept.get('Run', {}).get('cardio') == run['cardio']

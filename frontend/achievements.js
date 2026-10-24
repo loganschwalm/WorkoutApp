@@ -204,10 +204,10 @@ function achievementsOf(sessions, options = {}) {
         if (isTimed(item)) return;
         const lift = plateLiftOf(key);
         sets.forEach(set => {
-          const weight = Number(set.weight) || 0, reps = Number(set.reps) || 0;
-          if (!(weight > 0) || reps < 1) return;
+          const weight = Number(set.weight) || 0, reps = Number(set.reps) || 0, type = setTypeOf(set);
+          if (!(weight > 0) || reps < 1 || type === 'warmup') return;
           metrics.volume += convertWeight(weight, from, context.unit) * reps;
-          if (lift) metrics[lift] = Math.max(metrics[lift], platesIn(weight, from));
+          if (lift && type !== 'drop') metrics[lift] = Math.max(metrics[lift], platesIn(weight, from));
         });
       });
       metrics.exercises = exercises.size;
@@ -363,11 +363,11 @@ function weekRecapOf(sessions, monday, options = {}) {
   const latest = new Map();
   [...records].reverse().forEach(record => { const name = record.line.split(':')[0]; if (!latest.has(name)) latest.set(name, record.line); });
   const volumeOf = session => (session.exercises || []).filter(item => !isTimed(item)).reduce((total, item) =>
-    total + (item.sets || [{ weight:item.weight, reps:item.reps }]).reduce((sum, set) => {
+    total + workSets(item.sets || [{ weight:item.weight, reps:item.reps }]).reduce((sum, set) => {
       const weight = Number(set.weight) || 0, reps = Number(set.reps) || 0;
       return weight > 0 && reps >= 1 ? sum + convertWeight(weight, recordUnit(session), context.unit) * reps : sum;
     }, 0), 0);
-  const setsOf = session => isCardio(session) ? 0 : (session.exercises || []).reduce((total, item) => total + (item.sets ? item.sets.length : 1), 0);
+  const setsOf = session => isCardio(session) ? 0 : (session.exercises || []).reduce((total, item) => total + (item.sets ? workSets(item.sets).length : 1), 0);
   const distanceOf = session => {
     const distance = Number(session.cardio && session.cardio.distance);
     return isCardio(session) && distance > 0 && activityOf(session).distance === 'road' ? convertDistance(distance, enteredDistanceUnit(session), context.distanceUnit) : 0;

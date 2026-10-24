@@ -536,6 +536,81 @@ def run(t):
           and cdp.ev("document.activeElement.dataset.set + document.activeElement.dataset.field") == '0reps')
     t.end_workout()
 
+    # ------------------------------------------------------------------ Y kinds of set
+    print('Y   warm-up, drop, to failure and AMRAP sets')
+    open_tracker()
+    pure = cdp.ev("""(() => {
+      const set = (weight, reps, type) => ({ weight, reps, ...(type ? { type } : {}) });
+      const workout = { unit: 'lbs', exercises: [{ name: 'Bench Press', sets: [set(95, 10, 'warmup'), set(185, 5), set(160, 12, 'drop'), set(135, 8, 'failure'), set(100, 20, 'amrap')] }] };
+      const plain = { unit: 'lbs', exercises: [{ name: 'Bench Press', sets: [set(95, 10), set(185, 5), set(160, 12), set(135, 8), set(100, 20)] }] };
+      const bests = bestsOf([workout])['bench press'], every = bestsOf([plain])['bench press'];
+      const before = { 'bench press': { weight: 190, oneRepMax: 200, reps: 0, seconds: 0 } };
+      const plan = [{ warmup: true }, { amrap: true }, {}];
+      return { bests, every, tagged: newRecords(workout, before), untagged: newRecords(plain, before),
+        best: bestSets(workout.exercises[0].sets).length, work: workSets(workout.exercises[0].sets).length,
+        words: describeLoggedSets(workout.exercises[0].sets), unknown: setTypeOf({ type: 'giant' }), none: setTypeOf({}),
+        planned: [0, 1, 2].map(logged => currentSetType({ plan, sets: Array(logged).fill({}) })) };
+    })()""")
+    check('records leave out warm-up and drop sets: the heaviest is 185, and the best estimate is the 185 x 5 rather than the drop set’s 160 x 12',
+          pure['bests']['weight'] == 185 and pure['bests']['oneRepMax'] == 215.83 and pure['every']['oneRepMax'] == 224, pure)
+    check('a workout’s new record is worked out from its working sets: the 185 x 5, not the drop set',
+          len(pure['tagged']) == 1 and '185 lbs × 5' in pure['tagged'][0] and '160' not in pure['tagged'][0], pure['tagged'])
+    check('with the same sets untagged, the drop set sets the record', len(pure['untagged']) == 1 and '160 lbs × 12' in pure['untagged'][0], pure['untagged'])
+    check('three of the five sets are measured (to failure and AMRAP are), and four are counted (a warm-up is not)', pure['best'] == 3 and pure['work'] == 4, [pure['best'], pure['work']])
+    check('sets are written with their kind, and only when they have one',
+          pure['words'] == '95 lbs × 10 (warm-up) · 185 lbs × 5 · 160 lbs × 12 (drop set) · 135 lbs × 8 (to failure) · 100 lbs × 20 (AMRAP)', pure['words'])
+    check('a kind this version does not know is a normal set', pure['unknown'] == '' and pure['none'] == '')
+    check('a program’s planned warm-up and + set are those kinds unless another is chosen', pure['planned'] == ['warmup', 'amrap', ''], pure['planned'])
+
+    def chips(attribute='aria-pressed'):
+        return cdp.ev(f"[...document.querySelectorAll('#setTypeChoices button')].map(button => button.getAttribute('{attribute}'))")
+
+    def kinds():
+        return cdp.ev("activeSession.exercises[0].sets.map(set => set.type || '')")
+
+    def change_kind(index, value):
+        cdp.ev(f"(select => {{ select.value = '{value}'; select.dispatchEvent(new Event('change', {{ bubbles: true }})); }})(document.querySelector('#completedSets .set-type-edit[data-set=\"{index}\"]'))")
+        cdp.pause(0.2)
+
+    start(0)
+    cdp.pause(0.4)
+    check('the chips for the next set are there, none chosen', visible('setTypeChoices') and chips() == ['false'] * 4
+          and cdp.ev("[...document.querySelectorAll('#setTypeChoices button')].map(button => button.textContent)") == ['Warm-up', 'Drop set', 'To failure', 'AMRAP'])
+    click_chip = "document.querySelector('#setTypeChoices [data-set-type=%s]').click()"
+    cdp.ev(click_chip % 'warmup')
+    check('tapping one chooses it', chips() == ['true', 'false', 'false', 'false'], chips())
+    cdp.ev(click_chip % 'warmup')
+    check('and again takes it back', chips() == ['false'] * 4, chips())
+    cdp.ev(click_chip % 'warmup')
+    log(45, 10)
+    log(135, 5)
+    cdp.ev(click_chip % 'drop')
+    log(115, 8)
+    check('a set is logged as the kind chosen, and the chip is given back after it', kinds() == ['warmup', '', 'drop'] and chips() == ['false'] * 4, cdp.ev('activeSession.exercises[0].sets'))
+    cdp.ev("document.getElementById('completedSetsToggle').open = true")
+    check('the completed sets say each one’s kind, to change', cdp.ev("[...document.querySelectorAll('#completedSets .set-type-edit')].map(select => select.value)") == ['warmup', '', 'drop'])
+    cdp.ev("document.getElementById('repeatSetBtn').click()")
+    cdp.pause(0.2)
+    check('Same as last set repeats the kind, and a rest follows', kinds() == ['warmup', '', 'drop', 'drop'] and visible('restPanel'), cdp.ev('activeSession.exercises[0].sets'))
+    change_kind(1, 'failure')
+    check('changing one is kept', kinds() == ['warmup', 'failure', 'drop', 'drop'], kinds())
+    change_kind(2, '')
+    check('and a normal set has none written', cdp.ev("'type' in activeSession.exercises[0].sets[2]") is False and kinds() == ['warmup', 'failure', '', 'drop'], kinds())
+    cdp.ev("document.getElementById('nextExerciseBtn').click()")
+    t.finish_all()
+
+    def saved_kinds():
+        found = [w for w in t.workouts() if w['exercises'][0].get('sets') and any(s.get('type') for s in w['exercises'][0]['sets'])]
+        return [[s.get('type', '') for s in w['exercises'][0]['sets']] for w in found]
+
+    check('the kinds are saved with the workout', wait_for(lambda: saved_kinds() == [['warmup', 'failure', '', 'drop']]), saved_kinds())
+    check('the summary counts the working sets and takes its top set from them', '3 sets · top 135 lbs × 5' in text('summaryExerciseList'), text('summaryExerciseList'))
+    open_tracker()
+    start(0)
+    cdp.pause(0.4)
+    check('the next workout starts from last time’s first working set, not its warm-up', field('activeWeight') == '135', field('activeWeight'))
+    t.end_workout()
+
     print('V   the server checks the new fields')
 
     def post(body):
@@ -551,6 +626,8 @@ def run(t):
     check('nor none', post(with_exercise(rest=0))[0] == 400)
     check('nor more than an hour', post(with_exercise(rest=3601))[0] == 400)
     check('timed must be true or false', post(with_exercise(timed='yes')) == (400, 'exercises[0].timed must be true or false.'))
+    check('a set’s type must be one of the kinds, or left out', post(with_exercise(sets=[{'reps': 5, 'weight': 100, 'type': 'giant'}])) == (400, 'exercises[0].sets[0].type must be one of warmup, drop, failure, amrap, or left out.')
+          and post(with_exercise(sets=[{'reps': 5, 'weight': 100, 'type': 'drop'}, {'reps': 5, 'weight': 100}], timed=False))[0] in (200, 201))
     check('a duration must be seconds', post({**base, 'duration': -5}) == (400, 'duration must be a number of seconds.'))
     status, _, reply = t.request('PUT', '/api/state', json.dumps({'templates': [{'name': 'T', 'exercises': [{'name': 'a', 'reps': '5', 'rest': 'x'}]}]}).encode(),
                                  {'Content-Type': 'application/json'}, token=token)

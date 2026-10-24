@@ -60,6 +60,10 @@ def listed(value, field, limit):
     return value
 
 
+# The kinds of set a logged set can be (set.type; a normal set has none): see setTypes in frontend/common.js.
+SET_TYPES = ('warmup', 'drop', 'failure', 'amrap')
+
+
 def validate_exercises(exercises, field='exercises'):
     for index, exercise in enumerate(listed(exercises, field, 1000)):
         where = f'{field}[{index}]'
@@ -84,6 +88,9 @@ def validate_exercises(exercises, field='exercises'):
                 # How many more reps the set had in it, when that was recorded: 0 (none) to 10.
                 if logged.get('rir') is not None and not (is_number(logged['rir']) and 0 <= logged['rir'] <= 10):
                     raise BadRequest(f'{where}.sets[{number}].rir must be a number from 0 to 10.')
+                # What kind of set it was, when it was not a normal one; leaving it out is a normal set.
+                if logged.get('type') is not None and logged['type'] not in SET_TYPES:
+                    raise BadRequest(f'{where}.sets[{number}].type must be one of {", ".join(SET_TYPES)}, or left out.')
 
 
 def weight_unit(value, field='unit'):

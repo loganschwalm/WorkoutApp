@@ -156,6 +156,7 @@ function renderActiveWorkout() {
   renderProgression(exercise, previous);
   renderPastSessions(exercise);
   renderEffort(exercise);
+  renderSetType(exercise);
   $('completedSets').innerHTML = completedSetsHtml(exercise, timed);
   $('completedSetsToggle').hidden = !exercise.sets.length;
   // The list is folded away, so its label says what was just logged: "Completed sets (3) · last 145 lbs × 6".
@@ -180,6 +181,7 @@ function closeExercisePanels() {
 function goToExercise(index) {
   closeExercisePanels();
   effortChoice = null;
+  setTypeChoice = null;
   activeSession.currentIndex = index;
   stopRestTimer();
   restRemaining = restDuration();
@@ -232,6 +234,7 @@ function startWorkout(stored) {
   const replacing = `Replace your in-progress “${activeSession?.name}” workout? Sets you have logged so far will be lost.`;
   if (activeSession && getWorkoutSettings().confirmEnd && !confirm(replacing)) return;
   closeExercisePanels();
+  setTypeChoice = null;
   stopRestTimer();
   $('restPanel').hidden = true;
   $('workoutSummary').hidden = true;

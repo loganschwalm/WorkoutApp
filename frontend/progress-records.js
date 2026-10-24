@@ -49,7 +49,7 @@ function recordsOf(workouts) {
   const records = new Map();
   [...workouts].sort((a, b) => a.createdAt - b.createdAt).forEach(workout => workout.exercises.forEach(item => {
     // The workout form saves an exercise without sets: its weight and reps are its one set.
-    const sets = item.sets || [{ weight:item.weight, reps:item.reps }];
+    const sets = bestSets(item.sets || [{ weight:item.weight, reps:item.reps }]);
     const key = exerciseKey(item.name);
     if (!sets.length || !key) return;
     const record = records.get(key) || { key, heaviest:null, oneRepMax:null, reps:null, hold:null };
@@ -235,4 +235,4 @@ $('goalList').onclick = event => {
   saveGoals();
   renderGoals();
   showGoalFeedback(`Goal removed for ${name}.`);
-};
+};

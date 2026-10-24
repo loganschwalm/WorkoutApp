@@ -35,7 +35,7 @@ function exerciseRow(item, i) {
     + `<div class="set-field"><input class="set-edit" type="number" inputmode="numeric" min="1" step="1" value="${escapeHTML(set.reps)}"`
     + ` data-exercise="${i}" data-set="${index}" data-field="reps" aria-label="${label(index + 1)} ${count.label}"><span>${count.unit}</span></div>`
     + (item.sets.length > 1 ? `<button class="remove" type="button" data-exercise="${i}" data-remove-set="${index}" aria-label="Remove ${label(index + 1)}" title="Remove">&times;</button>` : '<span></span>')
-    + '</li>').join('');
+    + (isTimed(item) ? '' : setTypeSelectHtml(set, `data-exercise="${i}" data-set="${index}"`, label(index + 1))) + '</li>').join('');
   return `<li class="exercise has-sets">${name}<ol class="set-list">${sets}</ol>`
     + `<button class="secondary" type="button" data-exercise="${i}" data-add-set>Add set</button>${remove('Remove exercise')}</li>`;
 }
@@ -109,6 +109,10 @@ $('exerciseList').onchange = e => {
   const field = e.target.dataset.field;
   if (!set || !field) return;
   const value = e.target.value;
+  if (field === 'type') {
+    applySetType(set, value);
+    return;
+  }
   const problem = setChangeProblem(field, value, isTimed(item));
   if (problem) {
     showFeedback(problem);

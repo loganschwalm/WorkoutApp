@@ -54,6 +54,26 @@ own workouts, templates, and settings.
   its reps to the last set's, as finishing a workout does, so records, last time and Progress follow the fix.
   Cancel leaves the workout as it was.
 - Remove exercises before saving.
+- Each logged set can say what kind it is (`set.type`: `warmup`, `drop`, `failure` or `amrap`; a normal set has none written). The kinds
+  are the one list `setTypes` in `common.js` (and `SET_TYPES` in `validation.py`, which refuses any other type). They are chosen with
+  the Set type chips under the weight and reps (`setTypeChoice` in `training-tools.js`): tapping a chip chooses it for the next set,
+  tapping it again takes it back, and the choice is given back after the set. With none chosen a program's planned warm-up set is a
+  warm-up and its + set is AMRAP (`currentSetType`). Same as last set repeats the kind of the set it repeats. Each logged set has its
+  kind in a row of its own in the Completed sets list, to change, and the same row is in the saved-workout editor, so a set tagged
+  late or wrongly is fixed (`setTypeSelectHtml`, `applySetType` in `set-logging.js`); a timed exercise has no kinds. The kind is
+  written into History and the summaries after the set's weight: "40 lbs × 5 (warm-up) · 185 lbs × 5, 5 · 160 lbs × 8 (drop set)".
+  What a kind does, in two rules that every place reading sets goes through (`bestSets` and `workSets`, `common.js`):
+  - **What a set is measured by** leaves out warm-ups and drop sets: the heaviest weight, estimated one-rep max and best reps
+    (`bestsOf`, `newRecords`, so the record fireworks, the summary's records and the achievements' record count follow), Progress's
+    charts and records and its 1, 3, 5, 8 and 10 rep weights, stalls, Go heavier and a template's progression, a goal reached, the
+    plate tiers, the summary's top set, and Within reach (which is quiet while a warm-up or drop set is chosen). An exercise's own
+    weight and reps beside its sets (the heaviest set's weight and the last set's reps) are not read as results once a set has a kind
+    (`ownCount`), since they may be a warm-up's or a drop set's.
+  - **What is counted** leaves out warm-ups only: volume (the chart, the summary, Last week, the Weight lifted achievement), the sets
+    in the summary and Last week, and sets per muscle. A drop set is real work, so it counts.
+  To failure and AMRAP are labels: they count as any set does. Last time's first working set (not a warm-up) is what the next
+  workout's weight starts from. A set with no kind behaves as it always did, so nothing logged before this changes. Export sets as CSV
+  has a last column, Type, with the kind.
 - Add notes to custom workouts.
 - Validate exercise names, weights, reps, and dates with inline feedback.
 - Save workouts to your account, so they follow you to any browser or device.
@@ -1139,7 +1159,8 @@ Everything in your account can be saved to a file from Settings, and brought bac
   follow, your settings, your exercise notes, your goals, your bodyweight, and the muscle and equipment chosen for
   your exercises.
 - **Export sets as CSV** saves every logged set for a spreadsheet, one row each: its date, workout,
-  exercise, set number, weight, unit, and reps (or seconds, for a timed exercise). A cardio session is one row too: its
+  exercise, set number, weight, unit, and reps (or seconds, for a timed exercise), and in the last column its Type (warm-up, drop, failure
+  or amrap, empty for a normal set). A cardio session is one row too: its
   time under Seconds, then its distance and the unit it was entered in, calories, average heart rate and floors, then a
   column for each machine setting (incline, resistance level, incline level, cadence, damper, stroke rate, level), where
   it has them. Skipped exercises are

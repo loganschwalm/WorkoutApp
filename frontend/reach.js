@@ -37,7 +37,7 @@ function reachBaseFor(session) {
   history.filter(workout => !isCardio(workout)).forEach(workout => (workout.exercises || []).forEach(item => {
     const lift = plateLiftOf(item.name);
     if (!lift || isTimed(item)) return;
-    (item.sets || [{ weight:item.weight, reps:item.reps }]).forEach(set => {
+    bestSets(item.sets || [{ weight:item.weight, reps:item.reps }]).forEach(set => {
       if (Number(set.weight) > 0 && Number(set.reps) >= 1) lifts[lift].heaviest = Math.max(lifts[lift].heaviest, convertWeight(Number(set.weight), recordUnit(workout), unit));
     });
   }));
@@ -68,7 +68,7 @@ function plateReach(exercise, weight) {
   const base = reachBase && reachBase.lifts;
   if (!lift || !base) return null;
   const unit = recordUnit(activeSession);
-  const done = activeSession.exercises.filter(item => plateLiftOf(item.name) === lift && !isTimed(item)).flatMap(item => item.sets || [])
+  const done = bestSets(activeSession.exercises.filter(item => plateLiftOf(item.name) === lift && !isTimed(item)).flatMap(item => item.sets || []))
     .filter(set => Number(set.weight) > 0 && Number(set.reps) >= 1).map(set => Number(set.weight));
   const tiers = achievementFamilies.find(family => family.id === lift).tiers({}).length;
   const have = Math.max(base[lift].plates, ...done.map(set => Math.min(tiers, platesIn(set, unit))), 0);
@@ -84,12 +84,13 @@ function plateReach(exercise, weight) {
     ? { first:false, text:`${formatWeight(gap)} ${unit} from ${plural(have + 1, 'plate')} a side (${formatWeight(target)} ${unit}).` } : null;
 }
 
-// The line under the exercise, or ''. Quiet for a timed exercise, a warm-up set, and while the stall hint suggests a
+// The line under the exercise, or ''. Quiet for a timed exercise, a warm-up or drop set (planned, or chosen with the set type chips), and while the stall hint suggests a
 // lighter week, which a nudge to go heavier would argue with. A goal outranks a record, as it does when the set is logged.
 function exerciseReach(exercise) {
   if (!exercise || isTimed(exercise)) return '';
   const planned = Array.isArray(exercise.plan) ? exercise.plan[(exercise.sets || []).length] : null;
   if (planned && planned.warmup) return '';
+  if (['warmup', 'drop'].includes(currentSetType(exercise))) return '';
   if (!$('progressionHint').hidden && $('progressionHint').classList.contains('stalled')) return '';
   const typed = $('activeWeight').value.trim();
   const weight = Number(typed) || 0;
