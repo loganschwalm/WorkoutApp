@@ -52,7 +52,9 @@ own workouts, templates, and settings.
   weight and reps (or seconds), Add set for one missed at the time, and × to take one away (an exercise keeps at
   least one; Remove exercise takes the whole exercise). Saving sets each exercise's weight to its heaviest set and
   its reps to the last set's, as finishing a workout does, so records, last time and Progress follow the fix.
-  Cancel leaves the workout as it was.
+  Cancel leaves the workout as it was. The form has a date and no time, so a workout keeps the time of day it was done at: saved with its
+  date left alone, its time is exactly as it was, and moved to another day it keeps its time on that day (`workoutFormTime` in
+  `workout-form.js`); only a new workout written by hand has the middle of the day.
 - Remove exercises before saving.
 - Each logged set can say what kind it is (`set.type`: `warmup`, `drop`, `failure` or `amrap`; a normal set has none written). The kinds
   are the one list `setTypes` in `common.js` (and `SET_TYPES` in `validation.py`, which refuses any other type). They are chosen with
@@ -71,7 +73,11 @@ own workouts, templates, and settings.
     (`ownCount`), since they may be a warm-up's or a drop set's.
   - **What is counted** leaves out warm-ups only: volume (the chart, the summary, Last week, the Weight lifted achievement), the sets
     in the summary and Last week, and sets per muscle. A drop set is real work, so it counts.
-  To failure and AMRAP are labels: they count as any set does. Last time's first working set (not a warm-up) is what the next
+  To failure and AMRAP are labels: they count as any set does. A workout from a program or a template plans its sets in order
+  (`exercise.plan`), and a warm-up the lifter adds, that the plan has no place for, is not one of them: it does not use one up, so the
+  + set is still the fifth after two warm-ups and four working sets (`planSets`, `plannedDone` in `common.js`, which the planned-set
+  chips, the line under the exercise, the big view's "Set 3 of 5", the + set's reading and a program day's completion all go by). A
+  warm-up the plan does have a place for (5/3/1's own) does fill it, as logging it always has. Last time's first working set (not a warm-up) is what the next
   workout's weight starts from. A set with no kind behaves as it always did, so nothing logged before this changes. Export sets as CSV
   has a last column, Type, with the kind.
 - Add notes to custom workouts.
@@ -181,10 +187,14 @@ own workouts, templates, and settings.
   moving on to another exercise.
 - Go back to a previous exercise, or add an exercise in the middle of a workout.
 - Exercises with no logged sets count as skipped and are left out of the saved workout, so they never appear as done in History or Progress.
-- Automatically start a configurable rest timer after each set. It sits under the set entry and stays
-  on screen while you scroll, at the top of the screen or, above it, at the bottom. An exercise can have a rest of its own: the training programs rest
+- Automatically start a configurable rest timer after each set. It sits under the set entry and, while a rest runs, stays
+  on screen while you scroll, at the top of the screen or, above it, at the bottom (the `pinned` class, `pinRestPanel` in `rest-timer.js`);
+  paused, over, or waiting to be started it sits where it is in the page, so it never covers the entry once there is nothing to watch. On a
+  short phone the pinned place is where the set entry is, so a set that starts a rest moves the page up just far enough to have the entry,
+  Complete set included, above the panel (`keepEntryClearOfRest`), and never so far that the entry's top leaves the screen. An exercise can have a rest of its own: the training programs rest
   longer after a main lift than after accessories, and a template can set one for each exercise.
-  Everything else uses the default from Settings.
+  Everything else uses the default from Settings. The rest after a warm-up (a set with that kind, planned or tagged) is short, at most 45
+  seconds (`WARMUP_REST_SECONDS`, `restAfterLastSet`), whatever the exercise's rest is.
 - Pause and restart the rest timer, or give yourself 30 seconds more or less with −30s and +30s,
   running or paused. End rest is the main button of the panel; on a phone Pause rest and ··· sit beside it, and ··· opens Fix last set
   and Restart rest in a row under them (`showRestMore` in `rest-timer.js`), which closes again when one is chosen. On a wide screen all four

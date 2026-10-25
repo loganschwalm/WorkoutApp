@@ -88,7 +88,7 @@ function plateReach(exercise, weight) {
 // lighter week, which a nudge to go heavier would argue with. A goal outranks a record, as it does when the set is logged.
 function exerciseReach(exercise) {
   if (!exercise || isTimed(exercise)) return '';
-  const planned = Array.isArray(exercise.plan) ? exercise.plan[(exercise.sets || []).length] : null;
+  const planned = Array.isArray(exercise.plan) ? exercise.plan[plannedDone(exercise)] : null;
   if (planned && planned.warmup) return '';
   if (['warmup', 'drop'].includes(currentSetType(exercise))) return '';
   if (!$('progressionHint').hidden && $('progressionHint').classList.contains('stalled')) return '';

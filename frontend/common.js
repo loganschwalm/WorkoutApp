@@ -376,6 +376,23 @@ function workSets(sets) {
   return (sets || []).filter(set => setTypeOf(set) !== 'warmup');
 }
 
+// A workout from a program or a template can plan its sets (exercise.plan), done in order, and the lifter can log a warm-up the plan did
+// not ask for: that is not one of the plan's sets and does not use one up (the plan's own warm-ups, 5/3/1's, are in it, and are done by
+// logging them). planSets is the logged sets that fill the plan's places, in order; plannedDone how many places are filled.
+function planSets(exercise) {
+  const plan = Array.isArray(exercise.plan) ? exercise.plan : [];
+  const filled = [];
+  (exercise.sets || []).forEach(set => {
+    if (setTypeOf(set) === 'warmup' && !(plan[filled.length] && plan[filled.length].warmup)) return;
+    filled.push(set);
+  });
+  return filled;
+}
+
+function plannedDone(exercise) {
+  return planSets(exercise).length;
+}
+
 // What an exercise was saved with beside its sets (its weight, its reps) is the heaviest set's weight and the last set's reps, which
 // may be a warm-up's or a drop set's once sets are tagged, so it is not read as a result then.
 function ownCount(item, field) {

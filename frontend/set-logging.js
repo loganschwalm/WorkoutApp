@@ -11,7 +11,7 @@ function nextSetDefaults(exercise, previous, timed) {
   const previousFirst = previous ? { ...firstSet, weight:prefillWeight(firstSet.weight, previous.converted) } : null;
   const lastSet = sets[sets.length - 1];
   const plan = Array.isArray(exercise.plan) && exercise.plan.length ? exercise.plan : null;
-  const planned = plan ? plan[sets.length] : null;
+  const planned = plan ? plan[plannedDone(exercise)] : null;
   if (planned) {
     // A planned set with no weight (an assistance exercise) takes the set just logged, or last time's.
     const plannedWeight = planned.weight === '' || planned.weight === undefined || planned.weight === null ? null : planned.weight;
@@ -118,6 +118,7 @@ function recordSet(exercise, { weightValue, reps, type: repeatedType }) {
   setTypeChoice = null;
   const recordBefore = exerciseRecord(exercise.name);
   const goalReached = goalReachedBy(exercise, weight, type);
+  const slot = plannedDone(exercise);
   exercise.sets.push({ reps, weight, ...effort, ...(type ? { type } : {}) });
   persistActiveSession();
   renderActiveWorkout();
@@ -126,7 +127,7 @@ function recordSet(exercise, { weightValue, reps, type: repeatedType }) {
   // The fireworks go up from the button that was tapped: the big view's, when it is open over the page.
   const tapped = bigViewIsOpen() ? $('bigViewPrimary') : $('completeSetBtn');
   // A program's + set (as many reps as you can) that went past its planned reps.
-  const planned = Array.isArray(exercise.plan) ? exercise.plan[exercise.sets.length - 1] : null;
+  const planned = Array.isArray(exercise.plan) && plannedDone(exercise) > slot ? exercise.plan[slot] : null;
   const beatBy = planned && planned.amrap && !isSwappedIn(exercise) ? reps - (Number(planned.reps) || 0) : 0;
   const record = recordNow && recordNow !== recordBefore ? `New record! ${recordNow}.` : '';
   const goal = goalReached ? `Goal reached: ${goalReached.name}, ${formatWeight(goalReached.target)} ${goalReached.unit || 'lbs'}!` : '';
@@ -155,7 +156,8 @@ function restAfterSet(said = '') {
     return;
   }
   if (getWorkoutSettings().autoRest) startRestTimer();
-  else { stopRestTimer(); restRemaining = restTotal = restDuration(); updateRestTimer(); $('restPanel').hidden = false; }
+  else { stopRestTimer(); restRemaining = restTotal = restAfterLastSet(); updateRestTimer(); $('restPanel').hidden = false; }
+  keepEntryClearOfRest();
   // The round is done: rest, then the superset starts again from its first exercise with sets left.
   const first = supersetMembers(activeSession, index).length > 1 ? firstWithSetsLeft(activeSession, index) : null;
   if (first !== null && first !== index) moveWithinSuperset(first);

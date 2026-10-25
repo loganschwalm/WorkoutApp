@@ -96,9 +96,11 @@ function showExerciseJump(open) {
 // The planned sets as chips: done, the one to do now, and those to come. A set done shows what was lifted, which may not be
 // what was planned.
 function planChipsHtml(exercise, plan) {
-  const planState = index => index < exercise.sets.length ? 'done' : index === exercise.sets.length ? 'current' : 'upcoming';
+  // The sets that fill the plan's places: a warm-up the lifter added is not one of them (planSets, common.js).
+  const done = planSets(exercise);
+  const planState = index => index < done.length ? 'done' : index === done.length ? 'current' : 'upcoming';
   const chip = (set, index) => {
-    const logged = exercise.sets[index];
+    const logged = done[index];
     return logged ? formatPlannedSet({ weight:isBodyweight(logged.weight) ? '' : logged.weight, reps:logged.reps }) : formatPlannedSet(set);
   };
   return plan.map((set, index) => `<li class="${planState(index)}">${escapeHTML(chip(set, index))}</li>`).join('');

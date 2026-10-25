@@ -35,7 +35,7 @@ function bigViewState() {
   // A rest still to go (running or paused), or one that has just run out and is waiting for the set.
   const resting = !holding && restShown && restRemaining > 0;
   const over = !holding && restShown && restRemaining <= 0;
-  const finished = Boolean(plan) && sets.length >= plan.length;
+  const finished = Boolean(plan) && plannedDone(exercise) >= plan.length;
   const kind = holding || timed ? 'hold' : finished ? 'next' : 'complete';
   return { exercise, sets, plan, timed, holding, resting, over, finished, kind };
 }
@@ -66,7 +66,7 @@ function renderBigView() {
   setBigHidden('bigViewClock', !(state.holding || state.resting));
   setBigHidden('bigViewBar', !state.resting);
   if (state.resting) $('bigViewBar').style.setProperty('--rest-left', restTotal ? restRemaining / restTotal : 0);
-  const number = state.sets.length + 1;
+  const number = (state.plan ? plannedDone(state.exercise) : state.sets.length) + 1;
   setBigText('bigViewSet', state.finished ? 'All sets done'
     : `${state.resting ? 'Next: ' : ''}Set ${number}${state.plan ? ` of ${state.plan.length}` : ''}`);
   const numbers = state.finished || state.holding ? '' : bigViewNumbers(state);

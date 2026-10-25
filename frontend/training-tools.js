@@ -100,7 +100,7 @@ function showSwap(open) {
   $('swapToggle').setAttribute('aria-expanded', String(open));
   if (!open || !activeSession) return;
   const exercise = activeSession.exercises[activeSession.currentIndex];
-  const logged = exercise.sets.length;
+  const logged = Array.isArray(exercise.plan) && exercise.plan.length ? plannedDone(exercise) : exercise.sets.length;
   const planned = Array.isArray(exercise.plan) ? exercise.plan.length : 0;
   const main = Boolean(activeSession.programDay) && activeSession.currentIndex === 0 && planned > 0;
   $('swapName').value = '';
@@ -132,8 +132,8 @@ function swapExercise() {
   if (!name) { showFeedback('Enter the exercise to do instead.'); $('swapName').focus(); return; }
   const session = activeSession, index = session.currentIndex, exercise = session.exercises[index];
   if (exerciseKey(name) === exerciseKey(exercise.name)) { showSwap(false); return; }
-  const logged = exercise.sets.length;
   const plan = Array.isArray(exercise.plan) && exercise.plan.length ? exercise.plan : null;
+  const logged = plan ? plannedDone(exercise) : exercise.sets.length;
   if (plan && logged >= plan.length) { showFeedback(`Every planned set of ${exercise.name} is done. Add an exercise instead.`); return; }
   // What the workout had here before any swap, to come back to.
   const original = exercise.swappedFrom || withoutSets(exercise);
@@ -235,7 +235,7 @@ function supersetMembers(session, index) {
 // goes on (Next ends it). One swapped out is done.
 function hasSetsLeft(exercise) {
   if (exercise.swappedOut) return false;
-  return Array.isArray(exercise.plan) && exercise.plan.length ? exercise.sets.length < exercise.plan.length : true;
+  return Array.isArray(exercise.plan) && exercise.plan.length ? plannedDone(exercise) < exercise.plan.length : true;
 }
 
 // After a set, the next exercise in the round, or null when the round is done (or it is no superset).
@@ -431,7 +431,7 @@ function effortAsked(exercise) {
 // The kind of set the next one is: the chip chosen, else the one the program planned for it, else normal ('').
 function currentSetType(exercise) {
   if (setTypeChoice !== null) return setTypeChoice;
-  const planned = Array.isArray(exercise.plan) ? exercise.plan[(exercise.sets || []).length] : null;
+  const planned = Array.isArray(exercise.plan) ? exercise.plan[plannedDone(exercise)] : null;
   return planned && planned.warmup ? 'warmup' : planned && planned.amrap ? 'amrap' : '';
 }
 

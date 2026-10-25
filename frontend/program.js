@@ -193,7 +193,7 @@ function amrapResult(exercises) {
     const plan = Array.isArray(exercise.plan) ? exercise.plan : [];
     const index = plan.findIndex(set => set && set.amrap);
     if (index === -1) continue;
-    const logged = (exercise.sets || [])[index];
+    const logged = planSets(exercise)[index];
     return logged ? { weight:storedNumber(logged.weight), reps:storedNumber(logged.reps), target:storedNumber(plan[index].reps) } : null;
   }
   return null;
@@ -208,7 +208,8 @@ function missedAmrap(result) {
 function mainLiftHit(exercises) {
   const main = exercises[0];
   if (!main || isSwappedIn(main) || main.swappedOut || !Array.isArray(main.plan) || !(main.sets || []).length) return null;
-  return main.plan.every((set, index) => set.warmup || (Boolean(main.sets[index]) && storedNumber(main.sets[index].reps) >= storedNumber(set.reps)));
+  const done = planSets(main);
+  return main.plan.every((set, index) => set.warmup || (Boolean(done[index]) && storedNumber(done[index].reps) >= storedNumber(set.reps)));
 }
 
 // The next block starts once every day of this one is done. That normally happens as its last day is saved, but a
@@ -381,7 +382,7 @@ function formatPlannedSet(set) {
 function rangeAdvice(exercise, previous) {
   if (exercise.setCount) return templateAdvice(exercise);
   const top = exercise.plan[0].repsMax;
-  if (!top || exercise.sets.length || !previous || previous.sets.length < exercise.plan.length) return '';
+  if (!top || plannedDone(exercise) || !previous || previous.sets.length < exercise.plan.length) return '';
   return previous.sets.every(set => set.reps >= top) ? ` Last time every set reached ${top}, so go heavier.` : '';
 }
 
@@ -389,11 +390,12 @@ function rangeAdvice(exercise, previous) {
 // last time's performance of the exercise.
 function plannedTarget(exercise, previous) {
   const plan = exercise.plan;
-  const next = plan[exercise.sets.length];
+  const filled = plannedDone(exercise);
+  const next = plan[filled];
   const note = exercise.note ? ` ${exercise.note}.` : '';
   if (next) {
     const share = next.percent ? ` (${next.percent}% of your training max)` : '';
-    return `Set ${exercise.sets.length + 1} of ${plan.length}${next.warmup ? ', warm-up' : ''}: ${formatPlannedSet(next)}${share}.${next.amrap ? ' As many reps as you can.' : ''}${rangeAdvice(exercise, previous)}${note}`;
+    return `Set ${filled + 1} of ${plan.length}${next.warmup ? ', warm-up' : ''}: ${formatPlannedSet(next)}${share}.${next.amrap ? ' As many reps as you can.' : ''}${rangeAdvice(exercise, previous)}${note}`;
   }
   const result = amrapResult([exercise]);
   const done = plan.length === 1 ? 'The planned set is done.' : `All ${plan.length} planned sets done.`;

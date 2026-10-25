@@ -583,7 +583,9 @@ def run(t):
     check('and again takes it back', chips() == ['false'] * 4, chips())
     cdp.ev(click_chip % 'warmup')
     log(45, 10)
+    check('the rest after a warm-up is short', text('timerDisplay') in ('0:45', '0:44'), text('timerDisplay'))
     log(135, 5)
+    check('and after a working set it is the exercise’s own', cdp.ev('restRemaining') > 60, cdp.ev('restRemaining'))
     cdp.ev(click_chip % 'drop')
     log(115, 8)
     check('a set is logged as the kind chosen, and the chip is given back after it', kinds() == ['warmup', '', 'drop'] and chips() == ['false'] * 4, cdp.ev('activeSession.exercises[0].sets'))
@@ -632,6 +634,65 @@ def run(t):
     cdp.pause(0.4)
     check('the next workout starts from last time’s first working set, not its warm-up', field('activeWeight') == '135', field('activeWeight'))
     t.end_workout()
+
+    # ------------------------------------------------------------------ Z the rest panel, a plan's places, and a workout's time of day
+    print('Z   the rest panel stays off the set entry, a warm-up is not a planned set, and editing keeps the time')
+    plans = cdp.ev("""(() => {
+      const plain = [{ weight: 100, reps: 5 }, { weight: 100, reps: 5 }, { weight: 100, reps: 5, amrap: true }];
+      const own = [{ warmup: true, weight: 50, reps: 5 }, { warmup: true, weight: 75, reps: 3 }, { weight: 100, reps: 5 }, { weight: 100, reps: 5, amrap: true }];
+      const w = { type: 'warmup', weight: 40, reps: 5 }, n = { weight: 100, reps: 5 };
+      return { extra: plannedDone({ plan: plain, sets: [w, w, n, n] }), none: plannedDone({ plan: plain, sets: [n, n] }),
+        planned: plannedDone({ plan: own, sets: [{ ...w }, { ...w }, n] }), addedAmongPlanned: plannedDone({ plan: own, sets: [w, w, w, n] }),
+        beforePlanned: planSets({ plan: [{ warmup: true }, {}], sets: [w, w] }).length,
+        kind: currentSetType({ plan: plain, sets: [w, n, n] }), before: currentSetType({ plan: own, sets: [] }), unplanned: plannedDone({ sets: [w, n] }),
+        target: plannedTarget({ plan: plain, sets: [w, n, n] }, null), done: plannedTarget({ plan: plain, sets: [w, n, n, n] }, null) };
+    })()""")
+    check('a warm-up the lifter adds is not one of the plan’s sets, so it does not use one up', plans['extra'] == 2 and plans['none'] == 2, plans)
+    check('while a warm-up the plan has a place for is', plans['planned'] == 3 and plans['beforePlanned'] == 1, plans)
+    check('and one added after the plan’s own is an extra again', plans['addedAmongPlanned'] == 3, plans)
+    check('the next set is the plan’s next place: the + set is still the third, after a warm-up and two working sets', plans['kind'] == 'amrap' and plans['before'] == 'warmup', plans)
+    check('the line says which set is next by the plan’s places, and that all are done only when they are',
+          plans['target'].startswith('Set 3 of 3') and plans['done'].startswith('All 3 planned sets done'), [plans['target'], plans['done']])
+
+    cdp.send('Emulation.setDeviceMetricsOverride', width=360, height=640, deviceScaleFactor=1, mobile=True)
+    open_tracker()
+    start(0)
+    cdp.pause(0.4)
+    log(100, 5)
+    cdp.pause(1.2)
+    covered = cdp.ev("""(() => { const box = document.getElementById('completeSetBtn').getBoundingClientRect(), panel = document.getElementById('restPanel').getBoundingClientRect();
+      const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+      return { hit: hit && hit.id, buttonBottom: Math.round(box.bottom), panelTop: Math.round(panel.top), pinned: document.getElementById('restPanel').classList.contains('pinned') }; })()""")
+    check('on a short phone, a tap on Complete set after a set reaches it: the page moves up so the entry is above the pinned rest panel',
+          covered['hit'] == 'completeSetBtn' and covered['buttonBottom'] <= covered['panelTop'] and covered['pinned'] is True, covered)
+    cdp.ev("document.getElementById('restEndBtn').click()")
+    cdp.pause(0.3)
+    idle = cdp.ev("({ pinned: document.getElementById('restPanel').classList.contains('pinned'), position: getComputedStyle(document.getElementById('restPanel')).position, shown: !document.getElementById('restPanel').hidden })")
+    check('once the rest is over the panel is in the page and not pinned over it, and the big view still has its rest to say', idle == {'pinned': False, 'position': 'relative', 'shown': True}, idle)
+    cdp.ev("document.getElementById('restToggleBtn').click()")
+    check('a rest started again is pinned again', cdp.ev("document.getElementById('restPanel').classList.contains('pinned')") is True)
+    t.end_workout()
+    cdp.send('Emulation.clearDeviceMetricsOverride')
+
+    # Changing a saved workout keeps the time of day it was done at.
+    done_at = cdp.ev("new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() - 3, 18, 30, 15).getTime()")
+    saved = api('POST', '/api/workouts', {'name': 'Evening Lift', 'notes': '', 'createdAt': done_at, 'exercises': [ex('Bench Press', 135, 5, [(5, 135)])]}, token)[0]['id']
+    open_tracker()
+    cdp.ev(f"loadWorkoutIntoForm(savedWorkouts.find(workout => workout.id === {saved}), true)")
+    cdp.pause(0.3)
+    set_field('workoutName', 'Evening Lift, fixed')
+    click('saveBtn')
+    check('with the date left alone, a workout keeps its time exactly', wait_for(lambda: t.workout(saved)['name'] == 'Evening Lift, fixed') and t.workout(saved)['createdAt'] == done_at,
+          [t.workout(saved)['createdAt'], done_at])
+    open_tracker()
+    cdp.ev(f"loadWorkoutIntoForm(savedWorkouts.find(workout => workout.id === {saved}), true)")
+    cdp.pause(0.3)
+    day_before = cdp.ev("calendarDayKey(addDays(new Date(" + str(done_at) + "), -1))")
+    expected = cdp.ev("(d => new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1, 18, 30, 15).getTime())(new Date(" + str(done_at) + "))")
+    set_field('workoutDate', day_before)
+    click('saveBtn')
+    check('moved to the day before, it keeps its time on that day', wait_for(lambda: t.workout(saved)['createdAt'] == expected), [t.workout(saved)['createdAt'], expected])
+    cdp.ev("document.getElementById('clearBtn').click()")
 
     print('V   the server checks the new fields')
 

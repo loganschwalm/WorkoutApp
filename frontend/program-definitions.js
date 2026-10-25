@@ -342,7 +342,8 @@ function apartmentDeload(program, lift) {
 function reachedTopOfRange(exercises) {
   const main = exercises[0];
   if (!main || !Array.isArray(main.plan) || !(main.sets || []).length) return false;
-  return main.plan.every((set, index) => set.warmup || (Boolean(main.sets[index]) && storedNumber(main.sets[index].reps) >= storedNumber(set.repsMax || set.reps)));
+  const done = planSets(main);
+  return main.plan.every((set, index) => set.warmup || (Boolean(done[index]) && storedNumber(done[index].reps) >= storedNumber(set.repsMax || set.reps)));
 }
 
 const apartmentGym = {

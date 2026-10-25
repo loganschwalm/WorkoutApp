@@ -152,6 +152,17 @@ $('clearBtn').onclick = () => {
   render();
   $('workoutBuilderCard').hidden = true;
 };
+// The form has a date and no time. A workout being changed keeps the time of day it was done at: with the date left alone it is
+// exactly as it was, and moved to another day it keeps its time on that day. A new one has the middle of the day.
+function workoutFormTime() {
+  const day = $('workoutDate').value;
+  if (!editingWorkout || !(editingWorkout.createdAt > 0)) return timestampFromDateInput(day);
+  const was = new Date(editingWorkout.createdAt);
+  if (dateInputValue(was.getTime()) === day) return editingWorkout.createdAt;
+  const [year, month, date] = day.split('-').map(Number);
+  return new Date(year, month - 1, date, was.getHours(), was.getMinutes(), was.getSeconds(), was.getMilliseconds()).getTime();
+}
+
 $('saveBtn').onclick = async () => {
   if (!exercises.length) { showFeedback('Add at least one exercise before saving the workout.'); return; }
   if (!$('workoutDate').value) { showFeedback('Choose a workout date before saving.'); $('workoutDate').focus(); return; }
@@ -171,7 +182,7 @@ $('saveBtn').onclick = async () => {
     : { ...item });
   let workout = {
     ...editingWorkout, name:$('workoutName').value.trim() || 'Untitled workout', notes:$('workoutNotes').value.trim(), exercises:savedExercises,
-    createdAt:timestampFromDateInput($('workoutDate').value), unit:weightUnit()
+    createdAt:workoutFormTime(), unit:weightUnit()
   };
   if (editingStored) workout = backToUnit(workout, editingStored);
   if (!workout.id) {

@@ -28,6 +28,38 @@ function restDuration() {
   return own > 0 ? own : getWorkoutSettings().restDuration;
 }
 
+// A warm-up's rest is short, whatever the exercise's own: it is not the work, and a rest of minutes after each of three would be most
+// of the workout.
+const WARMUP_REST_SECONDS = 45;
+
+function restAfterLastSet() {
+  const exercise = activeSession ? activeSession.exercises[activeSession.currentIndex] : null;
+  const last = exercise && exercise.sets ? exercise.sets[exercise.sets.length - 1] : null;
+  return setTypeOf(last) === 'warmup' ? Math.min(restDuration(), WARMUP_REST_SECONDS) : restDuration();
+}
+
+// The rest panel is pinned above the tab bar only while a rest runs, to be seen from anywhere on the page. Once it is over, paused or
+// waiting to be started it sits where it is in the page, since on a short phone the pinned place is where the set entry is.
+function pinRestPanel(pinned) {
+  $('restPanel').classList.toggle('pinned', pinned);
+}
+
+// A rest that has just started is pinned over the bottom of the screen; if the set entry is behind it (a short screen), the page goes up
+// just far enough to have the entry, Complete set included, above it, so the next set is one tap and not a search for the place where both
+// fit. Never so far that the entry's top leaves the screen.
+function keepEntryClearOfRest() {
+  requestAnimationFrame(() => {
+    const panel = $('restPanel');
+    const entry = document.querySelector('.set-entry');
+    if (!activeSession || panel.hidden || !panel.classList.contains('pinned') || !entry) return;
+    const box = entry.getBoundingClientRect();
+    const overlap = box.bottom + 12 - panel.getBoundingClientRect().top;
+    const room = box.top - 12;
+    const by = Math.min(overlap, room);
+    if (by > 0) window.scrollBy({ top:by, behavior:matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  });
+}
+
 // The countdown is derived from an end timestamp, not from counting ticks, so it stays correct when the browser
 // throttles timers (locked screen, background tab) and catches up as soon as the page runs again.
 function syncRestRemaining() {
@@ -79,6 +111,7 @@ function runRestTimer() {
   clearInterval(restInterval);
   $('restAnnouncement').textContent = $('bigViewAnnouncement').textContent = '';
   restEndsAt = Date.now() + restRemaining * 1000;
+  pinRestPanel(true);
   $('restToggleBtn').textContent = 'Pause rest';
   restInterval = setInterval(tickRest, 250);
 }
@@ -87,6 +120,7 @@ function stopRestTimer() {
   clearInterval(restInterval);
   restInterval = null;
   restEndsAt = null;
+  pinRestPanel(false);
   $('restToggleBtn').textContent = 'Start rest';
 }
 
@@ -106,7 +140,7 @@ function adjustRest(seconds) {
 }
 
 function startRestTimer() {
-  restRemaining = restTotal = restDuration();
+  restRemaining = restTotal = restAfterLastSet();
   $('restPanel').hidden = false;
   updateRestTimer();
   runRestTimer();
@@ -255,13 +289,13 @@ $('restToggleBtn').onclick = () => {
   unlockAudio();
   if (restInterval) { syncRestRemaining(); updateRestTimer(); stopRestTimer(); }
   else {
-    if (restRemaining <= 0) restRemaining = restTotal = restDuration();
+    if (restRemaining <= 0) restRemaining = restTotal = restAfterLastSet();
     updateRestTimer();
     runRestTimer();
   }
 };
 $('restEndBtn').onclick = endRest;
-$('restResetBtn').onclick = () => { stopRestTimer(); restRemaining = restTotal = restDuration(); updateRestTimer(); };
+$('restResetBtn').onclick = () => { stopRestTimer(); restRemaining = restTotal = restAfterLastSet(); updateRestTimer(); };
 // On a phone the rest is End rest and Pause rest with ··· beside them, which opens Fix last set and Restart rest in a row under (on a wide
 // screen all four show, and ··· does not). Choosing one closes it again, so the panel is as small as it can be while the page is in use.
 function showRestMore(open) {
